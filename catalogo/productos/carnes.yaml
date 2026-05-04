@@ -1,0 +1,112 @@
+# =============================================================================
+# carnes.yaml — CATÁLOGO DE PRODUCTOS PARA SECADO SOLAR
+# Esquema: bitácora §5.9.9 + extensión §5.10.2 (Sesión 7).
+# Estado: ESTRUCTURA VACÍA — coeficientes a cargar por el usuario.
+# Ver PLANTILLA_REFERENCIA_CATALOGO.md para guía de carga.
+# =============================================================================
+#
+# ADVERTENCIA ESPECIAL PARA CARNES:
+# El secado de carnes tiene implicaciones de inocuidad alimentaria que NO
+# existen en frutas, hortalizas u hojas. El módulo de cámara DEBE verificar
+# que la actividad de agua (a_w) del producto seco sea < 0.85 para garantizar
+# estabilidad microbiológica (inhibición de patógenos como Salmonella, S. aureus).
+# Esta verificación se implementará en Tanda 3 paso 3 (validaciones de Camara).
+#
+# =============================================================================
+
+
+# =============================================================================
+# CHARQUI_VACUNO
+# =============================================================================
+charqui_vacuno:
+  descripcion: "Charqui vacuno (carne bovina deshidratada y salada). Producto tradicional NOA, especialmente Puna jujeña y salteña. La sal (NaCl) modifica significativamente la isoterma de sorción respecto de carne sin sal — los parámetros de isoterma deben corresponderse con el nivel de sal usado. Humedad inicial depende del corte y pre-salado."
+  categoria: CARNE
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 1050.0       # kg/m³. Carne vacuna magra fresca. ASHRAE.
+    calor_especifico_seco: 2170.0   # J/(kg·K). Carne magra sin agua (ASHRAE Ch.19).
+    humedad_inicial_tipica: 3.0     # kg/kg ms — ~75% bh post-salado. Rango: 2.5-4.0
+                                    # (varía según grosor y tiempo de salado previo).
+    humedad_equilibrio_aire_seco: 0.15  # MAYOR que frutas/hortalizas por efecto de la sal
+                                        # (la sal retiene agua — X_eq más alto a igual HR)
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad y Cp: ASHRAE Handbook Refrig. 2018 Ch.19 (beef lean raw).
+      Humedad inicial: estimada para charqui pre-salado tradicional.
+      Humedad equilibrio: efecto sal — más alto que carne sin sal.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: 318-348 K (45-75°C). Trujillo et al. (2007)
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Trujillo FJ, Wiangkaew C, Pham QT (2007). J Food Eng 78(1):74-85. DOI:10.1016/j.jfoodeng.2005.09.008 [MINCyT Elsevier]"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Aykin-Dincer E, Erbas M (2018). Meat Science 145:114-120. DOI:10.1016/j.meatsci.2018.06.022 [MINCyT Elsevier] — incluye carne salada, relevante para charqui"
+      notas: |
+        Aykin-Dincer (2018) trabaja con beef slices a distintos contenidos
+        de sal → directamente aplicable a charqui salado. Verificar que
+        el nivel de sal del paper sea comparable al del charqui NOA.
+        Charqui tradicional: ~10-15% de sal en peso fresco.
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Comaposada J, Gou P, Arnau J (2000). J Food Eng 43(2):119-123. DOI:10.1016/S0260-8774(99)00142-5 [MINCyT Elsevier] — efecto NaCl en a_w de carne"
+      notas: |
+        CRÍTICO: la isoterma de carne salada difiere sustancialmente
+        de la carne sin sal. Usar SOLO parámetros de isoterma calibrados
+        con carne con nivel de sal comparable al del producto.
+        La sal desplaza la isoterma hacia valores de X_eq más altos
+        a igual a_w (la sal retiene agua).
+
+  notas: |
+    ADVERTENCIA DE INOCUIDAD ALIMENTARIA:
+    El charqui debe alcanzar a_w < 0.85 para ser estable microbiológicamente
+    (inhibición de Salmonella, E. coli, S. aureus). El módulo de cámara
+    debe calcular la a_w final a partir de la isoterma y la humedad de
+    equilibrio alcanzada, y alertar si a_w ≥ 0.85 al finalizar el ciclo.
+    Esta validación se implementa en Tanda 3 paso 3 (§5.9.11).
+
+    Papers prioritarios:
+      - Trujillo FJ, Wiangkaew C, Pham QT (2007). Drying modeling and
+        water diffusivity in beef meat. J Food Eng 78(1):74-85.
+        DOI:10.1016/j.jfoodeng.2005.09.008 [MINCyT Elsevier]
+      - Aykin-Dincer E, Erbas M (2018). Drying kinetics, adsorption
+        isotherms and quality of vacuum-dried beef slices with different
+        salt contents. Meat Science 145:114-120.
+        DOI:10.1016/j.meatsci.2018.06.022 [MINCyT Elsevier]
+      - Comaposada J, Gou P, Arnau J (2000). Effect of NaCl on water
+        vapor pressure. J Food Eng 43(2):119-123.
+        DOI:10.1016/S0260-8774(99)00142-5 [MINCyT Elsevier]
+
+    Parámetro de proceso clave: nivel de salado previo. El charqui
+    tradicional NOA usa ~150-200 g NaCl / kg carne fresca. Este nivel
+    afecta tanto la cinética (sal deshidrata osmóticamente) como la
+    isoterma (sal retiene agua en equilibrio).

@@ -1,0 +1,92 @@
+# =============================================================================
+# legumbres_frutos.yaml — CATÁLOGO DE PRODUCTOS PARA SECADO SOLAR
+# Esquema: bitácora §5.9.9 + extensión §5.10.2 (Sesión 7).
+# Estado: ESTRUCTURA VACÍA — coeficientes a cargar por el usuario.
+# Ver PLANTILLA_REFERENCIA_CATALOGO.md para guía de carga.
+# =============================================================================
+
+
+# =============================================================================
+# ALGARROBA
+# =============================================================================
+algarroba:
+  descripcion: "Algarroba (Prosopis alba/nigra), vaina entera o partida. Producto nativo del NOA y Chaco, de alta importancia cultural y económica (harina, patay, arrope). Literatura argentina disponible — incluye trabajos del INENCO y grupos de UNCa/UNLP. Vaina dura con alta concentración de azúcares y proteínas."
+  categoria: LEGUMBRE_FRUTO
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 800.0        # kg/m³. Vaina madura semi-seca. Estimado.
+    calor_especifico_seco: 1550.0   # J/(kg·K). Choi-Okos (carbohidratos + proteína ~12%).
+    humedad_inicial_tipica: 0.25    # kg/kg ms — ~20% bh (vaina madura). Rango: 0.15-0.40.
+                                    # NOTA: mucho menor que frutas/hortalizas porque la
+                                    # vaina se cosecha ya parcialmente seca.
+    humedad_equilibrio_aire_seco: 0.08
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Humedad inicial: Prokopiuk et al. (2010) y Cattaneo et al. (2016).
+      Cp estimado por Choi-Okos con composición Prosopis alba.
+      Densidad estimada — no se encontró medición directa.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Sancho A, Iriarte A et al. (UNLP/UNCa). SEDICI UNLP: http://sedici.unlp.edu.ar/handle/10915/129751 [OA — fuente argentina]"
+      notas: |
+        El paper de Sancho et al. (SEDICI UNLP) describe secado de algarroba
+        en secador solar INENCO. Verificar si publica coeficientes de modelos
+        o solo curvas experimentales. Si solo hay curvas, ajustar Page/Midilli
+        a las curvas con scipy.optimize y reportar como calidad MEDIA.
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — misma referencia que page"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Prokopiuk D et al. (2010). Int J Food Properties 13(4):692-701. DOI:10.1080/10942910902742055 [MINCyT Tandfonline]. Tiene GAB para algarroba cruda y tostada."
+      notas: |
+        Para secado usar rama de DESORCIÓN. El paper tiene GAB tanto para
+        adsorción como para desorción a distintas temperaturas.
+        Prokopiuk trabaja con Prosopis alba de Argentina — fuente de alta
+        relevancia local. Calidad esperada: ALTA.
+
+  notas: |
+    Papers prioritarios — FUENTES ARGENTINAS:
+      - Prokopiuk D et al. (2010). Influence of roasting on the water
+        sorption isotherms of Argentinean algarroba (Prosopis alba).
+        Int J Food Properties 13(4):692-701.
+        DOI:10.1080/10942910902742055 [MINCyT Tandfonline]
+      - Sancho A, Iriarte A et al. (UNLP/UNCa). Deshidratado de algarroba
+        en secador solar vs métodos tradicionales NOA.
+        SEDICI UNLP: http://sedici.unlp.edu.ar/handle/10915/129751 [OA]
+      - Cattaneo F et al. (2016). Flour from Prosopis alba cotyledons.
+        Food Chem 208:89-96. DOI:10.1016/j.foodchem.2016.03.115
+        [MINCyT Elsevier — composición, no cinética]
+    La algarroba es uno de los pocos productos del catálogo con fuentes
+    argentinas accesibles (SEDICI + MINCyT). Priorizar estas fuentes.

@@ -1,0 +1,74 @@
+# Placa absorbedora: sustrato metálico + tratamiento superficial, modelados como un único material.
+# Espesor NO va aquí: se define en ColectorUnidad.
+# absortancia α y emisividad ε son del CONJUNTO (sustrato + tratamiento).
+# Versión: v1 (Tanda 2 paso 2)
+
+galvanizada_pintada_negro_mate:
+  descripcion: "Chapa galvanizada con pintura negro mate (esmalte sintético)"
+  absortancia_solar: 0.95
+  emisividad_ir: 0.88
+  conductividad_termica: 50        # W/m·K (acero galvanizado, dominado por el sustrato)
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 473              # K (limita la pintura)
+  fuente: "Duffie & Beckman 2013, Tabla 4.11.1; Incropera Tabla A.1 acero"
+  notas: "Económica, uso muy extendido. ε alta penaliza eficiencia a alta T."
+
+aluminio_pintado_negro_mate:
+  descripcion: "Chapa de aluminio con pintura negro mate"
+  absortancia_solar: 0.95
+  emisividad_ir: 0.88
+  conductividad_termica: 205       # alto, mejora distribución térmica
+  densidad: 2700
+  calor_especifico: 900
+  T_max_servicio: 473
+  fuente: "Duffie & Beckman 2013, Tabla 4.11.1; Incropera Tabla A.1"
+  notas: "Mejor uniformidad térmica que galvanizada por mayor k. Más cara."
+
+acero_carbono_pintado_negro_mate:
+  descripcion: "Chapa de acero al carbono con pintura negro mate"
+  absortancia_solar: 0.95
+  emisividad_ir: 0.88
+  conductividad_termica: 52
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 473
+  fuente: "Incropera Tabla A.1; Duffie & Beckman 2013, Tabla 4.11.1"
+  notas: "Sin galvanizado: requiere protección extra contra corrosión."
+
+aluminio_tinox:
+  descripcion: "Chapa de aluminio con recubrimiento selectivo TiNOX (Almeco)"
+  absortancia_solar: 0.95
+  emisividad_ir: 0.05              # selectivo: alto α / baja ε
+  conductividad_termica: 205
+  densidad: 2700
+  calor_especifico: 900
+  T_max_servicio: 573
+  fuente: "Hoja técnica Almeco TiNOX energy; Duffie & Beckman 2013, §6.24"
+  notas: |
+    Superficie selectiva de alta performance. Reduce drásticamente pérdidas radiativas.
+    Caro y poco disponible en Argentina (importación). Útil como caso de estudio.
+
+acero_cromo_negro:
+  descripcion: "Chapa de acero al carbono con cromo negro electrodepositado"
+  absortancia_solar: 0.95
+  emisividad_ir: 0.10
+  conductividad_termica: 52
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 573
+  fuente: "Duffie & Beckman 2013, Tabla 6.24.1"
+  notas: "Selectivo clásico, anterior al TiNOX. Aún se usa. Se mantiene en catálogo por completitud."
+
+galvanizada_cruda:
+  descripcion: "Chapa galvanizada sin tratamiento (referencia, no recomendada)"
+  absortancia_solar: 0.65
+  emisividad_ir: 0.13
+  conductividad_termica: 50
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 473
+  fuente: "Incropera Tabla A.11 (galvanized sheet steel)"
+  notas: |
+    Incluida como caso de referencia/comparación. α bajo y ε baja:
+    se calienta poco pero también pierde poco. No es buen absorbedor.

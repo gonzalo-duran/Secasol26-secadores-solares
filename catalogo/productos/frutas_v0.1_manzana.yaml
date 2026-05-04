@@ -1,0 +1,231 @@
+# =============================================================================
+# frutas.yaml — CATÁLOGO DE PRODUCTOS PARA SECADO SOLAR
+# Esquema definido en bitácora §5.9.9
+# Versión: v0.1 (parcial, manzana en construcción)
+# =============================================================================
+#
+# CONVENCIONES (recordatorio para el usuario que edita el catálogo):
+#
+#   - Sistema de unidades: SI estricto. Temperaturas SIEMPRE en KELVIN.
+#   - Humedad del producto: BASE SECA, X = m_agua / m_sólido_seco [kg/kg].
+#       Para convertir desde base húmeda: X = X_bh / (1 - X_bh).
+#   - Densidad aparente: kg/m³ (incluye porosidad de la matriz, no la del lecho).
+#   - Calor específico: J/(kg·K). El campo `calor_especifico_seco` se refiere
+#     al sólido seco; el calor específico aparente del producto húmedo se
+#     compone como c_p = X·c_p_agua + (1-X)·c_p_seco / (1+X) o similar
+#     (resolver en el módulo de cámara, no en el catálogo).
+#   - Humedad relativa en aire: fracción [0, 1], NO porcentaje.
+#   - Clave reservada `custom`: el usuario debe aportar TODOS los campos
+#     del esquema en `overrides`. (§5.6, decisión Opción 1).
+#
+# CALIDAD DE DATOS (decisión J, §5.9.9):
+#
+#   - ALTA: peer-reviewed, condiciones de calibración bien documentadas
+#           (T, v_aire, espesor, HR), R²/χ² reportados.
+#   - MEDIA: publicado pero genérico, tesis/congreso, o paper bueno con
+#            condiciones parcialmente documentadas.
+#   - BAJA: literatura gris, dato puntual sin replicación.
+#   - ESTIMADA_POR_ANALOGIA: parámetros copiados de producto similar
+#            (debe declararse en `notas`).
+#
+# =============================================================================
+
+
+manzana:
+
+  # ---------------------------------------------------------------------------
+  # METADATOS
+  # ---------------------------------------------------------------------------
+  descripcion: "Manzana (Malus domestica) en rodajas. Producto típico del cinturón frutícola del Alto Valle del Río Negro y de Mendoza. Variedades comunes secadas: Granny Smith, Red Delicious, Golden Delicious, Golab (en literatura iraní de referencia)."
+  categoria: FRUTA
+  tipo_secado: CAPA_FINA
+  fotosensible: false   # Las pectinas y el oscurecimiento enzimático ocurren con o sin luz; no es producto fotosensible en sentido estricto. Si se desea preservar color, sí se prefiere baja exposición a luz UV pero esto es una decisión de proceso, no una restricción físico-fotoquímica.
+
+  # ---------------------------------------------------------------------------
+  # PROPIEDADES BÁSICAS
+  # ---------------------------------------------------------------------------
+  # Estos valores son rangos típicos de literatura abierta (handbooks +
+  # mediciones puntuales). Vienen con `calidad_propiedades_basicas` propio
+  # porque, a diferencia de los modelos de cinética, las propiedades básicas
+  # se reportan en hojas de propiedades térmicas y handbooks, no en estudios
+  # cinéticos.
+  propiedades_basicas:
+
+    densidad_aparente: 840.0
+    # Unidad: kg/m³. Manzana fresca rebanada, antes de secado.
+    # Rango de literatura: 790-880 kg/m³ según variedad y madurez.
+    # Fuente: ASHRAE Handbook of Refrigeration 2018, Ch.19 Thermal Properties
+    #         of Foods (composición típica manzana cruda + ec. Choi-Okos para
+    #         densidad de mezcla a partir de fracciones másicas).
+    # NOTA: este valor cambia significativamente durante el secado por
+    # encogimiento (shrinkage). El módulo de cámara puede usar este valor
+    # como inicial, pero un modelo realista debería incorporar shrinkage.
+    # Hassini et al. 2007 (citado en shopping list para papa) propone
+    # corrección por shrinkage que se puede adaptar.
+
+    calor_especifico_seco: 1810.0
+    # Unidad: J/(kg·K). Calor específico del SÓLIDO SECO de manzana.
+    # Rango de literatura: 1760-1880 J/(kg·K) según composición.
+    # Fuente: Mykhailyk V, Lebovka NI (2013). Specific heat of apple at
+    #         different moisture contents and temperatures. arXiv:1305.1340.
+    #         Datos experimentales para W=0 (sólido seco), T=283-363 K.
+    # ALTERNATIVA con dependencia de T (futuro upgrade del esquema):
+    #   c_p_seco(T) = 1620 + 0.65·(T - 273)  [J/(kg·K)]
+    #   válido en T ∈ [283, 363] K. Mismo paper.
+
+    humedad_inicial_tipica: 7.0
+    # Unidad: kg agua / kg sólido seco (base seca, §3.3 bitácora).
+    # Equivalente en base húmeda: X_bh = X / (1+X) = 7.0 / 8.0 = 0.875 = 87.5% bh.
+    # Rango variedad/madurez: X ∈ [5.0, 8.5] (≈83-89% bh).
+    # Fuente: USDA SR-28 Food Composition Data, raw apple, water content
+    #         85-87% bh. Coherente con Sacilik 2006 (X₀=4.9-6.3) y
+    #         Meisami-Asl 2010 (X₀=4.9-6.3).
+
+    humedad_equilibrio_aire_seco: 0.10
+    # Unidad: kg agua / kg ms.
+    # Es la X de equilibrio con aire de baja humedad relativa (HR ≈ 0.10-0.15)
+    # a temperatura ambiente (≈ 298 K). Sirve como estimación inicial cuando
+    # NO se dispone de la isoterma calibrada (que es lo correcto: el módulo
+    # debe llamar a la isoterma con la HR del aire de cámara).
+    # Fuente: Tsami E et al. (1990) — apricot/apple GAB monolayer ≈ 0.06-0.08;
+    # con HR 0.10-0.15 da X_eq ≈ 0.08-0.12. Valor central 0.10.
+
+    calidad_propiedades_basicas: ALTA
+    fuente_propiedades_basicas: |
+      Densidad: ASHRAE Handbook Refrigeration (2018) Ch.19, USDA SR-28.
+      Calor específico: Mykhailyk & Lebovka (2013) arXiv:1305.1340.
+      Humedad inicial: USDA SR-28; Sacilik (2006) DOI:10.1016/j.jfoodeng.2005.01.024.
+      Humedad de equilibrio: Tsami et al. (1990) DOI:10.1111/j.1365-2621.1990.tb03583.x.
+
+  # ---------------------------------------------------------------------------
+  # MODELOS DE CAPA FINA
+  # ---------------------------------------------------------------------------
+  # Cada bloque debajo de `capa_fina` corresponde a un modelo distinto.
+  # En v1 implementamos: lewis, page, henderson_pabis, midilli, logaritmico.
+  # El usuario elige cuál usar desde la UI; si elige uno no calibrado para
+  # este producto, dispara error duro MOD_CAPA_FINA_NO_DISPONIBLE (§5.9.11).
+  #
+  # FORMATO (§5.9.9):
+  #   <modelo>:
+  #     params: {clave: valor, ...}        # parámetros del modelo
+  #     condiciones_calibracion:
+  #       T_K: <temperatura aire, K>
+  #       v_aire_m_s: <velocidad aire, m/s>
+  #       espesor_m: <espesor muestra, m>
+  #       HR_aire: <humedad relativa, fracción>
+  #     calidad_datos: ALTA | MEDIA | BAJA | ESTIMADA_POR_ANALOGIA
+  #     fuente: "Cita corta + DOI"
+  #
+  # ESTADO DEL POBLADO: sesión 6, pendiente extracción de PDFs.
+  # PDFs requeridos en Project knowledge:
+  #   - Sacilik & Elicin (2006) DOI:10.1016/j.jfoodeng.2005.01.024
+  #   - Meisami-Asl et al. (2009) DOI:10.3923/pjn.2009.804.809
+  #   - Zarein et al. (2013) DOI:10.4172/2157-7110.1000247
+  capa_fina:
+
+    page:
+      # PENDIENTE — esperando paper en Project knowledge.
+      # Cita esperada: Sacilik K, Elicin AK (2006). The thin layer drying
+      # characteristics of organic apple slices. J Food Eng 73(3):281-289.
+      # DOI:10.1016/j.jfoodeng.2005.01.024
+      #
+      # Forma del modelo: MR = exp(-k · t^n)
+      # Parámetros a extraer del paper: k(T), n(T) en T={40, 50, 60} °C.
+      #
+      # Si el paper reporta sólo curvas: ajustar Page a partir de las curvas
+      # con scipy.optimize.curve_fit y dejar nota de "ajuste secundario hecho
+      # por nosotros".
+      params: null
+      condiciones_calibracion:
+        T_K: null            # esperado: 313-333 K (40-60 °C)
+        v_aire_m_s: null     # esperado: 0.6 m/s
+        espesor_m: null      # esperado: 0.005 m (5 mm)
+        HR_aire: null        # esperado: ~0.20-0.30 (no siempre reportado)
+      calidad_datos: null    # esperado: ALTA
+      fuente: "PENDIENTE — Sacilik & Elicin (2006) DOI:10.1016/j.jfoodeng.2005.01.024"
+
+    midilli:
+      # PENDIENTE — esperando paper.
+      # Cita esperada: Meisami-Asl E, Rafiee S, Keyhani A, Tabatabaeefar A
+      # (2009). Mathematical modeling of moisture content of apple slices
+      # (var. Golab) during drying. Pakistan J Nutr 8(6):804-809.
+      # DOI:10.3923/pjn.2009.804.809
+      #
+      # Forma del modelo: MR = a · exp(-k · t^n) + b · t
+      # Parámetros a extraer: a, k, n, b en T={40,50,60,70,80}°C × espesor={2,4,6}mm.
+      # OPCIÓN: tomar caso de espesor 4 mm como "default", reportar dependencia con T.
+      params: null
+      condiciones_calibracion:
+        T_K: null            # esperado: 313-353 K (40-80 °C)
+        v_aire_m_s: null     # esperado: 0.5 m/s
+        espesor_m: null      # esperado: 0.004 m (4 mm como default)
+        HR_aire: null        # esperado: ~0.21 (constante en el ensayo)
+      calidad_datos: null    # esperado: ALTA
+      fuente: "PENDIENTE — Meisami-Asl et al. (2009) DOI:10.3923/pjn.2009.804.809"
+
+    # OTROS MODELOS — no son default pero hay datos publicados:
+    #   - henderson_pabis: típicamente ajusta peor que Page/Midilli para manzana,
+    #     pero Sacilik 2006 lo reporta. Poblar si el paper lo trae.
+    #   - logaritmico: Akpinar 2006 (J Food Eng 77:864) reporta. Más tarde.
+    #   - lewis: ajuste pobre para manzana (no captura curvatura no-exponencial).
+    #     Poblar si Sacilik/Meisami lo reportan, marcar `calidad_datos: MEDIA`
+    #     porque el modelo es físicamente limitado para este producto.
+
+  # ---------------------------------------------------------------------------
+  # ISOTERMAS DE SORCIÓN
+  # ---------------------------------------------------------------------------
+  # Cada bloque debajo de `isoterma` corresponde a un modelo (GAB, Oswin,
+  # Henderson — los tres soportados en v1, §5.9.8).
+  #
+  # FORMATO (§5.9.9):
+  #   <modelo>:
+  #     params: {...}
+  #     rango_T_K: [T_min, T_max]
+  #     calidad_datos: ALTA | MEDIA | BAJA | ESTIMADA_POR_ANALOGIA
+  #     fuente: "Cita + DOI"
+  #
+  # ESTADO: pendiente extracción.
+  # PDF requerido en Project knowledge:
+  #   - Tsami et al. (1990) Water sorption isotherms of raisins, currants,
+  #     figs, prunes and apricots. J Food Sci 55(6):1594-1597.
+  #     DOI:10.1111/j.1365-2621.1990.tb03583.x
+  #     [TIENE manzana? VERIFICAR — si no, alternativa: Kaymak-Ertekin & Gedik 2004]
+  isoterma:
+
+    gab:
+      # Forma del modelo: X_eq = X_m · C · K · a_w / [(1 - K·a_w)·(1 - K·a_w + C·K·a_w)]
+      # Parámetros: X_m (humedad de monocapa), C (cte. de Guggenheim), K.
+      params: null
+      rango_T_K: null       # esperado: ~[293, 333] K
+      calidad_datos: null   # esperado: ALTA
+      fuente: "PENDIENTE — Tsami et al. (1990) DOI:10.1111/j.1365-2621.1990.tb03583.x; alternativa: Kaymak-Ertekin & Gedik (2004) DOI:10.1016/j.lwt.2003.10.012"
+
+    # OTROS MODELOS:
+    #   - oswin: forma X_eq = a · [a_w/(1-a_w)]^b. Más simple; útil para
+    #     interpolación. Si Tsami no reporta, ajustar Oswin a partir de
+    #     datos GAB del mismo paper.
+    #   - henderson: 1 - a_w = exp(-c · (T_ref) · X_eq^n). Menos usado para
+    #     manzana, agregar sólo si aparece en literatura específica.
+
+  # ---------------------------------------------------------------------------
+  # NOTAS
+  # ---------------------------------------------------------------------------
+  notas: |
+    Producto bien documentado en literatura internacional. Default
+    propuesto: Page (Sacilik 2006) para cinética y GAB (Tsami 1990) para
+    isoterma. Variedad de referencia: orgánica, sin especificar cultivar
+    (Sacilik). Para variedad Golab (Meisami-Asl) hay rango de T más amplio
+    (40-80 °C); útil para secadores con auxiliar térmico.
+
+    PRETRATAMIENTOS comunes en producción real que afectan la cinética:
+      - Inmersión en solución de ácido cítrico/ascórbico para evitar pardeado.
+      - Sulfitado (con SO₂ o metabisulfito) — práctica industrial.
+      - Escaldado (blanching) — modifica la microestructura.
+    Los parámetros de Sacilik 2006 son sin pretratamiento. Si se modela
+    secador con pretratamiento, los parámetros pueden subestimar la velocidad
+    de secado en 10-20% (efecto de la disrupción celular).
+
+    SHRINKAGE significativo: una rodaja de 5 mm puede llegar a 1-2 mm al
+    final del secado. El modelo de capa fina con espesor constante introduce
+    error en el tramo final del secado. Para prediseño es aceptable;
+    para simulación detallada considerar Hassini et al. (2007).

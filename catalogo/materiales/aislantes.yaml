@@ -1,0 +1,49 @@
+# Aislantes térmicos. Espesor se define en ColectorUnidad.
+# Versión: v1 (Tanda 2 paso 2)
+
+lana_vidrio_media:
+  descripcion: "Lana de vidrio densidad media (rollos de construcción)"
+  conductividad_termica: 0.040     # W/m·K
+  densidad: 20                     # kg/m³
+  calor_especifico: 670
+  T_max_servicio: 523              # K (~250 °C)
+  fuente: "ASHRAE HoF 2021 Cap. 26; Incropera Tabla A.3"
+  notas: "Disponibilidad amplia en Argentina. Requiere barrera de vapor en climas húmedos."
+
+lana_vidrio_alta:
+  descripcion: "Lana de vidrio alta densidad (paneles rígidos)"
+  conductividad_termica: 0.034
+  densidad: 60
+  calor_especifico: 670
+  T_max_servicio: 523
+  fuente: "ASHRAE HoF 2021 Cap. 26"
+  notas: "Mejor k que la versión liviana. Más cara y más rígida (panel)."
+
+eps:
+  descripcion: "Poliestireno expandido (telgopor)"
+  conductividad_termica: 0.038
+  densidad: 20
+  calor_especifico: 1300
+  T_max_servicio: 348              # K (~75 °C) — ATENCIÓN
+  fuente: "ASHRAE HoF 2021 Cap. 26; Incropera Tabla A.3"
+  notas: |
+    ¡T_max baja! No usar en contacto directo con placa absorbedora si T_placa puede
+    superar 75 °C, lo cual es habitual. Útil para fondo si hay separación adecuada.
+
+poliuretano_expandido:
+  descripcion: "Espuma rígida de poliuretano (PUR/PIR)"
+  conductividad_termica: 0.025
+  densidad: 35
+  calor_especifico: 1500
+  T_max_servicio: 393              # K (~120 °C)
+  fuente: "ASHRAE HoF 2021 Cap. 26"
+  notas: "k muy buena. Uso típico: paneles tipo sándwich con chapa."
+
+lana_mineral_roca:
+  descripcion: "Lana mineral de roca (basalto)"
+  conductividad_termica: 0.038
+  densidad: 80
+  calor_especifico: 840
+  T_max_servicio: 873              # K (~600 °C) — incombustible
+  fuente: "ASHRAE HoF 2021 Cap. 26; hoja técnica Isover/Rockwool"
+  notas: "Excelente para cercanía a placa caliente o quemador biomasa. Más densa, más cara."

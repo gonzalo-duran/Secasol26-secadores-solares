@@ -1,0 +1,527 @@
+# =============================================================================
+# frutas.yaml — CATÁLOGO DE PRODUCTOS PARA SECADO SOLAR
+# Esquema definido en bitácora §5.9.9, extendido §5.10.2 (calidad+fuente
+# para propiedades_basicas).
+# Versión: v1.0 manzana, durazno, yacón (Sesión 7).
+# =============================================================================
+#
+# CONVENCIONES (recordatorio):
+#
+#   - SI estricto. Temperaturas en KELVIN internamente; sólo el comentario
+#     informa el equivalente en °C para legibilidad.
+#   - Humedad del producto en BASE SECA: X = m_agua / m_sólido_seco [kg/kg].
+#     Equivalencia: X = X_bh / (1 - X_bh).
+#   - Densidad aparente: kg/m³ (matriz, no lecho).
+#   - Calor específico: J/(kg·K). `calor_especifico_seco` es del sólido seco.
+#   - HR del aire: fracción [0, 1], no porcentaje.
+#   - Convención `params`: las claves dentro coinciden EXACTAMENTE con los
+#     símbolos de los modelos definidos en §5.9.8.
+#
+# MODELOS DE CAPA FINA (§5.9.8):
+#
+#   - lewis:       MR = exp(-k·t)                     params: {k}
+#   - page:        MR = exp(-k·t^n)                   params: {k, n}
+#   - henderson:   MR = a·exp(-k·t)                   params: {a, k}
+#   - midilli:     MR = a·exp(-k·t^n) + b·t           params: {a, k, n, b}
+#   - logaritmico: MR = a·exp(-k·t) + c               params: {a, k, c}
+#
+# Tiempo `t` en MINUTOS (convención de los papers fuente). El módulo
+# de cámara debe convertir desde segundos a minutos antes de evaluar el
+# modelo y la salida MR es adimensional.
+#
+# CALIDAD DE DATOS:
+#
+#   - ALTA: peer-review, condiciones bien documentadas, R² ≥ 0.99 reportado.
+#   - MEDIA: peer-review pero condiciones parcialmente documentadas, o R²
+#            no reportado por modelo, o coeficientes globalizados.
+#   - BAJA: literatura gris o dato puntual sin replicación.
+#   - ESTIMADA_POR_ANALOGIA: copiado de producto fenomenológicamente similar.
+#
+# =============================================================================
+
+
+# =============================================================================
+# MANZANA
+# =============================================================================
+manzana:
+
+  descripcion: "Manzana (Malus domestica) en rodajas. Producto típico del cinturón frutícola del Alto Valle del Río Negro y de Mendoza. Variedades comunes secadas: Granny Smith, Red Delicious, Golden Delicious, Starking (referencia de Sacilik 2006), Golab (referencia de Meisami-Asl 2009)."
+  categoria: FRUTA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+
+    densidad_aparente: 840.0
+    # kg/m³. Manzana fresca rebanada antes de secado.
+    # Rango literatura: 790-880 kg/m³ según variedad y madurez.
+    # Fuente: ASHRAE Handbook Refrig. 2018 Ch.19 + USDA SR-28 (composición
+    # típica + ec. Choi-Okos para densidad de mezcla).
+    # NOTA: shrinkage significativo durante secado (5 mm → 1-2 mm al final).
+    # El módulo de cámara debe considerarlo.
+
+    calor_especifico_seco: 1810.0
+    # J/(kg·K). Sólido seco. Rango lit. 1760-1880.
+    # Fuente: Mykhailyk V, Lebovka NI (2013). arXiv:1305.1340.
+    # Datos para W=0, T=283-363 K.
+
+    humedad_inicial_tipica: 4.6
+    # kg agua / kg ms. Equivalente: X_bh = 4.6/5.6 = 0.821 = 82% bh.
+    # Coherente con Sacilik 2006 (X₀=4.57, 82% bh) y Meisami-Asl (X₀=5.0-6.4).
+    # Rango variedad/madurez: X ∈ [4.5, 6.5].
+    # Fuente: Sacilik (2006) DOI:10.1016/j.jfoodeng.2005.03.024.
+
+    humedad_equilibrio_aire_seco: 0.10
+    # kg agua / kg ms. Estimación inicial cuando no se llama isoterma.
+    # Aire ambiente HR ≈ 0.10-0.15, T ≈ 298 K. Valor central de monolayer
+    # GAB ≈ 0.06-0.08. Fallback solamente; el módulo de cámara debe usar
+    # la isoterma con la HR real.
+
+    calidad_propiedades_basicas: ALTA
+    fuente_propiedades_basicas: |
+      Densidad: ASHRAE Handbook Refrig. 2018 Ch.19; USDA SR-28.
+      Calor específico: Mykhailyk & Lebovka (2013) arXiv:1305.1340.
+      Humedad inicial: Sacilik & Elicin (2006) DOI:10.1016/j.jfoodeng.2005.03.024.
+      Humedad equilibrio: estimada de monolayer GAB típico, no calibrada.
+
+  # ---------------------------------------------------------------------------
+  capa_fina:
+
+    page:
+      params:
+        k: 0.1153    # min^(-n)
+        n: 1.2965
+      condiciones_calibracion:
+        T_K: [313.15, 323.15, 333.15]   # 40, 50, 60 °C
+        v_aire_m_s: 0.8
+        espesor_m: [0.005, 0.009]        # 5 mm y 9 mm
+        HR_aire: null                     # no reportada explícitamente; el ensayo regula T pero no HR
+      calidad_datos: MEDIA
+      fuente: "Sacilik K, Elicin AK (2006). The thin layer drying characteristics of organic apple slices. J Food Eng 73(3):281-289. DOI:10.1016/j.jfoodeng.2005.03.024. Modelo 2 de Tabla 2."
+      notas: |
+        Coeficientes GLOBALES de Sacilik (Tabla 2, Modelo 2), agregados
+        sobre todas las T y espesores. R²=0.9837. Por ser coeficientes
+        agrupados (no específicos por T), calidad rebajada de ALTA→MEDIA.
+        Para extrapolación más fina, usar el modelo `logaritmico` de este
+        mismo producto (Sacilik propone forma regresionada a, k, c = f(T,h)).
+
+    midilli:
+      params:
+        a: 1.0041
+        k: 0.1281    # min^(-n)
+        n: 0.82
+        b: -0.03897  # min^(-1)
+      condiciones_calibracion:
+        T_K: [313.15, 323.15, 333.15]
+        v_aire_m_s: 0.8
+        espesor_m: [0.005, 0.009]
+        HR_aire: null
+      calidad_datos: MEDIA
+      fuente: "Sacilik K, Elicin AK (2006). DOI:10.1016/j.jfoodeng.2005.03.024. Modelo 10 de Tabla 2."
+      notas: |
+        Coeficientes globales (Tabla 2, Modelo 10), R²=0.9980, RMSE=2.15e-3.
+        Misma observación que `page`: rebajado a MEDIA por agregación.
+
+    logaritmico:
+      params:
+        a: 1.7506
+        k: 0.0761    # min^(-1)
+        c: -0.7718
+      condiciones_calibracion:
+        T_K: [313.15, 323.15, 333.15]
+        v_aire_m_s: 0.8
+        espesor_m: [0.005, 0.009]
+        HR_aire: null
+      calidad_datos: ALTA
+      fuente: "Sacilik K, Elicin AK (2006). DOI:10.1016/j.jfoodeng.2005.03.024. Modelo 4 de Tabla 2 (mejor ajuste). Variedad Starking, manzana orgánica, pretratamiento limón 5%."
+      notas: |
+        DEFAULT RECOMENDADO. Mejor ajuste de los 10 modelos evaluados:
+        R²=0.9983, RMSE=2.13e-3, χ²=0.16e-3.
+        Sacilik también propone una forma con a, k, c funciones de T y h
+        (eqs. 7-9 del paper), pero los coeficientes de regresión múltiple
+        no se incluyen aquí en v1 — agregarlos requiere un campo extra
+        (modelo_extendido) que no existe en el esquema §5.9.8 todavía.
+        Si se necesita extrapolación a T fuera del rango calibrado, usar
+        ese modelo extendido (futuro upgrade).
+
+  # ---------------------------------------------------------------------------
+  isoterma:
+    # No se cargó GAB de manzana en esta sesión: el paper Tsami 1990 que
+    # estaba en el shopping list NO se subió al Project knowledge.
+    # Status: PENDIENTE para Sesión siguiente.
+    # Recomendado conseguir: Kaymak-Ertekin & Gedik (2004). DOI:10.1016/j.lwt.2003.10.012.
+    # Alternativa: Veltchev & Menkov (2000) o Tsami et al. (1990).
+
+  # ---------------------------------------------------------------------------
+  notas: |
+    Producto bien documentado. Default recomendado: modelo logarítmico
+    de Sacilik 2006 (R²=0.9983).
+
+    REFERENCIAS SECUNDARIAS evaluadas pero no cargadas en YAML:
+      - Meisami-Asl et al. (2009). Pakistan J Nutr 8(6):804-809. Ajustó
+        Midilli con var. Golab a T=40-80°C. PROBLEMA: define MR=MC/MC₀
+        en kg agua / kg ms (sin adimensionalizar por X₀), por lo cual sus
+        valores `a` ≈ 5-6 NO son comparables con los de Sacilik (a≈1.0).
+        Renormalizar dividiendo por X₀ introduce ambigüedad. Si se desea
+        usar Meisami para extender T hasta 80°C, hacer ajuste secundario
+        propio. No incluido en v1.
+      - Zarein et al. (2013). J Food Process Technol 4:247.
+        DOI:10.4172/2157-7110.1000247. Confirmó cualitativamente que
+        Midilli es mejor en T=50-95°C. Tabla 2 reporta R²/χ²/RMSE pero
+        NO los coeficientes (k, n, a, b). Inutilizable para parámetros.
+
+    PRETRATAMIENTOS comunes que afectan cinética:
+      - Inmersión cítrica/ascórbica (anti-pardeado): usado en Sacilik 2006
+        (5% solución limón, 5 min).
+      - Sulfitado (SO₂, metabisulfito): práctica industrial.
+      - Escaldado: modifica microestructura.
+    Si se modela secador con pretratamiento distinto, los coeficientes
+    pueden subestimar/sobreestimar la velocidad de secado en ±10-20%.
+
+    SHRINKAGE significativo en tramo final del secado. Modelo de capa fina
+    con espesor constante introduce error en la última fase. Para prediseño
+    es aceptable; para simulación detallada considerar Hassini et al. (2007).
+
+
+# =============================================================================
+# DURAZNO
+# =============================================================================
+durazno:
+
+  descripcion: "Durazno (Prunus persica) en rodajas. Producto estacional del NOA y Cuyo. Variedad de referencia para los datos cinéticos: Shan-e-Punjab (India) por Kingsly et al. 2006. Producción argentina dominada por variedades como Caldesi, San Pedro, Flordaking."
+  categoria: FRUTA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+
+    densidad_aparente: 940.0
+    # kg/m³. Durazno fresco. Rango lit. 920-980 kg/m³.
+    # Fuente: ASHRAE Handbook Refrig. 2018 Ch.19, peach raw composition
+    # (89% agua, 11% sólidos), ec. Choi-Okos.
+
+    calor_especifico_seco: 1700.0
+    # J/(kg·K). Estimado por composición típica peach (carbohidratos
+    # mayoritarios, proteínas ≈1%, lípidos ≈0.3%) usando ec. ASHRAE
+    # cap. 19 (Choi-Okos para constituyentes a T_ref=25°C).
+    # Calidad MEDIA — no se ubicó medición experimental directa.
+
+    humedad_inicial_tipica: 6.3
+    # kg agua / kg ms. Equivalente: X_bh = 6.3/7.3 = 0.863 = 86.3% bh.
+    # Coherente con Kingsly 2006 (X₀=626.4% bs = 6.264).
+    # Rango variedad/madurez: X ∈ [5.5, 7.5].
+    # Fuente: Kingsly et al. (2006) DOI:10.1111/j.1365-2621.2006.01210.x.
+
+    humedad_equilibrio_aire_seco: 0.13
+    # kg agua / kg ms. Estimación basada en monolayer típico de frutas
+    # con alto contenido de azúcares. Sin isoterma calibrada en v1.
+
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad: ASHRAE Handbook Refrig. 2018 Ch.19 (peach raw).
+      Calor específico: estimado por Choi-Okos con composición ASHRAE,
+        sin verificación experimental directa (calidad MEDIA).
+      Humedad inicial: Kingsly et al. (2006) DOI:10.1111/j.1365-2621.2006.01210.x.
+
+  # ---------------------------------------------------------------------------
+  capa_fina:
+    # PROBLEMA EDITORIAL: Kingsly et al. 2006 (el único de los tres PDFs
+    # subidos que es realmente sobre durazno) reporta para 6 modelos
+    # solo r², χ², RMSE, MBE — NO los coeficientes de los modelos
+    # (k, n, a, b, c). Por eso este bloque NO TIENE valores numéricos
+    # de capa fina en v1. Sin esos coeficientes, el bloque no se puede
+    # poblar en formato YAML válido para el módulo de cámara.
+
+    # Status: PENDIENTE.
+    # Acción recomendada: conseguir uno de los siguientes papers que SÍ
+    # tabulan los coeficientes:
+    #   - Doymaz I (2006). Drying behaviour of dipped peach. J Food Eng
+    #     76:561-566. DOI:10.1016/j.jfoodeng.2005.05.052.
+    #   - Vega-Galvez A et al. (2009). [varios sobre Prunus]. MINCyT.
+    #   - Toğrul İT, Pehlivan D (2002). Mathematical modelling of solar
+    #     drying of apricots in thin layers. J Food Eng 55:209-216
+    #     (apricot, fruta hueso similar).
+
+  # ---------------------------------------------------------------------------
+  isoterma:
+    # No se cargó isoterma específica de durazno en esta sesión.
+    # Status: PENDIENTE para Sesión siguiente.
+    # Recomendado: Kaymak-Ertekin F, Gedik A (2004). Sorption isotherms
+    # and isosteric heat of sorption for grapes, apricots, apples and
+    # potatoes. LWT 37(4):429-438. (Apricot como análogo cercano a peach,
+    # ambas Prunus.)
+
+  # ---------------------------------------------------------------------------
+  notas: |
+    PROBLEMA en v1: el único paper sobre durazno cargado al Project
+    knowledge (Kingsly et al. 2006, IJFST) NO tabula los coeficientes
+    de los modelos de capa fina, sólo reporta los estadísticos de
+    bondad de ajuste por modelo. Eso lo hace inutilizable para
+    poblar `capa_fina.params`.
+
+    PAPERS DESCARTADOS por contenido:
+      - durazno_goyal2007.pdf → es sobre CIRUELA (Prunus salicina), no durazno.
+      - durazno_kingsly2007.pdf → es sobre GRANADA (pomegranate arils), no durazno.
+    Ambos archivos tienen DOIs correctos pero el contenido no corresponde
+    al producto del nombre del archivo. Si se desea usarlos como análogos
+    fenomenológicos (ciruela y granada son frutas con hueso/arilo),
+    cargar entradas separadas en frutas.yaml — no se hace en v1.
+
+    DATOS ÚTILES de Kingsly 2006 (aún sin coeficientes de capa fina):
+      - Difusividad efectiva: D_eff = 3.04-4.41 × 10⁻¹⁰ m²/s para T=55-65°C,
+        con o sin pretratamiento (KMS o ascórbico).
+      - Variedad Shan-e-Punjab, espesor 3.5 ± 0.4 mm, v_aire = 0.8 m/s,
+        modelo logarítmico mejor ajuste cualitativo (r²>0.99).
+
+    PRETRATAMIENTOS típicos:
+      - Blanching con KMS al 1% (potassium metabisulfito): práctica común,
+        previene pardeado enzimático. Acelera secado.
+      - Blanching con ácido ascórbico al 1%: alternativa al KMS.
+
+    El durazno presenta encogimiento moderado (menor que manzana por
+    mayor contenido de fibra estructural en el mesocarpio).
+
+
+# =============================================================================
+# YACÓN
+# =============================================================================
+yacon:
+
+  descripcion: "Yacón (Smallanthus sonchifolius) en rodajas. Tubérculo andino con alto contenido de fructooligosacáridos (FOS). Producción tradicional NOA en Bárcena (Jujuy) y valles de Salta. Producto sensible al pardeado enzimático y de alta humedad inicial (~90% bh)."
+  categoria: FRUTA
+  # Nota: yacón es botánicamente raíz tuberosa, no fruta. Lo agrupamos en
+  # frutas.yaml por su tratamiento culinario y comportamiento de secado
+  # (alto contenido de azúcares, similar a frutas dulces).
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+
+    densidad_aparente: 1050.0
+    # kg/m³. Yacón fresco. Tubérculo con alto contenido de agua y FOS.
+    # Estimado por composición (90% agua, FOS como carbohidrato dominante).
+    # Calidad MEDIA — no se ubicó medición directa en literatura accesible.
+    # Reis et al. (2012) Thermophysical properties of yacon — citado por
+    # Marques 2022 — sería referencia primaria pero no está en Project.
+
+    calor_especifico_seco: 1650.0
+    # J/(kg·K). Estimado por Choi-Okos con composición de Marques 2022:
+    # 0.37% proteína, 0.024% lípidos, 11% carbohidratos (mayoría FOS),
+    # 0.36% fibra, 0.51% ceniza, resto agua. Para sólido seco (sin agua):
+    # cp_sólido ≈ Σ (x_i · cp_i) ≈ 1650 J/(kg·K). Calidad MEDIA.
+
+    humedad_inicial_tipica: 9.0
+    # kg agua / kg ms. Equivalente: X_bh = 9.0/10.0 = 0.90 = 90% bh.
+    # Coherente con Marques 2022 ("yacon es una raíz con
+    # aproximadamente 90% w.b. de contenido de humedad") y con Shi 2013.
+    # Variabilidad por cultivar y estación: X ∈ [7.5, 11].
+    # Fuente: Marques et al. (2022) DOI:10.1016/j.lwt.2022.113151.
+
+    humedad_equilibrio_aire_seco: 0.12
+    # kg agua / kg ms. Estimación a HR=0.10-0.15, T=298 K.
+    # Coherente con monolayer GAB de Marques 2022 (Xm ≈ 0.13 a 50-60°C).
+
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad y cp_seco: estimaciones por Choi-Okos con composición de
+        Marques et al. (2022) DOI:10.1016/j.lwt.2022.113151. Sin
+        verificación experimental directa.
+      Humedad inicial: Marques et al. (2022); coherente con Shi (2013).
+      Humedad equilibrio: derivada de monolayer GAB Marques (Xm≈0.13).
+
+  # ---------------------------------------------------------------------------
+  capa_fina:
+
+    page:
+      # DEFAULT por simplicidad. Datos a v_aire = 1.5 m/s (condición central
+      # de Shi 2013). Se reportan los 5 sets por temperatura del paper.
+      # Para uso en módulo de cámara: el módulo debe interpolar k(T) y n(T)
+      # entre los puntos calibrados (5, 15, 25, 35, 45 °C).
+      params:
+        # Tabla con 5 sets por T. Se da como lista para que el módulo
+        # interpole en T_K. Si el módulo necesita un set único, usar
+        # el de 25 °C como default.
+        sets_por_temperatura:
+          - T_K: 278.15   # 5 °C
+            k: 0.089
+            n: 0.912
+            R2: 0.998
+          - T_K: 288.15   # 15 °C
+            k: 0.069
+            n: 1.103
+            R2: 1.000
+          - T_K: 298.15   # 25 °C
+            k: 0.217
+            n: 1.105
+            R2: 0.999
+          - T_K: 308.15   # 35 °C
+            k: 0.341
+            n: 1.170
+            R2: 0.998
+          - T_K: 318.15   # 45 °C
+            k: 0.328
+            n: 1.243
+            R2: 0.998
+        # Set default si el módulo no soporta interpolación todavía:
+        k: 0.217         # min^(-n)
+        n: 1.105
+      condiciones_calibracion:
+        T_K: [278.15, 288.15, 298.15, 308.15, 318.15]
+        v_aire_m_s: 1.5
+        espesor_m: 0.004    # 4 mm
+        HR_aire: null
+      calidad_datos: ALTA
+      fuente: "Shi Q, Zheng Y, Zhao Y (2013). Mathematical modeling on thin-layer heat pump drying of yacon (Smallanthus sonchifolius) slices. Energy Convers Manag 71:208-216. DOI:10.1016/j.enconman.2013.03.032. Tabla 5."
+      notas: |
+        DEFAULT RECOMENDADO. Datos a v_aire=1.5 m/s, espesor 4 mm.
+        Shi también reporta a v=0.5, 1.0, 2.0 m/s pero solo a T=25°C
+        (constante). El rango de T (5-45°C) corresponde a secado por
+        bomba de calor; PARA SECADORES SOLARES en Salta el rango más
+        relevante es 30-60°C: la extrapolación a T>45°C debe alertarse.
+        El módulo de cámara debe disparar advertencia si T_aire > 318 K.
+
+    midilli:
+      params:
+        sets_por_temperatura:
+          - T_K: 278.15   # 5 °C
+            a: 1.007
+            k: 0.102
+            n: 0.827
+            b: -0.002
+            R2: 0.999
+          - T_K: 288.15   # 15 °C
+            a: 1.001
+            k: 0.097
+            n: 1.095
+            b: 0.000
+            R2: 1.000
+          - T_K: 298.15   # 25 °C
+            a: 0.985
+            k: 0.201
+            n: 1.157
+            b: 0.001
+            R2: 0.999
+          - T_K: 308.15   # 35 °C
+            a: 0.989
+            k: 0.324
+            n: 1.231
+            b: 0.002
+            R2: 0.999
+          - T_K: 318.15   # 45 °C
+            a: 0.981
+            k: 0.305
+            n: 1.314
+            b: 0.002
+            R2: 0.998
+        # Set default a 25 °C:
+        a: 0.985
+        k: 0.201
+        n: 1.157
+        b: 0.001
+      condiciones_calibracion:
+        T_K: [278.15, 288.15, 298.15, 308.15, 318.15]
+        v_aire_m_s: 1.5
+        espesor_m: 0.004
+        HR_aire: null
+      calidad_datos: ALTA
+      fuente: "Shi et al. (2013). DOI:10.1016/j.enconman.2013.03.032. Tabla 5 (continuación)."
+      notas: |
+        Mejor ajuste según Shi 2013 (R²>0.998 en todos los casos).
+        Shi propone también ecs. polinomiales para k, n, a, b en función
+        de T y V (eqs. 13-20 del paper):
+          A v=1.5 m/s:
+            k(T) = -2.092e-5·T³ + 0.002·T² - 0.025·T + 0.194  (R²=0.998)
+            n(T) = 1.792e-5·T³ - 0.002·T² + 0.051·T + 0.611   (R²=0.995)
+            a(T) = 1.143e-5·T² - 0.001·T + 1.013              (R²=0.886)
+            b(T) = -2.857e-6·T² - 0.003                       (R²=0.995)
+          A T=25°C:
+            k(V) = -0.227·V³ + 0.860·V² - 0.895·V + 0.374
+            n(V) = 0.279·V³ - 1.070·V² + 1.169·V + 0.870
+            a(V) = -0.035·V³ + 0.120·V² - 0.119·V + 1.011
+            b(V) = -0.003·V³ + 0.010·V² - 0.010·V + 0.003
+        Para incorporar estas formas regresionadas se requiere extender
+        el esquema con un campo `params_regresionados` (futuro upgrade).
+
+  # ---------------------------------------------------------------------------
+  isoterma:
+
+    gab:
+      # Tabla 3 de Marques 2022 — desorción (relevante para secado),
+      # promediando modos DDI y DVS a 50 y 60 °C.
+      # Forma del modelo: X_eq = X_m·C·K·a_w / [(1-K·a_w)·(1-K·a_w + C·K·a_w)]
+      params:
+        # Promedios desorción 50 y 60 °C, modos DDI y DVS combinados:
+        X_m: 0.129     # kg/kg ms
+        C: 1.500
+        K: 0.978
+        # Sets detallados por modo y temperatura (para módulos avanzados):
+        sets_detallados:
+          - modo: DDI       # Dynamic Desorption Isotherm
+            T_K: 323.15     # 50 °C
+            curva: desorcion
+            X_m: 0.129
+            C: 1.32
+            K: 0.973
+          - modo: DDI
+            T_K: 333.15     # 60 °C
+            curva: desorcion
+            X_m: 0.134
+            C: 2.06
+            K: 0.979
+          - modo: DVS       # Dynamic Vapor Sorption (estática)
+            T_K: 323.15
+            curva: desorcion
+            X_m: 0.137
+            C: 1.17
+            K: 0.970
+          - modo: DVS
+            T_K: 333.15
+            curva: desorcion
+            X_m: 0.116
+            C: 1.45
+            K: 0.984
+      rango_T_K: [323.15, 333.15]   # 50-60 °C (rango calibrado)
+      calidad_datos: ALTA
+      fuente: "Marques BC, Plana-Fattori A, Flick D, Tadini CC (2022). Convective drying of yacón (Smallanthus sonchifolius) slices: A simple physical model including shrinkage. LWT 159:113151. DOI:10.1016/j.lwt.2022.113151. Tabla 3."
+      notas: |
+        Pearson correlation > 0.997 en todos los ajustes.
+        Adsorción y desorción muestran HISTÉRESIS — para secado usar
+        SIEMPRE la rama de desorción.
+        Rango calibrado: 50-60 °C; para extrapolación a T<50°C o T>60°C
+        introducir margen de incertidumbre y disparar advertencia.
+
+  # ---------------------------------------------------------------------------
+  notas: |
+    Producto bien documentado en literatura internacional reciente (Shi 2013,
+    Marques 2022). Default recomendado: Page o Midilli de Shi 2013 para
+    cinética; GAB de Marques 2022 para isoterma.
+
+    REFERENCIAS EVALUADAS pero descartadas para este bloque:
+      - Quiroga et al. (2007). ASADES 11(1):2.53-2.58. Trata HOJAS de
+        yacón (parte aérea), NO la raíz/rizoma. Producto cinéticamente
+        distinto. Si se quiere agregar como producto separado, crear
+        entrada `yacon_hojas` en hojas_aromaticas.yaml.
+      - Trabajos del INENCO (Durán, Condorí et al. ASADES) sobre el
+        secador de Bárcena: caracterizan el SISTEMA (colector + cámara),
+        no la cinética del producto. Confirmado por el usuario (Sesión 6).
+
+    RANGO DE TEMPERATURAS calibrado por Shi 2013 (5-45°C, secado por
+    bomba de calor) es BAJO comparado al típico de secado solar (30-60°C
+    en Salta). Para T_aire > 45°C el módulo de cámara debe disparar
+    advertencia ADV_CAPA_FINA_FUERA_DE_RANGO_T (a definir en §5.9.11
+    durante Tanda 3 paso 3).
+
+    PRETRATAMIENTOS comunes: el yacón es muy sensible a pardeado
+    enzimático (polifenoloxidasa). Inmersión rápida en solución cítrica
+    o ascórbica al 1% antes de secar. Marques 2022 NO usa pretratamiento.
+
+    SHRINKAGE: significativo. Marques 2022 modela shrinkage combinado
+    (vertical+isotrópico) y muestra que el diámetro se mantiene >90%
+    inicial hasta X*=0.2, después decrece drásticamente. Para prediseño
+    es aceptable ignorarlo; para simulación detallada incorporar el
+    modelo de Marques (eqs. 8-10 del paper).
+
+    INULINA Y FOS: el yacón pierde FOS (efecto biológico deseado) por
+    encima de ~50-60°C. ALERTA DE PROCESO: secar a T < 50°C preserva
+    mejor la calidad nutricional, aunque ralentiza el secado. Esto es
+    un trade-off de diseño que el software debe permitir explorar.

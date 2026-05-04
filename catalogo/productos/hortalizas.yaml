@@ -1,0 +1,569 @@
+# =============================================================================
+# hortalizas.yaml — CATÁLOGO DE PRODUCTOS PARA SECADO SOLAR
+# Esquema: bitácora §5.9.9 + extensión §5.10.2 (Sesión 7).
+# Estado: ESTRUCTURA VACÍA — coeficientes a cargar por el usuario.
+# Ver PLANTILLA_REFERENCIA_CATALOGO.md para guía de carga.
+# =============================================================================
+
+
+# =============================================================================
+# TOMATE
+# =============================================================================
+tomate:
+  descripcion: "Tomate (Solanum lycopersicum) en rodajas o mitades. Producción relevante en NOA y Cuyo. Para uso como tomate deshidratado o polvo. Alta humedad inicial (~94% bh). Sensible a pardeado no enzimático (reacción de Maillard) a altas temperaturas."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 950.0        # kg/m³ — tomate fresco en rodajas. ASHRAE Ch.19.
+    calor_especifico_seco: 1340.0   # J/(kg·K) — estimado Choi-Okos. Calidad MEDIA.
+    humedad_inicial_tipica: 15.7    # kg/kg ms — equivale a 94% bh. Rango: 13-17.
+    humedad_equilibrio_aire_seco: 0.08
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad y cp: ASHRAE Handbook Refrig. 2018 Ch.19 + Choi-Okos.
+      Humedad inicial: USDA SR-28 (tomate crudo ~94% bh).
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: ~328-343 K (55-70°C). Paper ref: Doymaz (2007)
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Doymaz I (2007). J Food Eng 78(4):1291-1297. DOI:10.1016/j.jfoodeng.2005.12.047"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Doymaz I (2007). DOI:10.1016/j.jfoodeng.2005.12.047 y/o Sacilik et al. (2006) secado solar túnel. DOI:10.1016/j.jfoodeng.2005.01.025"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Akanbi et al. (2006). J Food Eng 73(2):157-163. DOI:10.1016/j.jfoodeng.2005.01.011"
+      notas: null
+
+  notas: |
+    Papers prioritarios de la shopping list:
+      - Doymaz I (2007). Air-drying characteristics of tomatoes.
+        J Food Eng 78(4):1291-1297. DOI:10.1016/j.jfoodeng.2005.12.047 [MINCyT Elsevier]
+      - Sacilik K, Keskin R, Elicin AK (2006). Mathematical modelling of solar
+        tunnel drying of thin layer organic tomato.
+        J Food Eng 73(3):231-238. DOI:10.1016/j.jfoodeng.2005.01.025 [MINCyT Elsevier]
+    Temperatura máxima recomendada ~65°C para preservar licopeno.
+    Pretratamientos comunes: blanching, sulfitado leve.
+
+
+# =============================================================================
+# PAPA
+# =============================================================================
+papa:
+  descripcion: "Papa (Solanum tuberosum) en rodajas o cubos. Producto de alta disponibilidad en NOA (Puna). Relativamente alta densidad y baja humedad inicial comparado a otras hortalizas (~80% bh). Encogimiento significativo durante secado."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 1050.0       # kg/m³. ASHRAE Ch.19.
+    calor_especifico_seco: 1550.0   # J/(kg·K). Choi-Okos con composición papa cruda.
+    humedad_inicial_tipica: 4.0     # kg/kg ms — ~80% bh. Rango: 3.5-4.5.
+    humedad_equilibrio_aire_seco: 0.09
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad: ASHRAE Handbook Refrig. 2018 Ch.19.
+      Cp, X0: USDA SR-28 + Choi-Okos.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: 333-353 K (60-80°C). Paper ref: Akpinar et al. (2003)
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Akpinar EK, Midilli A, Bicer Y (2003). Energy Convers Manag 44(10):1689-1705. DOI:10.1016/S0196-8904(02)00171-1"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Akpinar et al. (2003) DOI:10.1016/S0196-8904(02)00171-1 y/o Naderinezhad et al. (2016) DOI:10.1002/fsn3.258 [OA Wiley]"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Kaymak-Ertekin & Gedik (2004). LWT 37(4):429-438. DOI:10.1016/j.lwt.2003.10.012 (incluye papa)"
+      notas: null
+
+  notas: |
+    Papers prioritarios:
+      - Akpinar EK, Midilli A, Bicer Y (2003). Single layer drying behaviour of
+        potato slices in a convective cyclone dryer.
+        Energy Convers Manag 44(10):1689-1705. DOI:10.1016/S0196-8904(02)00171-1 [MINCyT Elsevier]
+      - Naderinezhad S et al. (2016). Food Sci Nutr 4(1):110-118.
+        DOI:10.1002/fsn3.258 [OA Wiley — disponible sin MINCyT]
+    Encogimiento importante → el modelo de espesor constante subestima el
+    tiempo final de secado. Ver Hassini et al. (2007) para corrección.
+
+
+# =============================================================================
+# CEBOLLA
+# =============================================================================
+cebolla:
+  descripcion: "Cebolla (Allium cepa) en aros o rodajas. Producción importante en Cuyo y zonas áridas NOA. Alta humedad inicial (~89% bh). El compuesto de azufre afecta el sabor del producto seco — secado rápido a T moderada preserva calidad."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 900.0        # kg/m³. ASHRAE Ch.19.
+    calor_especifico_seco: 1370.0   # J/(kg·K). Choi-Okos.
+    humedad_inicial_tipica: 8.1     # kg/kg ms — ~89% bh. Rango: 7-9.
+    humedad_equilibrio_aire_seco: 0.07
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      Densidad: ASHRAE Ch.19. Cp, X0: USDA SR-28 + Choi-Okos.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: ~333-343 K. Sharma et al. (2005)
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Sharma GP, Verma RC, Pathare PB (2005). J Food Eng 71(3):282-286. DOI:10.1016/j.jfoodeng.2005.02.010"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Sharma et al. (2005) DOI:10.1016/j.jfoodeng.2005.02.010"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — buscar isoterma específica de cebolla. Alternativa: Kaymak-Ertekin & Sultanoğlu (2001) J Food Eng 47:225-231."
+      notas: null
+
+  notas: |
+    Papers prioritarios:
+      - Sharma GP, Verma RC, Pathare PB (2005). Mathematical modeling of
+        infrared radiation thin layer drying of onion slices.
+        J Food Eng 71(3):282-286. DOI:10.1016/j.jfoodeng.2005.02.010 [MINCyT Elsevier]
+    Cebolla es sensible a temperatura > 60°C (oscurecimiento de azufre).
+    Pretratamiento habitual: blanching o inmersión en salmuera.
+
+
+# =============================================================================
+# PIMIENTO_ROJO
+# =============================================================================
+pimiento_rojo:
+  descripcion: "Pimiento rojo (Capsicum annuum) en rodajas o tiras, para producción de pimentón. Cultivo relevante en NOA (Salta, La Rioja). Contiene capsaicina y carotenoides (responsables del color del pimentón). Sensible a pérdida de color a T > 70°C."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: true   # carotenoides (color del pimentón) se degradan con luz UV y calor excesivo
+
+  propiedades_basicas:
+    densidad_aparente: 890.0        # kg/m³. ASHRAE Ch.19.
+    calor_especifico_seco: 1450.0   # J/(kg·K). Estimado.
+    humedad_inicial_tipica: 10.7    # kg/kg ms — ~91.5% bh. Rango: 9-12.
+    humedad_equilibrio_aire_seco: 0.08
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      USDA SR-28 (red bell pepper, raw). Cp estimado por Choi-Okos.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: 328-343 K (55-70°C). Akpinar et al. (2003)
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Akpinar EK, Bicer Y, Yildiz C (2003). J Food Eng 59(1):99-104. DOI:10.1016/S0260-8774(02)00425-9"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Vega A et al. (2007). J Food Eng 79(4):1460-1466. DOI:10.1016/j.jfoodeng.2006.04.028 y/o Akpinar et al. (2003)"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Kaymak-Ertekin & Sultanoğlu (2001). J Food Eng 47:225-231. DOI:10.1016/S0260-8774(00)00120-5 (pepper isotherms)"
+      notas: null
+
+  notas: |
+    Papers prioritarios:
+      - Akpinar EK, Bicer Y, Yildiz C (2003). Thin layer drying of red pepper.
+        J Food Eng 59(1):99-104. DOI:10.1016/S0260-8774(02)00425-9 [MINCyT Elsevier]
+      - Vega A, Fito P, Andrés A, Lemus R (2007). J Food Eng 79(4):1460-1466.
+        DOI:10.1016/j.jfoodeng.2006.04.028 [MINCyT Elsevier]
+    T máxima recomendada ~65°C para preservar capsantina (color rojo).
+    fotosensible: true — cámara preferentemente protegida de luz directa.
+
+
+# =============================================================================
+# ZANAHORIA_RALLADA
+# =============================================================================
+zanahoria_rallada:
+  descripcion: "Zanahoria (Daucus carota) rallada. La geometría de rallado difiere fundamentalmente de los ensayos estándar de rodajas — el espesor efectivo es mucho menor (~0.5-1.5 mm) y la relación superficie/volumen es mucho mayor. Los parámetros de capa fina de papers de rodajas son solo orientativos."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 880.0        # kg/m³. Zanahoria fresca.
+    calor_especifico_seco: 1470.0   # J/(kg·K). Choi-Okos.
+    humedad_inicial_tipica: 9.0     # kg/kg ms — ~90% bh. Rango: 8-10.
+    humedad_equilibrio_aire_seco: 0.08
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      ASHRAE Ch.19 + USDA SR-28 (carrot raw). Cp por Choi-Okos.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: 323-343 K (50-70°C). Doymaz (2004)
+        v_aire_m_s: null
+        espesor_m: null   # ATENCIÓN: papers usan rodajas (3-10mm), no rallado
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Doymaz I (2004). J Food Eng 61(3):359-364. DOI:10.1016/S0260-8774(03)00142-0"
+      notas: |
+        ADVERTENCIA GEOMÉTRICA: los coeficientes de Doymaz (2004) son para
+        rodajas de zanahoria (espesor ~3-10 mm). Para zanahoria rallada el
+        espesor efectivo es ~0.5-1.5 mm → el secado es más rápido.
+        Calidad rebajada a MEDIA por mismatch geométrico, independientemente
+        de la calidad del paper original.
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Aghbashlo M et al. (2009). Int Agrophys 23:313-317. [OA]"
+      notas: |
+        Misma advertencia geométrica que para `page`. Ver notas del producto.
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — buscar isoterma específica de zanahoria."
+      notas: null
+
+  notas: |
+    ADVERTENCIA CENTRAL: la literatura de cinética de zanahoria trabaja con
+    rodajas. La zanahoria rallada tiene espesor efectivo ~5-10x menor. Al
+    usar estos parámetros en el módulo de cámara, los tiempos de secado
+    calculados serán MAYORES que los reales. Margen conservador para prediseño.
+    Si se desea mayor precisión, calibrar con datos propios de rallado.
+    Papers prioritarios:
+      - Doymaz I (2004). J Food Eng 61(3):359-364.
+        DOI:10.1016/S0260-8774(03)00142-0 [MINCyT Elsevier]
+
+
+# =============================================================================
+# PEREJIL
+# =============================================================================
+perejil:
+  descripcion: "Perejil (Petroselinum crispum), hojas frescas. Alta relación superficie/volumen por su estructura laminar. Producto aromático — temperatura máxima ~50°C para preservar aceites esenciales. Secado relativamente rápido."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: true   # aceites esenciales (apiol, mirceno) sensibles a UV
+
+  propiedades_basicas:
+    densidad_aparente: 450.0        # kg/m³. Estimado para hoja fresca con estructura aérea.
+    calor_especifico_seco: 1600.0   # J/(kg·K). Estimado.
+    humedad_inicial_tipica: 5.7     # kg/kg ms — ~85% bh. Rango: 5-7.
+    humedad_equilibrio_aire_seco: 0.10
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      Valores estimados. No se encontraron mediciones directas en
+      handbooks para perejil fresco. Actualizar cuando se disponga.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null         # esperado: 308-333 K (35-60°C). Papers de hojas aromáticas.
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Soysal Y (2004). Biosyst Eng 89(2):167-173. DOI:10.1016/j.biosystemseng.2004.07.008 [MINCyT Elsevier] (microondas — calidad MEDIA para solar)"
+      notas: |
+        Advertencia: paper de microondas, no convección. Usar como orientación.
+        Para convección solar, buscar alternativa o usar por analogía con
+        hojas de menta (Doymaz 2006, J Food Eng 74(3):370-375).
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Soysal et al. (2006). Biosystems Eng 93:403-413. DOI:10.1016/j.biosystemseng.2006.01.017"
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE"
+      notas: null
+
+  notas: |
+    La literatura de perejil es predominantemente de microondas o IR.
+    Para secado solar convectivo, los coeficientes de microondas son
+    orientativos (calidad MEDIA como máximo).
+    Alternativa: usar valores de hojas de menta como analogía
+    (morfología similar, categoría similar de hojas con aceites esenciales).
+
+
+# =============================================================================
+# APIO
+# =============================================================================
+apio:
+  descripcion: "Apio (Apium graveolens), pecíolos y hojas. Literatura escasa para secado convectivo solar. Parámetros ESTIMADOS POR ANALOGÍA con perejil (morfología similar: tallo herbáceo + hoja plana, composición parecida). Usar con precaución."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: true
+
+  propiedades_basicas:
+    densidad_aparente: 600.0        # kg/m³. Estimado (tallo hueco + hoja). MEDIA.
+    calor_especifico_seco: 1550.0   # J/(kg·K). Estimado Choi-Okos.
+    humedad_inicial_tipica: 22.2    # kg/kg ms — ~95.7% bh. Rango: 18-25.
+    humedad_equilibrio_aire_seco: 0.09
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      USDA SR-28 (celery raw, ~95.4% bh). Densidad y Cp estimados.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "PENDIENTE — usar valores de perejil (Soysal 2004/2006) como punto de partida"
+      notas: |
+        ESTIMADA_POR_ANALOGIA con perejil. Decisión tomada en Sesión 6:
+        literatura específica de apio para secado solar es escasa. Si se
+        dispone de datos calibrados de apio en el futuro, reemplazar.
+        La analogía es razonable: morfología similar (hoja plana, alta
+        relación superficie/volumen), composición aproximada similar,
+        rango de humedad inicial similar.
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "PENDIENTE — copiar de perejil una vez que perejil esté poblado"
+      notas: |
+        ESTIMADA_POR_ANALOGIA. Copiar params de perejil.midilli cuando estén disponibles.
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "PENDIENTE — analogía con perejil"
+      notas: null
+
+  notas: |
+    PRODUCTO CON DATOS DE ANALOGÍA. Ver decisión Sesión 6.
+    Todos los parámetros de capa fina e isoterma se estiman por
+    analogía con perejil. Calidad máxima posible: ESTIMADA_POR_ANALOGIA.
+    Si se realizan ensayos de cinética de apio (tesis, trabajos de
+    grado, papers futuros), actualizar con datos reales.
+
+
+# =============================================================================
+# MANDIOCA
+# =============================================================================
+mandioca:
+  descripcion: "Mandioca (Manihot esculenta), raíz en rodajas o rallada. Producción relevante en NOA (ramal jujeño, sudeste de Salta). Alta densidad de almidón. Encogimiento moderado durante secado. Humedad inicial ~60-65% bh."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 1100.0       # kg/m³. Raíz densa por contenido de almidón.
+    calor_especifico_seco: 1480.0   # J/(kg·K). Choi-Okos (mayoría carbohidrato).
+    humedad_inicial_tipica: 1.9     # kg/kg ms — ~65% bh. Rango: 1.5-2.5.
+    humedad_equilibrio_aire_seco: 0.10
+    calidad_propiedades_basicas: MEDIA
+    fuente_propiedades_basicas: |
+      USDA SR-28 (cassava raw, ~60% bh). Densidad estimada por composición.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Dairo OU et al. (2015). Acta Technol Agric 18(4):102-107. DOI:10.1515/ata-2015-0021 [OA De Gruyter]"
+      notas: null
+
+    midilli:
+      params:
+        a: null
+        k: null
+        n: null
+        b: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Dairo et al. (2015) o alternativa de secado solar."
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Sanni LO et al. (1997). J Food Eng 34(2):203-212. DOI:10.1016/S0260-8774(97)00072-6 [MINCyT Elsevier] (fufu/tapioca)"
+      notas: |
+        Sanni et al. (1997) trabaja con mandioca procesada (fufu, tapioca).
+        Para raíz fresca en rodajas la isoterma puede diferir. Verificar.
+
+  notas: |
+    Papers prioritarios:
+      - Dairo OU et al. (2015). Solar drying kinetics of cassava slices.
+        Acta Technol Agric 18(4):102-107. DOI:10.1515/ata-2015-0021 [OA De Gruyter]
+    La mandioca tiene toxicidad por cianuro (HCN) en variedades amargas.
+    El secado elimina el HCN por volatilización. Esto no afecta los
+    parámetros cinéticos pero sí es relevante para el diseño de la
+    cámara (ventilación mínima obligatoria para variedades amargas).

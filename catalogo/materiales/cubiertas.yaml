@@ -1,0 +1,60 @@
+# Cubiertas transparentes para colectores solares de aire.
+# Espesor NO va aquí: se define en ColectorUnidad para permitir estudios paramétricos.
+# Propiedades ópticas integradas al espectro solar (transmitancia) y al IR lejano (emisividad).
+# Versión: v1 (Tanda 2 paso 2)
+
+vidrio_comun:
+  descripcion: "Vidrio float común, contenido normal de hierro"
+  transmitancia_solar: 0.84
+  emisividad_ir: 0.88
+  conductividad_termica: 1.0       # W/m·K
+  densidad: 2500                   # kg/m³
+  calor_especifico: 750            # J/kg·K
+  T_max_servicio: 523              # K (~250 °C)
+  fuente: "Duffie & Beckman 2013, Tabla 5.3.1; Incropera Tabla A.3"
+  notas: "Espesor típico de mercado 3 o 4 mm. τ disminuye con espesor."
+
+vidrio_bajo_hierro:
+  descripcion: "Vidrio templado bajo contenido de hierro (solar grade)"
+  transmitancia_solar: 0.91
+  emisividad_ir: 0.88
+  conductividad_termica: 1.0
+  densidad: 2500
+  calor_especifico: 750
+  T_max_servicio: 573              # K (templado tolera más)
+  fuente: "Duffie & Beckman 2013, §5.3; ASHRAE HoF 2021 Cap. 35"
+  notas: "Estándar en colectores solares térmicos de calidad. Templado: rotura segura."
+
+policarbonato_alveolar:
+  descripcion: "Lámina de policarbonato alveolar (cámaras de aire internas)"
+  transmitancia_solar: 0.78
+  emisividad_ir: 0.90
+  conductividad_termica: 0.05      # k EFECTIVO, no intrínseco; ver nota
+  densidad: 1200
+  calor_especifico: 1200
+  T_max_servicio: 393              # K (~120 °C)
+  fuente: |
+    k efectivo derivado de transmitancia térmica U de ficha técnica Palram/Glanze
+    (ISO 10077, U = 3.8 W/m²·K para 4 mm) descontando resistencias superficiales
+    estándar h_i = 8, h_e = 25 W/m²·K (ISO 6946). Densidad y cp del PC sólido
+    según Incropera Tabla A.3. T_max según Wikipedia/hoja Lexan.
+  notas: |
+    ATENCIÓN: el valor de k es un coeficiente EFECTIVO del panel alveolar,
+    no la conductividad intrínseca del policarbonato (que es ~0.20 W/m·K).
+    Engloba conducción a través de paredes y aire estanco en los alveolos.
+    Calibrado para alveolar 4 mm de pared simple. Para 6 mm: ~0.06; para
+    10 mm: ~0.07. Si trabajás con espesor distinto, override recomendado.
+    Atención: τ degrada con UV; reemplazo cada 10-15 años.
+
+polietileno_ldpe:
+  descripcion: "Film de polietileno baja densidad (invernadero)"
+  transmitancia_solar: 0.85
+  emisividad_ir: 0.30              # ¡semitransparente al IR! pierde mucho por radiación
+  conductividad_termica: 0.33
+  densidad: 920
+  calor_especifico: 2300
+  T_max_servicio: 353              # K (~80 °C)
+  fuente: "Duffie & Beckman 2013, Tabla 5.3.1; ASHRAE HoF 2021"
+  notas: |
+    ε baja en IR → cubierta "fría" radiativamente, pero efecto invernadero pobre.
+    Económico y de uso extendido en armarios pequeños. Vida útil corta (1-3 años).

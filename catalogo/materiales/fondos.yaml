@@ -1,0 +1,39 @@
+# Material exterior de cierre del fondo del colector.
+# Función estructural y barrera contra intemperie, no térmica primaria.
+# Versión: v1 (Tanda 2 paso 2)
+
+galvanizada_sin_pintura:
+  descripcion: "Chapa galvanizada sin tratamiento exterior"
+  conductividad_termica: 50
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 673              # K, limitado por integridad del galvanizado
+  fuente: "Incropera Tabla A.1; ASTM A653 sobre galvanizado"
+  notas: "Cierre exterior económico. La galvanización oficia de protección."
+
+galvanizada_pintada:
+  descripcion: "Chapa galvanizada con pintura epoxi exterior"
+  conductividad_termica: 50
+  densidad: 7850
+  calor_especifico: 480
+  T_max_servicio: 473              # K, limita la pintura
+  fuente: "Incropera Tabla A.1; hojas técnicas pinturas epoxi"
+  notas: "Mejor durabilidad estética y anticorrosiva. T_max limitada por la pintura."
+
+contrachapado_fenolico:
+  descripcion: "Multilaminado fenólico (terciado fenólico marino)"
+  conductividad_termica: 0.13
+  densidad: 700
+  calor_especifico: 1700
+  T_max_servicio: 393              # K, limita el adhesivo fenólico
+  fuente: "ASHRAE HoF 2021 Cap. 26 (madera); Incropera Tabla A.3"
+  notas: "Aporta cierta resistencia térmica adicional. Buena estética."
+
+pino:
+  descripcion: "Madera de pino"
+  conductividad_termica: 0.12
+  densidad: 510
+  calor_especifico: 1380
+  T_max_servicio: 373              # K, ablandamiento de resinas y degradación
+  fuente: "Incropera Tabla A.3; ASHRAE HoF 2021 Cap. 26"
+  notas: "Económica y de fácil mecanizado. Requiere tratamiento contra humedad."
