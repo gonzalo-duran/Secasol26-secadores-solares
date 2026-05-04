@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+
+# Caché de datos climáticos (se regenera automáticamente)
+data/cache/
+*.parquet
+
+# Secretos de Streamlit
+.streamlit/secrets.toml
+
+# Artefactos de IDEs
+.vscode/settings.json
+.idea/
+
+# Artefactos del SO
+.DS_Store
+Thumbs.db
+
+# Artefactos de pytest
+.pytest_cache/
+.coverage
+htmlcov/
