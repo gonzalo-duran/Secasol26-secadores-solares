@@ -1,9 +1,12 @@
 # Material exterior de cierre del fondo del colector.
 # Función estructural y barrera contra intemperie, no térmica primaria.
-# Versión: v1 (Tanda 2 paso 2)
+# emisividad_ir: cara interna (hacia el canal de aire). Necesaria para
+#   el intercambio radiativo absorbedor↔fondo en Tipos 2, 3 y 4.
+# Versión: v2 (agrega emisividad_ir, Sesión 13)
 
 galvanizada_sin_pintura:
   descripcion: "Chapa galvanizada sin tratamiento exterior"
+  emisividad_ir: 0.22              # cara interna oxidada/envejecida; Incropera T12.1
   conductividad_termica: 50
   densidad: 7850
   calor_especifico: 480
@@ -13,6 +16,7 @@ galvanizada_sin_pintura:
 
 galvanizada_pintada:
   descripcion: "Chapa galvanizada con pintura epoxi exterior"
+  emisividad_ir: 0.90              # pintura oscura; Incropera T12.1
   conductividad_termica: 50
   densidad: 7850
   calor_especifico: 480
@@ -22,6 +26,7 @@ galvanizada_pintada:
 
 contrachapado_fenolico:
   descripcion: "Multilaminado fenólico (terciado fenólico marino)"
+  emisividad_ir: 0.90              # madera / fenólico; Incropera T12.1
   conductividad_termica: 0.13
   densidad: 700
   calor_especifico: 1700
@@ -31,6 +36,7 @@ contrachapado_fenolico:
 
 pino:
   descripcion: "Madera de pino"
+  emisividad_ir: 0.90              # madera no tratada; Incropera T12.1
   conductividad_termica: 0.12
   densidad: 510
   calor_especifico: 1380

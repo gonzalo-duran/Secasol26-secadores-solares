@@ -26,7 +26,7 @@ vidrio_bajo_hierro:
   notas: "Estándar en colectores solares térmicos de calidad. Templado: rotura segura."
 
 policarbonato_alveolar:
-  descripcion: "Lámina de policarbonato alveolar (cámaras de aire internas)"
+  descripcion: "Placa de policarbonato alveolar (cámaras de aire internas)"
   transmitancia_solar: 0.78
   emisividad_ir: 0.90
   conductividad_termica: 0.05      # k EFECTIVO, no intrínseco; ver nota

@@ -1,7 +1,7 @@
 # BITÁCORA — SOFTWARE DE PREDISEÑO DE SECADORES SOLARES
 
-**Última actualización:** Sesión 9 (Estructura de carpetas, convenciones, requirements.txt y esqueleto del repo — COMPLETOS. Entorno de desarrollo local operativo.)  
-**Estado:** Modelo de datos central 100% definido (Tandas 1–5). Esqueleto del repo generado y operativo. Entorno de desarrollo local configurado (Fedora 44, Python 3.12, venv, VS Code con plugins). Tanda 3 paso 2 EN CURSO (catálogo de productos — el usuario carga coeficientes de forma autónoma). Siguiente paso: codear Pestaña 2 (emplazamiento y clima).
+**Última actualización:** Sesión 11 + consulta sobre modelo físico del colector (2026-05-05).  
+**Estado:** Modelo de datos central 100% definido (Tandas 1–5). Pestañas 2 y 3 implementadas y testeadas (82 tests). `calculos/colector_calc.py` está vacío — el motor numérico del colector espera que el usuario provea las EDOs. Tanda 3 paso 2 EN CURSO. Siguiente paso: el usuario responde 3 preguntas sobre el modelo físico del colector (ver §10) y/o se avanza con la UI de Pestaña 4.
 
 ---
 
@@ -107,14 +107,56 @@ Versión inicial: **español** completo (interfaz y código/comentarios). Biling
 - **(a) Diario:** un día (específico / más frío / más caluroso / solsticios y equinoccios).  
 - **(b) Anual:** 8760 h, requiere vectorización NumPy.
 
-### 4.2 Pestaña 2 — Emplazamiento y recursos climáticos
+### 4.2 Pestaña 2 — Emplazamiento y recursos climáticos — IMPLEMENTADA (Sesión 10)
 
-Entradas: latitud, longitud, acimut, pendiente, altitud (opcional). Datos NASA POWER: T\_amb, GHI, DNI, DHI, WS2M, presión, HR, altitud. Política de huecos: interpolación ≤3h, bloqueo \+ decisión usuario \>3h. Caché: parquet en `data/cache/nasa_power/{hash}.parquet`. Salidas: gráficas de series \+ CSV descargable.
+**Entradas UI:** latitud, longitud, altitud, zona horaria (IANA); acimut y pendiente del colector (convención Duffie). Año de referencia para NASA POWER.
 
-### 4.3–4.7 Pestañas 3–7
+**Datos NASA POWER** (`pvlib.iotools.get_nasa_power`, pvlib 0.15.1): T\_amb [°C→K], GHI, DNI, DHI [W/m²], WS2M [m/s], PS [kPa→Pa], RH2M [%→fracción]. El índice del DataFrame es UTC tz-aware.
 
-- P3: Colectores (discretización espacial, optimización de largo).  
-- P4: Cámara de secado (modelo acoplado calor-masa).  
+**Política de huecos (implementada en `calculos/clima_calc._aplicar_politica_huecos`):**
+- Huecos ≤ 3 h: interpolación lineal en tiempo (`interpolate(method='time')` sin límite, luego restaurar NaN en gaps grandes).
+- Huecos > 3 h: se dejan como NaN. `CalidadClima.n_horas_bloqueadas > 0` activa widget de decisión en la UI.
+- **Nota técnica:** `interpolate(limit=3)` de pandas rellena desde ambos extremos del hueco y puede llenar gaps de >3 h completos. La solución correcta es: interpolar todo y restaurar NaN en los grupos de duración > 3 h.
+
+**Caché:** parquet en `data/cache/nasa_power/{hash}.parquet`. Hash = SHA-256 de (lat×4dec, lon×4dec, año). Altitud NASA embebida como metadata de pyarrow schema (clave `b"altitud_nasa_m"`), sin archivo sidecar.
+
+**Salidas UI:** plots mensuales (temperatura, irradiancia GHI/DNI/DHI, viento y HR), tabla mensual resumen, CSV descargable en unidades de usuario (°C, W/m², m/s, %, hPa).
+
+### 4.3 Pestaña 3 — Colector Solar de Aire — IMPLEMENTADA (Sesión 11)
+
+**Alcance de esta sesión:** configuración de entrada y validación estática. El motor numérico (EDOs de discretización espacial) se implementará cuando el usuario aporte las ecuaciones.
+
+**Jerarquía de dataclasses:**
+
+```
+Colector
+├── ColectorUnidad    — un módulo físico (materiales + geometría + velocidad de diseño)
+├── BancoColectores   — n_serie, n_paralelo
+└── Optional[Chimenea] — para convección natural
+```
+
+**Lógica de flujo en banco paralelo (decisión Sesión 11):**
+`Q_total = n_paralelo × (velocidad_diseno_ms × ancho_m × espaciado_m)`.
+El motor ve `Q_total`; cada rama trabaja a `velocidad_diseno_ms`.
+`n_serie` no cambia el caudal por rama, solo alarga el camino del aire.
+
+**Catálogo de materiales (`core/catalogo.py`):**
+Carga los 4 YAML al importar el módulo (sin lazy loading). Expone `CUBIERTAS`, `PLACAS`, `AISLANTES`, `FONDOS` como dicts globales. Los IDs de material en `ColectorUnidad` se validan contra estos dicts en `__post_init__`.
+
+**Campos clave de `ColectorUnidad`:**
+`ancho_m`, `largo_m`, `espaciado_m` (alto del canal de flujo), `n_cubiertas` (1 ó 2), `velocidad_diseno_ms`, `id_cubierta + espesor_cubierta_m`, `id_placa + espesor_placa_m`, `id_aislante + espesor_aislante_m`, `id_fondo + espesor_fondo_m`.
+
+**Métodos de conveniencia en `Colector`:** `caudal_total_m3_s()`, `area_total_m2()`, `largo_camino_aire_m()`.
+
+**Chimenea:** usa materiales de `fondos.yaml` (estructurales). Pendiente crear `chimeneas.yaml` con 4 materiales específicos de chimenea solar (ver Tanda 2 original).
+
+**Validaciones:** 13 errores duros + 8 advertencias estáticas (función `advertencias_colector()`).
+
+**Tests:** 32 tests en `test_colector.py`, todos pasan.
+
+### 4.4–4.7 Pestañas 4–7
+
+- P4: Cámara de secado (modelo acoplado calor-masa) — **SIGUIENTE PASO** (requiere EDOs del usuario).
 - P5: Sistema de calentamiento auxiliar.  
 - P6: Motores (solo convección forzada).  
 - P7: Resultados finales.
@@ -304,7 +346,7 @@ Advertencias runtime: `PROD_T_FUERA_RANGO_CALIBRACION`, `INIO_A_W_FINAL_INSEGURA
 
 **Serialización:** `proyecto_a_json()` vía `dataclasses.asdict()` \+ `json.dump()`. Deserialización: trabajo futuro.
 
-**Layout de módulos del core (IMPLEMENTADO en esqueleto):**
+**Layout de módulos del core:**
 
 core/
 
@@ -312,11 +354,13 @@ core/
 
 ├── proyecto.py       → Proyecto, Meta, Configuracion              ← CON CÓDIGO REAL
 
-├── emplazamiento.py  → Emplazamiento                              ← esqueleto
+├── emplazamiento.py  → Emplazamiento                              ← CON CÓDIGO REAL (Sesión 10)
 
-├── clima.py          → Clima, CalidadClima                        ← esqueleto
+├── clima.py          → Clima, CalidadClima, COLUMNAS\_SI           ← CON CÓDIGO REAL (Sesión 10)
 
-├── colector.py       → ColectorUnidad, BancoColectores, ...       ← esqueleto
+├── catalogo.py       → CUBIERTAS, PLACAS, AISLANTES, FONDOS       ← CON CÓDIGO REAL (Sesión 11)
+
+├── colector.py       → Chimenea, ColectorUnidad, BancoColectores, Colector, advertencias\_colector()  ← CON CÓDIGO REAL (Sesión 11)
 
 ├── camara.py         → GeometriaCamara, ..., Camara               ← esqueleto
 
@@ -325,6 +369,22 @@ core/
 ├── motor.py          → Motor, TipoAccionamiento                   ← esqueleto
 
 └── resultados.py     → Resultados, ResultadosClima, ...           ← esqueleto
+
+**Módulos de cálculo implementados:**
+
+calculos/
+
+└── clima\_calc.py     → obtener\_clima(), \_aplicar\_politica\_huecos()  ← CON CÓDIGO REAL (Sesión 10)
+
+**UI implementada:**
+
+ui/
+
+├── componentes/unidades.py  ← CON CÓDIGO REAL (Sesión 10): celsius↔kelvin, Pa↔kPa↔hPa, fracción↔%, acimut Duffie↔pvlib
+
+├── p2\_emplazamiento.py      ← CON CÓDIGO REAL (Sesión 10)
+
+└── p3\_colector.py           ← CON CÓDIGO REAL (Sesión 11): selectboxes de materiales con propiedades, geometría, banco, chimenea opcional, advertencias
 
 ---
 
@@ -447,12 +507,12 @@ Un test por validación dura. Nombre del test \= nombre del código en minúscul
 ## 8\. Entorno de desarrollo local — OPERATIVO (Sesión 9\)
 
 - **OS:** Fedora 44, Plasma 6.6.4  
-- **Python:** 3.12 nativo del sistema (instalado vía dnf)  
+- **Python:** 3.12 nativo del sistema (instalado vía dnf). **Nota:** el venv corre Python 3.14.4 según pytest — verificar si hay cambio de entorno.
 - **venv:** `~/proyectos/secador_solar/.venv`  
 - **VS Code:** instalado desde repositorio oficial Microsoft (RPM). Plugins instalados: Python, Pylance, Black Formatter, Ruff, debugpy, autoDocstring (Google style), YAML, TOML, GitLens.  
 - **`.vscode/settings.json`:** format on save con black, organize imports con ruff, pytest integrado, autoDocstring Google style.  
 - **`.vscode/launch.json`:** configuraciones de debug para Streamlit y pytest.  
-- **Tests:** 3 tests pasan (`test_proyecto_coherencia.py`).  
+- **Tests (Sesión 11):** 82 tests pasan — `test_proyecto_coherencia.py` (3), `test_emplazamiento.py` (13), `test_clima_calc.py` (9), `test_unidades.py` (25), `test_colector.py` (32).  
 - **Repo GitHub:** pendiente de crear (instrucciones en `docs/SETUP_GIT.md`).
 
 ---
@@ -470,9 +530,11 @@ Un test por validación dura. Nombre del test \= nombre del código en minúscul
 **PENDIENTE:**
 
 6. Crear repositorio en GitHub (público) — instrucciones en `docs/SETUP_GIT.md`.  
-7. Codear **Pestaña 2** (emplazamiento y clima) — **PRÓXIMO PASO**.  
-8. Pestaña por pestaña: 3, 4, 5, 6, 7\.  
-9. Para cada tipología: el usuario aporta las EDOs, Claude codea, tests de validación.
+7. ~~Codear **Pestaña 2** (emplazamiento y clima)~~ ← **COMPLETADO Sesión 10**.  
+8. ~~Codear **Pestaña 3** (colectores — configuración y validación estática)~~ ← **COMPLETADO Sesión 11**.  
+9. Codear **Pestaña 4** (cámara de secado) — **PRÓXIMO PASO** — requiere EDOs del usuario.  
+10. Pestaña por pestaña: 5, 6, 7\.  
+11. Motor numérico del colector (EDOs de discretización espacial) — el usuario aporta las ecuaciones.
 
 ---
 
@@ -485,6 +547,21 @@ Un test por validación dura. Nombre del test \= nombre del código en minúscul
 - [ ] **Acople vs. desacople colector-cámara:** decidir al recibir las ecuaciones del usuario.  
 - [ ] **Tipología CAJA:** modelo físico distinto. Definir cuando llegue su turno.  
 - [ ] **Deserialización** (dict → dataclasses anidadas): trabajo futuro.
+- [ ] **`chimeneas.yaml`:** la Tanda 2 original documenta 4 materiales de chimenea que no están en el repo. Por ahora Chimenea valida contra `fondos.yaml`. Pendiente crear el archivo con los materiales correctos.
+
+**Preguntas bloqueantes para implementar `calculos/colector_calc.py` (motor numérico del colector):**
+
+- [ ] **¿Estacionario en x o transitorio en t?**
+  - Estacionario: sistema EDO en `x ∈ [0, L]` → `solve_ivp` integra en x, condición de borde `T_f(0) = T_entrada`.
+  - Transitorio: sistema EDP → método de líneas (discretizar x, integrar en t). Necesario si querés simular el arranque o la respuesta a nubes.
+
+- [ ] **¿Qué superficies se modelan explícitamente?**
+  - Mínimo: `T_placa(x)` + `T_fluido(x)`.
+  - Completo: `T_cubierta(x)` + `T_placa(x)` + `T_fluido(x)` (+ fondo si corresponde).
+
+- [ ] **¿Cómo se trata el intercambio radiativo placa-cubierta?**
+  - Ecuación completa (Stefan-Boltzmann con factor de forma y emisividades).
+  - Coeficiente linealizado de pérdidas `U_L` (más simple, menos exacto a alta T).
 
 ---
 
@@ -498,16 +575,65 @@ Un test por validación dura. Nombre del test \= nombre del código en minúscul
 
 ## 12\. Próximo paso al retomar
 
-**Crear el repo en GitHub y arrancar con el código de la Pestaña 2 (emplazamiento y clima).**
+**Dos caminos igualmente válidos para la próxima sesión:**
 
-Abrir con:
+**Camino A — Motor numérico del colector:** el usuario responde las 3 preguntas del §10 y aporta las EDOs. Claude codea `calculos/colector_calc.py`.
 
-*"Retomemos. El entorno está operativo. Vamos con el código de la Pestaña 2."*
+*"Retomemos. Acá están las ecuaciones del colector: \[modelo\]. Respondo las preguntas: estacionario / superficies X, Y, Z / radiación completa."*
 
-O si ya creaste el repo en GitHub:
+**Camino B — UI de Pestaña 4 (datos de cámara):** implementar la sección de entrada de datos de la cámara sin el motor numérico, mientras el usuario consigue/formaliza las ecuaciones.
 
-*"Repo creado en GitHub. Vamos con la Pestaña 2."*
+*"Retomemos. Implementemos la Pestaña 4 (entrada de datos de cámara) mientras organizo las ecuaciones del colector."*
 
-O si cargaste coeficientes en los YAMLs:
+**Camino C — Catálogo de productos:**
 
-*"Cargué coeficientes para \[productos\]. Revisalos antes de seguir con la Pestaña 2."*  
+*"Cargué coeficientes para \[productos\]. Revisalos antes de seguir."*
+
+---
+
+## 13\. Decisiones técnicas de implementación — Sesión 10
+
+### 13.1 Política de huecos — bug y solución
+
+`pandas.interpolate(method='time', limit=3)` **no implementa correctamente** la política de "interpolación solo para huecos ≤ 3 h". El parámetro `limit=3` rellena hasta 3 NaN consecutivos desde **cada extremo** del hueco, por lo que un hueco de 5 h puede quedar completamente relleno (3 desde la izquierda + 3 desde la derecha con superposición).
+
+**Solución adoptada:** interpolar todo el DataFrame sin límite (`limit=None`), luego restaurar NaN en las posiciones correspondientes a huecos de duración > 3 h (identificados previamente por `groupby` sobre la máscara de nulos).
+
+### 13.2 Metadatos del caché parquet
+
+La altitud reportada por NASA POWER se almacena como metadata de schema de pyarrow (`b"altitud_nasa_m"`), embebida en el propio archivo `.parquet`. No se usa un archivo sidecar `.json`. Lectura con `pyarrow.parquet.read_table(...).schema.metadata`.
+
+### 13.3 Conversión de ángulos — caso degenerado
+
+`acimut_pvlib_a_duffie(0°) = 180°` (Norte). El valor `-180°` (también Norte en Duffie) no aparece como resultado de la función, ya que el rango canónico de salida es `(−180°, +180°]`. Los tests de round-trip excluyen el punto `−180°` por esta razón.
+
+### 13.4 Parámetros NASA POWER en pvlib 0.15.1
+
+La función `pvlib.iotools.get_nasa_power` acepta nombres pvlib (`"ghi"`, `"temp_air"`, `"wind_speed_2m"`) y los traduce internamente a nombres NASA. Para parámetros sin mapeo definido (`"RH2M"`, `"PS"`), se pasan directamente el nombre NASA y se devuelven con ese nombre en el DataFrame. La altitud del punto de grilla se recupera de `meta["altitude"]`.
+
+---
+
+## 14\. Decisiones técnicas de implementación — Sesión 11
+
+### 14.1 Velocidad de diseño en ColectorUnidad — motivación física
+
+La velocidad del aire en el canal (`velocidad_diseno_ms`) va en `ColectorUnidad`, no en Motor ni Camara. Razón: en un banco de colectores en paralelo, cada rama opera a la misma velocidad (es el parámetro de diseño del colector), y el motor ve la suma:
+
+```
+Q_total = n_paralelo × (v × ancho × espaciado)
+```
+
+Si la velocidad estuviera en el Motor, sería imposible calcularla por unidad sin conocer el banco. Si estuviera en la Camara, no reflejaría que el colector tiene su propia geometría de canal independiente de la cámara.
+
+### 14.2 Validación de materiales en `__post_init__`
+
+`core/catalogo.py` carga los 4 YAML al importar el módulo (no lazy loading). `ColectorUnidad.__post_init__` valida los IDs contra los dicts globales `catalogo.CUBIERTAS`, etc. Si un archivo YAML no existe, el import de `catalogo` falla con `RuntimeError` explicativo. Esta decisión hace que los errores de catálogo sean rápidos y claros.
+
+### 14.3 Chimenea usa materiales de `fondos.yaml`
+
+No existe `chimeneas.yaml` en el repo. Para no bloquear la validación, la Chimenea valida su `id_material` contra `fondos.yaml` (materiales estructurales: chapa galvanizada, contrachapado, pino). Esto es razonable físicamente. Pendiente: crear `chimeneas.yaml` con los 4 materiales específicos de chimenea solar documentados en la Tanda 2 original (no disponible en las bitácoras del repo).
+
+### 14.4 Advertencias estáticas como función módulo, no método
+
+Las advertencias estáticas del colector se implementan como función de módulo `advertencias_colector(colector)` en lugar de método de instancia. Esto evita que el dataclass tenga lógica de negocio y permite testearlas de forma aislada sin instanciar UI. El patrón es consistente con cómo se planea manejar validaciones en otros módulos del core.
+

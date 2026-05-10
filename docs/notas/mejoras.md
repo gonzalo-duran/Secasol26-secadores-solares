@@ -1,0 +1,34 @@
+# Archivo de pedido de mejoras UX/UI
+
+1. Pestaña emplazamiento. Seccion orientacion del colector: coloquemos como valor por defecto del acimut 180.0
+   **[IMPLEMENTADO]** — `core/emplazamiento.py`: `acimut_colector_deg` default cambiado de 0.0 a 180.0 (Norte, óptimo para hemisferio sur).
+
+2. Pestaña colector solar de aire. Materiales del colector unitario. Cubierta transparente: Corregir ¨Lamina de policarbonato alveolar (cámaras de aire internas)¨ y cambiar por ¨Placa de policarbonato alveolar (cámaras de aire internas)¨ como opción por default.
+   **[IMPLEMENTADO]** — Descripción corregida en `catalogo/materiales/cubiertas.yaml`. Default de `ColectorUnidad.id_cubierta` cambiado a `policarbonato_alveolar` en `core/colector.py`.
+
+3. Pestaña colector solar de aire: En todas las subsecciones de definicion de materiales (Cubierta transparente, Placa absorbedora, Aislante térmico, Fondo/Carcasa), agregar una opcion del estilo de ¨Definido por el usuario¨, de manera de que el usuario pueda definir algun material con características distintas a las que estamos considerando.
+   **[IMPLEMENTADO]** — `ui/p3_colector.py`: cada selector de material incluye ahora la opción "Definido por el usuario" al final. Al seleccionarla, aparecen campos de entrada para las propiedades relevantes (τ/α solar, ε IR, k, T_max). Los valores se inyectan en el catálogo en memoria antes de la validación.
+
+4. Una opcion muy util: Agregar una opcion en cada una de las pestañas de colector, camara, auxiliar y motor, que permita guardar en un texto plano lo volcado en la configuracion de cada uno de esos apartados (por ejemplo, en el caso de colectores, que guarde material, propiedades, dimensiones, etc).
+   **[IMPLEMENTADO]** — Botón "Guardar configuración (.txt)" al final de p3 (colector), p4 (cámara), p5 (auxiliar, solo si está activo) y p6 (motor, solo si está definido). Genera archivo descargable con todos los parámetros de configuración.
+
+5. Un pedido importantisimo: implementar un botos de guardar resultados al final del dimensionamiento, que te tire todo lo que corresponde al diseño, y resultados obtenidos
+   **[IMPLEMENTADO]** — Botón "Guardar prediseño completo (.txt)" al final de p7 (resultados). Genera un archivo con: condiciones de operación, configuración completa de todos los subsistemas, y resultados numéricos (colector, auxiliar, cámara, balance energético).
+
+6. Modificacion importante: en la pestaña colector no se ve la diferencia entre los distintos tipos de colectores. Lo que quiero decir con esto es que no se observa manera de cambiar de los tipos 1 2 3 o 4 de colector. Habria que colocar una subseccion de seleccion de tipo de colector. Luego de ello definir materiales y espaciamiento entre absorbedor y fondo de colector
+   **[IMPLEMENTADO]** — Nueva sección "Tipo de colector" en p3 con selectbox (Tipos 1–4) y descripción de cada configuración. Para Tipos 2, 3 y 4 aparecen dos campos de espaciado: canal superior (cubierta–absorbedor) y canal inferior (absorbedor–fondo). Nuevos campos `tipo_colector` y `espaciado_inferior_m` en `ColectorUnidad`. El balance global (`balance_global.py`) despacha al calculador correcto según el tipo. Los resultados en p7 usan `getattr` para manejar los campos que difieren entre tipos.
+   
+7. Modificacion importante: Pestaña emplazamiento. El acimut puede tomar valores de 0 a 360. Con la convencion que usamos acimut = 0 es S, acimut = 90 es E, acimut = 180 es N, acimut = 270 es OE.
+   **[IMPLEMENTADO]** — Widget de acimut cambiado a rango [0°, 360°] con convención UI360 (0=S, 90=E, 180=N, 270=O). Se agregaron `acimut_duffie_a_ui360()` y `acimut_ui360_a_duffie()` en `ui/componentes/unidades.py`. El almacenamiento interno sigue siendo Duffie (sin cambios en `core/`). La tabla de referencia en la UI muestra puntos cardinales correctos. 14 tests nuevos.
+
+8. Modificacion importante: Las gráficas que se tienen en la pestaña Emplazamiento solo reflejan los valores de irradiancia sobre plano horizontal que vienen de la descarga de NASA POWER, y no reflejan el cambio en la irradiancia sobre plano de colector cuando se modifica la pendiente y acimut. Analizar si conviene presentar dos graficas, una para los valores sobre plano horizontal y otra para los valores sobre plano de coleccion.
+   **[IMPLEMENTADO]** — Función `_calcular_poa_horaria()` en `p2_emplazamiento.py` transpone GHI/DNI/DHI al plano del colector usando pvlib (modelo Hay-Davies). El tab "Irradiancia solar" ahora muestra dos subgráficos verticales: plano horizontal (GHI/DNI/DHI) y plano del colector (POA global). Se muestran además métricas de GHI anual vs POA anual con la diferencia.
+
+9. **[IMPLEMENTADO]** Modificacion importante: Ampliar funcionalidad de la pestaña de colector solar. La pestaña de colectores debe servir para elegir el tipo de colector que se quiere utilizar, definir materiales, definir dimensiones, definir velocidad de diseño. Todo esto ya lo hace, pero necesitamos agregar graficas que muestren el desempeño del colector. Entonces, el pedido es el agregado de un boton Calcular colector¨, que al presionarlo, tome el colector que se acaba de dimensionar y definir en las subsecciones anteriores, y lo evalue tomando las variables climaticas, pendiente y acimut definidas en emplazamiento. Como resultado de esa evaluacion, el programa debe entregar lo siguiente:
+
+   9.a. grafica de temperatura de salida de flujo en funcion del tiempo: Esta grafica debe mostrar en el eje vertical la temperatura en x = L para el tipo de colector que se ha definido. En el eje horizontal la frecuencia temporal definida en la pestaña 1. Entonces, si se ha decidido dimensionar a lo largo de un dia (de las distintas alternativas de dia que se ofrecen en pestaña 1), el eje x muestra la fecha y hora que corresponde, y en el eje y los valores de temperatura de salida de flujo para ese dia que se analiza. 
+   Si es que se ha decidido dimensionar a lo largo de todo un año, el eje x deberá mostrar frecuencia mensual, y en el eje y se mostrará los valores diarios medio mensuales de temperatura de salida para el año.
+   
+   
+   9.b. grafica de temperatura de flujo en funcion del largo del coelctor: Esta grafica complementa a la anterior y debe mostrar en el eje vertical la temperatura de flujo de aire para el tipo de colector que se ha definido. En el eje horizontal se grafica considerando el largo del colector. Si se ha decidido dimensionar a lo largo de un dia (de las distintas alternativas de dia que se ofrecen en pestaña 1), el eje x muestra el largo de colector, y en el eje y los valores de temperatura de salida de flujo a mediodía solar para ese dia que se analiza. 
+   Si es que se ha decidido dimensionar a lo largo de todo un año, el eje x deberá mostrar el largo del colector variando desde x = 0 a x = L y en el eje y se mostrará los valores diarios medio mensuales de temperatura de salida de flujo evaluados en mediodia solar para el año.
