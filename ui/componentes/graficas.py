@@ -48,16 +48,30 @@ def grafica_termodinamica_camara(
     ax1.grid(True, alpha=0.3)
     ax1.set_ylim(bottom=0)
 
-    ax2.plot(
-        t_h, res.T_prod_K - 273.15, color="#d62728", linewidth=2,
-        label="T producto",
+    T_prod_C = res.T_prod_K - 273.15
+    T_flujo_C = res.T_flujo_K - 273.15
+
+    ax2.plot(t_h, T_prod_C, color="#d62728", linewidth=2, label="T producto")
+    ax2.set_ylabel("T producto [°C]", color="#d62728")
+    ax2.tick_params(axis="y", labelcolor="#d62728")
+
+    ax2b = ax2.twinx()
+    ax2b.plot(t_h, T_flujo_C, color="#2ca02c", linewidth=1.5,
+              linestyle="--", label="T aire (cámara)")
+    ax2b.set_ylabel("T aire cámara [°C]", color="#2ca02c")
+    ax2b.tick_params(axis="y", labelcolor="#2ca02c")
+
+    flujo_rango = float(T_flujo_C.max() - T_flujo_C.min())
+    ax2b.annotate(
+        f"var. T_aire = {flujo_rango:.1f} °C",
+        xy=(0.98, 0.05), xycoords="axes fraction",
+        ha="right", fontsize=7, color="#2ca02c",
+        bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7),
     )
-    ax2.plot(
-        t_h, res.T_flujo_K - 273.15, color="#2ca02c", linewidth=1.5,
-        linestyle="--", label="T aire (cámara)",
-    )
-    ax2.set_ylabel("Temperatura [°C]")
-    ax2.legend(fontsize=8, loc="lower right")
+
+    lines1, labels1 = ax2.get_legend_handles_labels()
+    lines2, labels2 = ax2b.get_legend_handles_labels()
+    ax2.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="lower right")
     ax2.grid(True, alpha=0.3)
 
     ax3.plot(t_h, res.q_prod_W, color="#ff7f0e", linewidth=1.5, label="q aire→producto")

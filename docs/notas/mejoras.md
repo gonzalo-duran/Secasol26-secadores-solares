@@ -38,3 +38,51 @@
 
 11. Modificación: Fuerte comentario: hay que revisar muy bien la definición de mediodía solar que se está usando en todo el proyecto. Por ejemplo, en alguna ocasión el mediodía solar figura en las gráficas a hora 18:00, en otras a la 15:15. Controlar timestamp de los datos, y controlar como se calcula el medidía solar. Estos errores se han observado usando la opcion zona horaria argentina/salta, correspondiente al lugar de emplazamiento por lat y long. Solo para que tengas de referencia, en Salta, el mediodía solar se produce a la 13:15 aproximadamente (varia ligeramente a lo largo del año), pero nunca a la 15 ni a la 18. Para recordar, el mediodía solar es la hora a la cual el sol se encuentra sobre el cenit, en determinado lugar (lat y long), y fecha del año (inclinacion de la ecliptica).
    **[IMPLEMENTADO]** — Diagnóstico: dos bugs combinados. (1) Conceptual: P3 definía "mediodía solar" como `idxmax(POA)`, que con orientaciones extremas del colector (vertical Oeste, etc.) caía a las 17:00 en lugar del tránsito real a 13:20. (2) Presentación: `DateFormatter("%H:%M")` por default usa UTC y desfasaba el eje X +3 h respecto al tz de los datos en Salta. Fixes: nuevo módulo `calculos/solar_geometria.py` con `mediodia_solar_transit()` (SPA, resolución continua, independiente de la orientación) y `bin_horario_que_contiene()`. `_evaluar_diario` y `_evaluar_anual` en P3 ahora calculan `hora_transit` (continuo) y `hora_poa_max` (bin) por separado. Gráfica T_salida vs hora muestra dos líneas verticales distintas si difieren >15 min. El perfil T(x) se evalúa en el bin que contiene el tránsito SPA, no el `idxmax(POA)`. `DateFormatter` recibe ahora `tz=horas[0].tz` para pintar el eje X en hora local. 15 tests nuevos en `test_solar_geometria.py`.
+   
+12. Modificación importante: ¿por que las temperaturas de salida de la cámara de secado no replican la forma de salida de las temperaturas ambiente y de salida de colector? Parecería que la cámara funciona a Temperatura de flujo de aire en cámara constante. Esto se verificó tomando el motor de evaporación termodinamico (balance acoplado). Producto yacon. Cuando se cambia a modelo de capa delgada no muestra temperatura de producto ni temperatura de aire en camara ni tampoco flujos de calor.
+   **[IMPLEMENTADO]** — Diagnóstico: dos situaciones distintas. (1) En modo termodinámico, T_flujo es físicamente casi constante porque el caudal de aire domina el balance energético (T_flujo ≈ T_ent, variación típica 0.3–3 °C). No es un bug. Solución: gráfico del panel 2 ahora usa **ejes twin** independientes — eje izquierdo rojo para T_producto, eje derecho verde para T_aire_cámara, cada uno con su propia escala. Anotación muestra la variación real de T_aire. Caption en p7 explica el fenómeno. (2) En modo capa fina, por diseño el modelo asume T y HR constantes durante todo el secado, por eso no calcula perfiles dinámicos. Se añadió un `st.info` en p7 explicando el supuesto de T = cte y HR = cte, y orientando al usuario a usar el modo Termodinámico si necesita perfiles dinámicos.
+
+13. En configuracion de auxiliar, especificando tension de operacion vemos: "streamlit.errors.StreamlitDuplicateElementId: There are multiple `checkbox` elements with the same auto-generated ID. When this element is created, it is assigned an internal ID based on the element type and provided parameters. Multiple elements with the same type and parameters will cause this error.
+
+To fix this error, please pass a unique `key` argument to the `checkbox` element.
+
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
+    result = func()
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
+    exec(code, module.__dict__)  # noqa: S102
+    
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/gduran/proyectos/secador_solar/app.py", line 66, in <module>
+    render()
+    ~~~~~~^^
+File "/home/gduran/proyectos/secador_solar/ui/p6_motor.py", line 351, in render
+    usar_tension = st.checkbox(
+        "Especificar tensión de alimentación",
+        value=mot_prev is not None and mot_prev.tension_V is not None,
+    )
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/runtime/metrics_util.py", line 698, in wrapped_func
+    result = non_optional_func(*args, **kwargs)
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/elements/widgets/checkbox.py", line 201, in checkbox
+    return self._checkbox(
+           ~~~~~~~~~~~~~~^
+        label=label,
+        ^^^^^^^^^^^^
+    ...<11 lines>...
+        bind=bind,
+        ^^^^^^^^^^
+    )
+    ^
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/elements/widgets/checkbox.py", line 397, in _checkbox
+    element_id = compute_and_register_element_id(
+        "toggle" if type == CheckboxProto.StyleType.TOGGLE else "checkbox",
+    ...<6 lines>...
+        width=width,
+    )
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/elements/lib/utils.py", line 264, in compute_and_register_element_id
+    _register_element_id(ctx, element_type, element_id)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/gduran/proyectos/secador_solar/.venv/lib64/python3.14/site-packages/streamlit/elements/lib/utils.py", line 149, in _register_element_id
+    raise StreamlitDuplicateElementId(element_type)"
+   **[IMPLEMENTADO]** — `ui/p6_motor.py` línea 351: añadido `key="motor_usar_tension"` al checkbox "Especificar tensión de alimentación" para forzar un ID único y evitar la colisión.
+
+14. 

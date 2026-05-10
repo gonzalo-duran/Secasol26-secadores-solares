@@ -497,6 +497,12 @@ def render() -> None:
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
             st.pyplot(fig_td)
             plt.close(fig_td)
+            st.caption(
+                "ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el "
+                "caudal de aire es el término dominante en el balance energético — "
+                "el aire mantiene la temperatura cercana a T_entrada. Cada curva usa "
+                "su propia escala (ejes izquierdo y derecho)."
+            )
         else:
             c1, c2, c3, c4 = st.columns(4)
             t_h = cam.t_secado_s / 3600.0
@@ -506,6 +512,16 @@ def render() -> None:
                       help=f"Fuente: {cam.fuente_X_eq}")
             c3.metric("Agua evaporada", f"{cam.masa_agua_extraida_kg:.2f} kg")
             c4.metric("MR objetivo", f"{cam.MR_obj:.4f}")
+
+            if res.T_entrada_camara_K is not None:
+                st.info(
+                    f"ℹ️ **Modelo de capa fina:** supone temperatura del aire "
+                    f"**T = {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C** y "
+                    f"HR = **{HR_cam_pct:.0f} %** constantes durante todo el secado. "
+                    "El modelo cinético no calcula temperaturas del producto ni flujos de "
+                    "calor dinámicos. Para análisis con temperatura y humedad variables, "
+                    "usar el modo **Termodinámico** en P4."
+                )
 
             fig_dry = _fig_drying_curve(cam)
             st.pyplot(fig_dry)

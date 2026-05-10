@@ -351,6 +351,7 @@ def render() -> None:
             usar_tension = st.checkbox(
                 "Especificar tensión de alimentación",
                 value=mot_prev is not None and mot_prev.tension_V is not None,
+                key="motor_usar_tension",
             )
             if usar_tension:
                 tension_val = float(st.selectbox(
