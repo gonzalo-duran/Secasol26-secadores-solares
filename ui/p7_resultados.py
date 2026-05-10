@@ -15,7 +15,9 @@ import numpy as np
 import streamlit as st
 
 from calculos.balance_global import ResultadosCompletos, calcular_todo
+from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.advertencias import Severidad
+from ui.componentes.graficas import grafica_termodinamica_camara
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -36,6 +38,20 @@ _LV_KJ_KG = 2450.0   # calor latente de vaporización [kJ/kg]
 
 def _estado(ok: bool) -> str:
     return "✅" if ok else "❌"
+
+
+def _resumen_camara(cam) -> tuple[float | None, float, str, bool]:
+    """Extrae (t_h, masa_agua_kg, status_legible, ok) abstrayendo el tipo.
+
+    `t_h` es ``None`` si el motor termodinámico no convergió. `ok` indica
+    si el cálculo es utilizable para el balance energético.
+    """
+    if isinstance(cam, ResultadoMotorTermodinamico):
+        ok = cam.t_secado_s is not None and cam.status == "X_obj_alcanzado"
+        t_h = cam.t_secado_s / 3600.0 if cam.t_secado_s is not None else None
+        return t_h, cam.masa_evaporada_total_kg, cam.status, ok
+    status = "OK" if cam.convergencia_ok else cam.mensaje_convergencia
+    return cam.t_secado_s / 3600.0, cam.masa_agua_extraida_kg, status, cam.convergencia_ok
 
 
 def _mostrar_errores(errores: list[str]) -> None:
@@ -249,15 +265,34 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
 
     if res.camara is not None:
         cam = res.camara
+        t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(cam)
         lines += [
             "",
             "CÁMARA",
             f"  T oper.       : {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C",
-            f"  X_eq          : {cam.X_eq_kg_kg:.4f} kg/kg ms",
-            f"  Tiempo secado : {cam.t_secado_s / 3600:.2f} h",
-            f"  Agua evap.    : {cam.masa_agua_extraida_kg:.3f} kg",
-            f"  Convergencia  : {'OK' if cam.convergencia_ok else cam.mensaje_convergencia}",
         ]
+        if isinstance(cam, ResultadoMotorTermodinamico):
+            X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
+            T_prod_final_C = (
+                float(cam.T_prod_K[-1]) - 273.15 if len(cam.T_prod_K) else 0.0
+            )
+            lines += [
+                f"  Modo cálculo  : termodinámico",
+                f"  Tiempo secado : "
+                + (f"{t_h_cam:.2f} h" if t_h_cam is not None else "no convergió"),
+                f"  Agua evap.    : {masa_cam:.3f} kg",
+                f"  X final       : {X_final:.4f} kg/kg ms",
+                f"  T prod. final : {T_prod_final_C:.1f} °C",
+                f"  Status        : {status_cam}",
+            ]
+        else:
+            lines += [
+                f"  Modo cálculo  : capa fina",
+                f"  X_eq          : {cam.X_eq_kg_kg:.4f} kg/kg ms",
+                f"  Tiempo secado : {t_h_cam:.2f} h",
+                f"  Agua evap.    : {masa_cam:.3f} kg",
+                f"  Convergencia  : {status_cam}",
+            ]
 
     if res.energia_total_MJ:
         lines += [
@@ -437,18 +472,44 @@ def render() -> None:
     if res.camara is not None:
         st.subheader("Cámara de Secado")
         cam = res.camara
-        c1, c2, c3, c4 = st.columns(4)
-        t_h = cam.t_secado_s / 3600.0
-        c1.metric("Tiempo de secado",
-                  f"{t_h:.1f} h" if cam.convergencia_ok else f">{t_h:.0f} h")
-        c2.metric("X equilibrio", f"{cam.X_eq_kg_kg:.4f} kg/kg ms",
-                  help=f"Fuente: {cam.fuente_X_eq}")
-        c3.metric("Agua evaporada", f"{cam.masa_agua_extraida_kg:.2f} kg")
-        c4.metric("MR objetivo", f"{cam.MR_obj:.4f}")
+        if isinstance(cam, ResultadoMotorTermodinamico):
+            c1, c2, c3, c4 = st.columns(4)
+            if cam.t_secado_s is not None:
+                c1.metric("Tiempo de secado", f"{cam.t_secado_s / 3600.0:.1f} h")
+            else:
+                c1.metric("Tiempo de secado", "—",
+                          help=f"No convergió: {cam.status}")
+            c2.metric("Status", cam.status)
+            c3.metric("Agua evaporada", f"{cam.masa_evaporada_total_kg:.2f} kg")
+            X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
+            c4.metric("X final", f"{X_final:.4f} kg/kg ms")
 
-        fig_dry = _fig_drying_curve(cam)
-        st.pyplot(fig_dry)
-        plt.close(fig_dry)
+            if cam.status == "t_max_alcanzado":
+                st.warning(
+                    "⚠️ El motor termodinámico no alcanzó X_objetivo dentro del "
+                    "tiempo máximo de simulación. Energías y COP no son confiables."
+                )
+            elif cam.status == "error":
+                st.error(f"❌ Error en el motor termodinámico: {cam.status}")
+
+            X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
+            prod_id = proyecto.camara.carga_producto.producto_id
+            fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
+            st.pyplot(fig_td)
+            plt.close(fig_td)
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            t_h = cam.t_secado_s / 3600.0
+            c1.metric("Tiempo de secado",
+                      f"{t_h:.1f} h" if cam.convergencia_ok else f">{t_h:.0f} h")
+            c2.metric("X equilibrio", f"{cam.X_eq_kg_kg:.4f} kg/kg ms",
+                      help=f"Fuente: {cam.fuente_X_eq}")
+            c3.metric("Agua evaporada", f"{cam.masa_agua_extraida_kg:.2f} kg")
+            c4.metric("MR objetivo", f"{cam.MR_obj:.4f}")
+
+            fig_dry = _fig_drying_curve(cam)
+            st.pyplot(fig_dry)
+            plt.close(fig_dry)
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
@@ -498,19 +559,19 @@ def render() -> None:
     if proyecto.camara is not None and res.camara is not None:
         p = proyecto.camara.carga_producto
         ms = res.masa_producto_seco_kg
-        t_h = res.camara.t_secado_s / 3600.0
+        t_h, masa_agua, _status, _ok = _resumen_camara(res.camara)
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("Masa producto fresco", f"{p.masa_total_kg:.1f} kg")
         c2.metric("Masa producto seco",
                   f"{ms:.2f} kg" if ms else "—",
                   help="masa_fresco / (1 + X₀)")
-        c3.metric("Agua evaporada",
-                  f"{res.camara.masa_agua_extraida_kg:.2f} kg")
+        c3.metric("Agua evaporada", f"{masa_agua:.2f} kg")
         c4.metric("Rendimiento en masa",
                   f"{res.rendimiento_masa:.1%}" if res.rendimiento_masa else "—",
                   help="kg_seco / kg_fresco")
-        c5.metric("Tiempo de secado", f"{t_h:.1f} h")
+        c5.metric("Tiempo de secado",
+                  f"{t_h:.1f} h" if t_h is not None else "no convergió")
 
     # --- Tabla de resumen exportable ---
     with st.expander("Tabla de resultados completa"):
@@ -532,13 +593,26 @@ def render() -> None:
             ]
         if res.camara:
             cam = res.camara
+            t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(cam)
             filas += [
                 ("Cámara — T operación [°C]",
                  f"{kelvin_a_celsius(res.T_entrada_camara_K):.1f}"),
-                ("Cámara — X_eq [kg/kg ms]", f"{cam.X_eq_kg_kg:.4f}"),
-                ("Cámara — Tiempo secado [h]", f"{cam.t_secado_s/3600:.2f}"),
-                ("Cámara — Agua evaporada [kg]", f"{cam.masa_agua_extraida_kg:.3f}"),
+                ("Cámara — Tiempo secado [h]",
+                 f"{t_h_cam:.2f}" if t_h_cam is not None else "no convergió"),
+                ("Cámara — Agua evaporada [kg]", f"{masa_cam:.3f}"),
+                ("Cámara — Status / convergencia", status_cam),
             ]
+            if isinstance(cam, ResultadoMotorTermodinamico):
+                X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
+                T_prod_final_C = (
+                    float(cam.T_prod_K[-1]) - 273.15 if len(cam.T_prod_K) else 0.0
+                )
+                filas += [
+                    ("Cámara — X final [kg/kg ms]", f"{X_final:.4f}"),
+                    ("Cámara — T producto final [°C]", f"{T_prod_final_C:.1f}"),
+                ]
+            else:
+                filas.append(("Cámara — X_eq [kg/kg ms]", f"{cam.X_eq_kg_kg:.4f}"))
         if proyecto.motor and proyecto.motor.potencia_a_instalar_W:
             mot = proyecto.motor
             filas += [

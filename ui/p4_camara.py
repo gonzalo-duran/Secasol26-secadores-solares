@@ -31,6 +31,7 @@ from core.camara import (
     _modelos_disponibles,
     advertencias_camara,
 )
+from ui.componentes.graficas import grafica_termodinamica_camara
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -92,57 +93,6 @@ def _T_amb_representativa_K(proyecto) -> tuple[float, str]:
     return 298.15, "fallback 25 °C (sin clima cargado)"
 
 
-def _grafica_termodinamica(
-    res: ResultadoMotorTermodinamico, X_obj: float, prod_id: str
-) -> plt.Figure:
-    """Tres paneles temporales: X(t), T_prod/T_flujo(t), q_prod/q_pared(t)."""
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
-    t_h = res.t_array_s / 3600.0
-
-    # Panel 1: humedad del producto
-    ax1.plot(t_h, res.X_prod_kg_kg, color="#1f77b4", linewidth=2, label="X(t)")
-    ax1.axhline(
-        X_obj, color="red", linestyle=":", linewidth=1.5,
-        label=f"X_obj = {X_obj:.3f}",
-    )
-    if res.t_secado_s is not None:
-        ax1.axvline(
-            res.t_secado_s / 3600.0, color="orange", linestyle="-.",
-            linewidth=1.5,
-            label=f"t_secado = {res.t_secado_s / 3600.0:.1f} h",
-        )
-    ax1.set_ylabel("X [kg agua / kg ms]")
-    ax1.legend(fontsize=8, loc="upper right")
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(bottom=0)
-
-    # Panel 2: temperaturas
-    ax2.plot(
-        t_h, res.T_prod_K - 273.15, color="#d62728", linewidth=2,
-        label="T producto",
-    )
-    ax2.plot(
-        t_h, res.T_flujo_K - 273.15, color="#2ca02c", linewidth=1.5,
-        linestyle="--", label="T aire (cámara)",
-    )
-    ax2.set_ylabel("Temperatura [°C]")
-    ax2.legend(fontsize=8, loc="lower right")
-    ax2.grid(True, alpha=0.3)
-
-    # Panel 3: flujos de calor
-    ax3.plot(t_h, res.q_prod_W, color="#ff7f0e", linewidth=1.5, label="q aire→producto")
-    ax3.plot(t_h, res.q_pared_W, color="#9467bd", linewidth=1.5, label="q pérdida pared")
-    ax3.set_ylabel("Flujo de calor [W]")
-    ax3.set_xlabel("Tiempo [h]")
-    ax3.legend(fontsize=8, loc="upper right")
-    ax3.grid(True, alpha=0.3)
-
-    fig.suptitle(
-        f"Motor termodinámico — {prod_id} (status: {res.status})",
-        fontsize=11,
-    )
-    fig.tight_layout()
-    return fig
 
 
 def _grafica_curva_secado(resultados, X_0: float, X_obj: float, prod_id: str) -> plt.Figure:
@@ -703,7 +653,7 @@ def render() -> None:
                 help="Humedad del producto al final de la integración.",
             )
 
-            fig = _grafica_termodinamica(res, X_obj, prod_id)
+            fig = grafica_termodinamica_camara(res, X_obj, prod_id)
             st.pyplot(fig)
             plt.close(fig)
         else:

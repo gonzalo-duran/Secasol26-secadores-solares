@@ -21,7 +21,7 @@ Hipótesis de v0:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from core.auxiliar import Auxiliar
@@ -30,8 +30,9 @@ if TYPE_CHECKING:
 
 from calculos.auxiliar_calc import calcular_auxiliar
 from calculos.auxiliar_calc import ResultadosAuxiliar as _SolverAuxiliar
-from calculos.camara_calc import calcular_tiempo_secado
+from calculos.camara_calc import calcular_camara
 from calculos.camara_calc import ResultadosCamara as _SolverCamara
+from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.colector_calc import calcular_colector_tipo1
 from calculos.colector_tipos234_calc import (
     calcular_colector_tipo2,
@@ -39,6 +40,8 @@ from calculos.colector_tipos234_calc import (
     calcular_colector_tipo4,
 )
 from core.resultados import LV_AGUA_MJ_KG
+
+_SolverCamaraUnion = Union[_SolverCamara, ResultadoMotorTermodinamico]
 
 # ---------------------------------------------------------------------------
 # Dataclass de resultados integrados
@@ -70,7 +73,7 @@ class ResultadosCompletos:
 
     colector: Optional[Any] = None
     auxiliar: Optional[_SolverAuxiliar] = None
-    camara: Optional[_SolverCamara] = None
+    camara: Optional[_SolverCamaraUnion] = None
 
     T_entrada_camara_K: Optional[float] = None
 
@@ -141,6 +144,21 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
 # ---------------------------------------------------------------------------
 # Verificación de caudal consistente entre motor y cámara
 # ---------------------------------------------------------------------------
+
+
+def _extraer_t_y_masa(
+    solver_cam: _SolverCamaraUnion,
+) -> tuple[Optional[float], float]:
+    """Extrae (t_secado_s, masa_agua_kg) abstrayendo los nombres divergentes.
+
+    En modo capa fina ambos campos existen siempre como ``float``. En modo
+    termodinámico ``t_secado_s`` puede ser ``None`` cuando el solver no llegó
+    a X_obj (status ``t_max_alcanzado`` o ``error``); en ese caso el balance
+    global no puede multiplicar potencias × tiempo y los devuelve como ``None``.
+    """
+    if isinstance(solver_cam, ResultadoMotorTermodinamico):
+        return solver_cam.t_secado_s, solver_cam.masa_evaporada_total_kg
+    return solver_cam.t_secado_s, solver_cam.masa_agua_extraida_kg
 
 
 def _advertencia_caudal_inconsistente(proyecto) -> Optional[str]:
@@ -269,10 +287,11 @@ def calcular_todo(
     # --- Solver cámara ---
     if proyecto.camara is not None:
         try:
-            solver_cam = calcular_tiempo_secado(
+            solver_cam = calcular_camara(
                 camara=proyecto.camara,
                 T_operacion_K=T_salida_aux_K,
                 HR_operacion=HR_camara,
+                T_amb_K=T_amb_K,
             )
             res.camara = solver_cam
             res.advertencias.extend(solver_cam.advertencias)
@@ -282,37 +301,46 @@ def calcular_todo(
 
     # --- Balance global ---
     if res.camara is not None:
-        t_s = res.camara.t_secado_s
-        masa_agua = res.camara.masa_agua_extraida_kg
+        t_s, masa_agua = _extraer_t_y_masa(res.camara)
 
-        # Energías [MJ]
-        E_sol = (res.colector.Q_util_W * t_s / 1e6) if res.colector else 0.0
-        E_aux = (res.auxiliar.Q_efectivo_W * t_s / 1e6) if res.auxiliar else 0.0
-        E_mot = (
-            (proyecto.motor.potencia_electrica_W * t_s / 1e6)
-            if proyecto.motor is not None and proyecto.motor.potencia_electrica_W
-            else 0.0
-        )
-        E_total = E_sol + E_aux + E_mot
-        E_sec = masa_agua * LV_AGUA_MJ_KG
+        # Masa producto seco — siempre calculable, no depende de t_secado.
+        p = proyecto.camara.carga_producto
+        X_0 = p.humedad_inicial_X
+        ms = p.masa_total_kg / (1 + X_0)
+        res.masa_producto_seco_kg = ms
+        res.rendimiento_masa = ms / p.masa_total_kg
 
-        res.energia_solar_util_MJ = E_sol
-        res.energia_auxiliar_MJ = E_aux if proyecto.auxiliar else 0.0
-        res.energia_motor_MJ = E_mot
-        res.energia_secado_MJ = E_sec
-        res.energia_total_MJ = E_total
+        if t_s is None:
+            # Motor TD no convergió (t_max_alcanzado o error). No podemos
+            # calcular energías × tiempo. Reportamos lo que tenemos.
+            status = getattr(res.camara, "status", "desconocido")
+            res.advertencias.append(
+                f"BG_TD_NO_CONVERGE: motor termodinámico devolvió status='{status}'. "
+                "Energías y COP no calculables; aumentar t_max o revisar parámetros."
+            )
+        else:
+            # Energías [MJ]
+            E_sol = (res.colector.Q_util_W * t_s / 1e6) if res.colector else 0.0
+            E_aux = (
+                res.auxiliar.Q_efectivo_W * t_s / 1e6 if res.auxiliar else 0.0
+            )
+            E_mot = (
+                (proyecto.motor.potencia_electrica_W * t_s / 1e6)
+                if proyecto.motor is not None and proyecto.motor.potencia_electrica_W
+                else 0.0
+            )
+            E_total = E_sol + E_aux + E_mot
+            E_sec = masa_agua * LV_AGUA_MJ_KG
 
-        if E_total > 0:
-            res.COP_secado = E_sec / E_total
-        if E_sol + E_aux > 0:
-            res.fraccion_solar = E_sol / (E_sol + E_aux)
+            res.energia_solar_util_MJ = E_sol
+            res.energia_auxiliar_MJ = E_aux if proyecto.auxiliar else 0.0
+            res.energia_motor_MJ = E_mot
+            res.energia_secado_MJ = E_sec
+            res.energia_total_MJ = E_total
 
-        # Masa producto
-        if proyecto.camara is not None:
-            p = proyecto.camara.carga_producto
-            X_0 = p.humedad_inicial_X
-            ms = p.masa_total_kg / (1 + X_0)
-            res.masa_producto_seco_kg = ms
-            res.rendimiento_masa = ms / p.masa_total_kg
+            if E_total > 0:
+                res.COP_secado = E_sec / E_total
+            if E_sol + E_aux > 0:
+                res.fraccion_solar = E_sol / (E_sol + E_aux)
 
     return res
