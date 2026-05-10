@@ -32,6 +32,11 @@ COLUMNAS_SI: tuple[str, ...] = (
     "HR",
 )
 
+# Rango disponible de NASA POWER para descarga horaria (revisar periódicamente —
+# NASA POWER suele extender el rango ~1 año tras finalizar el calendario).
+ANIO_NASA_MIN: int = 2001
+ANIO_NASA_MAX: int = 2023
+
 
 @dataclass
 class CalidadClima:

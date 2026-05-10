@@ -18,6 +18,10 @@ import pvlib
 import streamlit as st
 
 from calculos.colector_calc import calcular_colector_tipo1
+from calculos.solar_geometria import (
+    bin_horario_que_contiene,
+    mediodia_solar_transit,
+)
 from calculos.colector_tipos234_calc import (
     calcular_colector_tipo2,
     calcular_colector_tipo3,
@@ -355,16 +359,37 @@ def _seleccionar_dia(datos_local, cfg, anio):
 
 
 def _evaluar_diario(colector, datos_dia, empl):
-    """Evalúa el colector hora a hora en el día de análisis."""
+    """Evalúa el colector hora a hora en el día de análisis.
+
+    Devuelve dos timestamps de referencia:
+        - ``hora_transit``: tránsito solar verdadero (mediodía físico, SPA).
+            Resolución continua (típicamente 13:15-13:25 en Salta).
+        - ``hora_poa_max``: bin horario con máxima POA (la hora de mejor
+            rendimiento del colector según su orientación).
+
+    El perfil de temperatura T(x) se evalúa en el bin horario que contiene
+    el tránsito solar (no en POA máx), siguiendo la convención de "estado
+    al mediodía" usada en textos de secado solar.
+    """
     acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
     poa = _poa_serie(datos_dia, empl.latitud_deg, empl.longitud_deg, empl.altitud_m,
                      empl.pendiente_colector_deg, acimut_pvlib)
     tipo = colector.unidad.tipo_colector
 
     horas, T_sal_C, T_amb_C, poa_list = [], [], [], []
-    x_noon = T_perfil_noon_C = hora_noon = None
+    x_noon = T_perfil_noon_C = None
 
-    idx_noon = poa.idxmax() if poa.max() > 50 else None
+    if poa.max() > 50:
+        # Mediodía solar verdadero (tránsito SPA, resolución continua).
+        target = datos_dia.index.date[0]
+        hora_transit = mediodia_solar_transit(
+            target, empl.latitud_deg, empl.longitud_deg, empl.zona_horaria,
+        )
+        hora_poa_max = poa.idxmax()
+        # Evaluamos el perfil en el bin que contiene el tránsito SPA.
+        idx_perfil = bin_horario_que_contiene(hora_transit, datos_dia.index)
+    else:
+        hora_transit = hora_poa_max = idx_perfil = None
 
     for ts, row in datos_dia.iterrows():
         I_g = float(poa.get(ts, 0.0))
@@ -378,22 +403,29 @@ def _evaluar_diario(colector, datos_dia, empl):
 
         if res is not None:
             T_sal_C.append(_T_salida_res(res, tipo) - 273.15)
-            if idx_noon is not None and ts == idx_noon:
+            if idx_perfil is not None and ts == idx_perfil:
                 x_noon, T_perfil = _perfil_fluido(res, tipo)
                 T_perfil_noon_C = T_perfil - 273.15
-                hora_noon = ts
         else:
             T_sal_C.append(None)
 
     return {
         "horas": horas, "T_salida_C": T_sal_C, "T_amb_C": T_amb_C, "poa": poa_list,
-        "x_noon": x_noon, "T_perfil_noon_C": T_perfil_noon_C, "hora_noon": hora_noon,
+        "x_noon": x_noon, "T_perfil_noon_C": T_perfil_noon_C,
+        "hora_transit": hora_transit, "hora_poa_max": hora_poa_max,
         "tipo": tipo,
     }
 
 
 def _evaluar_anual(colector, datos_local, empl, anio):
-    """Para cada mes: evalúa el colector en el mediodía del día 15 (representativo)."""
+    """Para cada mes: evalúa el colector en el bin horario que contiene el
+    mediodía solar verdadero del día 15 (representativo).
+
+    Cambio respecto a la versión anterior: el bin de evaluación se elige
+    por el tránsito SPA (independiente de la orientación del colector),
+    no por POA máxima. Esto evita que un colector con orientación rara
+    desplace artificialmente la evaluación a horas tarde / temprano.
+    """
     acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
     poa_all = _poa_serie(datos_local, empl.latitud_deg, empl.longitud_deg, empl.altitud_m,
                          empl.pendiente_colector_deg, acimut_pvlib)
@@ -404,12 +436,14 @@ def _evaluar_anual(colector, datos_local, empl, anio):
 
     for mes_num in range(1, 13):
         datos_dia = None
+        target_dia = None
         for delta in [0, 1, -1, 2, -2, 3, -3]:
             try:
-                target = _date_type(anio, mes_num, 15 + delta)
-                mask = datos_local.index.date == target
+                target_try = _date_type(anio, mes_num, 15 + delta)
+                mask = datos_local.index.date == target_try
                 if mask.any():
                     datos_dia = datos_local[mask]
+                    target_dia = target_try
                     break
             except ValueError:
                 continue
@@ -420,7 +454,11 @@ def _evaluar_anual(colector, datos_local, empl, anio):
         if poa_dia.max() < 50:
             continue
 
-        idx_noon = poa_dia.idxmax()
+        # Bin que contiene el mediodía solar verdadero (no idxmax(POA)).
+        transit = mediodia_solar_transit(
+            target_dia, empl.latitud_deg, empl.longitud_deg, empl.zona_horaria,
+        )
+        idx_noon = bin_horario_que_contiene(transit, datos_dia.index)
         row = datos_dia.loc[idx_noon]
         I_g = float(poa_dia[idx_noon])
         T_amb = float(row["T_amb_K"])
@@ -473,9 +511,22 @@ def _fig_T_salida_dia(r, fecha_label):
     ax1.plot(horas_dt, T_amb, color="#1f77b4", linewidth=1.5, linestyle="--",
              label="T ambiente [°C]")
 
-    if r["hora_noon"] is not None:
-        ax1.axvline(r["hora_noon"].to_pydatetime(), color="#9c27b0", linestyle=":", linewidth=1.5,
-                    label="Mediodía solar")
+    if r["hora_transit"] is not None:
+        ax1.axvline(
+            r["hora_transit"].to_pydatetime(),
+            color="#9c27b0", linestyle=":", linewidth=1.8,
+            label=f"Mediodía solar ({r['hora_transit'].strftime('%H:%M')})",
+        )
+    if r["hora_poa_max"] is not None:
+        # Pintamos POA máx solo si está separada del transit por al menos
+        # 15 min — si caen en el mismo bin, una sola línea es más limpio.
+        if (r["hora_transit"] is None
+                or abs((r["hora_poa_max"] - r["hora_transit"]).total_seconds()) > 15 * 60):
+            ax1.axvline(
+                r["hora_poa_max"].to_pydatetime(),
+                color="#ff7f0e", linestyle="--", linewidth=1.3,
+                label=f"POA máx ({r['hora_poa_max'].strftime('%H:%M')})",
+            )
 
     ax1.set_ylabel("Temperatura [°C]")
     ax1.set_xlabel("")
@@ -487,7 +538,10 @@ def _fig_T_salida_dia(r, fecha_label):
     ax1.grid(True, linestyle="--", alpha=0.4)
 
     import matplotlib.dates as mdates
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    # tz de los datos — sin esto, DateFormatter usa UTC por default y el eje
+    # aparece corrido respecto al hemisferio occidental (en Salta, +3 h).
+    tz_axis = horas[0].tz if horas else None
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=tz_axis))
     fig.autofmt_xdate(rotation=0, ha="center")
     fig.tight_layout()
     return fig
@@ -1028,7 +1082,7 @@ def render() -> None:
                 c1, c2, c3 = st.columns(3)
                 c1.metric("T salida máx (día)", f"{max(_T_sal_vals):.1f} °C")
                 c2.metric("T salida en mediodía", f"{_T_sal_vals[len(_T_sal_vals)//2]:.1f} °C"
-                           if _r['hora_noon'] is not None else "—")
+                           if _r['hora_transit'] is not None else "—")
                 c3.metric("ΔT máx (salida − ambiente)",
                            f"{max(ts - ta for ts, ta in zip(_T_sal_vals, [_r['T_amb_C'][i] for i, t in enumerate(_r['T_salida_C']) if t is not None])):.1f} °C")
 

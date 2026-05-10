@@ -18,7 +18,7 @@ import pvlib
 import streamlit as st
 
 from calculos.clima_calc import obtener_clima
-from core.clima import Clima
+from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
@@ -55,8 +55,8 @@ _ZONAS_HORARIAS = [
     "UTC",
 ]
 
-_ANIO_MIN = 2001
-_ANIO_MAX = 2023
+_ANIO_MIN = ANIO_NASA_MIN
+_ANIO_MAX = ANIO_NASA_MAX
 _ANIO_DEFAULT = 2022
 
 
@@ -482,17 +482,39 @@ def render() -> None:
 
     st.subheader("Datos climáticos NASA POWER")
 
+    # Sincronización con P1: si el usuario eligió un día específico en P1,
+    # el año de descarga arranca con el año de esa fecha. Si después cambia
+    # la fecha en P1, el widget se actualiza automáticamente. El usuario
+    # puede sobrescribir el año manualmente — su elección persiste hasta que
+    # vuelva a cambiar la fecha en P1.
+    fecha_p1 = (
+        proyecto.configuracion.fecha_especifica
+        if proyecto.configuracion is not None else None
+    )
+    anio_p1 = fecha_p1.year if fecha_p1 else None
+    ultimo_anio_p1_visto = st.session_state.get("_p2_anio_p1_visto")
+    if anio_p1 is not None and anio_p1 != ultimo_anio_p1_visto:
+        st.session_state["p2_anio_descarga"] = anio_p1
+        st.session_state["_p2_anio_p1_visto"] = anio_p1
+    if "p2_anio_descarga" not in st.session_state:
+        st.session_state["p2_anio_descarga"] = _ANIO_DEFAULT
+
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
         anio = st.number_input(
             "Año de referencia",
             min_value=_ANIO_MIN,
             max_value=_ANIO_MAX,
-            value=_ANIO_DEFAULT,
             step=1,
+            key="p2_anio_descarga",
             help=(
                 f"Año calendar de los datos horarios. "
-                f"Rango disponible en NASA POWER: {_ANIO_MIN}–{_ANIO_MAX}."
+                f"Rango disponible en NASA POWER: {_ANIO_MIN}–{_ANIO_MAX}. "
+                + (f"Sincronizado con la fecha del día específico en P1 "
+                   f"({fecha_p1.isoformat()}). Podés sobreescribirlo."
+                   if fecha_p1 else
+                   "Cuando elijas un día específico en P1, este año se "
+                   "ajusta automáticamente.")
             ),
         )
     with c2:

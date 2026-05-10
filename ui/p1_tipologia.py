@@ -17,6 +17,7 @@ from datetime import date
 
 import streamlit as st
 
+from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN
 from core.proyecto import (
     Configuracion,
     DiaAnalisis,
@@ -215,11 +216,32 @@ def render() -> None:
         dia_sel = dia_lista[dia_labels.index(dia_label_sel)]
 
         if dia_sel == DiaAnalisis.ESPECIFICO:
-            fecha_default = cfg.fecha_especifica or date.today()
+            fecha_min = date(ANIO_NASA_MIN, 1, 1)
+            fecha_max = date(ANIO_NASA_MAX, 12, 31)
+            if cfg.fecha_especifica:
+                fecha_default = cfg.fecha_especifica
+            else:
+                # Si "hoy" cae dentro del rango NASA POWER se usa hoy. Si no,
+                # se preserva mes/día y se reemplaza el año por el más reciente
+                # disponible — menos sorprendente que saltar a una fecha fija.
+                hoy = date.today()
+                if fecha_min <= hoy <= fecha_max:
+                    fecha_default = hoy
+                else:
+                    try:
+                        fecha_default = hoy.replace(year=ANIO_NASA_MAX)
+                    except ValueError:
+                        # 29-feb fuera de año bisiesto.
+                        fecha_default = date(ANIO_NASA_MAX, hoy.month, 28)
             fecha_sel = st.date_input(
                 "Fecha del análisis",
                 value=fecha_default,
-                help="Fecha concreta del día a analizar.",
+                min_value=fecha_min,
+                max_value=fecha_max,
+                help=(
+                    f"Fecha concreta del día a analizar. Rango disponible en "
+                    f"NASA POWER: {ANIO_NASA_MIN}–{ANIO_NASA_MAX}."
+                ),
             )
         else:
             fecha_sel = None
