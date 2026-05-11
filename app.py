@@ -1,5 +1,5 @@
 """
-Secador Solar — Software de Prediseño
+Secador Solar — Software de Prediseño de Secadores Solares
 Entry point de Streamlit.
 """
 
@@ -13,8 +13,23 @@ from core.proyecto import Proyecto
 # Configuración de página
 # ---------------------------------------------------------------------------
 
+from ui.componentes.header import render_header
+
+st.set_page_config(page_title="Secasol26", page_icon="☀️", layout="wide")
+render_header()   # ← antes del st.tabs()
+
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "Tipología y Configuración",
+    "Emplazamiento y Clima",
+    "Colector Solar",
+    "Cámara de Secado",
+    "Calentamiento Auxiliar",
+    "Motor / Ventilador",
+    "Resultados",
+])
+
 st.set_page_config(
-    page_title="Secador Solar — Prediseño",
+    page_title="Secasol26 - Herramienta de Prediseño de Secadores Solares",
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded",

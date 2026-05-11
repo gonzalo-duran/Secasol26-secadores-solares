@@ -1,7 +1,6 @@
-# Secador Solar — Software de Prediseño
+# Secasol 26 — Herramienta de Prediseño de Secadores Solares
 
-Software de prediseño de secadores solares de alimentos, desarrollado en el marco de la
-Maestría en Energías Renovables (M.E.R.) de la Facultad de Ciencias Exactas, UNSa.
+Software de prediseño de secadores solares de alimentos, desarrollado por el Grupo de Eficiencia Energética y Desarrollo Socio - Productivo (GEEDSP) - INENCO UNSa CONICET.
 
 **Licencia:** MIT  
 **Idioma:** Español  
@@ -11,7 +10,7 @@ Maestría en Energías Renovables (M.E.R.) de la Facultad de Ciencias Exactas, U
 
 ## Descripción
 
-Herramienta de prediseño (no simulación nodal completa) orientada a usuarios con formación
+Herramienta de prediseño de secadores solares orientada a usuarios con formación
 en transferencia de calor. Permite tomar decisiones de ingeniería de prediseño:
 dimensiones, áreas, caudales, potencias auxiliares y estimación de tiempo de secado.
 
@@ -131,7 +130,6 @@ secador_solar/
 
 ## Créditos
 
-Desarrollado en INENCO – Instituto de Investigación en Energías No Convencionales,
+Desarrollado por Gonzalo Durán. GEEDSP INENCO – Instituto de Investigación en Energías No Convencionales,
 Universidad Nacional de Salta – CONICET.
 
-Curso: Secado Solar Industrial, Maestría en Energías Renovables, FCEx-UNSa.
