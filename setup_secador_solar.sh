@@ -2,11 +2,15 @@
 # =============================================================================
 # Setup del proyecto Secador Solar — Software de Prediseño
 # =============================================================================
-# Este script automatiza el setup inicial del entorno de desarrollo en Fedora.
+# Este script automatiza el setup inicial del entorno de desarrollo.
+# Plataformas soportadas:
+#   - Fedora 40 o superior
+#   - Windows 10 / 11  (ejecutar desde Git Bash, NO desde cmd ni PowerShell)
 #
 # Qué hace:
-#   1. Verifica que estás en Fedora.
-#   2. Instala Python 3.12 y herramientas básicas vía dnf.
+#   1. Detecta el sistema operativo.
+#   2. En Fedora: instala Python 3.12 y herramientas básicas vía dnf.
+#      En Windows: verifica que Python ≥3.11 esté instalado manualmente.
 #   3. Verifica que el zip del esqueleto esté descomprimido en ~/proyectos/.
 #   4. Crea el entorno virtual .venv dentro del proyecto.
 #   5. Instala las dependencias de desarrollo.
@@ -14,18 +18,25 @@
 #   7. Configura VS Code para usar el venv automáticamente.
 #   8. Corre los tests para verificar que todo funciona.
 #
-# Uso:
+# Uso (Fedora):
 #   1. Descomprimir secador_solar_esqueleto.zip en ~/proyectos/
-#      (debe quedar la carpeta ~/proyectos/secador_solar/)
-#   2. Hacer ejecutable el script:
-#         chmod +x setup_secador_solar.sh
-#   3. Ejecutar:
-#         ./setup_secador_solar.sh
+#   2. chmod +x setup_secador_solar.sh
+#   3. ./setup_secador_solar.sh
 #
-# Requisitos:
-#   - Fedora 40 o superior
+# Uso (Windows 10/11):
+#   1. Instalar Git for Windows (https://git-scm.com/) — incluye Git Bash.
+#   2. Instalar Python 3.12 desde https://www.python.org/
+#      IMPORTANTE: marcar "Add Python to PATH" durante la instalación.
+#   3. Descomprimir secador_solar_esqueleto.zip en C:\Users\TuUsuario\proyectos\
+#      (debe quedar la carpeta proyectos\secador_solar\)
+#   4. Abrir Git Bash y ejecutar:
+#         cd ~/proyectos/secador_solar
+#         bash setup_secador_solar.sh
+#
+# Requisitos comunes:
 #   - Conexión a internet
 #   - VS Code instalado (comando 'code' disponible en PATH)
+#     Si no está: abrir VS Code → Ctrl+Shift+P → "Shell Command: Install code in PATH"
 # =============================================================================
 
 set -e  # Abortar si algún comando falla
@@ -33,6 +44,7 @@ set -e  # Abortar si algún comando falla
 # --- Configuración ---
 PROYECTO_DIR="$HOME/proyectos/secador_solar"
 PYTHON_VERSION="3.12"
+PYTHON_VERSION_MIN="3.11"  # Versión mínima aceptable (según pyproject.toml)
 VENV_NAME=".venv"
 
 # --- Colores para mensajes ---
@@ -55,17 +67,64 @@ separador() {
 }
 
 # =============================================================================
+# Detección del sistema operativo
+# =============================================================================
+# Posibles valores de OSTYPE: linux-gnu, linux (Fedora), msys (Git Bash en Win),
+# cygwin, darwin. Usamos 'uname -s' como respaldo.
+detectar_os() {
+    case "$(uname -s)" in
+        Linux*)
+            if command -v dnf &> /dev/null; then
+                echo "fedora"
+            else
+                echo "linux_otro"
+            fi
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            echo "windows"
+            ;;
+        *)
+            echo "desconocido"
+            ;;
+    esac
+}
+
+OS=$(detectar_os)
+
+# =============================================================================
 # Paso 1: Verificación del sistema
 # =============================================================================
 separador "Paso 1/8 — Verificando sistema"
 
-if ! command -v dnf &> /dev/null; then
-    error "Este script requiere Fedora (no se encontró 'dnf')."
-    error "Si estás en otra distro, instalá Python ${PYTHON_VERSION} manualmente"
-    error "y corré los pasos 4 en adelante a mano."
-    exit 1
-fi
-ok "Fedora detectado."
+case "$OS" in
+    fedora)
+        ok "Fedora detectado."
+        ;;
+    linux_otro)
+        warn "Distribución Linux detectada, pero no es Fedora (no se encontró 'dnf')."
+        warn "El paso de instalación de Python se saltea."
+        warn "Asegurate de tener Python ${PYTHON_VERSION_MIN}+ instalado manualmente."
+        warn ""
+        read -p "¿Continuar de todas formas? (s/N) " respuesta
+        if [[ ! "$respuesta" =~ ^[sS]$ ]]; then
+            exit 1
+        fi
+        ;;
+    windows)
+        ok "Windows detectado (Git Bash)."
+        warn "El script NO puede instalar Python automáticamente en Windows."
+        warn "Si todavía no lo instalaste:"
+        warn "  1. Descargá Python ${PYTHON_VERSION} desde https://www.python.org/"
+        warn "  2. Marcá 'Add Python to PATH' en el instalador."
+        warn "  3. Cerrá y volvé a abrir Git Bash, luego corré el script de nuevo."
+        warn ""
+        ;;
+    *)
+        error "Sistema operativo no reconocido: $(uname -s)"
+        error "Este script soporta Fedora y Windows 10/11 (Git Bash)."
+        exit 1
+        ;;
+esac
 
 if ! command -v code &> /dev/null; then
     warn "El comando 'code' (VS Code CLI) no está disponible."
@@ -83,57 +142,73 @@ else
 fi
 
 # =============================================================================
-# Paso 2: Instalación de Python 3.12 y herramientas
+# Paso 2: Instalación / verificación de Python
 # =============================================================================
-separador "Paso 2/8 — Instalando Python ${PYTHON_VERSION} y herramientas del sistema"
+separador "Paso 2/8 — Verificando Python ${PYTHON_VERSION_MIN}+"
 
-info "Esto puede pedir tu contraseña de sudo..."
+if [[ "$OS" == "fedora" ]]; then
+    info "Instalando Python ${PYTHON_VERSION} y herramientas del sistema vía dnf..."
+    info "Esto puede pedir tu contraseña de sudo..."
+    sudo dnf install -y --skip-unavailable \
+        python3 \
+        python3-devel \
+        git \
+        gcc \
+        gcc-c++ \
+        make
+    ok "Paquetes del sistema instalados."
+else
+    info "Saltando instalación vía gestor de paquetes (no es Fedora)."
+fi
 
-# En Fedora 44, Python 3.12 es el intérprete del sistema.
-# Los nombres de paquete correctos son python3 y python3-devel.
-# python3-pip no existe como paquete separado: pip viene incluido con python3.
-# git, gcc, gcc-c++ y make probablemente ya estén instalados, --skip-unavailable
-# evita que el comando falle si algún paquete ya está presente o no existe.
-sudo dnf install -y --skip-unavailable \
-    python3 \
-    python3-devel \
-    git \
-    gcc \
-    gcc-c++ \
-    make
-
-ok "Paquetes del sistema instalados."
-
-# Buscar el binario de Python 3.12 — puede llamarse python3.12 o python3
+# Buscar el binario de Python adecuado (multiplataforma)
+# Orden de preferencia: python3.12, python3.11, python3, python, py
 PYTHON_BIN=""
-for candidato in python${PYTHON_VERSION} python3; do
+for candidato in python${PYTHON_VERSION} python3.11 python3 python py; do
     if command -v "$candidato" &> /dev/null; then
-        VERSION_REAL=$("$candidato" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-        if [[ "$VERSION_REAL" == "${PYTHON_VERSION}"* ]] || [[ "$VERSION_REAL" == "3."* ]]; then
-            PYTHON_BIN=$(which "$candidato")
+        VERSION_REAL=$("$candidato" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "")
+        if [[ -z "$VERSION_REAL" ]]; then
+            continue
+        fi
+        MAJOR=$(echo "$VERSION_REAL" | cut -d. -f1)
+        MINOR=$(echo "$VERSION_REAL" | cut -d. -f2)
+        MIN_MINOR=$(echo "$PYTHON_VERSION_MIN" | cut -d. -f2)
+        # Aceptar Python 3.x con x >= MIN_MINOR
+        if [[ "$MAJOR" -eq 3 && "$MINOR" -ge "$MIN_MINOR" ]]; then
+            PYTHON_BIN=$(command -v "$candidato")
             break
         fi
     fi
 done
 
 if [ -z "$PYTHON_BIN" ]; then
-    error "No se encontró Python 3 después de la instalación."
+    error "No se encontró Python ${PYTHON_VERSION_MIN}+ disponible en PATH."
+    if [[ "$OS" == "windows" ]]; then
+        error "Instalá Python desde https://www.python.org/ marcando 'Add Python to PATH',"
+        error "luego abrí una nueva ventana de Git Bash y volvé a correr el script."
+    else
+        error "Instalá Python ${PYTHON_VERSION} manualmente y volvé a correr el script."
+    fi
     exit 1
 fi
 
 ok "Python disponible en: ${PYTHON_BIN}"
-${PYTHON_BIN} --version
+"${PYTHON_BIN}" --version
 
-# Verificar que pip esté disponible en el intérprete encontrado
-if ! ${PYTHON_BIN} -m pip --version &> /dev/null; then
+# Verificar que pip esté disponible
+if ! "${PYTHON_BIN}" -m pip --version &> /dev/null; then
     error "pip no está disponible. Intentando instalarlo con ensurepip..."
-    ${PYTHON_BIN} -m ensurepip --upgrade || {
-        error "No se pudo instalar pip. Instalalo manualmente con:"
-        error "  sudo dnf install python3-pip"
+    "${PYTHON_BIN}" -m ensurepip --upgrade || {
+        error "No se pudo instalar pip."
+        if [[ "$OS" == "fedora" ]]; then
+            error "  sudo dnf install python3-pip"
+        else
+            error "Reinstalá Python asegurándote de incluir pip en la instalación."
+        fi
         exit 1
     }
 fi
-ok "pip disponible: $(${PYTHON_BIN} -m pip --version)"
+ok "pip disponible: $("${PYTHON_BIN}" -m pip --version)"
 
 # =============================================================================
 # Paso 3: Verificar que el esqueleto esté descomprimido
@@ -145,13 +220,22 @@ if [ ! -d "$PROYECTO_DIR" ]; then
     error ""
     error "Antes de correr este script tenés que:"
     error "  1. Descargar secador_solar_esqueleto.zip"
-    error "  2. Descomprimirlo en ~/proyectos/"
-    error "     (debe quedar la carpeta ~/proyectos/secador_solar/)"
+    error "  2. Descomprimirlo de modo que quede la carpeta:"
+    error "       $PROYECTO_DIR"
     error ""
-    error "Ejemplo:"
-    error "  mkdir -p ~/proyectos"
-    error "  cd ~/proyectos"
-    error "  unzip ~/Descargas/secador_solar_esqueleto.zip"
+    if [[ "$OS" == "windows" ]]; then
+        error "En Windows desde Git Bash:"
+        error "  mkdir -p ~/proyectos"
+        error "  cd ~/proyectos"
+        error "  unzip ~/Downloads/secador_solar_esqueleto.zip"
+        error ""
+        error "  (~/proyectos equivale a C:\\Users\\TuUsuario\\proyectos)"
+    else
+        error "Ejemplo:"
+        error "  mkdir -p ~/proyectos"
+        error "  cd ~/proyectos"
+        error "  unzip ~/Descargas/secador_solar_esqueleto.zip"
+    fi
     exit 1
 fi
 
@@ -181,16 +265,30 @@ if [ -d "$VENV_NAME" ]; then
 fi
 
 if [ ! -d "$VENV_NAME" ]; then
-    ${PYTHON_BIN} -m venv "$VENV_NAME"
+    "${PYTHON_BIN}" -m venv "$VENV_NAME"
     ok "Entorno virtual creado en: $PROYECTO_DIR/$VENV_NAME"
 fi
 
-# Activar venv para los pasos siguientes
-source "$VENV_NAME/bin/activate"
+# Activar venv — la ruta del activate difiere según el OS
+# En Git Bash sobre Windows el separador es '/' igual que en Linux,
+# pero el script de activación vive en Scripts/ en vez de bin/
+if [[ "$OS" == "windows" ]]; then
+    ACTIVATE_PATH="$VENV_NAME/Scripts/activate"
+else
+    ACTIVATE_PATH="$VENV_NAME/bin/activate"
+fi
+
+if [ ! -f "$ACTIVATE_PATH" ]; then
+    error "No se encontró el script de activación del venv en: $ACTIVATE_PATH"
+    error "El entorno virtual puede estar corrupto. Borralo y volvé a correr el script."
+    exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$ACTIVATE_PATH"
 ok "Entorno virtual activado."
 
-# Verificar que estamos usando el Python del venv
-PYTHON_VENV=$(which python)
+PYTHON_VENV=$(command -v python)
 info "Python activo: $PYTHON_VENV"
 python --version
 
@@ -204,7 +302,7 @@ pip install --upgrade pip --quiet
 ok "pip actualizado: $(pip --version)"
 
 info "Instalando dependencias del proyecto (requirements-dev.txt)..."
-info "Esto puede tardar unos minutos la primera vez (numpy, scipy, pvlib...)"
+info "Esto puede tardar unos minutos la primera vez (numpy, scipy, pvlib...)."
 pip install -r requirements-dev.txt
 ok "Todas las dependencias instaladas."
 
@@ -233,7 +331,7 @@ if [ "$INSTALAR_PLUGINS" = true ]; then
 
     ok "Plugins instalados."
 else
-    warn "Salteando instalación de plugins."
+    warn "Salteando instalación de plugins (VS Code CLI no disponible)."
 fi
 
 # =============================================================================
@@ -243,9 +341,17 @@ separador "Paso 7/8 — Configurando VS Code para el proyecto"
 
 mkdir -p .vscode
 
-cat > .vscode/settings.json << 'EOF'
+# La ruta del intérprete en settings.json varía según el OS.
+# En Windows el venv queda en .venv\Scripts\python.exe
+if [[ "$OS" == "windows" ]]; then
+    PYTHON_INTERP_PATH="\${workspaceFolder}/.venv/Scripts/python.exe"
+else
+    PYTHON_INTERP_PATH="\${workspaceFolder}/.venv/bin/python"
+fi
+
+cat > .vscode/settings.json << EOF
 {
-    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.defaultInterpreterPath": "${PYTHON_INTERP_PATH}",
     "python.terminal.activateEnvironment": true,
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": ["tests"],
@@ -334,6 +440,12 @@ fi
 # =============================================================================
 separador "✅ Setup completo"
 
+if [[ "$OS" == "windows" ]]; then
+    ACTIVATE_MSG="source .venv/Scripts/activate"
+else
+    ACTIVATE_MSG="source .venv/bin/activate"
+fi
+
 cat << EOF
 
 El proyecto está listo para empezar a codear.
@@ -349,13 +461,13 @@ Próximos pasos:
 
   3. VS Code va a usar automáticamente el venv de .venv/.
      Para verificarlo: abrir cualquier archivo .py y mirar abajo a la derecha,
-     debería decir "Python 3.12.x ('.venv': venv)".
+     debería decir "Python 3.x ('.venv': venv)".
 
   4. Para activar el venv en una terminal externa:
        cd $PROYECTO_DIR
-       source .venv/bin/activate
+       ${ACTIVATE_MSG}
 
-  5. Para correr la aplicación Streamlit (todavía vacía):
+  5. Para correr la aplicación Streamlit:
        streamlit run app.py
 
   6. Para crear el repo en GitHub, seguí las instrucciones en:

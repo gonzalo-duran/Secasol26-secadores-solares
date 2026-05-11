@@ -1,10 +1,8 @@
 # Secasol 26 — Herramienta de Prediseño de Secadores Solares
 
-Software de prediseño de secadores solares de alimentos, desarrollado por el Grupo de Eficiencia Energética y Desarrollo Socio - Productivo (GEEDSP) - INENCO UNSa CONICET.
+Software de prediseño de secadores solares de alimentos, desarrollado por el Grupo de Eficiencia Energética y Desarrollo Socio-Productivo (GEEDSP) — INENCO UNSa CONICET.
 
-**Licencia:** MIT  
-**Idioma:** Español  
-**Stack:** Python 3.11 · Streamlit · NumPy · SciPy · pvlib  
+**Licencia:** MIT &nbsp;|&nbsp; **Idioma:** Español &nbsp;|&nbsp; **Stack:** Python 3.11+ · Streamlit · NumPy · SciPy · pvlib
 
 ---
 
@@ -30,10 +28,18 @@ dimensiones, áreas, caudales, potencias auxiliares y estimación de tiempo de s
 - Python 3.11 o superior
 - Git
 
-Verificar versión de Python:
+> **Windows:** instalar [Git for Windows](https://git-scm.com/) (incluye Git Bash) y
+> [Python 3.12](https://www.python.org/) marcando **"Add Python to PATH"** durante la instalación.
+> Todos los comandos de esta sección se ejecutan desde **Git Bash**, no desde cmd ni PowerShell.
+
+Verificar versiones:
+
 ```bash
 python3 --version
+git --version
 ```
+
+---
 
 ### 1. Clonar el repositorio
 
@@ -42,15 +48,25 @@ git clone https://github.com/TU_USUARIO/secador_solar.git
 cd secador_solar
 ```
 
+---
+
 ### 2. Crear y activar el entorno virtual
 
+**Linux / Fedora:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-El prompt del terminal cambia a `(.venv)` cuando el entorno está activo.
-Para desactivarlo: `deactivate`.
+**Windows (Git Bash):**
+```bash
+python -m venv .venv
+source .venv/Scripts/activate
+```
+
+El prompt cambia a `(.venv)` cuando el entorno está activo. Para desactivarlo: `deactivate`.
+
+---
 
 ### 3. Instalar dependencias
 
@@ -64,6 +80,8 @@ Para uso solamente (sin herramientas de desarrollo):
 pip install -r requirements.txt
 ```
 
+---
+
 ### 4. Ejecutar la aplicación
 
 ```bash
@@ -71,6 +89,25 @@ streamlit run app.py
 ```
 
 La aplicación se abre automáticamente en el navegador en `http://localhost:8501`.
+
+---
+
+### Setup automatizado (script)
+
+El repositorio incluye `setup_secador_solar.sh`, que automatiza los pasos 2–4 más la
+instalación de plugins de VS Code. Soporta Fedora, Windows 10/11 (Git Bash) y otras
+distribuciones Linux.
+
+**Linux / Fedora:**
+```bash
+chmod +x setup_secador_solar.sh
+./setup_secador_solar.sh
+```
+
+**Windows (Git Bash):**
+```bash
+bash setup_secador_solar.sh
+```
 
 ---
 
@@ -89,23 +126,48 @@ ruff check .
 pytest
 ```
 
+---
+
 ### Estructura del proyecto
 
 ```
 secador_solar/
-├── app.py                    # Entry point de Streamlit
-├── core/                     # Modelo de datos (dataclasses, validaciones)
-├── calculos/                 # Motores numéricos (independientes de UI)
-├── catalogo/                 # Datos estáticos en YAML
+├── app.py                        # Entry point de Streamlit
+├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
+├── setup_secador_solar.sh        # Script de setup multiplataforma
+├── core/                         # Modelo de datos (dataclasses, validaciones)
+├── calculos/                     # Motores numéricos (independientes de UI)
+│   ├── clima_calc.py
+│   ├── correlaciones_nusselt.py
+│   ├── colector_calc.py
+│   ├── colector_tipos234_calc.py
+│   ├── camara_calc.py
+│   ├── auxiliar_calc.py
+│   ├── motor_calc.py
+│   ├── balance_global.py
+│   └── psicrometria.py
+├── catalogo/                     # Datos estáticos en YAML
 │   ├── materiales/
 │   └── productos/
-├── ui/                       # Componentes Streamlit
-│   └── componentes/          # Widgets reutilizables
-├── data/cache/nasa_power/    # Caché local de datos climáticos (generado automáticamente)
-├── validation_data/          # Datos experimentales para validación
-├── tests/                    # Tests automáticos
-└── docs/                     # Documentación y bitácoras
+├── ui/                           # Componentes Streamlit
+│   ├── componentes/
+│   │   └── unidades.py           # Conversiones de unidades y ángulos
+│   ├── p1_tipologia.py
+│   ├── p2_emplazamiento.py
+│   ├── p3_colector.py
+│   ├── p4_camara.py
+│   ├── p5_auxiliar.py
+│   ├── p6_motor.py
+│   └── p7_resultados.py
+├── data/cache/nasa_power/        # Caché local de datos climáticos (en .gitignore)
+├── validation_data/              # Datos experimentales para validación
+├── tests/                        # Tests automáticos
+└── docs/                         # Documentación y bitácoras
 ```
+
+---
 
 ### Convenciones clave
 
@@ -121,7 +183,7 @@ secador_solar/
 
 ## Deploy en Streamlit Community Cloud
 
-1. Hacer fork o push del repo a GitHub (repositorio público).
+1. Hacer push del repo a GitHub (repositorio público).
 2. Ingresar a [share.streamlit.io](https://share.streamlit.io).
 3. Conectar el repositorio y seleccionar `app.py` como entry point.
 4. Streamlit Cloud instala automáticamente las dependencias de `requirements.txt`.
@@ -130,6 +192,5 @@ secador_solar/
 
 ## Créditos
 
-Desarrollado por Gonzalo Durán. GEEDSP INENCO – Instituto de Investigación en Energías No Convencionales,
+Desarrollado por Gonzalo Durán. GEEDSP INENCO — Instituto de Investigación en Energías No Convencionales,
 Universidad Nacional de Salta – CONICET.
-
