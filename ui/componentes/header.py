@@ -72,7 +72,7 @@ _HTML_TITULO = """
         font-size: 0.78rem;
         color: #888888;
         letter-spacing: 0.02em;
-    ">Herramienta de Prediseño de Secadores Solares &nbsp;·&nbsp; INENCO · CONICET-UNSa</span>
+    ">Prediseño de Secadores Solares &nbsp;·&nbsp; GEEDSP · INENCO · CONICET-UNSa</span>
 </div>
 """
 
