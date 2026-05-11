@@ -72,7 +72,7 @@ _HTML_TITULO = """
         font-size: 0.78rem;
         color: #888888;
         letter-spacing: 0.02em;
-    ">Prediseño de secadores solares &nbsp;·&nbsp; INENCO · CONICET-UNSa</span>
+    ">INENCO · CONICET-UNSa</span>
 </div>
 """
 
