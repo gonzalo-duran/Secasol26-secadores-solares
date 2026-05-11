@@ -29,7 +29,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
 ])
 
 st.set_page_config(
-    page_title="Secasol26 - Herramienta de Prediseño de Secadores Solares",
+    page_title="Secasol26 - Prediseño de Secadores Solares",
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded",
