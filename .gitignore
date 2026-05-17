@@ -24,3 +24,7 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Papers académicos (no se distribuyen — ver docs/notas/papers/indice.md para referencias)
+docs/notas/papers/*.pdf
+docs/notas/Saravia2007.pdf
