@@ -280,21 +280,26 @@ def calor_latente_vaporizacion(T_K: float) -> float:
         L_v(0°C)  ≈ 2 501 000 J/kg
         L_v(100°C) ≈ 2 264 000 J/kg
 
+    Para T < 0 °C la fórmula se extrapola linealmente (sublimación
+    aproximada). El error de extrapolación es < 5 % entre -20 °C y 0 °C,
+    suficiente para usos transitorios del solver de cámara que ocasionalmente
+    visita temperaturas bajas de madrugada o por enfriamiento evaporativo.
+    Para T_K extremadamente bajo (< 250 K = -23 °C) se mantiene una guarda
+    porque ahí ya es sublimación pura y el modelo lineal no es realista.
+
     Args:
-        T_K: Temperatura [K].
+        T_K: Temperatura [K]. Aceptado en [250, 373] K (-23 a 100 °C).
 
     Returns:
         L_v [J/kg].
 
     Raises:
-        ValueError: Si T_K ≤ 273.15 K (fuera del rango de validez físico
-            para agua líquida en secado).
+        ValueError: Si T_K < 250 K (extrapolación demasiado agresiva).
     """
-    if T_K <= _T_REF - 1e-6:
+    if T_K < 250.0:
         raise ValueError(
-            f"PSICRO_LV_T_FUERA_RANGO: T={T_K - 273.15:.1f} °C ≤ 0 °C. "
-            "El calor latente de vaporización está definido para agua líquida "
-            "(T > 0 °C). Para secado solar, T ∈ [5, 100] °C."
+            f"PSICRO_LV_T_FUERA_RANGO: T={T_K - 273.15:.1f} °C < -23 °C. "
+            "Fuera del rango de extrapolación admisible del modelo lineal."
         )
     return _LV_0 - _K_LV * (T_K - _T_REF)
 

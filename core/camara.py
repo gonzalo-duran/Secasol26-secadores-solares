@@ -9,8 +9,10 @@ Jerarquía:
     ├── ConfiguracionFlujo    — caudal, dirección, HR de entrada
     └── CargaProducto         — producto, humedades y modelos de secado
 
-Almacenado en Proyecto.camara. Es None para tipología CAJA (que aún no está
-implementada en v0).
+Almacenado en Proyecto.camara. Para tipologías ARMARIO y GRAN_ESCALA la cámara
+recibe aire precalentado por el colector externo. Para tipología CAJA se admite
+también una Camara, pero con `construccion.cubierta_translucida_id` obligatoria
+(la única fuente de energía es la radiación solar a través del techo).
 
 Convención de unidades (SI estricto):
     Temperaturas: K
@@ -26,6 +28,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Optional
+
+import numpy as np
 
 # Modos válidos de cálculo de cámara
 _MODOS_CALCULO_VALIDOS: tuple[str, ...] = ("capa_fina", "termodinamico")
@@ -96,17 +100,172 @@ class GeometriaCamara:
             )
 
 
+_CATALOGOS_PARED: tuple[str, ...] = ("fondos", "aislantes")
+
+
+def _catalogo_pared(nombre: str) -> dict:
+    if nombre == "fondos":
+        return catalogo.FONDOS
+    if nombre == "aislantes":
+        return catalogo.AISLANTES
+    raise ValueError(
+        f"CAPA_CATALOGO_INVALIDO: '{nombre}' no es un catálogo válido. "
+        f"Opciones: {_CATALOGOS_PARED}."
+    )
+
+
+@dataclass
+class CapaPared:
+    """Una capa material de la pared de la cámara.
+
+    Cada capa apunta a un material del catálogo (fondos.yaml o aislantes.yaml)
+    y declara su espesor. La resistencia térmica de conducción se computa como
+    R = espesor / k_material.
+
+    Attributes:
+        material_id: Clave del material en su catálogo.
+        espesor_m: Espesor de la capa [m].
+        catalogo: Catálogo de origen — "fondos" (materiales estructurales) o
+            "aislantes" (lana de vidrio, EPS, PUR, etc.).
+    """
+
+    material_id: str
+    espesor_m: float
+    catalogo: Literal["fondos", "aislantes"]
+
+    def __post_init__(self) -> None:
+        if self.espesor_m <= 0:
+            raise ValueError(
+                f"CAPA_ESPESOR_NO_POSITIVO: espesor_m={self.espesor_m:.4f} m ≤ 0."
+            )
+        if self.catalogo not in _CATALOGOS_PARED:
+            raise ValueError(
+                f"CAPA_CATALOGO_INVALIDO: '{self.catalogo}'. "
+                f"Opciones: {_CATALOGOS_PARED}."
+            )
+        cat = _catalogo_pared(self.catalogo)
+        if self.material_id not in cat:
+            raise ValueError(
+                f"CAPA_MATERIAL_NO_ENCONTRADO: '{self.material_id}' no existe en "
+                f"{self.catalogo}.yaml. Disponibles: {list(cat.keys())}."
+            )
+
+    @property
+    def conductividad_termica_W_mK(self) -> float:
+        return float(_catalogo_pared(self.catalogo)[self.material_id]["conductividad_termica"])
+
+    @property
+    def R_conduccion_m2K_W(self) -> float:
+        return self.espesor_m / self.conductividad_termica_W_mK
+
+
+@dataclass
+class ParedCamara:
+    """Composición de la envolvente opaca de la cámara.
+
+    Aplica a las paredes laterales, piso y techo (salvo que el techo sea
+    translúcido, en cuyo caso ese se trata aparte vía ``cubierta_translucida_id``).
+
+    Pared simple = lista de 1 capa. Pared compuesta = lista de 2+ capas
+    (típicamente 3: cara externa + aislante + cara interna).
+
+    La resistencia total de conducción es la suma de las resistencias de cada
+    capa (capas en serie). Los films convectivos interior/exterior se aplican
+    en el motor termodinámico, no acá.
+
+    Attributes:
+        capas: Lista de capas en orden externo → interno (no afecta a R_total,
+            pero conviene seguir esa convención para legibilidad).
+    """
+
+    capas: list[CapaPared]
+
+    def __post_init__(self) -> None:
+        if not self.capas:
+            raise ValueError(
+                "PARED_SIN_CAPAS: la pared debe tener al menos una capa."
+            )
+
+    @property
+    def R_conduccion_m2K_W(self) -> float:
+        return sum(c.R_conduccion_m2K_W for c in self.capas)
+
+    @property
+    def U_conduccion_W_m2K(self) -> float:
+        return 1.0 / self.R_conduccion_m2K_W
+
+    @property
+    def espesor_total_m(self) -> float:
+        return sum(c.espesor_m for c in self.capas)
+
+    @property
+    def es_compuesta(self) -> bool:
+        return len(self.capas) >= 2
+
+
+def _default_pared_camara() -> ParedCamara:
+    """Default razonable: pared compuesta chapa + lana de vidrio 50 mm + chapa.
+
+    U_conduccion ≈ 0.8 W/(m²·K), próximo al U_muros=0.5 histórico. Realista
+    para un secador armario con aislación estándar.
+    """
+    return ParedCamara(capas=[
+        CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
+        CapaPared(material_id="lana_vidrio_media", espesor_m=0.05, catalogo="aislantes"),
+        CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
+    ])
+
+
 @dataclass
 class ConstruccionCamara:
     """Propiedades constructivas de la cámara.
 
     Attributes:
-        cubierta_translucida: True si la cubierta superior permite el paso de luz.
-        U_muros_W_m2K: Conductancia térmica efectiva de los muros laterales [W/(m²·K)].
+        cubierta_translucida_id: Identificador del material de la cubierta
+            superior en el catálogo ``catalogo/materiales/cubiertas.yaml``.
+            ``None`` → cubierta opaca (el techo forma parte del cuerpo opaco
+            con la composición de ``pared``). Cualquier string válido del
+            catálogo activa el término radiativo Q_rad = I_g·τ·α·A_rad en el
+            motor termodinámico.
+        A_rad_m2: Área expuesta a la radiación solar directa a través del
+            techo translúcido [m²]. ``None`` → toma ``area_bandeja_m2`` de la
+            bandeja superior (sólo la primera "ve" el sol). Ignorado si
+            ``cubierta_translucida_id is None``.
+        pared: Composición de la envolvente opaca (paredes + piso + techo
+            cuando es opaco). 1 capa = pared simple; 3 capas = pared compuesta
+            cara externa + aislante + cara interna.
+
+    Properties:
+        U_muros_W_m2K: Conductancia de conducción de la pared, computada como
+            ``1 / R_conduccion_pared`` (los films convectivos los suma el motor).
     """
 
-    cubierta_translucida: bool = False
-    U_muros_W_m2K: float = 0.5
+    cubierta_translucida_id: Optional[str] = None
+    A_rad_m2: Optional[float] = None
+    pared: ParedCamara = field(default_factory=_default_pared_camara)
+
+    def __post_init__(self) -> None:
+        if self.cubierta_translucida_id is not None:
+            if self.cubierta_translucida_id not in catalogo.CUBIERTAS:
+                raise ValueError(
+                    f"MAT_CUBIERTA_CAM_NO_ENCONTRADA: '{self.cubierta_translucida_id}' "
+                    "no existe en cubiertas.yaml. Disponibles: "
+                    f"{list(catalogo.CUBIERTAS.keys())}."
+                )
+        if self.A_rad_m2 is not None and self.A_rad_m2 <= 0:
+            raise ValueError(
+                f"CONS_A_RAD_NO_POSITIVA: A_rad_m2={self.A_rad_m2:.4f} m² ≤ 0."
+            )
+
+    @property
+    def U_muros_W_m2K(self) -> float:
+        """Conductancia por conducción de la pared opaca [W/(m²·K)].
+
+        Computada de la composición de capas. Los films convectivos
+        (interior aire-pared, exterior pared-viento) los aplica el motor TD
+        en la cascada de resistencias h_int + R_pared + h_w.
+        """
+        return self.pared.U_conduccion_W_m2K
 
 
 @dataclass
@@ -287,7 +446,9 @@ class CargaProducto:
 class Camara:
     """Cámara de secado solar completa.
 
-    Almacenada en Proyecto.camara. Es None para tipología CAJA en v0.
+    Almacenada en Proyecto.camara. Para CAJA se admite con
+    `construccion.cubierta_translucida_id` obligatoria; para ARMARIO y
+    GRAN_ESCALA es opcional (aire precalentado por colector externo).
 
     Attributes:
         geometria: Dimensiones internas de la cámara.
@@ -490,17 +651,18 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
         ))
 
     # --- CONS: cubierta translúcida + producto fotosensible ---
-    if c.cubierta_translucida and datos.get("fotosensible", False):
+    if c.cubierta_translucida_id is not None and datos.get("fotosensible", False):
         adv.append(Advertencia(
             codigo="CONS_CUBIERTA_TRANSLUCIDA_FOTOSENSIBLE",
             severidad=Severidad.WARNING,
             mensaje=(
-                f"Producto fotosensible '{p.producto_id}' con cubierta translúcida. "
-                "La exposición a radiación UV puede degradar pigmentos o aceites esenciales."
+                f"Producto fotosensible '{p.producto_id}' con cubierta translúcida "
+                f"'{c.cubierta_translucida_id}'. La exposición a radiación UV puede "
+                "degradar pigmentos o aceites esenciales."
             ),
-            campo="construccion.cubierta_translucida",
+            campo="construccion.cubierta_translucida_id",
             sugerencia="Considerar cubierta opaca o filtro UV.",
-            contexto={"producto_id": p.producto_id},
+            contexto={"producto_id": p.producto_id, "cubierta_id": c.cubierta_translucida_id},
         ))
 
     # --- CONS: muros sin aislación ---
@@ -675,3 +837,58 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
         ))
 
     return adv
+
+
+# =============================================================================
+# Motor dinámico de cámara — dataclasses de entrada y salida
+# =============================================================================
+
+
+@dataclass
+class ForzantesAire:
+    """Serie temporal de condiciones del aire de entrada a la cámara de secado.
+
+    Todos los arrays deben tener la misma longitud N.
+    t_s[0] = 0.0 siempre (el motor integra desde t=0).
+
+    Attributes:
+        t_s: Tiempos [s]. t_s[0] = 0.0, monótonamente creciente.
+        T_ent_K: Temperatura del aire de entrada [K].
+        omega_ent: Humedad absoluta del aire de entrada [kg agua/kg aire seco].
+        m_dot_aire_seco_kg_s: Caudal másico de aire seco [kg/s].
+        T_amb_K: Temperatura ambiente exterior [K].
+        v_viento_ms: Velocidad del viento [m/s].
+        I_g_W_m2: Irradiancia global horizontal incidente sobre el techo de
+            la cámara [W/m²]. ``None`` → rellena con ceros (cámara opaca o
+            modo Constantes sin ciclo día/noche).
+    """
+
+    t_s: np.ndarray
+    T_ent_K: np.ndarray
+    omega_ent: np.ndarray
+    m_dot_aire_seco_kg_s: np.ndarray
+    T_amb_K: np.ndarray
+    v_viento_ms: np.ndarray
+    I_g_W_m2: Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        n = len(self.t_s)
+        if self.I_g_W_m2 is None:
+            self.I_g_W_m2 = np.zeros(n, dtype=float)
+        for nombre, arr in [
+            ("T_ent_K", self.T_ent_K),
+            ("omega_ent", self.omega_ent),
+            ("m_dot_aire_seco_kg_s", self.m_dot_aire_seco_kg_s),
+            ("T_amb_K", self.T_amb_K),
+            ("v_viento_ms", self.v_viento_ms),
+            ("I_g_W_m2", self.I_g_W_m2),
+        ]:
+            if len(arr) != n:
+                raise ValueError(
+                    f"FORZANTES_LONGITUD_INCONSISTENTE: {nombre} tiene {len(arr)} "
+                    f"elementos, esperado {n}."
+                )
+        if float(self.t_s[0]) != 0.0:
+            raise ValueError(
+                f"FORZANTES_T_INICIAL: t_s[0] debe ser 0.0. Recibido: {self.t_s[0]}."
+            )

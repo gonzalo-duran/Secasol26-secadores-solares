@@ -517,6 +517,9 @@ class TestRHSTipos34:
             "W_abs_m": p["W_abs_m"],
             "m_punto_ci_kgs": p["m_punto_ci_kgs"],
             "m_punto_cs_kgs": p["m_punto_cs_kgs"],
+            # requeridos por _construir_rhs_tipo3 (convección natural estanco)
+            "alto_cs_m": 0.025,
+            "theta_deg": 45.0,
         }
 
     def test_tipo3_derivada_positiva_entrada(self):
@@ -590,6 +593,9 @@ class TestIntegracionLiviana:
             "W_abs_m": p["W_abs_m"],
             "m_punto_cs_kgs": p["m_punto_cs_kgs"],
             "m_punto_ci_kgs": p["m_punto_ci_kgs"],
+            # requeridos por _construir_rhs_tipo3 (convección natural estanco)
+            "alto_cs_m": 0.025,
+            "theta_deg": 45.0,
         }
 
     def _integrar(self, rhs_fn, y0, L=2.0):
@@ -1131,14 +1137,10 @@ class TestAlturasIndependientes:
     def test_tipo3_canal_estanco_pequeno_caso_uso_real(self, colector_basico):
         """Tipo 3 con canal superior estanco pequeño: caso de uso del usuario.
 
-        Caso de uso descrito en sesión: canal superior estanco angosto (~8 mm)
-        para reducir convección y pérdidas al ambiente. Verifica que el motor
-        acepta esta configuración asimétrica y converge a un resultado físico.
-
-        Nota: con la implementación actual de ``h_int`` estanco (Re=500 fijo),
-        achicar alto_cs reduce Dh y aumenta h_int (Nu·k/Dh). Para que el
-        modelo refleje correctamente el efecto de inhibir convección natural,
-        se requiere pasar a modo='natural' (mejora futura, ver §10).
+        Canal superior estanco angosto (~8 mm) para inhibir convección natural
+        y reducir pérdidas al ambiente. El modelo calcula h_int_cs per-nodo
+        usando Hollands et al. (1976): al reducir alto_cs, disminuye Ra y por
+        tanto h_int_cs, reflejando correctamente la inhibición de convección.
         """
         r = calcular_colector_tipo3(
             colector_basico,

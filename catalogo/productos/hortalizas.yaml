@@ -88,12 +88,21 @@ papa:
   propiedades_basicas:
     densidad_aparente: 1050.0       # kg/m³. ASHRAE Ch.19.
     calor_especifico_seco: 1550.0   # J/(kg·K). Choi-Okos con composición papa cruda.
-    humedad_inicial_tipica: 4.0     # kg/kg ms — ~80% bh. Rango: 3.5-4.5.
+    humedad_inicial_tipica: 4.5     # kg/kg ms — ~82% bh. Naderinezhad (2016) reporta 4.491.
     humedad_equilibrio_aire_seco: 0.09
     calidad_propiedades_basicas: MEDIA
     fuente_propiedades_basicas: |
       Densidad: ASHRAE Handbook Refrig. 2018 Ch.19.
-      Cp, X0: USDA SR-28 + Choi-Okos.
+      Cp: USDA SR-28 + Choi-Okos.
+      X0 actualizada a 4.5 desde Naderinezhad et al. (2016) Food Sci Nutr 4(1):110-118,
+      DOI:10.1002/fsn3.258 (rodajas circulares 7 mm, media 449.1% bs).
+      USDA SR-28 reporta ~4.0; rango razonable 4.0-5.0.
+
+  forma_geometrica:
+    diametro_eq_m: 0.010        # cubos ~10 mm o rodajas espesas 7-12 mm
+    porosidad_lecho: 0.45
+    esfericidad: 0.7              # cubos/dados (más esféricos que rodajas)
+    forma: "cubos 10 mm o rodajas espesas"
 
   capa_fina:
     page:
@@ -111,39 +120,89 @@ papa:
 
     midilli:
       params:
-        a: null
-        k: null
-        n: null
-        b: null
+        sets_por_temperatura:
+          - {T_K: 318.15, a: 1.00900, k: 0.01404, n: 0.87280, b: -0.00019, R2: 0.99986}
+          - {T_K: 328.15, a: 1.00700, k: 0.01722, n: 0.85460, b: -0.00031, R2: 0.99990}
+          - {T_K: 333.15, a: 1.00800, k: 0.01873, n: 0.82340, b: -0.00019, R2: 0.99991}
+          - {T_K: 343.15, a: 1.00800, k: 0.02004, n: 0.84520, b: -0.00019, R2: 0.99986}
+        # Default top-level: T=60°C (Test 3 del paper — R² más alto, T representativa).
+        a: 1.00800
+        k: 0.01873
+        n: 0.82340
+        b: -0.00019
       condiciones_calibracion:
-        T_K: null
-        v_aire_m_s: null
-        espesor_m: null
+        T_K: [318.15, 328.15, 333.15, 343.15]    # 45, 55, 60, 70 °C
+        v_aire_m_s: 1.81
+        espesor_m: 0.007        # rodajas circulares de 7 mm
         HR_aire: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Akpinar et al. (2003) DOI:10.1016/S0196-8904(02)00171-1 y/o Naderinezhad et al. (2016) DOI:10.1002/fsn3.258 [OA Wiley]"
-      notas: null
+        pretratamiento: "blanqueo 5 min agua hirviendo 90°C + 2 min agua fría 10°C"
+      calidad_datos: ALTA
+      fuente: "Naderinezhad S, Etesami N, Poormalek Najafabady A, Ghasemi Falavarjani M (2016). Mathematical modeling of drying of potato slices in a forced convective dryer based on important parameters. Food Sci Nutr 4(1):110-118. DOI:10.1002/fsn3.258. Tabla 3 (tests 1-4: circle, v=1.81 m/s). [OA Wiley]"
+      notas: |
+        DEFAULT a T=60°C. Calibración con rodajas circulares de 7 mm,
+        v_aire=1.81 m/s, pretratamiento de blanqueo. R²>0.999 en todos los
+        sets. Modelo seleccionado tras comparar 21 modelos en el paper.
+        El paper también provee una regresión multiparamétrica de
+        (a, b, k, n) vs (T, V) — ver Tablas 4-5 del paper — útil para
+        interpolar fuera de los 4 sets cargados pero no representable en
+        el esquema actual del catálogo.
+        Caveat: b₁ (T=45°C) aparece como "0.00019-" en el PDF; interpretado
+        como -0.00019 por consistencia con los demás sets (todos b<0).
 
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Kaymak-Ertekin & Gedik (2004). LWT 37(4):429-438. DOI:10.1016/j.lwt.2003.10.012 (incluye papa)"
-      notas: null
+        # Default a T=45°C (mediana del rango calibrado 30-60°C).
+        X_m: 0.073     # monocapa (no depende de T en GAB de Van den Berg)
+        C: 10.163      # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 0.869       # = K0 · exp(ΔH_k / RT) a T=318.15 K
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.073, C: 26.678, K: 0.927}
+          - {T_K: 318.15, X_m: 0.073, C: 10.163, K: 0.869}
+          - {T_K: 333.15, X_m: 0.073, C: 4.223,  K: 0.820}
+        # Parámetros entrópicos del modelo de Van den Berg (no usados por el
+        # motor actual; quedan para futura extensión que cablee C(T) y K(T)):
+        entalpicos:
+          M_0: 0.073
+          C_0: 3.44e-8
+          K_0: 0.235
+          dH_c_kJ_mol: 51.590
+          dH_k_kJ_mol: 3.460
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: ALTA
+      fuente: "Kaymak-Ertekin F, Gedik A (2004). Sorption isotherms and isosteric heat of sorption for grapes, apricots, apples and potatoes. LWT - Food Sci Technol 37(4):429-438. DOI:10.1016/j.lwt.2003.10.012. Tabla 6 (curva DESORCIÓN — apropiada para secado). Variedades turcas Bozdağ/Ödemiş, alto almidón, método gravimétrico estático con 10 sales saturadas, n=3 réplicas."
+      notas: |
+        Curva de DESORCIÓN (relevante para secado).
+        El paper reporta C y K como funciones de T vía Van den Berg:
+            C(T) = C_0 · exp(ΔH_c / R·T)
+            K(T) = K_0 · exp(ΔH_k / R·T)
+        El motor actual usa C y K fijos → cargados a T=45°C (mediana del rango).
+        Para extrapolación a T_op ≫ 45°C recomputar desde `entalpicos`.
+        Validación contra Tabla 5 (puntos selectos):
+            T=30°C, aw=0.560: M_exp=0.144, M_gab=0.147 (+2%)
+            T=45°C, aw=0.469: M_exp=0.106, M_gab=0.108 (+2%)
+            T=60°C, aw=0.497: M_exp=0.099, M_gab=0.092 (-8%)
+        Calidad ALTA: P(%)=7.91. GAB es buen ajuste para papa (alto almidón).
 
   notas: |
-    Papers prioritarios:
+    Papers cargados:
+      - Naderinezhad S et al. (2016). Food Sci Nutr 4(1):110-118.
+        DOI:10.1002/fsn3.258 [OA Wiley]
+        → cargado en capa_fina.midilli (4 T: 45-70°C) y propiedades_basicas (X0).
+      - Kaymak-Ertekin F, Gedik A (2004). LWT 37(4):429-438.
+        DOI:10.1016/j.lwt.2003.10.012 [PDF en docs/notas/papers]
+        → cargado en isoterma.gab (curva desorción, 3 T: 30-60°C, calidad ALTA).
+    Papers pendientes:
       - Akpinar EK, Midilli A, Bicer Y (2003). Single layer drying behaviour of
         potato slices in a convective cyclone dryer.
-        Energy Convers Manag 44(10):1689-1705. DOI:10.1016/S0196-8904(02)00171-1 [MINCyT Elsevier]
-      - Naderinezhad S et al. (2016). Food Sci Nutr 4(1):110-118.
-        DOI:10.1002/fsn3.258 [OA Wiley — disponible sin MINCyT]
-    Encogimiento importante → el modelo de espesor constante subestima el
-    tiempo final de secado. Ver Hassini et al. (2007) para corrección.
+        Energy Convers Manag 44(10):1689-1705. DOI:10.1016/S0196-8904(02)00171-1
+        [PDF en docs/notas/papers]. Modelo seleccionado: "Aproximación de la
+        difusión"; también ajusta Page → útil para llenar capa_fina.page.
+      - Hassini et al. (2007). Difusividad efectiva con corrección de encogimiento
+        [PDF en docs/notas/papers]. Útil para Arrhenius futuro; no carga directo
+        en capa_fina.
+    Encogimiento importante (Hassini 2007 lo cuantifica como "ideal", 77% reducción
+    de volumen) → el modelo de espesor constante subestima el tiempo final de secado.
 
 
 # =============================================================================
@@ -231,19 +290,39 @@ pimiento_rojo:
     fuente_propiedades_basicas: |
       USDA SR-28 (red bell pepper, raw). Cp estimado por Choi-Okos.
 
+  forma_geometrica:
+    diametro_eq_m: 0.008        # rodajas/tiras 6–10 mm
+    porosidad_lecho: 0.45
+    esfericidad: 0.6
+    forma: "rodajas/tiras de pimiento bell"
+
   capa_fina:
     page:
       params:
-        k: null
-        n: null
+        sets_por_temperatura:
+          - {T_K: 323.15, k: 0.00726, n: 1.29310, R2: 0.9874}
+          - {T_K: 333.15, k: 0.01123, n: 1.34950, R2: 0.9835}
+          - {T_K: 343.15, k: 0.01365, n: 1.38587, R2: 0.9867}
+          - {T_K: 353.15, k: 0.01741, n: 1.40500, R2: 0.9918}
+        # Default top-level: T=60°C (más representativa de secado solar en NOA).
+        k: 0.01123
+        n: 1.34950
       condiciones_calibracion:
-        T_K: null         # esperado: 328-343 K (55-70°C). Akpinar et al. (2003)
-        v_aire_m_s: null
-        espesor_m: null
+        T_K: [323.15, 333.15, 343.15, 353.15]   # 50, 60, 70, 80 °C
+        v_aire_m_s: 2.5
+        espesor_m: 0.010      # cubos de 1 cm (no rodajas)
         HR_aire: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Akpinar EK, Bicer Y, Yildiz C (2003). J Food Eng 59(1):99-104. DOI:10.1016/S0260-8774(02)00425-9"
-      notas: null
+      calidad_datos: ALTA
+      fuente: "Vega A, Fito P, Andrés A, Lemus R (2007). Mathematical modeling of hot-air drying kinetics of red bell pepper (var. Lamuyo). J Food Eng 79(4):1460-1466. DOI:10.1016/j.jfoodeng.2006.04.028. Tablas 5 y 6."
+      notas: |
+        DEFAULT RECOMENDADO a T=60°C. Calibración con cubos de 1 cm
+        (var. Lamuyo, España), v_aire=2.5 m/s, solo periodo de tasa
+        decreciente. El paper también reporta Page Modificado
+        (mejor ajuste estadístico que Page) y Henderson-Pabis, pero
+        el catálogo no expone esos modelos todavía. Ea(Page)=18.22 kJ/mol;
+        Ea(D_eff)=39.70 kJ/mol, D0=9.19e-3 m²/s (para futuro cableado
+        Arrhenius). El paper observa que la calidad del color (capsantina)
+        se degrada severamente a T > 70°C — preferir T ≤ 65°C.
 
     midilli:
       params:
@@ -257,26 +336,40 @@ pimiento_rojo:
         espesor_m: null
         HR_aire: null
       calidad_datos: null
-      fuente: "PENDIENTE — Vega A et al. (2007). J Food Eng 79(4):1460-1466. DOI:10.1016/j.jfoodeng.2006.04.028 y/o Akpinar et al. (2003)"
+      fuente: "PENDIENTE — Vega (2007) no calibra Midilli (usa Page Modificado y H-Pabis). Buscar paper específico con Midilli para pimiento."
       notas: null
 
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Kaymak-Ertekin & Sultanoğlu (2001). J Food Eng 47:225-231. DOI:10.1016/S0260-8774(00)00120-5 (pepper isotherms)"
-      notas: null
+        X_m: 0.08     # g agua / g ms (monolayer)
+        C: 12.53      # constante de Guggenheim
+        K: 1.02       # constante multilayer
+      rango_T_K: [303.15, 303.15]   # única T de medición
+      calidad_datos: MEDIA
+      fuente: "Vega A, Fito P, Andrés A, Lemus R (2007). J Food Eng 79(4):1460-1466. DOI:10.1016/j.jfoodeng.2006.04.028. Tabla 2 (isoterma de desorción a 30°C, sales saturadas, método gravimétrico estático)."
+      notas: |
+        Isoterma medida a UNA SOLA TEMPERATURA (30°C), bastante por
+        debajo de la T de operación de secado solar (50-80°C). El motor
+        termodinámico extrapolará fuera del rango de calibración.
+        Ajuste GAB: r²=0.91, %E=11.22 — calidad MEDIA (vs r²>0.99 de
+        productos con datos multi-T).
+        Para uso serio: completar con Kaymak-Ertekin & Sultanoğlu (2001),
+        J Food Eng 47:225-231, que reporta isotermas de pimiento a varias T.
+        Como check: X_we experimental a 50/60/70/80 °C = 0.064/0.040/0.032/0.021
+        kg/kg ms (Vega 2007 Tabla 3).
 
   notas: |
-    Papers prioritarios:
-      - Akpinar EK, Bicer Y, Yildiz C (2003). Thin layer drying of red pepper.
-        J Food Eng 59(1):99-104. DOI:10.1016/S0260-8774(02)00425-9 [MINCyT Elsevier]
+    Papers cargados:
       - Vega A, Fito P, Andrés A, Lemus R (2007). J Food Eng 79(4):1460-1466.
         DOI:10.1016/j.jfoodeng.2006.04.028 [MINCyT Elsevier]
+        → cargado en capa_fina.page (4 T: 50-80°C) e isoterma.gab (30°C, MEDIA).
+    Papers pendientes:
+      - Akpinar EK, Bicer Y, Yildiz C (2003). Thin layer drying of red pepper.
+        J Food Eng 59(1):99-104. DOI:10.1016/S0260-8774(02)00425-9 [PDF en docs/notas/papers].
+        Modelo seleccionado: "Aproximación de la difusión" (no Page ni Midilli).
+      - Kaymak-Ertekin & Sultanoğlu (2001). J Food Eng 47:225-231 —
+        para isoterma GAB multi-T (no descargado).
     T máxima recomendada ~65°C para preservar capsantina (color rojo).
     fotosensible: true — cámara preferentemente protegida de luz directa.
 
@@ -567,3 +660,101 @@ mandioca:
     El secado elimina el HCN por volatilización. Esto no afecta los
     parámetros cinéticos pero sí es relevante para el diseño de la
     cámara (ventilación mínima obligatoria para variedades amargas).
+
+
+# =============================================================================
+# AJÍ ROJO (RED CHILLIES) — distinto de pimiento_rojo
+# =============================================================================
+aji_rojo:
+  descripcion: "Ají rojo (Capsicum spp., chillies) — frutos enteros, pungentes por capsaicina, color rojo por carotenoides (capsantina). DISTINTO de pimiento_rojo (bell pepper grande dulce): el ají rojo es pequeño (~4 cm de largo), pungente, y se seca ENTERO (no rebanado). Producción NOA importante para condimento y exportación. Paper de referencia: variedad polyster (Coimbatore, India)."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: true   # capsaicina y carotenoides se degradan con calor >60°C y UV
+
+  propiedades_basicas:
+    densidad_aparente: 800.0        # kg/m³. Estimación (frutos huecos con semillas).
+    calor_especifico_seco: 1500.0   # J/(kg·K). Estimación Choi-Okos.
+    humedad_inicial_tipica: 3.25    # kg/kg ms — 325% bs (Kaleemullah 2006).
+    humedad_equilibrio_aire_seco: 0.105
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      Humedad inicial y final: Kaleemullah & Kailappan (2006)
+        DOI:10.1016/j.jfoodeng.2005.05.049 (variedad polyster, Coimbatore, India).
+      Densidad y Cp: estimaciones genéricas. Calidad BAJA.
+
+  forma_geometrica:
+    diametro_eq_m: 0.012        # chile entero ~10–15 mm de diámetro
+    porosidad_lecho: 0.55        # frutos huecos largos → mucho hueco entre ellos
+    esfericidad: 0.5              # forma alargada irregular
+    forma: "chiles enteros (no rebanados)"
+
+  capa_fina:
+    page:
+      params:
+        # k convertido de h⁻ᴺ (paper) a min⁻ᴺ (convención del catálogo):
+        # k_min = k_h / 60^N
+        sets_por_temperatura:
+          - {T_K: 323.15, k: 0.000696, n: 1.1954, R2: 0.997}   # 50 °C
+          - {T_K: 328.15, k: 0.001277, n: 1.1537, R2: 0.995}   # 55 °C
+          - {T_K: 333.15, k: 0.001832, n: 1.1550, R2: 0.992}   # 60 °C
+          - {T_K: 338.15, k: 0.002694, n: 1.1302, R2: 0.997}   # 65 °C
+        # Default top-level: T=55°C (RECOMENDADO POR EL PAPER — mejor balance
+        # entre tiempo de secado, retención de capsaicina y color rojo a*).
+        k: 0.001277
+        n: 1.1537
+      condiciones_calibracion:
+        T_K: [323.15, 328.15, 333.15, 338.15]   # 50, 55, 60, 65 °C
+        v_aire_m_s: 0.4
+        espesor_m: 0.016        # capa de ~1.6 cm, frutos enteros apilados
+        HR_aire: null
+        forma: "frutos enteros (no rebanados); dimensiones individuales 4.0 × 1.6 × 1.6 cm"
+      calidad_datos: ALTA
+      fuente: "Kaleemullah S, Kailappan R (2006). Modelling of thin-layer drying kinetics of red chillies. J Food Eng 76(4):531-537. DOI:10.1016/j.jfoodeng.2005.05.049. Tabla 5 (4 T: 50-65°C). Page rankeado #1 entre Lewis/Hustrulid-Flikke/Page/Kaleemullah."
+      notas: |
+        DEFAULT a T=55°C — RECOMENDADO EXPLÍCITAMENTE POR EL PAPER (Tabla 4):
+        a 55°C la capsaicina se mantiene en 0.57% y el color rojo a*=23.03;
+        a 65°C bajan a 0.34% y a*=14.73 (degradación severa).
+        Variedad polyster (Coimbatore local, India), frutos enteros sin
+        rebanar ni pretratamiento.
+
+        IMPORTANTE — CONVERSIÓN DE UNIDADES:
+        El paper reporta k en h⁻ᴺ con θ en horas (verificado: Lewis K=0.1443 h⁻¹
+        a 50°C, θ=26h → MR=0.024, consistente con M_final=10.5%).
+        El catálogo usa min⁻ᴺ con t en min. Conversión aplicada: k_min = k_h / 60^N.
+        Valores originales del paper (h⁻ᴺ):
+          T=50°C: k=0.07906, T=55°C: 0.12563, T=60°C: 0.18114, T=65°C: 0.23631.
+
+        DATOS ADICIONALES del paper (no usados por el motor actual):
+          - Ea = 37.76 kJ/mol (Arrhenius de D_eff vs 1/T, R²=0.99)
+          - D_0 = 4.92 × 10⁻³ m²/s
+          - D_eff: 3.78 × 10⁻⁹ (50°C) a 7.10 × 10⁻⁹ m²/s (65°C)
+          - Modelo Kaleemullah (T-dependent): MR = exp(-(at+b)·θ^(ct+d))
+            con a=0.00848, b=-0.34775, c=0.00005, d=1.1912 (rank #2 del paper).
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Kaleemullah & Kailappan (2004). Moisture sorption isotherms of red chillies. Biosyst Eng 88(1):95-104. Los mismos autores publicaron isotermas de chillies; no descargado todavía."
+      notas: null
+
+  notas: |
+    PRODUCTO NUEVO en el catálogo (cargado en esta sesión).
+    DIFERENCIADO de pimiento_rojo (mismo género Capsicum, productos distintos):
+      - aji_rojo:     chillies pequeños pungentes, frutos enteros, capsaicina alta.
+      - pimiento_rojo: bell pepper grande dulce, en rodajas o cubos, sin capsaicina.
+
+    Papers cargados:
+      - Kaleemullah S, Kailappan R (2006). J Food Eng 76(4):531-537.
+        DOI:10.1016/j.jfoodeng.2005.05.049 [PDF en docs/notas/papers]
+        → capa_fina.page (4 T: 50-65°C, calidad ALTA).
+    Papers pendientes:
+      - Kaleemullah & Kailappan (2004). Biosyst Eng 88(1):95-104 — isoterma GAB
+        de red chillies. No descargado.
+
+    T MÁXIMA RECOMENDADA: 55 °C (>60°C degrada capsaicina y color rojo).
+    fotosensible: true — cámara preferentemente protegida de luz directa.

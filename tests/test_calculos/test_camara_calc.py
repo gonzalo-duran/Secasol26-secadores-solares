@@ -3,7 +3,7 @@
 Cubre:
     - calcular_X_eq_gab: invariantes físicas de la isoterma GAB
     - evaluar_MR: todos los modelos de capa fina
-    - calcular_tiempo_secado: casos típicos, casos extremos, convergencia
+    - calcular_tiempo_secado_estatico: casos típicos, casos extremos, convergencia
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import pytest
 from calculos.camara_calc import (
     ResultadosCamara,
     calcular_X_eq_gab,
-    calcular_tiempo_secado,
+    calcular_tiempo_secado_estatico,
     evaluar_MR,
 )
 from core.camara import (
@@ -160,44 +160,44 @@ class TestEvaluarMR:
 
 
 # ---------------------------------------------------------------------------
-# calcular_tiempo_secado
+# calcular_tiempo_secado_estatico
 # ---------------------------------------------------------------------------
 
 
 class TestCalcularTiempoSecado:
 
     def test_resultado_es_ResultadosCamara(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert isinstance(res, ResultadosCamara)
 
     def test_convergencia_manzana_50C(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert res.convergencia_ok
         assert res.t_secado_s > 0
 
     def test_t_secado_positivo(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert res.t_secado_s > 0
 
     def test_tiempo_en_rango_fisico(self, camara_manzana):
         """El solver converge y el tiempo es positivo y menor al límite de 72 h."""
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert res.convergencia_ok
         assert 0 < res.t_secado_s < 72 * 3600
 
     def test_X_eq_positivo_y_menor_que_X0(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         X_0 = camara_manzana.carga_producto.humedad_inicial_X
         assert 0 <= res.X_eq_kg_kg < X_0
 
     def test_curva_monotona_decreciente(self, camara_manzana):
         """La curva de secado X(t) debe ser monótonamente decreciente."""
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         diff = np.diff(res.X_array_kg_kg)
         assert np.all(diff <= 1e-6), "La curva de secado no es monótonamente decreciente."
 
     def test_curva_empieza_en_X0(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         X_0 = camara_manzana.carga_producto.humedad_inicial_X
         X_eq = res.X_eq_kg_kg
         # El primer punto debe ser ≈ X₀ (MR≈1 en t=0)
@@ -205,53 +205,54 @@ class TestCalcularTiempoSecado:
 
     def test_curva_termina_en_X_obj(self, camara_manzana):
         """El último punto de la curva debe ser ≈ X_obj."""
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         X_obj = camara_manzana.carga_producto.humedad_objetivo_X
         assert res.X_array_kg_kg[-1] == pytest.approx(X_obj, abs=0.05)
 
     def test_yacon_page_con_GAB(self, camara_yacon_page):
         """Yacón tiene isoterma GAB — fuente_X_eq debe ser 'gab'."""
-        res = calcular_tiempo_secado(camara_yacon_page, T_operacion_K=318.15, HR_operacion=0.25)
+        res = calcular_tiempo_secado_estatico(camara_yacon_page, T_operacion_K=318.15, HR_operacion=0.25)
         assert res.fuente_X_eq == "gab"
 
-    def test_manzana_usa_fallback(self, camara_manzana):
-        """Manzana no tiene isoterma GAB — fuente_X_eq debe ser 'fallback_escalar'."""
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
-        assert res.fuente_X_eq == "fallback_escalar"
+    def test_manzana_usa_gab(self, camara_manzana):
+        """Manzana ahora tiene isoterma GAB cargada (Kaymak-Ertekin & Gedik 2004)
+        → fuente_X_eq debe ser 'gab'."""
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        assert res.fuente_X_eq == "gab"
 
     def test_masa_agua_extraida_positiva(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert res.masa_agua_extraida_kg > 0
 
     def test_masa_agua_extraida_valor(self, camara_manzana):
         """Verifica el valor de masa de agua extraída."""
         p = camara_manzana.carga_producto
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         ms = p.masa_total_kg / (1.0 + p.humedad_inicial_X)
         agua_esperada = ms * (p.humedad_inicial_X - p.humedad_objetivo_X)
         assert res.masa_agua_extraida_kg == pytest.approx(agua_esperada, rel=0.05)
 
     def test_T_invalida_lanza(self, camara_manzana):
         with pytest.raises(ValueError):
-            calcular_tiempo_secado(camara_manzana, T_operacion_K=-10.0, HR_operacion=0.20)
+            calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=-10.0, HR_operacion=0.20)
 
     def test_HR_invalida_lanza(self, camara_manzana):
         with pytest.raises(ValueError):
-            calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=1.5)
+            calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=1.5)
 
     def test_advertencia_T_fuera_rango(self, camara_manzana):
         """T=90°C (363 K) está fuera del rango de calibración de Sacilik (40-60°C)."""
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=363.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=363.15, HR_operacion=0.20)
         codigos = " ".join(res.advertencias)
         assert "CAM_T_FUERA_RANGO_CALIBRACION" in codigos
 
     def test_MR_obj_en_rango(self, camara_manzana):
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert 0.0 < res.MR_obj < 1.0
 
     def test_N_puntos_curva_correcto(self, camara_manzana):
         from calculos.camara_calc import N_PUNTOS_CURVA
-        res = calcular_tiempo_secado(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara_manzana, T_operacion_K=323.15, HR_operacion=0.20)
         assert len(res.t_array_s) == N_PUNTOS_CURVA
         assert len(res.X_array_kg_kg) == N_PUNTOS_CURVA
 
@@ -275,8 +276,8 @@ class TestCalcularTiempoSecado:
                 modelo_capa_fina="logaritmico",
             )
         )
-        res_corto = calcular_tiempo_secado(camara_corto, T_operacion_K=323.15, HR_operacion=0.20)
-        res_largo = calcular_tiempo_secado(camara_largo, T_operacion_K=323.15, HR_operacion=0.20)
+        res_corto = calcular_tiempo_secado_estatico(camara_corto, T_operacion_K=323.15, HR_operacion=0.20)
+        res_largo = calcular_tiempo_secado_estatico(camara_largo, T_operacion_K=323.15, HR_operacion=0.20)
         assert res_largo.t_secado_s > res_corto.t_secado_s
 
     def test_manzana_midilli(self):
@@ -290,6 +291,6 @@ class TestCalcularTiempoSecado:
                 modelo_capa_fina="midilli",
             )
         )
-        res = calcular_tiempo_secado(camara, T_operacion_K=323.15, HR_operacion=0.20)
+        res = calcular_tiempo_secado_estatico(camara, T_operacion_K=323.15, HR_operacion=0.20)
         assert res.convergencia_ok
         assert res.t_secado_s > 0

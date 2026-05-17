@@ -65,7 +65,14 @@ class Motor:
             a partir de los sub-componentes.
         delta_P_colector_Pa: ΔP en el banco de colectores [Pa]. None = 0.
         delta_P_camara_Pa: ΔP en la cámara de secado [Pa]. None = 0.
-        delta_P_ductos_Pa: ΔP en ductos de conexión [Pa]. None = 20% automático.
+        delta_P_ductos_Pa: ΔP friccional en ductos de conexión [Pa]. None = 20% automático.
+        delta_P_singulares_Pa: ΔP de pérdidas singulares (entrada, salida,
+            codos, manifold de banco paralelo) [Pa]. None = 0. Se obtiene
+            típicamente de ``calculos.motor_calc.estimar_delta_P_singulares``.
+        v_descarga_m_s: Velocidad del aire en la descarga del ventilador [m/s].
+            Si está definida, se suma la presión dinámica ρ·v²/2 al ΔP total
+            (presión TOTAL del ventilador = estática + dinámica). None = 0
+            (sólo presión estática, conservador a la baja).
         eficiencia_ventilador: η del ventilador [0, 1]. Default: 0.55.
         eficiencia_motor: η del motor eléctrico [0, 1]. Default: 0.85.
         factor_servicio: Factor de sobredimensionamiento nominal [-]. Default: 1.15.
@@ -86,6 +93,8 @@ class Motor:
     delta_P_colector_Pa: Optional[float] = None
     delta_P_camara_Pa: Optional[float] = None
     delta_P_ductos_Pa: Optional[float] = None
+    delta_P_singulares_Pa: Optional[float] = None
+    v_descarga_m_s: Optional[float] = None
     eficiencia_ventilador: float = 0.55
     eficiencia_motor: float = 0.85
     factor_servicio: float = 1.15
@@ -173,7 +182,18 @@ class Motor:
                     ),
                     contexto={"dP_ductos_estimado_Pa": round(dP_duc, 2)},
                 ))
-            self.perdida_carga_total_Pa = dP_col + dP_cam + dP_duc
+            dP_sing = self.delta_P_singulares_Pa or 0.0
+            # Presión dinámica de salida: ρ·v_descarga²/2.
+            # Si v_descarga no se proveyó, asumimos cero (modelo histórico
+            # conservador a la baja). Densidad del aire a ~50 °C / 1 atm.
+            if self.v_descarga_m_s is not None and self.v_descarga_m_s > 0:
+                rho_descarga = 101325.0 / (287.058 * 323.15)  # ~1.092 kg/m³
+                dP_dinamica = rho_descarga * self.v_descarga_m_s ** 2 / 2.0
+            else:
+                dP_dinamica = 0.0
+            self.perdida_carga_total_Pa = (
+                dP_col + dP_cam + dP_duc + dP_sing + dP_dinamica
+            )
 
         dP = self.perdida_carga_total_Pa
         Q = self.caudal_volumetrico_m3_s

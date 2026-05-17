@@ -85,6 +85,22 @@ manzana:
       Humedad equilibrio: estimada de monolayer GAB típico, no calibrada.
 
   # ---------------------------------------------------------------------------
+  forma_geometrica:
+    # Geometría representativa del producto sobre la bandeja (para Ergun).
+    # Si ConfiguracionBandejas no sobreescribe estos valores, el motor de
+    # motor_calc los usa para estimar ΔP del lecho.
+    diametro_eq_m: 0.006        # rodaja ~5–8 mm de espesor → d_eq ≈ 6 mm
+    porosidad_lecho: 0.45        # lecho de rodajas planas apiladas, hueco moderado
+    esfericidad: 0.6              # rodajas planas (Φ baja)
+    forma: "rodajas de 5–8 mm de espesor sobre bandeja"
+    notas: |
+      d_eq estimado de rodajas planas usando d_eq = (6·V/π)^(1/3) con
+      V típico = π·R²·h con R≈25 mm, h≈6 mm → d_eq ≈ 16 mm (esfera
+      equivalente en volumen). Pero para Ergun lo relevante es la
+      dimensión normal al flujo, dominada por el espesor → d_eq ≈ espesor
+      ≈ 6 mm. Validar con medición si es crítico.
+
+  # ---------------------------------------------------------------------------
   capa_fina:
 
     page:
@@ -146,16 +162,48 @@ manzana:
 
   # ---------------------------------------------------------------------------
   isoterma:
-    # No se cargó GAB de manzana en esta sesión: el paper Tsami 1990 que
-    # estaba en el shopping list NO se subió al Project knowledge.
-    # Status: PENDIENTE para Sesión siguiente.
-    # Recomendado conseguir: Kaymak-Ertekin & Gedik (2004). DOI:10.1016/j.lwt.2003.10.012.
-    # Alternativa: Veltchev & Menkov (2000) o Tsami et al. (1990).
+    gab:
+      params:
+        # Default a T=45°C (mediana del rango calibrado 30-60°C).
+        X_m: 0.220     # monocapa (no depende de T en GAB de Van den Berg)
+        C: 9.055       # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 0.844       # = K0 · exp(ΔH_k / RT) a T=318.15 K
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.220, C: 25.259, K: 0.866}
+          - {T_K: 318.15, X_m: 0.220, C: 9.055,  K: 0.844}
+          - {T_K: 333.15, X_m: 0.220, C: 3.560,  K: 0.825}
+        # Parámetros entrópicos del modelo de Van den Berg (no usados por el
+        # motor actual; quedan para futura extensión que cablee C(T) y K(T)):
+        entalpicos:
+          M_0: 0.220
+          C_0: 8.97e-9
+          K_0: 0.501
+          dH_c_kJ_mol: 54.840
+          dH_k_kJ_mol: 1.380
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: MEDIA
+      fuente: "Kaymak-Ertekin F, Gedik A (2004). Sorption isotherms and isosteric heat of sorption for grapes, apricots, apples and potatoes. LWT - Food Sci Technol 37(4):429-438. DOI:10.1016/j.lwt.2003.10.012. Tabla 6 (curva DESORCIÓN — apropiada para secado). Variedad Starking, método gravimétrico estático con 10 sales saturadas, n=3 réplicas."
+      notas: |
+        Curva de DESORCIÓN (relevante para secado).
+        El paper reporta C y K como funciones de T vía Van den Berg:
+            C(T) = C_0 · exp(ΔH_c / R·T)
+            K(T) = K_0 · exp(ΔH_k / R·T)
+        El motor actual usa C y K fijos → cargados a T=45°C (mediana del rango).
+        Para extrapolación a T_op ≫ 45°C recomputar desde `entalpicos`.
+        Validación contra Tabla 5 (puntos selectos):
+            T=30°C, aw=0.514: M_exp=0.425, M_gab=0.378 (-11%)
+            T=45°C, aw=0.469: M_exp=0.260, M_gab=0.312 (+20%) ← peor punto
+            T=60°C, aw=0.497: M_exp=0.290, M_gab=0.265 (-8%)
+        Calidad MEDIA: P(%)=10.16. El paper indica que Halsey ajusta mejor
+        que GAB para apples (P~5-7%), pero el motor solo acepta GAB.
+        Para uso más fino: cargar Halsey cuando el esquema lo soporte.
 
   # ---------------------------------------------------------------------------
   notas: |
-    Producto bien documentado. Default recomendado: modelo logarítmico
-    de Sacilik 2006 (R²=0.9983).
+    Producto bien documentado. Default capa_fina: modelo logarítmico
+    de Sacilik 2006 (R²=0.9983). GAB cargado desde Kaymak-Ertekin &
+    Gedik (2004) DOI:10.1016/j.lwt.2003.10.012 — variedad Starking,
+    curva desorción, 3 T (30/45/60°C). Calidad MEDIA (P%=10.16).
 
     REFERENCIAS SECUNDARIAS evaluadas pero no cargadas en YAML:
       - Meisami-Asl et al. (2009). Pakistan J Nutr 8(6):804-809. Ajustó
@@ -328,6 +376,13 @@ yacon:
         verificación experimental directa.
       Humedad inicial: Marques et al. (2022); coherente con Shi (2013).
       Humedad equilibrio: derivada de monolayer GAB Marques (Xm≈0.13).
+
+  # ---------------------------------------------------------------------------
+  forma_geometrica:
+    diametro_eq_m: 0.005        # rodajas finas (~4–6 mm) — Shi/Marques
+    porosidad_lecho: 0.45
+    esfericidad: 0.6
+    forma: "rodajas finas ~5 mm sobre bandeja"
 
   # ---------------------------------------------------------------------------
   capa_fina:
@@ -525,3 +580,148 @@ yacon:
     encima de ~50-60°C. ALERTA DE PROCESO: secar a T < 50°C preserva
     mejor la calidad nutricional, aunque ralentiza el secado. Esto es
     un trade-off de diseño que el software debe permitir explorar.
+
+
+# =============================================================================
+# GRANADA (POMEGRANATE)
+# =============================================================================
+granada:
+  descripcion: "Granada (Punica granatum) — arilos (semillas con pulpa). Originaria de regiones tropicales y subtropicales. La porción comestible son los arilos. El producto seco se conoce como 'anardana' en cocina india y se usa como condimento ácido. Producción argentina: emergente en Mendoza, Catamarca y NOA."
+  categoria: FRUTA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 1050.0       # kg/m³. Estimación (no en paper).
+    calor_especifico_seco: 1600.0   # J/(kg·K). Estimación Choi-Okos genérica.
+    humedad_inicial_tipica: 2.72    # kg/kg ms — 271.80% bs (Kingsly & Singh 2007).
+    humedad_equilibrio_aire_seco: 0.087  # final reportada en el paper.
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      Humedad inicial y final: Kingsly & Singh (2007)
+        DOI:10.1016/j.jfoodeng.2006.02.033 (variedad wild de Solan, Himachal Pradesh).
+      Densidad y Cp: estimaciones genéricas sin paper específico. Calidad BAJA.
+
+  forma_geometrica:
+    diametro_eq_m: 0.006        # arilos enteros ~5–7 mm
+    porosidad_lecho: 0.40        # arilos esféricos empacan más denso
+    esfericidad: 0.9              # arilos casi esféricos
+    forma: "arilos enteros (no rebanados); loading 3 kg/m² de bandeja"
+
+  capa_fina:
+    page:
+      params:
+        sets_por_temperatura:
+          - {T_K: 323.15, k: 0.0444, n: 0.6951, R2: 0.9942}
+          - {T_K: 328.15, k: 0.0476, n: 0.7045, R2: 0.9963}
+          - {T_K: 333.15, k: 0.0675, n: 0.6872, R2: 0.9961}
+        # Default top-level: T=55°C (mediana del rango calibrado).
+        k: 0.0476
+        n: 0.7045
+      condiciones_calibracion:
+        T_K: [323.15, 328.15, 333.15]    # 50, 55, 60 °C
+        v_aire_m_s: 1.2
+        espesor_m: null               # arilos enteros (no rebanados)
+        HR_aire: null
+        forma: "arilos enteros (no rebanados); loading 3 kg/m² de bandeja"
+      calidad_datos: ALTA
+      fuente: "Kingsly ARP, Singh DB (2007). Drying kinetics of pomegranate arils. J Food Eng 79(3):741-744. DOI:10.1016/j.jfoodeng.2006.02.033. Tabla 2 (Page mejor entre 4 modelos: Newton/H-Pabis/Page/Mod-Page)."
+      notas: |
+        DEFAULT a T=55°C. Variedad wild de Solan (Himachal Pradesh, India).
+        Producto: ARILOS (semillas con pulpa), NO la fruta entera.
+
+        CAVEAT DE UNIDADES: el paper declara en nomenclatura "t drying time (h)"
+        pero los valores numéricos de k SOLO cierran físicamente si t está en
+        MINUTOS. Verificación: a T=50°C, t=11 h reportado, k=0.0444, n=0.6951:
+          - Con t en h:   MR(11h) = exp(-0.0444·11^0.6951) = exp(-0.232) = 0.79
+            → drying barely started, NO concuerda con M_final=8.7%.
+          - Con t en min: MR(660min) = exp(-0.0444·660^0.6951) = exp(-3.98) = 0.019
+            → concuerda con M_final/M_0 = 0.032 (M_e pequeño).
+        Mismo análisis vale para Newton, Henderson-Pabis y Modified Page.
+        Los valores cargados son los del paper SIN conversión, consistentes con
+        la convención del catálogo (k en min⁻ᴺ). Es un bug de nomenclatura del
+        paper, no del catálogo.
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — no hay paper de isoterma de granada/arils en la carpeta."
+      notas: null
+
+  notas: |
+    PRODUCTO NUEVO en el catálogo (cargado en esta sesión).
+    Papers cargados:
+      - Kingsly ARP, Singh DB (2007). J Food Eng 79(3):741-744.
+        DOI:10.1016/j.jfoodeng.2006.02.033 [PDF en docs/notas/papers]
+        → capa_fina.page (3 T: 50-60°C, calidad ALTA).
+    Papers pendientes:
+      - Isoterma GAB de granada/arils.
+
+
+# =============================================================================
+# CIRUELA (PLUM)
+# =============================================================================
+ciruela:
+  descripcion: "Ciruela (Prunus domestica) en rodajas. Fruta de zona templada, alta humedad inicial (~90% bh), rica en azúcares, carotenos y compuestos fenólicos. La ciruela seca (passa) es producto tradicional de Mendoza (variedad d'Agen). El paper de referencia usa variedad Sutlej purple (India)."
+  categoria: FRUTA
+  tipo_secado: CAPA_FINA
+  fotosensible: false
+
+  propiedades_basicas:
+    densidad_aparente: 1000.0       # kg/m³. Estimación.
+    calor_especifico_seco: 1700.0   # J/(kg·K). Estimación Choi-Okos.
+    humedad_inicial_tipica: 9.86    # kg/kg ms — 986.17% bs (Goyal 2007).
+    humedad_equilibrio_aire_seco: 0.10
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      Humedad inicial: Goyal et al. (2007) DOI:10.1016/j.jfoodeng.2006.01.041
+        (var. Sutlej purple, Ludhiana, India).
+      Densidad y Cp: estimaciones genéricas. Calidad BAJA.
+
+  capa_fina:
+    page:
+      params:
+        k: null
+        n: null
+      condiciones_calibracion:
+        T_K: null
+        v_aire_m_s: null
+        espesor_m: null
+        HR_aire: null
+      calidad_datos: null
+      fuente: "PENDIENTE — Goyal et al. (2007) DOI:10.1016/j.jfoodeng.2006.01.041 selecciona Logarítmico como mejor (r²≈0.999) pero NO publica los coeficientes a,k,c — solo reporta r²/χ²/RMSE/MBE en Tabla 3. Mismo problema estructural que Kingsly 2007 de durazno (mismo grupo de autores indios)."
+      notas: null
+
+  isoterma:
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      rango_T_K: null
+      calidad_datos: null
+      fuente: "PENDIENTE — no hay paper de isoterma de ciruela en la carpeta."
+      notas: null
+
+  notas: |
+    PRODUCTO NUEVO en el catálogo. NO se pudo calibrar capa fina porque el
+    único paper disponible (Goyal et al. 2007) reporta solo estadísticos de
+    bondad de ajuste sin publicar los coeficientes del modelo. Mismo problema
+    que durazno (Kingsly 2007). Para usar este producto en el motor, conseguir
+    un paper que publique los coeficientes del modelo Page o Midilli para ciruela.
+
+    DATOS ÚTILES extraídos del paper Goyal 2007 (no cargables en params):
+      - Variedad Sutlej purple, rodajas 3.5±0.5 mm, tunnel cross-flow.
+      - T ensayadas: 55, 60, 65 °C.
+      - Difusividad efectiva D_eff = 3.04-4.41 × 10⁻¹⁰ m²/s (control, falling rate).
+      - Pretratamientos blanqueo y blanqueo+KMS 1% reducen tiempo ~10%.
+      - Sin periodo de tasa constante; todo el secado en falling rate.
+      - Tiempos de secado control: 270, 270, 240 min a 55, 60, 65 °C.
+
+    PAPERS DESCARTADOS por contenido:
+      - Plum tunnel dryer 2007 (Goyal et al.) — analizado, sin coeficientes.

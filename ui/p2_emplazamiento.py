@@ -12,14 +12,16 @@ from __future__ import annotations
 
 import io
 
-import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
 import pvlib
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from calculos.clima_calc import obtener_clima
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
+from core.proyecto import DiaAnalisis, ModoAnalisis
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
@@ -107,40 +109,38 @@ def _resumen_mensual(datos_local: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _fig_temperatura(datos_local: pd.DataFrame) -> plt.Figure:
-    """Genera figura de temperatura media diaria y promedio mensual.
-
-    Args:
-        datos_local: DataFrame SI con índice en zona horaria local.
-
-    Returns:
-        Figura matplotlib.
-    """
+def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
+    """Temperatura media diaria y promedio mensual — figura interactiva Plotly."""
     T_C = datos_local["T_amb_K"] - 273.15
     T_diaria = T_C.resample("D").mean()
     T_mensual = T_C.resample("ME").mean()
 
-    fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.plot(T_diaria.index, T_diaria.values, color="#aec6e8", linewidth=0.7, label="Media diaria")
-    ax.plot(T_mensual.index, T_mensual.values, color="#1f77b4", linewidth=2.0, marker="o",
-            markersize=4, label="Media mensual")
-    ax.set_ylabel("Temperatura [°C]")
-    ax.set_xlabel("")
-    ax.legend(loc="upper right", fontsize=9)
-    ax.grid(True, linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=T_diaria.index, y=T_diaria.values,
+        mode="lines", name="Media diaria",
+        line=dict(color="#aec6e8", width=0.8),
+    ))
+    fig.add_trace(go.Scatter(
+        x=T_mensual.index, y=T_mensual.values,
+        mode="lines+markers", name="Media mensual",
+        line=dict(color="#1f77b4", width=2.5),
+        marker=dict(size=6),
+    ))
+    fig.update_layout(
+        yaxis_title="Temperatura [°C]",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+        height=320,
+        margin=dict(l=50, r=20, t=30, b=40),
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
+    fig.update_yaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
     return fig
 
 
-def _fig_irradiancia(datos_local: pd.DataFrame) -> plt.Figure:
-    """Genera figura de irradiación mensual (GHI, DNI, DHI).
-
-    Args:
-        datos_local: DataFrame SI con índice en zona horaria local.
-
-    Returns:
-        Figura matplotlib.
-    """
+def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
+    """Irradiación mensual GHI/DNI/DHI — figura interactiva Plotly."""
     _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
@@ -148,61 +148,52 @@ def _fig_irradiancia(datos_local: pd.DataFrame) -> plt.Figure:
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
     dhi_s = datos_local["DHI_Wm2"].resample("ME").sum() / 1000.0
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ghi_s.index]
-    ghi = ghi_s.values
-    dni = dni_s.values
-    dhi = dhi_s.values
-    n = len(ghi)
-    x = range(n)
 
-    fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.bar(x, ghi, label="GHI", color="#f5a623", alpha=0.85)
-    ax.bar(x, dhi, label="DHI", color="#7ec8e3", alpha=0.85)
-    ax.bar(x, dni, label="DNI", color="#e05c2a", alpha=0.85, bottom=dhi)
-    ax.set_xticks(list(x), labels=etiquetas)
-    ax.set_ylabel("Irradiación mensual [kWh/m²]")
-    ax.legend(loc="upper right", fontsize=9)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Bar(name="GHI", x=etiquetas, y=ghi_s.values,
+                         marker_color="#f5a623", opacity=0.85))
+    fig.add_trace(go.Bar(name="DHI", x=etiquetas, y=dhi_s.values,
+                         marker_color="#7ec8e3", opacity=0.85))
+    fig.add_trace(go.Bar(name="DNI", x=etiquetas, y=dni_s.values,
+                         marker_color="#e05c2a", opacity=0.85))
+    fig.update_layout(
+        barmode="stack",
+        yaxis_title="Irradiación mensual [kWh/m²]",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+        height=320,
+        margin=dict(l=50, r=20, t=30, b=40),
+    )
+    fig.update_yaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
     return fig
 
 
-def _fig_viento_hr(datos_local: pd.DataFrame) -> plt.Figure:
-    """Genera figura de velocidad del viento y humedad relativa mensuales.
-
-    Args:
-        datos_local: DataFrame SI con índice en zona horaria local.
-
-    Returns:
-        Figura matplotlib.
-    """
+def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
+    """Velocidad del viento y HR mensuales — eje Y secundario nativo Plotly."""
     _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     ws_s = datos_local["WS_ms"].resample("ME").mean()
     hr_s = (datos_local["HR"] * 100.0).resample("ME").mean()
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ws_s.index]
-    ws = ws_s.values
-    hr = hr_s.values
-    n = len(ws)
-    x = list(range(n))
 
-    fig, ax1 = plt.subplots(figsize=(10, 3.5))
-    ax2 = ax1.twinx()
-
-    ax1.bar(x, ws, color="#4caf50", alpha=0.7, label="Viento [m/s]")
-    ax2.plot(x, hr, color="#9c27b0", linewidth=2.0, marker="o", markersize=4,
-             label="HR [%]")
-
-    ax1.set_xticks(x, labels=etiquetas)
-    ax1.set_ylabel("Velocidad del viento [m/s]", color="#4caf50")
-    ax2.set_ylabel("Humedad relativa [%]", color="#9c27b0")
-    ax1.grid(True, axis="y", linestyle="--", alpha=0.3)
-
-    lineas1, etq1 = ax1.get_legend_handles_labels()
-    lineas2, etq2 = ax2.get_legend_handles_labels()
-    ax1.legend(lineas1 + lineas2, etq1 + etq2, loc="upper right", fontsize=9)
-
-    fig.tight_layout()
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Bar(name="Viento [m/s]", x=etiquetas, y=ws_s.values,
+                         marker_color="#4caf50", opacity=0.7), secondary_y=False)
+    fig.add_trace(go.Scatter(name="HR [%]", x=etiquetas, y=hr_s.values,
+                             mode="lines+markers", line=dict(color="#9c27b0", width=2.5),
+                             marker=dict(size=6)), secondary_y=True)
+    fig.update_yaxes(title_text="Velocidad del viento [m/s]",
+                     title_font_color="#4caf50", secondary_y=False, showgrid=True,
+                     gridwidth=0.5, gridcolor="lightgray")
+    fig.update_yaxes(title_text="Humedad relativa [%]",
+                     title_font_color="#9c27b0", secondary_y=True)
+    fig.update_layout(
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+        height=320,
+        margin=dict(l=60, r=60, t=30, b=40),
+    )
     return fig
 
 
@@ -247,16 +238,8 @@ def _calcular_poa_horaria(
 def _fig_irradiancia_comparativa(
     datos_local: pd.DataFrame,
     poa_horaria: pd.Series,
-) -> plt.Figure:
-    """Figura con dos subgráficos: irradiación en plano horizontal y en plano del colector.
-
-    Args:
-        datos_local: DataFrame SI con índice tz-aware (hora local).
-        poa_horaria: Serie de POA global [W/m²], misma frecuencia que datos_local.
-
-    Returns:
-        Figura matplotlib con dos subplots verticales.
-    """
+) -> go.Figure:
+    """Dos subgráficos: plano horizontal (GHI/DNI/DHI) y plano del colector (POA)."""
     _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
@@ -264,31 +247,124 @@ def _fig_irradiancia_comparativa(
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
     dhi_s = datos_local["DHI_Wm2"].resample("ME").sum() / 1000.0
     poa_s = poa_horaria.resample("ME").sum() / 1000.0
-
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ghi_s.index]
-    n = len(etiquetas)
-    x = list(range(n))
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+                        subplot_titles=["Plano horizontal (GHI / DNI / DHI)",
+                                        "Plano del colector (POA global)"])
+    fig.add_trace(go.Bar(name="GHI", x=etiquetas, y=ghi_s.values,
+                         marker_color="#f5a623", opacity=0.85), row=1, col=1)
+    fig.add_trace(go.Bar(name="DHI", x=etiquetas, y=dhi_s.values,
+                         marker_color="#7ec8e3", opacity=0.85), row=1, col=1)
+    fig.add_trace(go.Bar(name="DNI", x=etiquetas, y=dni_s.values,
+                         marker_color="#e05c2a", opacity=0.85), row=1, col=1)
+    fig.add_trace(go.Bar(name="POA global", x=etiquetas, y=poa_s.values,
+                         marker_color="#4caf50", opacity=0.85, showlegend=True), row=2, col=1)
+    fig.update_layout(
+        barmode="stack",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+        height=560,
+        margin=dict(l=60, r=20, t=60, b=40),
+    )
+    fig.update_yaxes(title_text="kWh/m²", showgrid=True, gridwidth=0.5, gridcolor="lightgray")
+    return fig
 
-    # Panel superior: plano horizontal
-    ax1.bar(x, ghi_s.values, label="GHI", color="#f5a623", alpha=0.85)
-    ax1.bar(x, dhi_s.values, label="DHI", color="#7ec8e3", alpha=0.85)
-    ax1.bar(x, dni_s.values, label="DNI", color="#e05c2a", alpha=0.85, bottom=dhi_s.values)
-    ax1.set_ylabel("Irradiación mensual [kWh/m²]")
-    ax1.set_title("Plano horizontal (GHI / DNI / DHI)")
-    ax1.legend(loc="upper right", fontsize=9)
-    ax1.grid(True, axis="y", linestyle="--", alpha=0.4)
 
-    # Panel inferior: plano del colector (POA)
-    ax2.bar(x, poa_s.values, label="POA global", color="#4caf50", alpha=0.85)
-    ax2.set_xticks(x, labels=etiquetas)
-    ax2.set_ylabel("Irradiación mensual [kWh/m²]")
-    ax2.set_title("Plano del colector (POA global)")
-    ax2.legend(loc="upper right", fontsize=9)
-    ax2.grid(True, axis="y", linestyle="--", alpha=0.4)
+def _fecha_dia_analisis(datos_local: pd.DataFrame, cfg, anio: int):
+    """Resuelve la fecha concreta del día de diseño según cfg.dia_analisis."""
+    from datetime import date
+    if cfg.dia_analisis == DiaAnalisis.ESPECIFICO and cfg.fecha_especifica:
+        return cfg.fecha_especifica
+    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_VERANO:
+        return date(anio, 12, 21)
+    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
+        return date(anio, 6, 21)
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO:
+        return date(anio, 3, 21)
+    elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
+        return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
+    else:  # MAS_FRIO
+        return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
 
-    fig.tight_layout()
+
+def _fig_temperatura_diaria(datos_dia: pd.DataFrame) -> go.Figure:
+    """Perfil horario de temperatura ambiente para el día de diseño."""
+    T_C = datos_dia["T_amb_K"] - 273.15
+    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=horas_str, y=T_C.values, mode="lines+markers",
+        name="T amb [°C]", line=dict(color="#1f77b4", width=2.0),
+        marker=dict(size=5),
+        hovertemplate="%{x} — %{y:.1f} °C<extra></extra>",
+    ))
+    fig.update_layout(
+        yaxis_title="Temperatura [°C]",
+        hovermode="x unified", height=300,
+        margin=dict(l=50, r=20, t=20, b=40),
+    )
+    fig.update_xaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
+    fig.update_yaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
+    return fig
+
+
+def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.Figure:
+    """Dos subgráficos horarios: plano horizontal y plano del colector."""
+    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
+    horas_poa = [t.strftime("%H:%M") for t in poa_dia.index]
+
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
+                        subplot_titles=["Plano horizontal (GHI / DNI / DHI)",
+                                        "Plano del colector (POA global)"])
+
+    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["GHI_Wm2"].values,
+                             fill="tozeroy", fillcolor="rgba(245,166,35,0.35)",
+                             line=dict(color="#f5a623"), name="GHI"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["DNI_Wm2"].values,
+                             mode="lines", line=dict(color="#e05c2a", width=1.6),
+                             name="DNI"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["DHI_Wm2"].values,
+                             mode="lines", line=dict(color="#7ec8e3", width=1.6),
+                             name="DHI"), row=1, col=1)
+
+    fig.add_trace(go.Scatter(x=horas_poa, y=poa_dia.values,
+                             fill="tozeroy", fillcolor="rgba(76,175,80,0.35)",
+                             line=dict(color="#4caf50"), name="POA"), row=2, col=1)
+
+    fig.update_yaxes(title_text="W/m²", showgrid=True, gridwidth=0.5, gridcolor="lightgray")
+    fig.update_layout(
+        hovermode="x unified", height=520,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=60, r=20, t=60, b=40),
+    )
+    return fig
+
+
+def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
+    """Perfil horario de velocidad del viento y HR — eje Y secundario nativo Plotly."""
+    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
+    ws = datos_dia["WS_ms"].values
+    hr_pct = datos_dia["HR"].values * 100.0
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(go.Scatter(x=horas_str, y=ws, mode="lines+markers",
+                             name="Viento [m/s]", line=dict(color="#4caf50", width=2.0),
+                             marker=dict(size=5)), secondary_y=False)
+    fig.add_trace(go.Scatter(x=horas_str, y=hr_pct, mode="lines+markers",
+                             name="HR [%]", line=dict(color="#9c27b0", width=2.0),
+                             marker=dict(size=5, symbol="square")), secondary_y=True)
+    fig.update_yaxes(title_text="Velocidad del viento [m/s]",
+                     title_font_color="#4caf50", showgrid=True,
+                     gridwidth=0.5, gridcolor="lightgray", secondary_y=False)
+    fig.update_yaxes(title_text="Humedad relativa [%]",
+                     title_font_color="#9c27b0", secondary_y=True)
+    fig.update_layout(
+        hovermode="x unified", height=300,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=60, r=60, t=30, b=40),
+    )
     return fig
 
 
@@ -615,29 +691,30 @@ def render() -> None:
         datos_local = datos.tz_convert(empl.zona_horaria)
         datos_local = datos_local[datos_local.index.year == clima.anio]
 
+        # Calcular POA anual aquí (fuera de tabs) para reutilizarlo
+        # tanto en la sección anual como en la sección diaria.
+        acimut_pvlib_actual = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
+        with st.spinner("Calculando irradiancia sobre el plano del colector..."):
+            poa_horaria = _calcular_poa_horaria(
+                datos_local,
+                lat=empl.latitud_deg,
+                lon=empl.longitud_deg,
+                altitud_m=empl.altitud_m,
+                pendiente_deg=empl.pendiente_colector_deg,
+                acimut_pvlib_deg=acimut_pvlib_actual,
+            )
+
         tab_t, tab_rad, tab_vhr, tab_tabla = st.tabs(
             ["Temperatura", "Irradiancia solar", "Viento y Humedad", "Tabla mensual"]
         )
 
         with tab_t:
             fig_t = _fig_temperatura(datos_local)
-            st.pyplot(fig_t, clear_figure=True)
-            plt.close(fig_t)
+            st.plotly_chart(fig_t, use_container_width=True)
 
         with tab_rad:
-            acimut_pvlib_actual = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
-            with st.spinner("Calculando irradiancia sobre el plano del colector..."):
-                poa_horaria = _calcular_poa_horaria(
-                    datos_local,
-                    lat=empl.latitud_deg,
-                    lon=empl.longitud_deg,
-                    altitud_m=empl.altitud_m,
-                    pendiente_deg=empl.pendiente_colector_deg,
-                    acimut_pvlib_deg=acimut_pvlib_actual,
-                )
             fig_rad = _fig_irradiancia_comparativa(datos_local, poa_horaria)
-            st.pyplot(fig_rad, clear_figure=True)
-            plt.close(fig_rad)
+            st.plotly_chart(fig_rad, use_container_width=True)
 
             poa_anual = poa_horaria.sum() / 1000.0
             ghi_anual = datos_local["GHI_Wm2"].sum() / 1000.0
@@ -655,15 +732,91 @@ def render() -> None:
 
         with tab_vhr:
             fig_vhr = _fig_viento_hr(datos_local)
-            st.pyplot(fig_vhr, clear_figure=True)
-            plt.close(fig_vhr)
+            st.plotly_chart(fig_vhr, use_container_width=True)
 
         with tab_tabla:
             df_mens = _resumen_mensual(datos_local)
             st.dataframe(df_mens.set_index("Mes"), use_container_width=True)
 
         # -----------------------------------------------------------------------
-        # Sección 5: Descarga CSV
+        # Sección 5: Recurso climático del día de diseño (solo modo DIARIO)
+        # -----------------------------------------------------------------------
+
+        cfg = proyecto.configuracion
+        if cfg is not None and cfg.modo_analisis == ModoAnalisis.DIARIO:
+            fecha_dia = _fecha_dia_analisis(datos_local, cfg, clima.anio)
+            mask_dia = datos_local.index.date == fecha_dia
+            datos_dia = datos_local[mask_dia]
+            poa_dia = poa_horaria[mask_dia]
+
+            _LABELS_DIA = {
+                DiaAnalisis.ESPECIFICO: "día específico",
+                DiaAnalisis.SOLSTICIO_VERANO: "solsticio de verano",
+                DiaAnalisis.SOLSTICIO_INVIERNO: "solsticio de invierno",
+                DiaAnalisis.EQUINOCCIO: "equinoccio",
+                DiaAnalisis.MAS_CALUROSO: "día más caluroso",
+                DiaAnalisis.MAS_FRIO: "día más frío",
+            }
+            label_dia = _LABELS_DIA.get(cfg.dia_analisis, "día de diseño")
+
+            st.subheader("Recurso climático del día de diseño")
+            st.caption(
+                f"Perfil horario para el {fecha_dia.strftime('%d/%m/%Y')} "
+                f"({label_dia}) — "
+                f"({empl.latitud_deg:.4f}°, {empl.longitud_deg:.4f}°)"
+            )
+
+            if len(datos_dia) == 0:
+                st.warning(
+                    f"No hay datos para el {fecha_dia.strftime('%d/%m/%Y')} en el "
+                    f"año {clima.anio}. Verificá que el año de la serie climática "
+                    "coincida con el año del día de diseño."
+                )
+            else:
+                # Métricas del día
+                T_dia_C = datos_dia["T_amb_K"] - 273.15
+                col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
+                col_d1.metric("T media", f"{T_dia_C.mean():.1f} °C")
+                col_d2.metric("T min / max", f"{T_dia_C.min():.1f} / {T_dia_C.max():.1f} °C")
+                col_d3.metric("GHI día", f"{datos_dia['GHI_Wm2'].sum()/1000:.2f} kWh/m²")
+                col_d4.metric("POA día", f"{poa_dia.sum()/1000:.2f} kWh/m²")
+                col_d5.metric("Viento medio", f"{datos_dia['WS_ms'].mean():.1f} m/s")
+
+                tab_dt, tab_drad, tab_dvhr = st.tabs(
+                    ["Temperatura", "Irradiancia solar", "Viento y Humedad"]
+                )
+
+                with tab_dt:
+                    fig_dt = _fig_temperatura_diaria(datos_dia)
+                    st.plotly_chart(fig_dt, use_container_width=True)
+
+                with tab_drad:
+                    fig_drad = _fig_irradiancia_diaria(datos_dia, poa_dia)
+                    st.plotly_chart(fig_drad, use_container_width=True)
+                    st.caption(
+                        "Plano horizontal: datos directos de NASA POWER. "
+                        "Plano del colector: modelo Hay-Davies (pvlib), "
+                        "con la pendiente e inclinación configuradas arriba."
+                    )
+
+                with tab_dvhr:
+                    fig_dvhr = _fig_viento_hr_diaria(datos_dia)
+                    st.plotly_chart(fig_dvhr, use_container_width=True)
+
+                # Botón CSV del día
+                csv_dia = _generar_csv(datos_dia, empl.zona_horaria)
+                st.download_button(
+                    label=f"Descargar CSV del día ({fecha_dia.strftime('%d/%m/%Y')})",
+                    data=csv_dia,
+                    file_name=(
+                        f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}"
+                        f"_{fecha_dia.isoformat()}.csv"
+                    ),
+                    mime="text/csv",
+                )
+
+        # -----------------------------------------------------------------------
+        # Sección 6: Descarga CSV
         # -----------------------------------------------------------------------
 
         st.subheader("Exportar datos")

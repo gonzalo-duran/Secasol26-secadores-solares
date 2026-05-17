@@ -509,8 +509,9 @@ class TestDeltaPCamaraVerticalErgun:
         )
 
     @pytest.fixture
-    def camara_vertical_sin_particulas(self):
-        """Cámara VERTICAL sin d_p → Ergun no aplica (ΔP_lecho = 0)."""
+    def camara_vertical_sin_d_p_explicito(self):
+        """Cámara VERTICAL sin d_p explícito → motor_calc usa defaults del
+        catálogo/conservadores (Ergun activo de todos modos)."""
         from core.camara import (
             Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
         )
@@ -528,28 +529,32 @@ class TestDeltaPCamaraVerticalErgun:
             ),
         )
 
-    def test_vertical_con_particulas_mayor_que_sin(
-        self, camara_vertical_con_particulas, camara_vertical_sin_particulas
+    def test_vertical_d_p_pequeno_mayor_que_grande(
+        self, camara_vertical_con_particulas, camara_vertical_sin_d_p_explicito
     ):
-        """Con Ergun activo, ΔP > ΔP sin Ergun (solo malla)."""
-        dP_con = estimar_delta_P_camara(camara_vertical_con_particulas)
-        dP_sin = estimar_delta_P_camara(camara_vertical_sin_particulas)
-        assert dP_con > dP_sin
+        """A menor d_p, ΔP_Ergun es mayor (mayor superficie/volumen).
+        El default sin d_p explícito (8 mm) es menor que 10 mm de la fixture."""
+        dP_10mm = estimar_delta_P_camara(camara_vertical_con_particulas)
+        dP_default = estimar_delta_P_camara(camara_vertical_sin_d_p_explicito)
+        # default = 8 mm → más Ergun que 10 mm
+        assert dP_default > dP_10mm
 
-    def test_vertical_sin_particulas_igual_que_solo_malla(
-        self, camara_vertical_sin_particulas
+    def test_vertical_sin_d_p_usa_default_ergun(
+        self, camara_vertical_sin_d_p_explicito
     ):
-        """Sin d_p, ΔP_lecho = 0 → total = solo ΔP_malla."""
+        """Sin d_p explícito ni producto, motor_calc usa defaults (d_p=8 mm,
+        ε=0.45, Φ=0.6) → Ergun activo, ΔP > solo malla."""
         from core.camara import DireccionFlujo
-        cam = camara_vertical_sin_particulas
+        cam = camara_vertical_sin_d_p_explicito
         f = cam.flujo
         b = cam.bandejas
         rho = densidad_aire(323.15, 101325.0)
         Q_vol = f.caudal_masico_kg_s / rho
         v0 = Q_vol / b.area_bandeja_m2
-        dP_malla_esperada = K_MALLA * (rho * v0**2 / 2.0) * b.n_bandejas
+        dP_malla_sola = K_MALLA * (rho * v0**2 / 2.0) * b.n_bandejas
         dP_calc = estimar_delta_P_camara(cam)
-        assert dP_calc == pytest.approx(dP_malla_esperada, rel=1e-6)
+        # Con Ergun activo por default, debe ser estrictamente mayor que sólo malla.
+        assert dP_calc > dP_malla_sola
 
     def test_vertical_positivo(self, camara_vertical_con_particulas):
         assert estimar_delta_P_camara(camara_vertical_con_particulas) > 0

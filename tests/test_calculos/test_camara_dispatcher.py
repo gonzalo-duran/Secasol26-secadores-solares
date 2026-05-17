@@ -113,8 +113,9 @@ class TestDispatcher:
             T_amb_K=298.15,
         )
         assert isinstance(res, ResultadoMotorTermodinamico)
-        # Manzana sin GAB → debe haber advertencia de fallback
-        assert any("GAB_FALTA" in a for a in res.advertencias)
+        # Manzana ya tiene GAB cargado (Kaymak-Ertekin & Gedik 2004) →
+        # no debe emitir CAM_TD_GAB_FALTA.
+        assert not any("GAB_FALTA" in a for a in res.advertencias)
 
     def test_termodinamico_alcanza_X_obj(self):
         """Test de convergencia con yacón (que SÍ tiene GAB calibrada).

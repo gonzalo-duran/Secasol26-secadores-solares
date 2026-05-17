@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from datetime import date as _date_type
 
-import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pvlib
 import streamlit as st
 
@@ -486,64 +487,80 @@ def _evaluar_anual(colector, datos_local, empl, anio):
 
 # --- Figuras ---
 
+def _add_vline_datetime(fig, *, x, text, color, dash, width, xanchor):
+    """Línea vertical + anotación en eje X de tipo datetime.
+
+    Workaround de un bug de Plotly: add_vline con annotation_text falla con
+    TypeError cuando x es un Timestamp/string porque internamente intenta
+    sum([x, x]) para posicionar la anotación. Separamos shape y annotation.
+    """
+    fig.add_shape(
+        type="line", xref="x", yref="paper",
+        x0=x, x1=x, y0=0, y1=1,
+        line=dict(color=color, dash=dash, width=width),
+    )
+    fig.add_annotation(
+        x=x, y=1.0, xref="x", yref="paper",
+        text=text, showarrow=False,
+        xanchor=xanchor, yanchor="bottom",
+        font=dict(color=color, size=11),
+    )
+
+
 def _fig_T_salida_dia(r, fecha_label):
     horas = r["horas"]
     T_sal = r["T_salida_C"]
     T_amb = r["T_amb_C"]
     poa = r["poa"]
 
-    fig, ax1 = plt.subplots(figsize=(10, 4))
-    ax2 = ax1.twinx()
-
-    horas_dt = [h.to_pydatetime() for h in horas]
-
-    # POA como área gris de fondo
-    ax2.fill_between(horas_dt, poa, alpha=0.15, color="#f5a623", label="POA [W/m²]")
-    ax2.set_ylabel("POA [W/m²]", color="#f5a623", fontsize=9)
-    ax2.tick_params(axis="y", labelcolor="#f5a623")
-    ax2.set_ylim(bottom=0)
-
-    # T_salida (solo horas con sol)
-    h_sol = [h for h, t in zip(horas_dt, T_sal) if t is not None]
+    h_sol = [h for h, t in zip(horas, T_sal) if t is not None]
     t_sol = [t for t in T_sal if t is not None]
-    ax1.plot(h_sol, t_sol, color="#e05c2a", linewidth=2, marker="o", markersize=4,
-             label="T salida colector [°C]")
-    ax1.plot(horas_dt, T_amb, color="#1f77b4", linewidth=1.5, linestyle="--",
-             label="T ambiente [°C]")
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(go.Scatter(
+        x=list(horas), y=poa, mode="lines",
+        fill="tozeroy", fillcolor="rgba(245,166,35,0.15)",
+        line=dict(color="rgba(245,166,35,0.5)", width=1),
+        name="POA [W/m²]",
+    ), secondary_y=True)
+
+    fig.add_trace(go.Scatter(
+        x=h_sol, y=t_sol, mode="lines+markers",
+        line=dict(color="#e05c2a", width=2), marker=dict(size=4),
+        name="T salida colector [°C]",
+    ), secondary_y=False)
+
+    fig.add_trace(go.Scatter(
+        x=list(horas), y=T_amb, mode="lines",
+        line=dict(color="#1f77b4", width=1.5, dash="dash"),
+        name="T ambiente [°C]",
+    ), secondary_y=False)
 
     if r["hora_transit"] is not None:
-        ax1.axvline(
-            r["hora_transit"].to_pydatetime(),
-            color="#9c27b0", linestyle=":", linewidth=1.8,
-            label=f"Mediodía solar ({r['hora_transit'].strftime('%H:%M')})",
+        _add_vline_datetime(
+            fig, x=r["hora_transit"],
+            text=f"Mediodía ({r['hora_transit'].strftime('%H:%M')})",
+            color="#9c27b0", dash="dot", width=1.8, xanchor="left",
         )
     if r["hora_poa_max"] is not None:
-        # Pintamos POA máx solo si está separada del transit por al menos
-        # 15 min — si caen en el mismo bin, una sola línea es más limpio.
         if (r["hora_transit"] is None
                 or abs((r["hora_poa_max"] - r["hora_transit"]).total_seconds()) > 15 * 60):
-            ax1.axvline(
-                r["hora_poa_max"].to_pydatetime(),
-                color="#ff7f0e", linestyle="--", linewidth=1.3,
-                label=f"POA máx ({r['hora_poa_max'].strftime('%H:%M')})",
+            _add_vline_datetime(
+                fig, x=r["hora_poa_max"],
+                text=f"POA máx ({r['hora_poa_max'].strftime('%H:%M')})",
+                color="#ff7f0e", dash="dash", width=1.3, xanchor="right",
             )
 
-    ax1.set_ylabel("Temperatura [°C]")
-    ax1.set_xlabel("")
-    ax1.set_title(f"Temperatura de salida del colector — {fecha_label}")
-
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=9)
-    ax1.grid(True, linestyle="--", alpha=0.4)
-
-    import matplotlib.dates as mdates
-    # tz de los datos — sin esto, DateFormatter usa UTC por default y el eje
-    # aparece corrido respecto al hemisferio occidental (en Salta, +3 h).
-    tz_axis = horas[0].tz if horas else None
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=tz_axis))
-    fig.autofmt_xdate(rotation=0, ha="center")
-    fig.tight_layout()
+    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
+    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623",
+                     secondary_y=True, rangemode="tozero")
+    fig.update_xaxes(tickformat="%H:%M")
+    fig.update_layout(
+        title_text=f"Temperatura de salida del colector — {fecha_label}",
+        height=400, showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
@@ -553,15 +570,22 @@ def _fig_T_fluido_dia(r, fecha_label):
     if x is None or T is None:
         return None
 
-    fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.plot(x, T, color="#e05c2a", linewidth=2)
-    ax.axhline(T[0], color="#1f77b4", linestyle="--", linewidth=1, label=f"T entrada = {T[0]:.1f} °C")
-    ax.set_xlabel("Posición x a lo largo del colector [m]")
-    ax.set_ylabel("Temperatura del fluido [°C]")
-    ax.set_title(f"Perfil de temperatura del fluido — mediodía solar — {fecha_label}")
-    ax.legend(fontsize=9)
-    ax.grid(True, linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(x), y=list(T), mode="lines",
+        line=dict(color="#e05c2a", width=2), name="T fluido [°C]",
+    ))
+    fig.add_hline(
+        y=float(T[0]),
+        line=dict(color="#1f77b4", dash="dash", width=1),
+        annotation_text=f"T entrada = {T[0]:.1f} °C",
+    )
+    fig.update_xaxes(title_text="Posición x a lo largo del colector [m]")
+    fig.update_yaxes(title_text="Temperatura del fluido [°C]")
+    fig.update_layout(
+        title_text=f"Perfil de temperatura del fluido — mediodía solar — {fecha_label}",
+        height=350, showlegend=True,
+    )
     return fig
 
 
@@ -570,31 +594,36 @@ def _fig_T_salida_anual(r):
     T_sal = r["T_salida_noon_C"]
     T_amb = r["T_amb_noon_C"]
     poa = r["poa_noon"]
-    n = len(meses)
 
-    fig, ax1 = plt.subplots(figsize=(10, 4))
-    ax2 = ax1.twinx()
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    x = list(range(n))
-    ax2.bar(x, poa, color="#f5a623", alpha=0.2, label="POA mediodía [W/m²]")
-    ax2.set_ylabel("POA [W/m²]", color="#f5a623", fontsize=9)
-    ax2.tick_params(axis="y", labelcolor="#f5a623")
-    ax2.set_ylim(bottom=0)
+    fig.add_trace(go.Bar(
+        x=meses, y=poa, name="POA mediodía [W/m²]",
+        marker=dict(color="rgba(245,166,35,0.2)",
+                    line=dict(color="rgba(245,166,35,0.5)", width=1)),
+    ), secondary_y=True)
 
-    ax1.plot(x, T_sal, color="#e05c2a", linewidth=2, marker="o", markersize=6,
-             label="T salida colector — mediodía [°C]")
-    ax1.plot(x, T_amb, color="#1f77b4", linewidth=1.5, linestyle="--", marker="s", markersize=4,
-             label="T ambiente — mediodía [°C]")
+    fig.add_trace(go.Scatter(
+        x=meses, y=T_sal, mode="lines+markers",
+        line=dict(color="#e05c2a", width=2), marker=dict(symbol="circle", size=6),
+        name="T salida colector — mediodía [°C]",
+    ), secondary_y=False)
 
-    ax1.set_xticks(x, labels=meses)
-    ax1.set_ylabel("Temperatura [°C]")
-    ax1.set_title("Temperatura de salida del colector — mediodía solar por mes (día 15)")
+    fig.add_trace(go.Scatter(
+        x=meses, y=T_amb, mode="lines+markers",
+        line=dict(color="#1f77b4", width=1.5, dash="dash"),
+        marker=dict(symbol="square", size=4),
+        name="T ambiente — mediodía [°C]",
+    ), secondary_y=False)
 
-    lines1, labels1 = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left", fontsize=9)
-    ax1.grid(True, linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
+    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623",
+                     secondary_y=True, rangemode="tozero")
+    fig.update_layout(
+        title_text="Temperatura de salida del colector — mediodía solar por mes (día 15)",
+        height=400, showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
@@ -605,17 +634,21 @@ def _fig_T_fluido_anual(r):
     if x_m is None or not perfiles:
         return None
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    fig = go.Figure()
     for i, (mes, T) in enumerate(zip(meses, perfiles)):
         color = _COLORES_MESES[i % len(_COLORES_MESES)]
-        ax.plot(x_m, T, color=color, linewidth=1.8, label=mes)
+        fig.add_trace(go.Scatter(
+            x=list(x_m), y=list(T), mode="lines",
+            line=dict(color=color, width=1.8), name=mes,
+        ))
 
-    ax.set_xlabel("Posición x a lo largo del colector [m]")
-    ax.set_ylabel("Temperatura del fluido [°C]")
-    ax.set_title("Perfil de temperatura del fluido — mediodía solar por mes")
-    ax.legend(fontsize=8, ncol=4, loc="upper left")
-    ax.grid(True, linestyle="--", alpha=0.4)
-    fig.tight_layout()
+    fig.update_xaxes(title_text="Posición x a lo largo del colector [m]")
+    fig.update_yaxes(title_text="Temperatura del fluido [°C]")
+    fig.update_layout(
+        title_text="Perfil de temperatura del fluido — mediodía solar por mes",
+        height=400, showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
@@ -1090,14 +1123,12 @@ def render() -> None:
 
             with tab_a:
                 _fig_a = _fig_T_salida_dia(_r, _lbl)
-                st.pyplot(_fig_a, clear_figure=True)
-                plt.close(_fig_a)
+                st.plotly_chart(_fig_a, use_container_width=True)
 
             with tab_b:
                 _fig_b = _fig_T_fluido_dia(_r, _lbl)
                 if _fig_b is not None:
-                    st.pyplot(_fig_b, clear_figure=True)
-                    plt.close(_fig_b)
+                    st.plotly_chart(_fig_b, use_container_width=True)
                 else:
                     st.info("No hay radiación solar suficiente a mediodía para calcular el perfil.")
 
@@ -1115,15 +1146,13 @@ def render() -> None:
 
                 with tab_a:
                     _fig_a = _fig_T_salida_anual(_r)
-                    st.pyplot(_fig_a, clear_figure=True)
-                    plt.close(_fig_a)
+                    st.plotly_chart(_fig_a, use_container_width=True)
                     st.caption("Evaluación en el mediodía solar del día 15 de cada mes.")
 
                 with tab_b:
                     _fig_b = _fig_T_fluido_anual(_r)
                     if _fig_b is not None:
-                        st.pyplot(_fig_b, clear_figure=True)
-                        plt.close(_fig_b)
+                        st.plotly_chart(_fig_b, use_container_width=True)
             else:
                 st.warning("No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente.")
 

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 if TYPE_CHECKING:
     from calculos.camara_termodinamica import ResultadoMotorTermodinamico
@@ -14,76 +15,64 @@ def grafica_termodinamica_camara(
     res: "ResultadoMotorTermodinamico",
     X_obj: float,
     prod_id: str,
-) -> plt.Figure:
+) -> go.Figure:
     """Tres paneles temporales del motor termodinámico de la cámara.
 
     Panel 1: humedad del producto X(t) con X_obj y t_secado.
-    Panel 2: temperaturas del producto y del aire en cámara.
+    Panel 2: temperaturas del producto y del aire en cámara (eje dual).
     Panel 3: flujos de calor q_aire→producto y q_pérdida_pared.
-
-    Args:
-        res: Resultado del motor termodinámico de cámara.
-        X_obj: Humedad objetivo en base seca [kg agua / kg ms].
-        prod_id: Identificador del producto, para el título.
-
-    Returns:
-        Figura matplotlib con tres paneles compartiendo eje X.
     """
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(7, 9), sharex=True)
     t_h = res.t_array_s / 3600.0
 
-    ax1.plot(t_h, res.X_prod_kg_kg, color="#1f77b4", linewidth=2, label="X(t)")
-    ax1.axhline(
-        X_obj, color="red", linestyle=":", linewidth=1.5,
-        label=f"X_obj = {X_obj:.3f}",
+    fig = make_subplots(
+        rows=3, cols=1, shared_xaxes=True,
+        specs=[[{}], [{"secondary_y": True}], [{}]],
+        vertical_spacing=0.08,
     )
-    if res.t_secado_s is not None:
-        ax1.axvline(
-            res.t_secado_s / 3600.0, color="orange", linestyle="-.",
-            linewidth=1.5,
-            label=f"t_secado = {res.t_secado_s / 3600.0:.1f} h",
-        )
-    ax1.set_ylabel("X [kg agua / kg ms]")
-    ax1.legend(fontsize=8, loc="upper right")
-    ax1.grid(True, alpha=0.3)
-    ax1.set_ylim(bottom=0)
 
+    # Panel 1: X(t)
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(res.X_prod_kg_kg), mode="lines",
+        line=dict(color="#1f77b4", width=2), name="X(t)",
+    ), row=1, col=1)
+    fig.add_hline(y=X_obj, line=dict(color="red", dash="dot", width=1.5),
+                  annotation_text=f"X_obj={X_obj:.3f}", row=1, col=1)
+    if res.t_secado_s is not None:
+        t_sec_h = res.t_secado_s / 3600.0
+        fig.add_vline(x=t_sec_h, line=dict(color="orange", dash="dashdot", width=1.5),
+                      annotation_text=f"t={t_sec_h:.1f}h", row=1, col=1)
+
+    # Panel 2: T_prod (eje izq) y T_flujo (eje der)
     T_prod_C = res.T_prod_K - 273.15
     T_flujo_C = res.T_flujo_K - 273.15
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(T_prod_C), mode="lines",
+        line=dict(color="#d62728", width=2), name="T producto [°C]",
+    ), row=2, col=1, secondary_y=False)
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(T_flujo_C), mode="lines",
+        line=dict(color="#2ca02c", width=1.5, dash="dash"), name="T aire cámara [°C]",
+    ), row=2, col=1, secondary_y=True)
 
-    ax2.plot(t_h, T_prod_C, color="#d62728", linewidth=2, label="T producto")
-    ax2.set_ylabel("T producto [°C]", color="#d62728")
-    ax2.tick_params(axis="y", labelcolor="#d62728")
+    # Panel 3: flujos de calor
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(res.q_prod_W), mode="lines",
+        line=dict(color="#ff7f0e", width=1.5), name="q aire→producto [W]",
+    ), row=3, col=1)
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(res.q_pared_W), mode="lines",
+        line=dict(color="#9467bd", width=1.5), name="q pérdida pared [W]",
+    ), row=3, col=1)
 
-    ax2b = ax2.twinx()
-    ax2b.plot(t_h, T_flujo_C, color="#2ca02c", linewidth=1.5,
-              linestyle="--", label="T aire (cámara)")
-    ax2b.set_ylabel("T aire cámara [°C]", color="#2ca02c")
-    ax2b.tick_params(axis="y", labelcolor="#2ca02c")
-
-    flujo_rango = float(T_flujo_C.max() - T_flujo_C.min())
-    ax2b.annotate(
-        f"var. T_aire = {flujo_rango:.1f} °C",
-        xy=(0.98, 0.05), xycoords="axes fraction",
-        ha="right", fontsize=7, color="#2ca02c",
-        bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7),
+    fig.update_yaxes(title_text="X [kg agua / kg ms]", rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(title_text="T producto [°C]", color="#d62728",
+                     row=2, col=1, secondary_y=False)
+    fig.update_yaxes(title_text="T aire [°C]", color="#2ca02c",
+                     row=2, col=1, secondary_y=True)
+    fig.update_yaxes(title_text="Calor [W]", row=3, col=1)
+    fig.update_xaxes(title_text="Tiempo [h]", row=3, col=1)
+    fig.update_layout(
+        title_text=f"Motor termodinámico — {prod_id} (status: {res.status})",
+        height=700, showlegend=True,
     )
-
-    lines1, labels1 = ax2.get_legend_handles_labels()
-    lines2, labels2 = ax2b.get_legend_handles_labels()
-    ax2.legend(lines1 + lines2, labels1 + labels2, fontsize=8, loc="lower right")
-    ax2.grid(True, alpha=0.3)
-
-    ax3.plot(t_h, res.q_prod_W, color="#ff7f0e", linewidth=1.5, label="q aire→producto")
-    ax3.plot(t_h, res.q_pared_W, color="#9467bd", linewidth=1.5, label="q pérdida pared")
-    ax3.set_ylabel("Flujo de calor [W]")
-    ax3.set_xlabel("Tiempo [h]")
-    ax3.legend(fontsize=8, loc="upper right")
-    ax3.grid(True, alpha=0.3)
-
-    fig.suptitle(
-        f"Motor termodinámico — {prod_id} (status: {res.status})",
-        fontsize=11,
-    )
-    fig.tight_layout()
     return fig

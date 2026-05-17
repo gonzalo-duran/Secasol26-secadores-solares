@@ -3,7 +3,7 @@
 Implementa:
     - Isoterma GAB: X_eq = f(a_w, X_m, C, K)
     - Modelos cinéticos de capa fina: Lewis, Page, Henderson, Midilli, Logarítmico
-    - Función principal: calcular_tiempo_secado()
+    - Función principal: calcular_tiempo_secado_estatico()
 
 Supuestos del modelo de prediseño:
     - Condiciones cuasi-estacionarias: T_aire y HR_aire constantes durante el secado.
@@ -47,6 +47,7 @@ from calculos.psicrometria import (
     humedad_absoluta,
 )
 from core import catalogo
+from core.camara import ForzantesAire
 
 if TYPE_CHECKING:
     from core.camara import Camara
@@ -187,11 +188,48 @@ def evaluar_MR(t_min: float, modelo: str, params: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Interpolación de parámetros de capa fina en función de T
+# ---------------------------------------------------------------------------
+
+
+def _interpolar_params_cf(modelo_entry: dict, T_K: float) -> dict:
+    """Interpola linealmente los parámetros del modelo de capa fina en T_K.
+
+    Si el entry tiene 'params.sets_por_temperatura', interpola cada parámetro
+    (k, n, a, b, c) a la temperatura de operación. Si no, devuelve los
+    escalares top-level de 'params' (comportamiento anterior).
+
+    np.interp extrapola por los valores extremos si T_K cae fuera del rango
+    de calibración (la advertencia de rango se emite por separado).
+
+    Args:
+        modelo_entry: Entrada YAML del modelo (e.g. catalogo['page']).
+        T_K: Temperatura de operación [K].
+
+    Returns:
+        Diccionario con los parámetros interpolados.
+    """
+    params_top = modelo_entry.get("params") or {}
+    sets = params_top.get("sets_por_temperatura")
+
+    if not sets:
+        return {k: v for k, v in params_top.items() if k != "sets_por_temperatura"}
+
+    T_arr = np.array([s["T_K"] for s in sets], dtype=float)
+    param_keys = [key for key in sets[0] if key not in ("T_K", "R2")]
+
+    return {
+        key: float(np.interp(T_K, T_arr, [s[key] for s in sets]))
+        for key in param_keys
+    }
+
+
+# ---------------------------------------------------------------------------
 # Función principal
 # ---------------------------------------------------------------------------
 
 
-def calcular_tiempo_secado(
+def calcular_tiempo_secado_estatico(
     camara: "Camara",
     T_operacion_K: float,
     HR_operacion: float,
@@ -272,7 +310,9 @@ def calcular_tiempo_secado(
     # --- Verificar rango de temperatura de calibración ---
     cf = datos.get("capa_fina") or {}
     modelo_entry = cf.get(p.modelo_capa_fina) or {}
-    params_cf = modelo_entry.get("params") or {} if modelo_entry else {}
+    # Interpolación de k(T), n(T), etc. según sets_por_temperatura del catálogo.
+    # Si no hay sets, usa los escalares top-level (comportamiento pre-interpolación).
+    params_cf = _interpolar_params_cf(modelo_entry, T_operacion_K) if modelo_entry else {}
     condiciones = modelo_entry.get("condiciones_calibracion") or {} if modelo_entry else {}
     T_K_cal = condiciones.get("T_K")
     if T_K_cal:
@@ -287,6 +327,23 @@ def calcular_tiempo_secado(
                 f"({T_min_cal - 273.15:.0f}–{T_max_cal - 273.15:.0f} °C, margen ±{margen_K:.0f} K). "
                 "La extrapolación puede ser imprecisa."
             )
+
+    # Advertencia cuando el espesor de capa supera 3× el espesor de calibración.
+    # El modelo de capa fina fue calibrado para espesores pequeños (típico: 3–10 mm).
+    # Para capas gruesas, la resistencia interna a la transferencia de masa no es
+    # despreciable y el modelo subestima significativamente el tiempo de secado.
+    _esp_raw = condiciones.get("espesor_m")
+    espesor_cal_m = (
+        max(_esp_raw) if isinstance(_esp_raw, list) else float(_esp_raw)
+    ) if _esp_raw is not None else None
+    espesor_real_m = camara.bandejas.espesor_capa_m
+    if espesor_cal_m and espesor_real_m > espesor_cal_m * 3:
+        advertencias.append(
+            f"CAM_ESPESOR_FUERA_CALIBRACION: espesor de capa {espesor_real_m*100:.1f} cm "
+            f"> 3× el espesor de calibración ({espesor_cal_m*100:.1f} cm). "
+            "El modelo de capa fina subestima el tiempo de secado para capas gruesas. "
+            "Considerar reducir el espesor de producto en bandeja o usar un modelo difusivo."
+        )
 
     # --- MR objetivo ---
     X_0 = p.humedad_inicial_X
@@ -541,20 +598,28 @@ def _calcular_termodinamico(
     T_amb_K: float,
     P_Pa: float,
     t_max_s: float = 24.0 * 3600.0,
+    forzantes_aire: Optional["ForzantesAire"] = None,
 ) -> ResultadoMotorTermodinamico:
-    """Wire-up de Camara → motor termodinámico transitorio (S3).
+    """Wire-up de Camara → motor termodinámico transitorio.
 
     Lee del catálogo del producto:
-        - propiedades_basicas.calor_especifico_seco → para cp efectivo (X media).
+        - propiedades_basicas.calor_especifico_seco → c_ps (sólido seco).
         - isoterma.gab.params → para construir aw_func. Si faltan, usa rampa
           lineal aw = clip(X/X_inicial, 0, 1) como fallback con advertencia.
 
     Calcula:
-        - cp efectivo = (X_med·cp_w + cp_seco)/(1+X_med).
         - A_prod = n_bandejas · area_bandeja.
         - A_cuerpo = 2·(largo·alto + ancho·alto + largo·ancho).
         - v_aire = ṁ_as/(ρ·ancho·alto), h_conv por placa plana, K_m por
           Chilton-Colburn directo: K_m = h_conv/(cp_hum·Le^(2/3)).
+        - Pared 3-nodos: deriva k_aisl desde U_muros del data model en
+          condiciones de diseño (h_w McAdams a v_viento default).
+
+    Si forzantes_aire se provee (modo "real" o "sintético"), se usa tal cual
+    y los escalares T_operacion_K, HR_operacion, T_amb_K se ignoran (sólo se
+    usan para los cálculos de h_conv/K_m de referencia y la decomposición de
+    pared). Si no se provee, se arman forzantes degeneradas (2 puntos
+    constantes) reproduciendo el comportamiento histórico.
 
     Si T_prod_inicial_K es None en CargaProducto, usa T_amb_K como fallback.
     """
@@ -576,6 +641,23 @@ def _calcular_termodinamico(
             f"CAM_TD_CP_SECO_FALTA: producto '{p.producto_id}' sin "
             "calor_especifico_seco en catálogo. Usando default 1500 J/(kg·K)."
         )
+
+    # --- Radiación solar al producto (techo translúcido) ---
+    # Si la cámara tiene cubierta opaca (cubierta_translucida_id is None),
+    # τ=0 y el motor anula el término Q_rad sin coste.
+    if cons.cubierta_translucida_id is not None:
+        tau_cub = float(
+            catalogo.CUBIERTAS[cons.cubierta_translucida_id]["transmitancia_solar"]
+        )
+        # α_producto: opcional en catálogo (default 0.6 — superficie sólida media)
+        alfa_prod = float(propsb.get("alfa_solar", 0.6))
+        # A_rad: explícito en construcción o, por defecto, una sola bandeja
+        # (sólo la superior "ve" la radiación directa)
+        A_rad = float(cons.A_rad_m2) if cons.A_rad_m2 is not None else b.area_bandeja_m2
+    else:
+        tau_cub = 0.0
+        alfa_prod = 0.6  # irrelevante: τ·A_rad=0 anula el factor
+        A_rad = 0.0
 
     # cp efectivo del producto a X media (opción B — bitácora §24.x)
     X_med = 0.5 * (p.humedad_inicial_X + p.humedad_objetivo_X)
@@ -642,24 +724,51 @@ def _calcular_termodinamico(
     cp_hum = 1006.0 + omega_ent * 1805.0
     K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0))
 
+    # --- Decomposición de la pared en cascada 3-nodos ---
+    # La pared opaca de la cámara está descrita como una composición de capas
+    # (cons.pared) con R_conduccion = Σ(e_i/k_i). Pasamos al motor el espesor
+    # total y un k equivalente tal que esp_total/k_eq = R_conduccion, así
+    # internamente el motor reconstruye la misma R_cond sin necesidad de
+    # cambiar su firma. Para pared simple (1 capa), k_eq = k_material; para
+    # compuesta, k_eq es el promedio armónico ponderado por espesor.
+    _V_VIENTO_DEFAULT_MS = 2.0
+    R_cond_pared = cons.pared.R_conduccion_m2K_W
+    esp_cam_total = cons.pared.espesor_total_m
+    k_aisl = esp_cam_total / R_cond_pared
+
+    # --- Forzantes: usar las del llamador o construir degeneradas ---
+    if forzantes_aire is None:
+        t_forz = np.array([0.0, t_max_s], dtype=float)
+        forzantes_uso = ForzantesAire(
+            t_s=t_forz,
+            T_ent_K=np.full(2, T_operacion_K),
+            omega_ent=np.full(2, omega_ent),
+            m_dot_aire_seco_kg_s=np.full(2, f.caudal_masico_kg_s),
+            T_amb_K=np.full(2, T_amb_K),
+            v_viento_ms=np.full(2, _V_VIENTO_DEFAULT_MS),
+        )
+    else:
+        forzantes_uso = forzantes_aire
+
     # --- Integración termodinámica ---
     res = simular_secado(
         T_prod_inicial_K=T_prod_inicial,
         X_prod_inicial_kg_kg=p.humedad_inicial_X,
         X_prod_objetivo_kg_kg=p.humedad_objetivo_X,
         m_seco_prod_kg=m_seco_prod,
-        cp_prod_J_kgK=cp_prod_efectivo,
-        T_ent_K=T_operacion_K,
-        omega_ent_kg_kg=omega_ent,
+        c_ps_J_kgK=cp_seco,
+        forzantes=forzantes_uso,
         A_prod_m2=A_prod,
         A_cuerpo_m2=A_cuerpo,
-        m_dot_as_kg_s=f.caudal_masico_kg_s,
         h_conv_W_m2K=h_conv,
         K_m_kg_m2s=K_m,
-        U_muros_W_m2K=cons.U_muros_W_m2K,
-        T_amb_K=T_amb_K,
+        k_aisl_W_mK=k_aisl,
+        esp_cam_m=esp_cam_total,
         P_Pa=P_Pa,
         aw_func=_aw_func,
+        tau_cubierta_solar=tau_cub,
+        alfa_producto_solar=alfa_prod,
+        A_rad_m2=A_rad,
         t_max_s=t_max_s,
     )
 
@@ -675,7 +784,16 @@ def _calcular_termodinamico(
         m_dot_w_kg_s=res.m_dot_w_kg_s,
         q_prod_W=res.q_prod_W,
         q_pared_W=res.q_pared_W,
+        T_cam_int_K=res.T_cam_int_K,
+        T_cam_ext_K=res.T_cam_ext_K,
+        U_pared_W_m2K=res.U_pared_W_m2K,
+        HR_flujo=res.HR_flujo,
         masa_evaporada_total_kg=res.masa_evaporada_total_kg,
+        Q_rad_W=res.Q_rad_W,
+        energia_rad_total_J=res.energia_rad_total_J,
+        horas_clipeo_nocturno_s=res.horas_clipeo_nocturno_s,
+        horas_HR_alta_s=res.horas_HR_alta_s,
+        T_max_alcanzada_K=res.T_max_alcanzada_K,
         advertencias=advertencias + list(res.advertencias),
     )
 
@@ -687,10 +805,11 @@ def calcular_camara(
     T_amb_K: float = 298.15,
     P_Pa: float = 101325.0,
     t_max_s: float = 72.0 * 3600.0,
+    forzantes_aire: Optional["ForzantesAire"] = None,
 ) -> Union[ResultadosCamara, ResultadoMotorTermodinamico]:
     """Punto de entrada único — despacha al motor según camara.modo_calculo.
 
-    - modo='capa_fina'    → delega a calcular_tiempo_secado, retorna ResultadosCamara.
+    - modo='capa_fina'    → delega a calcular_tiempo_secado_estatico, retorna ResultadosCamara.
     - modo='termodinamico' → delega a _calcular_termodinamico, retorna
       ResultadoMotorTermodinamico con curvas dinámicas.
 
@@ -699,12 +818,17 @@ def calcular_camara(
         T_operacion_K: T del aire que entra a la cámara [K].
         HR_operacion: HR del aire que entra [fracción 0-1].
         T_amb_K: T ambiente externa [K]. Solo se usa en modo termodinámico
-            (pérdidas a paredes y fallback de T_prod_inicial).
+            (pérdidas a paredes y fallback de T_prod_inicial). Si se pasa
+            forzantes_aire, se ignora.
         P_Pa: Presión total [Pa].
         t_max_s: Cota superior del tiempo de secado [s]. Default 72 h
             (peores casos pueden llegar a 5 días). Solo usado en modo
-            termodinámico. Default histórico de capa_fina sigue siendo 72 h
-            en `T_MAX_MIN`.
+            termodinámico.
+        forzantes_aire: Forzantes horarias de aire (modo termodinámico).
+            None → motor arma forzantes degeneradas constantes desde los
+            escalares (comportamiento histórico). Use
+            `calculos.balance_global.construir_serie_sintetica_dia_tipo` o
+            `armar_forzantes_aire` para construirlas.
 
     Returns:
         ResultadosCamara (capa_fina) o ResultadoMotorTermodinamico (termodinámico).
@@ -714,13 +838,14 @@ def calcular_camara(
             la dataclass ya valida esto en __post_init__).
     """
     if camara.modo_calculo == "capa_fina":
-        return calcular_tiempo_secado(
+        return calcular_tiempo_secado_estatico(
             camara, T_operacion_K, HR_operacion, P_Pa=P_Pa
         )
     elif camara.modo_calculo == "termodinamico":
         return _calcular_termodinamico(
             camara, T_operacion_K, HR_operacion, T_amb_K, P_Pa,
             t_max_s=t_max_s,
+            forzantes_aire=forzantes_aire,
         )
     else:
         raise ValueError(

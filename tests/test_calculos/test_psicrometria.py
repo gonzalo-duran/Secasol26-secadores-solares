@@ -269,12 +269,12 @@ class TestEntalpiaAireHumedo:
 
 
 # ---------------------------------------------------------------------------
-# Integración: corrección psicrométrica en calcular_tiempo_secado
+# Integración: corrección psicrométrica en calcular_tiempo_secado_estatico
 # ---------------------------------------------------------------------------
 
 
 class TestIntegracionPsicrometriaCamara:
-    """Verifica que calcular_tiempo_secado popula los campos psicrométricos."""
+    """Verifica que calcular_tiempo_secado_estatico popula los campos psicrométricos."""
 
     @pytest.fixture
     def camara_manzana(self):
@@ -291,32 +291,32 @@ class TestIntegracionPsicrometriaCamara:
         )
 
     def test_omega_entrada_poblado(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado
-        res = calcular_tiempo_secado(camara_manzana, 323.15, 0.20)
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
+        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
         assert res.omega_entrada_kg_kg is not None
         assert res.omega_entrada_kg_kg > 0
 
     def test_omega_salida_mayor_que_entrada(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado
-        res = calcular_tiempo_secado(camara_manzana, 323.15, 0.20)
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
+        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
         assert res.omega_salida_kg_kg > res.omega_entrada_kg_kg
 
     def test_HR_salida_entre_0_y_1(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado
-        res = calcular_tiempo_secado(camara_manzana, 323.15, 0.20)
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
+        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
         assert res.HR_salida is not None
         assert 0.0 < res.HR_salida <= 1.0
 
     def test_HR_media_entre_HR_entrada_y_HR_salida(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
         HR_in = 0.20
-        res = calcular_tiempo_secado(camara_manzana, 323.15, HR_in)
+        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, HR_in)
         assert res.HR_media is not None
         assert min(HR_in, res.HR_salida) <= res.HR_media <= max(HR_in, res.HR_salida)
 
     def test_saturacion_con_caudal_muy_bajo(self):
         """Caudal muy bajo → el aire se satura → advertencia CAM_RIESGO_SATURACION_AIRE."""
-        from calculos.camara_calc import calcular_tiempo_secado
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
         from core.camara import Camara, CargaProducto, ConfiguracionFlujo
         cam = Camara(
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.0005),  # caudal minúsculo
@@ -328,20 +328,20 @@ class TestIntegracionPsicrometriaCamara:
                 modelo_capa_fina="logaritmico",
             ),
         )
-        res = calcular_tiempo_secado(cam, 323.15, 0.10)
+        res = calcular_tiempo_secado_estatico(cam, 323.15, 0.10)
         assert any("SATURACION" in a for a in res.advertencias)
 
     def test_t_secado_corregido_mayor_igual_original(self, camara_manzana):
         """La corrección aumenta X_eq → MR_obj más pequeño → t_secado mayor o igual."""
-        from calculos.camara_calc import calcular_tiempo_secado
-        res = calcular_tiempo_secado(camara_manzana, 323.15, 0.20)
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
+        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
         # Solo aplica si hay isoterma GAB (yacón); manzana usa fallback → sin corrección
         # Si no hay corrección, t_secado_corregido == t_secado
         assert res.t_secado_corregido_s >= res.t_secado_s - 1.0  # tolerancia 1 s
 
     def test_camara_yacon_tiene_correccion_gab(self):
         """Yacón tiene GAB → X_eq_corregido debería diferir de X_eq base."""
-        from calculos.camara_calc import calcular_tiempo_secado
+        from calculos.camara_calc import calcular_tiempo_secado_estatico
         from core.camara import Camara, CargaProducto, ConfiguracionFlujo
         cam = Camara(
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
@@ -353,7 +353,7 @@ class TestIntegracionPsicrometriaCamara:
                 modelo_capa_fina="page",
             ),
         )
-        res = calcular_tiempo_secado(cam, 323.15, 0.20)
+        res = calcular_tiempo_secado_estatico(cam, 323.15, 0.20)
         # X_eq con HR_media > X_eq con HR_entrada (aire en cámara es más húmedo)
         assert res.X_eq_corregido_kg_kg is not None
         assert res.X_eq_corregido_kg_kg >= res.X_eq_kg_kg - 0.001  # corrección ≥ 0
@@ -393,9 +393,20 @@ class TestCalorLatenteVaporizacion:
         for i in range(len(Lv_vals) - 1):
             assert Lv_vals[i + 1] < Lv_vals[i]
 
-    def test_T_negativa_lanza(self):
+    def test_extrapolacion_subzero_admitida(self):
+        """Aceptamos extrapolación lineal hasta -23 °C (=250 K) sin errar.
+        Es necesario para que solve_ivp pueda explorar temperaturas bajas
+        durante el cálculo del Jacobiano sin romper la integración."""
+        # -10 °C debe ser admitido (extrapolación)
+        Lv = calor_latente_vaporizacion(263.15)
+        Lv_0C = calor_latente_vaporizacion(273.15)
+        assert Lv > Lv_0C   # crece con T decreciente (fórmula lineal)
+
+    def test_T_extremadamente_baja_lanza(self):
+        """Por debajo de -23 °C (250 K) sí lanzamos error: ya es sublimación
+        pura y la extrapolación no tiene sentido físico."""
         with pytest.raises(ValueError, match="PSICRO_LV_T_FUERA_RANGO"):
-            calor_latente_vaporizacion(263.15)  # -10 °C
+            calor_latente_vaporizacion(240.0)  # -33 °C
 
     def test_pendiente_lineal(self):
         """dL_v/dT = -2370 J/(kg·K) por construcción."""

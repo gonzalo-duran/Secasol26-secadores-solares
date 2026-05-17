@@ -11,6 +11,7 @@ galvanizada_pintada_negro_mate:
   densidad: 7850
   calor_especifico: 480
   T_max_servicio: 473              # K (limita la pintura)
+  rugosidad_m: 5.0e-5              # ~50 µm (chapa pintada rolada estándar)
   fuente: "Duffie & Beckman 2013, Tabla 4.11.1; Incropera Tabla A.1 acero"
   notas: "Económica, uso muy extendido. ε alta penaliza eficiencia a alta T."
 
@@ -22,6 +23,7 @@ aluminio_pintado_negro_mate:
   densidad: 2700
   calor_especifico: 900
   T_max_servicio: 473
+  rugosidad_m: 3.0e-5              # ~30 µm (aluminio pintado, superficie más fina)
   fuente: "Duffie & Beckman 2013, Tabla 4.11.1; Incropera Tabla A.1"
   notas: "Mejor uniformidad térmica que galvanizada por mayor k. Más cara."
 
@@ -33,6 +35,7 @@ acero_carbono_pintado_negro_mate:
   densidad: 7850
   calor_especifico: 480
   T_max_servicio: 473
+  rugosidad_m: 5.0e-5
   fuente: "Incropera Tabla A.1; Duffie & Beckman 2013, Tabla 4.11.1"
   notas: "Sin galvanizado: requiere protección extra contra corrosión."
 
@@ -44,6 +47,7 @@ aluminio_tinox:
   densidad: 2700
   calor_especifico: 900
   T_max_servicio: 573
+  rugosidad_m: 2.0e-5              # superficie selectiva pulida, más fina
   fuente: "Hoja técnica Almeco TiNOX energy; Duffie & Beckman 2013, §6.24"
   notas: |
     Superficie selectiva de alta performance. Reduce drásticamente pérdidas radiativas.
@@ -57,6 +61,7 @@ acero_cromo_negro:
   densidad: 7850
   calor_especifico: 480
   T_max_servicio: 573
+  rugosidad_m: 2.0e-5
   fuente: "Duffie & Beckman 2013, Tabla 6.24.1"
   notas: "Selectivo clásico, anterior al TiNOX. Aún se usa. Se mantiene en catálogo por completitud."
 
@@ -68,6 +73,7 @@ galvanizada_cruda:
   densidad: 7850
   calor_especifico: 480
   T_max_servicio: 473
+  rugosidad_m: 1.0e-4              # ~100 µm (galvanizada cruda, más rugosa)
   fuente: "Incropera Tabla A.11 (galvanized sheet steel)"
   notas: |
     Incluida como caso de referencia/comparación. α bajo y ε baja:

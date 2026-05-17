@@ -20,6 +20,7 @@ from calculos.motor_calc import (
     caudal_masico_a_volumetrico,
     estimar_delta_P_camara,
     estimar_delta_P_colector,
+    estimar_delta_P_singulares,
 )
 from core.advertencias import Severidad
 from core.motor import Motor, TipoAccionamiento
@@ -207,6 +208,7 @@ def render() -> None:
         dP_colector_val: float | None = None
         dP_camara_val: float | None = None
         dP_ductos_val: float | None = None
+        dP_singulares_val: float | None = None
 
         if modo_dP == "ΔP total directo":
             dP_total_override = st.number_input(
@@ -303,15 +305,67 @@ def render() -> None:
                     dP_duc_est = 0.20 * (dP_col_input + dP_cam_input)
                     st.caption(f"Auto 20%: **{dP_duc_est:.1f} Pa**")
 
+            # --- ΔP singulares (entrada, salida, codos, manifold) ---
+            # v_ducto = velocidad típica en ductos de aire de secadores solares
+            # (5–10 m/s). NO es la velocidad del canal del colector (mucho más
+            # baja) ni la velocidad superficial de la cámara. Default 6 m/s.
+            v_ducto = float(st.session_state.get("p6_v_ducto", 6.0))
+            n_paralelo = 1
+            if proyecto.colector is not None:
+                try:
+                    n_paralelo = int(proyecto.colector.banco.n_paralelo)
+                except Exception:
+                    pass
+            sing = estimar_delta_P_singulares(
+                Q_vol_m3_s=Q_vol_m3s,
+                v_ducto_m_s=v_ducto,
+                n_paralelo=n_paralelo,
+                n_codos=2,
+            )
+            dP_singulares_val = sing["total"]
+            with st.expander(
+                f"ΔP singulares (entrada, salida, codos, manifold): "
+                f"**{dP_singulares_val:.1f} Pa**",
+                expanded=False,
+            ):
+                v_ducto_input = st.number_input(
+                    "Velocidad del aire en ducto principal [m/s]",
+                    min_value=1.0, max_value=20.0,
+                    value=v_ducto, step=0.5, format="%.1f",
+                    help=(
+                        "Velocidad típica en ductos de secadores solares: 5–10 m/s. "
+                        "Más alta → más pérdida singular. Para ductos de ø≈15 cm con "
+                        "Q≈900 m³/h, v ≈ 14 m/s."
+                    ),
+                )
+                if abs(v_ducto_input - v_ducto) > 1e-6:
+                    st.session_state["p6_v_ducto"] = v_ducto_input
+                    # Recalcular display si el usuario tocó la velocidad
+                    sing = estimar_delta_P_singulares(
+                        Q_vol_m3_s=Q_vol_m3s, v_ducto_m_s=v_ducto_input,
+                        n_paralelo=n_paralelo, n_codos=2,
+                    )
+                    dP_singulares_val = sing["total"]
+                    v_ducto = v_ducto_input
+                st.caption(
+                    f"n_paralelo = {n_paralelo} · n_codos asumidos = 2\n\n"
+                    f"- Entrada (K=0.5): {sing['entrada']:.1f} Pa\n"
+                    f"- Salida descarga libre (K=1.0): {sing['salida']:.1f} Pa\n"
+                    f"- 2 codos 90° (K=0.9 c/u): {sing['codos']:.1f} Pa\n"
+                    f"- Manifold banco paralelo (K=1.5): {sing['manifold']:.1f} Pa"
+                )
+
+            dP_ductos_efectivo = (
+                dP_ductos_val if dP_ductos_val is not None
+                else 0.20 * (dP_col_input + dP_cam_input)
+            )
             dP_tot_preview = (
-                dP_col_input + dP_cam_input
-                + (dP_ductos_val if dP_ductos_val is not None
-                   else 0.20 * (dP_col_input + dP_cam_input))
+                dP_col_input + dP_cam_input + dP_ductos_efectivo + dP_singulares_val
             )
             st.caption(
                 f"**ΔP total estimada: {dP_tot_preview:.1f} Pa** "
                 f"(col={dP_col_input:.1f} + cam={dP_cam_input:.1f} + "
-                f"duc={dP_tot_preview - dP_col_input - dP_cam_input:.1f})"
+                f"duc={dP_ductos_efectivo:.1f} + sing={dP_singulares_val:.1f})"
             )
 
     # -----------------------------------------------------------------------
@@ -414,6 +468,11 @@ def render() -> None:
                 delta_P_colector_Pa=dP_colector_val,
                 delta_P_camara_Pa=dP_camara_val,
                 delta_P_ductos_Pa=dP_ductos_val,
+                delta_P_singulares_Pa=dP_singulares_val,
+                v_descarga_m_s=(
+                    st.session_state.get("p6_v_ducto", 6.0)
+                    if dP_total_override is None else None
+                ),
                 eficiencia_ventilador=eta_vent,
                 eficiencia_motor=eta_motor_val,
                 factor_servicio=fs,

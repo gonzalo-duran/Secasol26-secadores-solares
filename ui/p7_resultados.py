@@ -10,11 +10,17 @@ ingresan manualmente o se sugieren desde los datos NASA POWER de P2.
 
 from __future__ import annotations
 
-import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
-from calculos.balance_global import ResultadosCompletos, calcular_todo
+from calculos.balance_global import (
+    ResultadosCompletos,
+    ResultadosCompletosTransitorio,
+    calcular_todo,
+    calcular_todo_transitorio,
+)
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.advertencias import Severidad
 from ui.componentes.graficas import grafica_termodinamica_camara
@@ -41,11 +47,7 @@ def _estado(ok: bool) -> str:
 
 
 def _resumen_camara(cam) -> tuple[float | None, float, str, bool]:
-    """Extrae (t_h, masa_agua_kg, status_legible, ok) abstrayendo el tipo.
-
-    `t_h` es ``None`` si el motor termodinámico no convergió. `ok` indica
-    si el cálculo es utilizable para el balance energético.
-    """
+    """Extrae (t_h, masa_agua_kg, status_legible, ok) abstrayendo el tipo."""
     if isinstance(cam, ResultadoMotorTermodinamico):
         ok = cam.t_secado_s is not None and cam.status == "X_obj_alcanzado"
         t_h = cam.t_secado_s / 3600.0 if cam.t_secado_s is not None else None
@@ -62,6 +64,173 @@ def _mostrar_errores(errores: list[str]) -> None:
 def _mostrar_advertencias(advs: list[str]) -> None:
     for a in advs:
         st.warning(f"⚠️ {a}")
+
+
+# ---------------------------------------------------------------------------
+# Render: pipeline transitoria (mejora 19)
+# ---------------------------------------------------------------------------
+
+
+def _render_resultados_transitorios(res_tr, proyecto) -> None:
+    """Muestra series transitorias + acumulados de la pipeline P7-transitoria."""
+    if res_tr.errores:
+        _mostrar_errores(res_tr.errores)
+        return
+    if res_tr.advertencias:
+        with st.expander("Advertencias del cálculo", expanded=False):
+            _mostrar_advertencias(res_tr.advertencias)
+
+    # ---- Tarjetas resumen ----
+    st.subheader("Resumen del prediseño")
+    c1, c2, c3, c4 = st.columns(4)
+    t_h_obj = (
+        res_tr.t_X_obj_alcanzado_s / 3600.0
+        if res_tr.t_X_obj_alcanzado_s is not None else None
+    )
+    c1.metric(
+        "X_obj alcanzado",
+        f"{t_h_obj:.1f} h" if t_h_obj is not None else "No (>horizonte)",
+        help="Tiempo desde t=0 en que la humedad del producto baja a X_obj.",
+    )
+    c2.metric(
+        "Masa agua evaporada",
+        f"{res_tr.masa_agua_evaporada_kg:.2f} kg",
+    )
+    c3.metric(
+        "Energía secado",
+        f"{res_tr.energia_secado_MJ:.2f} MJ",
+        help="masa_agua × Lv",
+    )
+    cop_txt = f"{res_tr.COP_secado:.2f}" if res_tr.COP_secado is not None else "—"
+    c4.metric("COP_secado", cop_txt)
+
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("E_solar útil", f"{res_tr.energia_solar_util_MJ:.2f} MJ")
+    c6.metric("E_auxiliar", f"{res_tr.energia_auxiliar_MJ:.2f} MJ")
+    c7.metric("E_motor", f"{res_tr.energia_motor_MJ:.2f} MJ")
+    fs_txt = f"{res_tr.fraccion_solar:.2f}" if res_tr.fraccion_solar is not None else "—"
+    c8.metric("Fracción solar", fs_txt)
+
+    # ---- Series temporales ----
+    if res_tr.camara is None or res_tr.forzantes_aplicadas is None:
+        st.warning("Sin trayectorias para graficar.")
+        return
+
+    t_h_fz = res_tr.forzantes_base.t_s / 3600.0
+    t_h_cam = res_tr.camara.t_array_s / 3600.0
+
+    st.subheader("Trayectorias del horizonte")
+
+    # --- Panel 1: Aire externo (T_amb, I_g, v_viento) ---
+    fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig1.add_trace(
+        go.Scatter(x=t_h_fz, y=res_tr.forzantes_base.T_amb_K - 273.15,
+                   name="T_amb", line=dict(color="#1f77b4", width=2)),
+        secondary_y=False,
+    )
+    fig1.add_trace(
+        go.Scatter(x=t_h_fz, y=res_tr.forzantes_base.I_g_W_m2,
+                   name="I_g (POA)", line=dict(color="#ff7f0e", width=1.5, dash="dot")),
+        secondary_y=True,
+    )
+    fig1.add_trace(
+        go.Scatter(x=t_h_fz, y=res_tr.forzantes_base.v_viento_ms,
+                   name="v_viento", line=dict(color="#2ca02c", width=1)),
+        secondary_y=False,
+    )
+    fig1.update_yaxes(title_text="T_amb [°C] / v [m/s]", secondary_y=False)
+    fig1.update_yaxes(title_text="I_g [W/m²]", secondary_y=True)
+    fig1.update_xaxes(title_text="Tiempo [h]")
+    fig1.update_layout(
+        title="Forzantes climáticas del horizonte",
+        height=320, hovermode="x unified",
+    )
+    st.plotly_chart(fig1, use_container_width=True)
+
+    # --- Panel 2: T_sal_col, ΔT_aux, T_ent_cam ---
+    fig2 = go.Figure()
+    fig2.add_trace(go.Scatter(
+        x=t_h_fz, y=res_tr.forzantes_base.T_ent_K - 273.15,
+        name="T_sal_colector", line=dict(color="#d62728", width=2),
+    ))
+    if res_tr.auxiliar is not None:
+        fig2.add_trace(go.Scatter(
+            x=t_h_fz, y=res_tr.forzantes_aplicadas.T_ent_K - 273.15,
+            name="T_ent_cámara (post-aux)", line=dict(color="#9467bd", width=2),
+        ))
+        fig2.add_trace(go.Scatter(
+            x=t_h_fz, y=res_tr.auxiliar.delta_T_K,
+            name="ΔT_auxiliar", line=dict(color="#8c564b", width=1, dash="dash"),
+        ))
+    fig2.update_xaxes(title_text="Tiempo [h]")
+    fig2.update_yaxes(title_text="T [°C] / ΔT [K]")
+    fig2.update_layout(
+        title="Acoplamiento colector → auxiliar → entrada de cámara",
+        height=320, hovermode="x unified",
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+    # --- Panel 3: producto T_prod, X_prod ---
+    fig3 = make_subplots(specs=[[{"secondary_y": True}]])
+    fig3.add_trace(
+        go.Scatter(x=t_h_cam, y=res_tr.camara.T_prod_K - 273.15,
+                   name="T_prod", line=dict(color="#1f77b4", width=2)),
+        secondary_y=False,
+    )
+    fig3.add_trace(
+        go.Scatter(x=t_h_cam, y=res_tr.camara.X_prod_kg_kg,
+                   name="X_prod", line=dict(color="#2ca02c", width=2)),
+        secondary_y=True,
+    )
+    fig3.update_yaxes(title_text="T_prod [°C]", secondary_y=False)
+    fig3.update_yaxes(title_text="X [kg/kg ms]", secondary_y=True)
+    fig3.update_xaxes(title_text="Tiempo [h]")
+    fig3.update_layout(
+        title="Producto: temperatura y humedad",
+        height=320, hovermode="x unified",
+    )
+    if res_tr.t_X_obj_alcanzado_s is not None:
+        fig3.add_vline(
+            x=res_tr.t_X_obj_alcanzado_s / 3600.0,
+            line=dict(color="orange", dash="dashdot", width=1.5),
+            annotation_text="X_obj alcanzado",
+            annotation_position="top",
+        )
+    st.plotly_chart(fig3, use_container_width=True)
+
+    # --- Panel 4: tasa de evaporación ---
+    fig4 = go.Figure()
+    fig4.add_trace(go.Scatter(
+        x=t_h_cam, y=res_tr.camara.m_dot_w_kg_s * 3600.0,
+        name="ṁ_w", line=dict(color="#1f77b4", width=2),
+    ))
+    fig4.update_xaxes(title_text="Tiempo [h]")
+    fig4.update_yaxes(title_text="Tasa evaporación [kg/h]")
+    fig4.update_layout(
+        title="Tasa de evaporación de agua del producto",
+        height=280, hovermode="x unified",
+    )
+    st.plotly_chart(fig4, use_container_width=True)
+
+    # ---- Diagnósticos extra ----
+    with st.expander("Diagnósticos del horizonte"):
+        d1, d2, d3 = st.columns(3)
+        d1.metric(
+            "T_prod máx",
+            f"{(res_tr.T_prod_max_K - 273.15):.1f} °C"
+            if res_tr.T_prod_max_K is not None else "—",
+        )
+        d2.metric("Horas anti-rehumect.", f"{res_tr.horas_clipeo_pol_B_s/3600.0:.2f} h")
+        d3.metric("Horas HR>95%", f"{res_tr.horas_HR_alta_s/3600.0:.2f} h")
+        if res_tr.auxiliar is not None:
+            st.write(
+                f"**Auxiliar activo**: {res_tr.auxiliar.horas_activo_s/3600.0:.2f} h "
+                f"(fracción {res_tr.auxiliar.fraccion_horas_activo*100:.0f} %)"
+            )
+            st.write(
+                f"**ΔT_aux máx**: {res_tr.auxiliar.delta_T_max_K:.1f} K  |  "
+                f"**Q_aux máx**: {res_tr.auxiliar.Q_max_W:.0f} W"
+            )
 
 
 def _seccion_config(proyecto) -> None:
@@ -95,33 +264,33 @@ def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
     return T_sug, I_sug, v_sug
 
 
-def _fig_drying_curve(solver_cam) -> plt.Figure:
-    fig, ax = plt.subplots(figsize=(7, 3.5))
+def _fig_drying_curve(solver_cam) -> go.Figure:
     t_h = solver_cam.t_array_s / 3600.0
-    ax.plot(t_h, solver_cam.X_array_kg_kg, color="#1f77b4", linewidth=2)
-    ax.axhline(solver_cam.X_eq_kg_kg, color="gray", linestyle="--", linewidth=1,
-               label=f"X_eq = {solver_cam.X_eq_kg_kg:.3f}")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=list(t_h), y=list(solver_cam.X_array_kg_kg), mode="lines",
+        line=dict(color="#1f77b4", width=2), name="X(t)",
+    ))
+    fig.add_hline(y=solver_cam.X_eq_kg_kg, line=dict(color="gray", dash="dash", width=1),
+                  annotation_text=f"X_eq={solver_cam.X_eq_kg_kg:.3f}",
+                  annotation_position="bottom right")
     t_fin = solver_cam.t_secado_s / 3600.0
-    ax.axvline(t_fin, color="orange", linestyle="-.", linewidth=1.5,
-               label=f"t = {t_fin:.1f} h")
-    ax.set_xlabel("Tiempo [h]")
-    ax.set_ylabel("Humedad X [kg/kg ms]")
-    ax.set_title("Curva de secado")
-    ax.legend(fontsize=8)
-    ax.grid(True, alpha=0.3)
-    ax.set_ylim(bottom=0)
-    fig.tight_layout()
+    fig.add_vline(x=t_fin, line=dict(color="orange", dash="dashdot", width=1.5),
+                  annotation_text=f"t={t_fin:.1f}h")
+    fig.update_xaxes(title_text="Tiempo [h]")
+    fig.update_yaxes(title_text="Humedad X [kg/kg ms]", rangemode="tozero")
+    fig.update_layout(title_text="Curva de secado", height=350, showlegend=True)
     return fig
 
 
-def _fig_sankey_simplificado(res: ResultadosCompletos) -> plt.Figure:
+def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
     """Gráfico de barras del balance energético."""
     etiquetas = []
     valores = []
     colores = []
 
     if res.energia_solar_util_MJ is not None and res.energia_solar_util_MJ > 0:
-        etiquetas.append("Solar\n(colector)")
+        etiquetas.append("Solar<br>(colector)")
         valores.append(res.energia_solar_util_MJ)
         colores.append("#f5a623")
     if res.energia_auxiliar_MJ is not None and res.energia_auxiliar_MJ > 0:
@@ -133,22 +302,22 @@ def _fig_sankey_simplificado(res: ResultadosCompletos) -> plt.Figure:
         valores.append(res.energia_motor_MJ)
         colores.append("#9c27b0")
     if res.energia_secado_MJ is not None and res.energia_secado_MJ > 0:
-        etiquetas.append("Evaporación\n(útil)")
+        etiquetas.append("Evaporación<br>(útil)")
         valores.append(res.energia_secado_MJ)
         colores.append("#4caf50")
 
     if not etiquetas:
         return None
 
-    fig, ax = plt.subplots(figsize=(7, 3))
-    bars = ax.bar(etiquetas, valores, color=colores, alpha=0.85)
-    for bar, val in zip(bars, valores):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.02,
-                f"{val:.2f} MJ", ha="center", va="bottom", fontsize=9)
-    ax.set_ylabel("Energía [MJ]")
-    ax.set_title("Balance energético del ciclo de secado")
-    ax.grid(True, axis="y", alpha=0.3)
-    fig.tight_layout()
+    fig = go.Figure(go.Bar(
+        x=etiquetas, y=valores, marker_color=colores, opacity=0.85,
+        text=[f"{v:.2f} MJ" for v in valores], textposition="outside",
+    ))
+    fig.update_yaxes(title_text="Energía [MJ]")
+    fig.update_layout(
+        title_text="Balance energético del ciclo de secado",
+        height=350, showlegend=False,
+    )
     return fig
 
 
@@ -263,18 +432,20 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
             f"  Q efect. : {aux.Q_efectivo_W:.0f} W",
         ]
 
-    if res.camara is not None:
-        cam = res.camara
-        t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(cam)
+    # Cámara: resultado estático o termodinámico
+    _cam_show = res.camara
+    if _cam_show is not None:
+        t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(_cam_show)
         lines += [
             "",
             "CÁMARA",
-            f"  T oper.       : {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C",
+            f"  T oper.       : {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C"
+            if res.T_entrada_camara_K else "  T oper.       : —",
         ]
-        if isinstance(cam, ResultadoMotorTermodinamico):
-            X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
+        if isinstance(_cam_show, ResultadoMotorTermodinamico):
+            X_final = float(_cam_show.X_prod_kg_kg[-1]) if len(_cam_show.X_prod_kg_kg) else 0.0
             T_prod_final_C = (
-                float(cam.T_prod_K[-1]) - 273.15 if len(cam.T_prod_K) else 0.0
+                float(_cam_show.T_prod_K[-1]) - 273.15 if len(_cam_show.T_prod_K) else 0.0
             )
             lines += [
                 f"  Modo cálculo  : termodinámico",
@@ -287,8 +458,8 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
             ]
         else:
             lines += [
-                f"  Modo cálculo  : capa fina",
-                f"  X_eq          : {cam.X_eq_kg_kg:.4f} kg/kg ms",
+                f"  Modo cálculo  : capa fina estático",
+                f"  X_eq          : {_cam_show.X_eq_kg_kg:.4f} kg/kg ms",
                 f"  Tiempo secado : {t_h_cam:.2f} h",
                 f"  Agua evap.    : {masa_cam:.3f} kg",
                 f"  Convergencia  : {status_cam}",
@@ -336,6 +507,83 @@ def render() -> None:
             "**Cámara de Secado (P4)**."
         )
         return
+
+    # -----------------------------------------------------------------------
+    # Selector modo de cálculo: transitorio (horizonte de P4) vs constantes
+    # -----------------------------------------------------------------------
+    fz_horizonte = st.session_state.get("p4_forzantes_horizonte")
+    horizonte_meta = st.session_state.get("p4_horizonte_meta") or {}
+    horizonte_disponible = (
+        fz_horizonte is not None
+        and proyecto.camara.modo_calculo == "termodinamico"
+    )
+
+    if horizonte_disponible:
+        st.subheader("Modo de cálculo")
+        modo_p7 = st.radio(
+            "¿Cómo evaluamos el prediseño completo?",
+            options=[
+                "Transitorio (horizonte de P4)",
+                "Constantes representativas",
+            ],
+            index=0,
+            horizontal=True,
+            help=(
+                "Transitorio: usa las forzantes horarias con las que corriste "
+                "el motor termodinámico de cámara (P4), suma el auxiliar paso "
+                "a paso y reporta resultados integrados sobre el horizonte.\n\n"
+                "Constantes: condiciones representativas escalares — un punto "
+                "de diseño único."
+            ),
+        )
+    else:
+        modo_p7 = "Constantes representativas"
+        if proyecto.camara.modo_calculo == "termodinamico":
+            st.info(
+                "ℹ️ Para activar el **modo transitorio** corré primero la cámara "
+                "en P4 con forzantes 'Día sintético' o 'Día real'. El horizonte "
+                "se va a propagar automáticamente acá."
+            )
+
+    # ===========================================================================
+    # RAMA: Transitorio (mejora 19)
+    # ===========================================================================
+    if modo_p7 == "Transitorio (horizonte de P4)":
+        n_dias_hor = int(horizonte_meta.get("n_dias", 1))
+        modo_fz_label = str(horizonte_meta.get("modo_forzantes", "sintético"))
+        horizonte_h = float(fz_horizonte.t_s[-1]) / 3600.0
+
+        st.subheader("Horizonte propagado de cámara")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Horizonte", f"{n_dias_hor} día(s)")
+        c2.metric("Duración", f"{horizonte_h:.1f} h")
+        c3.metric("Forzantes", modo_fz_label)
+        st.caption(
+            "Las forzantes T_amb(t), T_sal_col(t), v_viento(t), I_g(t), ω(t) "
+            "vienen de P4 exactamente como las simulaste. Si configuraste un "
+            "**Auxiliar (P5)**, se aplica paso a paso a la T_ent de cámara "
+            "antes de re-correr el motor termodinámico."
+        )
+
+        st.divider()
+        calcular_tr = st.button(
+            "▶ Calcular pipeline transitoria",
+            type="primary", key="p7_btn_calc_tr",
+        )
+        if calcular_tr:
+            with st.spinner("Corriendo auxiliar(t) + cámara TD + motor..."):
+                res_tr: ResultadosCompletosTransitorio = calcular_todo_transitorio(
+                    proyecto, forzantes_base=fz_horizonte, n_dias=n_dias_hor,
+                )
+            st.session_state["p7_resultados_tr"] = res_tr
+
+        if "p7_resultados_tr" not in st.session_state:
+            st.info("ℹ️ Presioná **Calcular** para evaluar la pipeline transitoria.")
+            return
+
+        res_tr = st.session_state["p7_resultados_tr"]
+        _render_resultados_transitorios(res_tr, proyecto)
+        return    # no caer en el flujo de constantes representativas
 
     # -----------------------------------------------------------------------
     # Condiciones de operación representativas
@@ -495,8 +743,7 @@ def render() -> None:
             X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
             prod_id = proyecto.camara.carga_producto.producto_id
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
-            st.pyplot(fig_td)
-            plt.close(fig_td)
+            st.plotly_chart(fig_td, use_container_width=True)
             st.caption(
                 "ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el "
                 "caudal de aire es el término dominante en el balance energético — "
@@ -524,8 +771,7 @@ def render() -> None:
                 )
 
             fig_dry = _fig_drying_curve(cam)
-            st.pyplot(fig_dry)
-            plt.close(fig_dry)
+            st.plotly_chart(fig_dry, use_container_width=True)
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
@@ -567,8 +813,7 @@ def render() -> None:
 
         fig_bal = _fig_sankey_simplificado(res)
         if fig_bal:
-            st.pyplot(fig_bal)
-            plt.close(fig_bal)
+            st.plotly_chart(fig_bal, use_container_width=True)
 
     # --- Resumen del ciclo ---
     st.subheader("Resumen del ciclo de secado")
@@ -607,12 +852,15 @@ def render() -> None:
                 ("Auxiliar — ΔT [°C]", f"{aux.delta_T_K:.1f}"),
                 ("Auxiliar — Q efectivo [W]", f"{aux.Q_efectivo_W:.0f}"),
             ]
-        if res.camara:
+        if res.camara is not None:
             cam = res.camara
             t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(cam)
+            T_op_str = (
+                f"{kelvin_a_celsius(res.T_entrada_camara_K):.1f}"
+                if res.T_entrada_camara_K else "—"
+            )
             filas += [
-                ("Cámara — T operación [°C]",
-                 f"{kelvin_a_celsius(res.T_entrada_camara_K):.1f}"),
+                ("Cámara — T operación [°C]", T_op_str),
                 ("Cámara — Tiempo secado [h]",
                  f"{t_h_cam:.2f}" if t_h_cam is not None else "no convergió"),
                 ("Cámara — Agua evaporada [kg]", f"{masa_cam:.3f}"),

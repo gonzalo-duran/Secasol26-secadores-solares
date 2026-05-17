@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from calculos.balance_global import (
     ResultadosCompletos,
+    armar_forzantes_aire,
     calcular_todo,
+    construir_serie_sintetica_dia_tipo,
     verificar_coherencia_proyecto,
 )
+from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from calculos.psicrometria import humedad_absoluta
+from core.camara import ForzantesAire
 from core.auxiliar import Auxiliar, ModoOperacionAuxiliar, TipoAuxiliar
 from core.camara import (
     Camara, CargaProducto, ConfiguracionBandejas, ConfiguracionFlujo,
@@ -409,3 +415,214 @@ class TestModoTermodinamico:
         # Pero la masa de producto seco SÍ se calcula (no depende de t_secado).
         assert res.masa_producto_seco_kg is not None
         assert res.masa_producto_seco_kg > 0
+
+
+# ===========================================================================
+# Fase 3: construir_serie_sintetica_dia_tipo + wire-up forzantes_aire
+# ===========================================================================
+
+
+class TestSerieSinteticaDiaTipo:
+    """Generador de forzantes senoidales día/noche."""
+
+    def test_estructura_basica_24h_un_dia(self):
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=323.15,
+            T_sal_col_amplitud_K=15.0,
+            omega_amb=0.008,
+            m_dot_aire_seco_kg_s=0.05,
+        )
+        assert isinstance(fz, ForzantesAire)
+        assert len(fz.t_s) == 24
+        assert fz.t_s[0] == 0.0
+        assert fz.t_s[-1] == 23 * 3600.0
+
+    def test_T_pico_al_mediodia(self):
+        """Por default el pico está a las 12 h."""
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=320.0,
+            T_sal_col_amplitud_K=20.0,
+            omega_amb=0.008,
+            m_dot_aire_seco_kg_s=0.05,
+            hora_pico=12.0,
+        )
+        idx_max = int(np.argmax(fz.T_ent_K))
+        assert idx_max == 12
+
+    def test_T_col_no_inferior_a_T_amb(self):
+        """El colector no enfría el aire por debajo del ambiente (clamp)."""
+        # Caso extremo: amplitud T_col muy alta llevaría T_col < T_amb por la noche
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=305.0,        # cerca del ambiente
+            T_sal_col_amplitud_K=30.0,         # amplitud muy grande
+            T_amb_promedio_K=295.0,
+            T_amb_amplitud_K=5.0,
+            omega_amb=0.008,
+            m_dot_aire_seco_kg_s=0.05,
+        )
+        # Tras el clamp, T_ent ≥ T_amb hora a hora
+        assert np.all(fz.T_ent_K >= fz.T_amb_K - 1e-9)
+
+    def test_multi_dia_replica(self):
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=323.15,
+            T_sal_col_amplitud_K=15.0,
+            omega_amb=0.008,
+            m_dot_aire_seco_kg_s=0.05,
+            n_dias=3,
+        )
+        assert len(fz.t_s) == 72
+        # Las primeras 24 h coinciden con las últimas 24 h en T_ent (réplica exacta)
+        assert np.allclose(fz.T_ent_K[:24], fz.T_ent_K[24:48])
+        assert np.allclose(fz.T_ent_K[:24], fz.T_ent_K[48:72])
+
+
+class TestWireUpForzantes:
+    """calcular_camara acepta ForzantesAire externo en modo termodinámico."""
+
+    def _camara_minima(self):
+        """Construye una Camara mínima en modo termodinámico para los tests."""
+        return Camara(
+            geometria=GeometriaCamara(largo_m=1.2, ancho_m=0.8, alto_m=1.5),
+            bandejas=ConfiguracionBandejas(n_bandejas=5, area_bandeja_m2=0.5),
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=10.0,
+                humedad_inicial_X=4.0,
+                humedad_objetivo_X=0.20,
+                modelo_isoterma="gab",
+                modelo_capa_fina="page",
+            ),
+            modo_calculo="termodinamico",
+        )
+
+    def test_modo_termodinamico_sin_forzantes_funciona(self):
+        """Si forzantes_aire=None, el wire-up arma degeneradas (comportamiento previo)."""
+        cam = self._camara_minima()
+        res = calcular_camara(
+            cam, T_operacion_K=323.15, HR_operacion=0.30,
+            T_amb_K=293.15, t_max_s=12 * 3600.0,
+        )
+        assert isinstance(res, ResultadoMotorTermodinamico)
+        # Con forzantes degeneradas constantes, T_flujo debería ser casi constante
+        assert np.std(res.T_flujo_K) < 5.0
+
+    def test_modo_termodinamico_con_forzantes_sinteticas_modula_T_flujo(self):
+        """Con forzantes senoidales, T_flujo debe oscilar significativamente."""
+        cam = self._camara_minima()
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=323.15,
+            T_sal_col_amplitud_K=15.0,                 # ±15 K día/noche
+            omega_amb=humedad_absoluta(0.40, 295.0),
+            m_dot_aire_seco_kg_s=0.030,
+            T_amb_promedio_K=293.15,
+            T_amb_amplitud_K=5.0,
+            n_dias=2,
+        )
+        res = calcular_camara(
+            cam, T_operacion_K=323.15, HR_operacion=0.30,
+            T_amb_K=293.15, t_max_s=48 * 3600.0,
+            forzantes_aire=fz,
+        )
+        assert isinstance(res, ResultadoMotorTermodinamico)
+        # T_flujo debería oscilar siguiendo la forzante
+        assert np.std(res.T_flujo_K) > 3.0
+
+    def test_modo_capa_fina_ignora_forzantes(self):
+        """capa_fina no usa forzantes_aire; pasar no debe fallar."""
+        cam = self._camara_minima()
+        cam.modo_calculo = "capa_fina"   # cambio para este test
+        # Forzantes válidas pero el motor estático las ignora
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=323.15,
+            T_sal_col_amplitud_K=10.0,
+            omega_amb=0.008,
+            m_dot_aire_seco_kg_s=0.030,
+        )
+        # No debe lanzar
+        res = calcular_camara(
+            cam, T_operacion_K=323.15, HR_operacion=0.30,
+            forzantes_aire=fz,
+        )
+        # ResultadosCamara (estático), no ResultadoMotorTermodinamico
+        assert not isinstance(res, ResultadoMotorTermodinamico)
+
+
+class TestArmarForzantesAireYaExistente:
+    """Smoke tests para armar_forzantes_aire (ya existía, verificamos integración)."""
+
+    def test_diario_24h(self):
+        T_col = np.full(24, 323.15)
+        omega = np.full(24, 0.008)
+        fz = armar_forzantes_aire(
+            modo="diario",
+            T_salida_colector_K=T_col,
+            omega_ambiente=omega,
+            m_dot_aire_seco_kg_s=0.03,
+        )
+        assert len(fz.t_s) == 24
+
+    def test_multi_dia_replica_correctamente(self):
+        T_col = np.linspace(310.0, 330.0, 24)
+        omega = np.full(24, 0.008)
+        fz = armar_forzantes_aire(
+            modo="multi_dia", n_dias=2,
+            T_salida_colector_K=T_col,
+            omega_ambiente=omega,
+            m_dot_aire_seco_kg_s=0.03,
+        )
+        assert len(fz.t_s) == 48
+        assert np.allclose(fz.T_ent_K[:24], fz.T_ent_K[24:])
+
+
+# ===========================================================================
+# Test integral end-to-end: P3 colector + P4 cámara termodinámico multi-día
+# ===========================================================================
+
+
+class TestIntegralEndToEnd:
+    """Integración: forzantes sintéticas → motor termodinámico → trayectorias coherentes."""
+
+    def test_multi_dia_sintetico_con_secado_progresivo(self):
+        """Con día sintético senoidal de 3 días, X(t) decrece monotónicamente
+        durante las horas de operación y la trayectoria es coherente."""
+        cam = Camara(
+            geometria=GeometriaCamara(largo_m=1.2, ancho_m=0.8, alto_m=1.5),
+            bandejas=ConfiguracionBandejas(n_bandejas=5, area_bandeja_m2=0.5),
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=5.0,                # carga menor para que converja
+                humedad_inicial_X=2.0,
+                humedad_objetivo_X=0.30,
+                modelo_isoterma="gab",
+                modelo_capa_fina="page",
+            ),
+            modo_calculo="termodinamico",
+        )
+        fz = construir_serie_sintetica_dia_tipo(
+            T_sal_col_promedio_K=325.15,
+            T_sal_col_amplitud_K=15.0,
+            omega_amb=humedad_absoluta(0.40, 295.0),
+            m_dot_aire_seco_kg_s=0.030,
+            T_amb_promedio_K=295.0,
+            T_amb_amplitud_K=5.0,
+            n_dias=3,
+        )
+        res = calcular_camara(
+            cam, T_operacion_K=325.15, HR_operacion=0.30,
+            T_amb_K=295.0, t_max_s=72 * 3600.0,
+            forzantes_aire=fz,
+        )
+        # X final < X inicial (hubo secado, aunque no necesariamente alcanzó X_obj)
+        assert res.X_prod_kg_kg[-1] < cam.carga_producto.humedad_inicial_X
+        # T_flujo oscila (forzante senoidal)
+        assert np.std(res.T_flujo_K) > 2.0
+        # Series multi-día completas (al menos múltiples puntos)
+        assert len(res.t_array_s) > 10
+        # Trayectorias coherentes: sin NaN
+        assert np.all(np.isfinite(res.T_prod_K))
+        assert np.all(np.isfinite(res.X_prod_kg_kg))
+        # T_cam_int siempre <= T_flujo (pared cede calor del aire)
+        assert np.all(res.T_cam_int_K <= res.T_flujo_K + 1e-6)

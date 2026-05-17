@@ -70,7 +70,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
-from calculos.correlaciones_nusselt import calcular_h_int
+from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
 
 if TYPE_CHECKING:
     from core.colector import Colector
@@ -89,6 +89,9 @@ PR_AIRE: float = 0.703  # adim
 RHO_AIRE_REF: float = 1.093  # kg/m³ a 323 K, 101325 Pa
 
 V_VIENTO_LIMITE_MCADAMS: float = 5.0  # m/s
+
+G_ACELERACION: float = 9.81        # m/s²
+NU_AIRE: float = MU_AIRE / RHO_AIRE_REF  # m²/s — viscosidad cinemática a 323 K
 
 N_NODOS_MIN: int = 50
 TOL_FSOLVE: float = 1e-8
@@ -335,6 +338,26 @@ def _T_bot_desde_T_int(
     """
     U_ais = k_ais_W_mK / esp_ais_m
     return (U_ais * T_int_K + h_wind_W_m2K * T_amb_K) / (U_ais + h_wind_W_m2K)
+
+
+def _Ra_canal_estanco(dT_K: float, L_m: float, T_film_K: float) -> float:
+    """Número de Rayleigh para cavidad plana inclinada (canal estanco).
+
+    Ra = g·β·ΔT·L³·Pr / ν²
+
+    donde L es el alto del canal (separación entre las dos placas paralelas),
+    β = 1/T_film (gas ideal), ν = μ/ρ a 323 K.
+
+    Args:
+        dT_K: Diferencia de temperatura entre pared caliente y fría [K].
+        L_m: Alto del canal estanco [m].
+        T_film_K: Temperatura de película ≈ (T_hot + T_cold)/2 [K].
+
+    Returns:
+        Número de Rayleigh [adim]. Mínimo 0.
+    """
+    beta = 1.0 / T_film_K
+    return max(0.0, G_ACELERACION * beta * dT_K * L_m**3 * PR_AIRE / NU_AIRE**2)
 
 
 def _Re_canal(
@@ -665,11 +688,19 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
             T_g_cub = T_amb + 5.0
             estado["guess"] = np.array([T_g_cub, T_g_cub + 5.0, T_g_abs, T_g_cub + 5.0])
 
-        # Punto de partida para T_f_cs estanco: necesitamos T_cub_i y T_abs
-        # del guess actual para obtener T_f_cs analítico
+        # T_f_cs y h_int_cs del canal superior estanco se obtienen del warm-start
+        # del nodo anterior (misma estrategia que T_f_cs analítico ya existente).
         T_cub_i_guess = estado["guess"][1]
         T_abs_guess = estado["guess"][2]
         T_f_cs = 0.5 * (T_cub_i_guess + T_abs_guess)
+
+        # h_int_cs: convección natural en canal estanco superior.
+        # Pared inferior = absorbedor (caliente), pared superior = cubierta (fría)
+        # → configuración inestable → Hollands et al. (1976).
+        dT_cs = max(T_abs_guess - T_cub_i_guess, 0.1)
+        T_film_cs = 0.5 * (T_abs_guess + T_cub_i_guess)
+        Ra_cs = _Ra_canal_estanco(dT_cs, params["alto_cs_m"], T_film_cs)
+        h_int_cs = nusselt_hollands_inclinada(Ra_cs, params["theta_deg"]) * K_AIRE / params["alto_cs_m"]
 
         sol, _, ier, msg = fsolve(
             _sistema_nodo_tipos34,
@@ -682,7 +713,7 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
                 params["I_g_W_m2"],
                 params["h_wind"],
                 params["h_int_ci"],
-                params["h_int_cs"],
+                h_int_cs,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -887,11 +918,20 @@ def _reconstruir_perfiles_tipos34(
             T_g_cub = T_amb + 5.0
             guess = np.array([T_g_cub, T_g_cub + 5.0, T_g_abs, T_g_cub + 5.0])
 
-        # Despeje analítico del canal estanco
+        # T_f_estanco y h_int_estanco desde el warm-start del nodo anterior.
         if canal_activo == "inferior":
+            # Tipo 3: canal superior estanco, absorbedor (caliente) abajo → Hollands
             T_f_est = 0.5 * (guess[1] + guess[2])  # (T_cub_i + T_abs)/2
+            dT_est = max(guess[2] - guess[1], 0.1)
+            T_film_est = 0.5 * (guess[2] + guess[1])
+            Ra_est = _Ra_canal_estanco(dT_est, params["alto_cs_m"], T_film_est)
+            h_int_estanco = nusselt_hollands_inclinada(Ra_est, params["theta_deg"]) * K_AIRE / params["alto_cs_m"]
+            h_int_activo = params["h_int_ci"]
         else:
+            # Tipo 4: canal inferior estanco, absorbedor (caliente) arriba → Nu=1
             T_f_est = 0.5 * (guess[2] + guess[3])  # (T_abs + T_int)/2
+            h_int_estanco = params["h_int_ci"]  # K_AIRE / alto_ci_m, precomputado
+            h_int_activo = params["h_int_cs"]
 
         sol = fsolve(
             _sistema_nodo_tipos34,
@@ -903,8 +943,8 @@ def _reconstruir_perfiles_tipos34(
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int_ci"] if canal_activo == "inferior" else params["h_int_cs"],
-                params["h_int_cs"] if canal_activo == "inferior" else params["h_int_ci"],
+                h_int_activo,
+                h_int_estanco,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -1210,6 +1250,7 @@ def calcular_colector_tipo3(
     alto_cs_m: float | None = None,
     alto_ci_m: float | None = None,
     correlacion_nusselt: str | None = None,
+    theta_deg: float = 45.0,
 ) -> ResultadosColectorTipo3:
     """Calcula el comportamiento térmico del colector solar Tipo 3.
 
@@ -1219,7 +1260,12 @@ def calcular_colector_tipo3(
 
     Las alturas de cada canal pueden especificarse independientemente
     (§15.11). Caso de uso típico: ``alto_cs_m`` pequeño (canal superior
-    estanco angosto) para inhibir convección y reducir pérdidas al ambiente.
+    estanco angosto) para inhibir convección natural y reducir pérdidas.
+
+    El canal superior estanco usa la correlación de Hollands et al. (1976)
+    para convección natural entre placas inclinadas (absorbedor caliente
+    abajo, cubierta fría arriba). El coeficiente h_int_cs se recalcula
+    en cada nodo usando el warm-start de temperaturas del nodo previo.
 
     Args:
         colector: Instancia de Colector del core.
@@ -1233,6 +1279,9 @@ def calcular_colector_tipo3(
         alto_ci_m: Altura del canal inferior (activo) [m]. Si es None, usa
             ``colector.unidad.espaciado_m``.
         correlacion_nusselt: Correlación Nusselt canal activo (None=auto).
+        theta_deg: Inclinación del colector desde la horizontal [°].
+            Usado por la correlación de Hollands en el canal estanco.
+            Default 45°.
 
     Returns:
         ResultadosColectorTipo3.
@@ -1292,19 +1341,6 @@ def calcular_colector_tipo3(
     )
     advertencias.extend(adv_nu)
 
-    # Canal superior estanco: h_int_cs para el despeje analítico
-    # (Re en estanco es bajo — convección natural o mínima; usamos misma correlación)
-    Dh_cs = _diametro_hidraulico_m(alto_cs_m, W_m)
-    h_int_cs, _, _, _, _ = calcular_h_int(
-        Re=500.0,
-        Pr=PR_AIRE,
-        Dh_m=Dh_cs,
-        L_m=L_total_m,
-        k_fluido_W_mK=K_AIRE,
-        pared="una_pared",
-        modo="forzado",
-    )
-
     mat = _extraer_params_materiales(colector)
 
     params = {
@@ -1313,7 +1349,6 @@ def calcular_colector_tipo3(
         "I_g_W_m2": I_g_W_m2,
         "h_wind": h_wind,
         "h_int_ci": h_int_ci,
-        "h_int_cs": h_int_cs,
         "k_cub": mat["k_cub"],
         "esp_cub_m": mat["esp_cub_m"],
         "em_cub": mat["em_cub"],
@@ -1326,6 +1361,8 @@ def calcular_colector_tipo3(
         "W_m": W_m,
         "W_abs_m": W_abs_m,
         "m_punto_ci_kgs": m_ci_rama,
+        "alto_cs_m": alto_cs_m,
+        "theta_deg": theta_deg,
     }
 
     rhs_fn, log_nc = _construir_rhs_tipo3(params)
@@ -1342,6 +1379,12 @@ def calcular_colector_tipo3(
     Q_util_W = m_ci_total * CP_AIRE * (T_salida - T_entrada_K)
     Q_incidente_W = I_g_W_m2 * mat["tau_cub"] * W_m * L_total_m * banco.n_paralelo
     eta_termica = Q_util_W / Q_incidente_W if Q_incidente_W > 0.0 else 0.0
+
+    # h_int_cs representativo para el reporte (promedio sobre el colector)
+    dT_cs_rep = float(np.mean(np.maximum(T_abs - T_cub_i, 0.1)))
+    T_film_rep = float(np.mean(0.5 * (T_abs + T_cub_i)))
+    Ra_rep = _Ra_canal_estanco(dT_cs_rep, alto_cs_m, T_film_rep)
+    h_int_cs = nusselt_hollands_inclinada(Ra_rep, theta_deg) * K_AIRE / alto_cs_m
 
     return ResultadosColectorTipo3(
         x_m=x_arr,
@@ -1457,17 +1500,9 @@ def calcular_colector_tipo4(
     )
     advertencias.extend(adv_nu)
 
-    # Canal inferior estanco
-    Dh_ci = _diametro_hidraulico_m(alto_ci_m, W_m)
-    h_int_ci, _, _, _, _ = calcular_h_int(
-        Re=500.0,
-        Pr=PR_AIRE,
-        Dh_m=Dh_ci,
-        L_m=L_total_m,
-        k_fluido_W_mK=K_AIRE,
-        pared="una_pared",
-        modo="forzado",
-    )
+    # Canal inferior estanco: absorbedor caliente arriba, fondo frío abajo.
+    # Configuración estable (estratificación estable) → convección suprimida → Nu = 1.
+    h_int_ci = K_AIRE / alto_ci_m
 
     mat = _extraer_params_materiales(colector)
 
