@@ -372,69 +372,441 @@ def _grafica_secado_termodinamico(
 # Generador de texto de configuración
 # ---------------------------------------------------------------------------
 
-def _texto_config_camara(cam: "Camara") -> str:
+def _resumen_resultado_termodinamico(res) -> dict:
+    """Extrae métricas escalares del resultado del motor termodinámico."""
+    import numpy as np
+    n = len(res.t_array_s) if hasattr(res, "t_array_s") else 0
+    out = {
+        "status": res.status,
+        "t_secado_s": res.t_secado_s,
+        "t_secado_h": res.t_secado_s / 3600.0 if res.t_secado_s else None,
+        "masa_evaporada_total_kg": float(res.masa_evaporada_total_kg),
+        "T_max_alcanzada_K": float(res.T_max_alcanzada_K),
+        "T_max_alcanzada_C": float(res.T_max_alcanzada_K) - 273.15,
+        "energia_rad_total_MJ": float(res.energia_rad_total_J) / 1e6,
+        "horas_clipeo_nocturno_h": float(res.horas_clipeo_nocturno_s) / 3600.0,
+        "horas_HR_alta_h": float(res.horas_HR_alta_s) / 3600.0,
+        "advertencias": list(res.advertencias),
+        "n_puntos_simulacion": n,
+    }
+    if n > 0:
+        out["X_prod_final"] = float(res.X_prod_kg_kg[-1])
+        out["X_prod_inicial"] = float(res.X_prod_kg_kg[0])
+        out["T_prod_final_K"] = float(res.T_prod_K[-1])
+        out["T_prod_final_C"] = out["T_prod_final_K"] - 273.15
+        out["T_flujo_max_C"] = float(np.max(res.T_flujo_K)) - 273.15
+        out["HR_max"] = float(np.max(res.HR_flujo))
+        out["t_simulacion_h"] = float(res.t_array_s[-1]) / 3600.0
+    return out
+
+
+def _resumen_resultado_capa_fina(res) -> dict:
+    """Extrae métricas del resultado de capa fina estático."""
+    return {
+        "X_eq_kg_kg": float(res.X_eq_kg_kg),
+        "fuente_X_eq": res.fuente_X_eq,
+        "modelo_usado": res.modelo_usado,
+        "t_secado_s": float(res.t_secado_s),
+        "t_secado_h": float(res.t_secado_s) / 3600.0,
+        "MR_obj": float(res.MR_obj),
+        "masa_agua_extraida_kg": float(res.masa_agua_extraida_kg),
+        "convergencia_ok": bool(res.convergencia_ok),
+        "mensaje_convergencia": res.mensaje_convergencia,
+        "advertencias": list(res.advertencias),
+        "omega_entrada_kg_kg": res.omega_entrada_kg_kg,
+        "omega_salida_kg_kg": res.omega_salida_kg_kg,
+        "HR_salida": res.HR_salida,
+        "HR_media": res.HR_media,
+        "X_eq_corregido_kg_kg": res.X_eq_corregido_kg_kg,
+        "t_secado_corregido_s": res.t_secado_corregido_s,
+        "t_secado_corregido_h": (
+            res.t_secado_corregido_s / 3600.0
+            if res.t_secado_corregido_s is not None else None
+        ),
+    }
+
+
+def _obtener_resultado_camara(session_state) -> tuple[str | None, object | None, dict | None]:
+    """Devuelve (tipo, resultado, meta) extraído de session_state.
+
+    tipo ∈ {"termodinamico_horizonte", "capa_fina", None}.
+    """
+    horizonte = session_state.get("p4_horizonte_resultado")
+    if horizonte is not None:
+        return "termodinamico_horizonte", horizonte, session_state.get("p4_horizonte_meta")
+    estatico = session_state.get("p4_resultado_dinamico")
+    if estatico is not None:
+        return "capa_fina", estatico, None
+    return None, None, None
+
+
+def _texto_config_camara(cam: "Camara", session_state=None) -> str:
+    """Genera el snapshot .txt de la cámara con resultados si están en session."""
     from datetime import date
     g = cam.geometria
     cn = cam.construccion
     b = cam.bandejas
     f = cam.flujo
     c = cam.carga_producto
+    from core import catalogo as _cat
+    datos_prod = _cat.PRODUCTOS.get(c.producto_id) or {}
+    props_prod = datos_prod.get("propiedades_basicas") or {}
+
+    sep = "=" * 60
     lines = [
-        "=== CONFIGURACIÓN DE LA CÁMARA DE SECADO ===",
-        f"Fecha: {date.today()}",
+        sep,
+        "        CONFIGURACIÓN DE LA CÁMARA DE SECADO",
+        sep,
+        f"Fecha de exportación: {date.today()}",
+        f"Motor numérico       : {cam.modo_calculo}",
         "",
         "GEOMETRÍA",
-        f"  Largo : {g.largo_m:.2f} m",
-        f"  Ancho : {g.ancho_m:.2f} m",
-        f"  Alto  : {g.alto_m:.2f} m",
+        f"  Largo : {g.largo_m:.3f} m",
+        f"  Ancho : {g.ancho_m:.3f} m",
+        f"  Alto  : {g.alto_m:.3f} m",
+        f"  Volumen interno   : {g.largo_m * g.ancho_m * g.alto_m:.3f} m³",
         "",
         "CONSTRUCCIÓN",
-        f"  Techo translúcido : "
-        + (cn.cubierta_translucida_id or "(opaca)"),
+        f"  Techo translúcido : " + (cn.cubierta_translucida_id or "(opaca)"),
     ]
     if cn.cubierta_translucida_id is not None and cn.A_rad_m2 is not None:
-        lines.append(f"  A_rad            : {cn.A_rad_m2:.3f} m²")
+        lines.append(f"  A_rad             : {cn.A_rad_m2:.4f} m²")
     lines.append(
-        f"  Pared            : {'compuesta' if cn.pared.es_compuesta else 'simple'} "
+        f"  Pared             : {'compuesta' if cn.pared.es_compuesta else 'simple'} "
         f"({len(cn.pared.capas)} capa(s))"
     )
     for i, capa in enumerate(cn.pared.capas, start=1):
         lines.append(
-            f"    Capa {i}: {capa.material_id} ({capa.catalogo}), "
-            f"e={capa.espesor_m*1000:.1f} mm, "
-            f"k={capa.conductividad_termica_W_mK:.3f} W/(m·K), "
-            f"R={capa.R_conduccion_m2K_W:.3f} m²·K/W"
+            f"    Capa {i}: id={capa.material_id} ({capa.catalogo})  "
+            f"e={capa.espesor_m * 1000:.2f} mm  "
+            f"k={capa.conductividad_termica_W_mK:.3f} W/(m·K)  "
+            f"R={capa.R_conduccion_m2K_W:.4f} m²·K/W"
         )
-    lines.append(f"  R_total pared    : {cn.pared.R_conduccion_m2K_W:.3f} m²·K/W")
-    lines.append(f"  U_pared (cond.)  : {cn.U_muros_W_m2K:.2f} W/(m²·K)")
-    lines.extend([
+    lines += [
+        f"  Espesor pared     : {cn.pared.espesor_total_m * 1000:.1f} mm",
+        f"  R_total pared     : {cn.pared.R_conduccion_m2K_W:.4f} m²·K/W",
+        f"  U_pared (cond.)   : {cn.U_muros_W_m2K:.3f} W/(m²·K)",
         "",
         "BANDEJAS",
-        f"  N° bandejas    : {b.n_bandejas}",
-        f"  Área c/u       : {b.area_bandeja_m2:.3f} m²",
-        f"  Espesor capa   : {b.espesor_capa_m * 100:.1f} cm",
-        f"  Separación     : {b.separacion_entre_bandejas_m * 100:.1f} cm",
+        f"  N° bandejas         : {b.n_bandejas}",
+        f"  Área c/u            : {b.area_bandeja_m2:.4f} m²",
+        f"  Área total bandejas : {b.n_bandejas * b.area_bandeja_m2:.3f} m²",
+        f"  Espesor capa        : {b.espesor_capa_m * 100:.2f} cm",
+        f"  Separación          : {b.separacion_entre_bandejas_m * 100:.2f} cm",
+        f"  Tipo malla          : {b.tipo_malla or '(no especificada)'}",
+        f"  Porosidad lecho     : {b.porosidad_lecho:.3f}",
+        f"  Esfericidad         : {b.esfericidad:.3f}",
+    ]
+    if b.diametro_eq_particula_m is not None:
+        lines.append(f"  d_eq partícula      : {b.diametro_eq_particula_m * 1000:.2f} mm")
+    lines += [
         "",
         "PRODUCTO Y CARGA",
-        f"  Producto       : {c.producto_id}",
-        f"  Masa total     : {c.masa_total_kg:.1f} kg",
-        f"  Modelo capa fina: {c.modelo_capa_fina}",
-        f"  Modelo isoterma : {c.modelo_isoterma}",
-        f"  T_prod inicial : "
+        f"  Producto           : {c.producto_id}",
+        f"  Categoría          : {datos_prod.get('categoria', '—')}",
+        f"  Masa total         : {c.masa_total_kg:.2f} kg",
+        f"  X inicial          : {c.humedad_inicial_X:.4f} kg/kg ms",
+        f"  X objetivo         : {c.humedad_objetivo_X:.4f} kg/kg ms",
+        f"  Modelo capa fina   : {c.modelo_capa_fina}",
+        f"  Modelo isoterma    : {c.modelo_isoterma}",
+        "  T_prod inicial     : "
         + (
             f"{c.T_prod_inicial_K - 273.15:.1f} °C (explícita)"
             if c.T_prod_inicial_K is not None
             else "T_amb (fallback)"
         ),
+    ]
+    if props_prod:
+        lines += ["", "  Propiedades básicas del producto (catálogo):"]
+        for k, v in props_prod.items():
+            lines.append(f"    {k}: {v}")
+    lines += [
         "",
         "FLUJO",
-        f"  Caudal másico  : {f.caudal_masico_kg_s:.4f} kg/s",
-        f"  Dirección      : {f.direccion_flujo.value}",
-        f"  Recirculación  : {f.fraccion_recirculacion:.0%}",
-        "",
-        f"MOTOR NUMÉRICO  : {cam.modo_calculo}",
-    ])
+        f"  Caudal másico      : {f.caudal_masico_kg_s:.5f} kg/s",
+        f"  Dirección          : {f.direccion_flujo.value}",
+        f"  Recirculación      : {f.fraccion_recirculacion:.0%}",
+        "  HR entrada         : "
+        + (
+            f"{f.HR_entrada_fraccion:.3f}"
+            if f.HR_entrada_fraccion is not None
+            else "(no especificada, fallback)"
+        ),
+    ]
+
+    # Advertencias
+    from core.camara import advertencias_camara as _advs_cam
+    advs = _advs_cam(cam)
+    lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
+    if not advs:
+        lines.append("  (ninguna)")
+    else:
+        for a in advs:
+            lines.append(f"  [{a.severidad.value}] {a.codigo}: {a.mensaje}")
+
+    # Resultados
+    lines += ["", sep, "  RESULTADOS DE SIMULACIÓN", sep]
+    tipo_res, res, meta = _obtener_resultado_camara(
+        session_state if session_state is not None else {}
+    )
+    if res is None:
+        lines.append("  ⚠ Cálculo no ejecutado. Volver a P4 y presionar")
+        lines.append("    'Calcular cámara' para incluirlos.")
+    elif tipo_res == "termodinamico_horizonte":
+        resumen = _resumen_resultado_termodinamico(res)
+        lines.append("  Modo               : termodinámico (horizonte)")
+        if meta:
+            lines.append(f"  Horizonte          : {meta.get('n_dias')} día(s), "
+                          f"forzantes={meta.get('modo_forzantes')}")
+        lines += [
+            f"  Status             : {resumen['status']}",
+            f"  Tiempo simulación  : {resumen.get('t_simulacion_h', 0):.2f} h",
+            f"  Tiempo de secado   : "
+            + (f"{resumen['t_secado_h']:.2f} h" if resumen['t_secado_h']
+               else "no alcanzado"),
+            f"  Agua evaporada     : {resumen['masa_evaporada_total_kg']:.3f} kg",
+            f"  X inicial          : {resumen.get('X_prod_inicial', 0):.4f} kg/kg",
+            f"  X final            : {resumen.get('X_prod_final', 0):.4f} kg/kg",
+            f"  T producto final   : {resumen.get('T_prod_final_C', 0):.1f} °C",
+            f"  T producto máx     : {resumen['T_max_alcanzada_C']:.1f} °C",
+            f"  T flujo máx        : {resumen.get('T_flujo_max_C', 0):.1f} °C",
+            f"  HR máx en cámara   : {resumen.get('HR_max', 0):.3f}",
+            f"  E radiativa total  : {resumen['energia_rad_total_MJ']:.4f} MJ",
+            f"  Horas clipeo noct. : {resumen['horas_clipeo_nocturno_h']:.2f} h",
+            f"  Horas HR > 0.95    : {resumen['horas_HR_alta_h']:.2f} h",
+        ]
+        if resumen["advertencias"]:
+            lines.append("  Advertencias cálculo:")
+            for adv in resumen["advertencias"]:
+                lines.append(f"    - {adv}")
+    elif tipo_res == "capa_fina":
+        resumen = _resumen_resultado_capa_fina(res)
+        lines += [
+            "  Modo               : capa fina (estático)",
+            f"  Modelo aplicado    : {resumen['modelo_usado']}",
+            f"  X_eq               : {resumen['X_eq_kg_kg']:.4f} kg/kg ms",
+            f"  Fuente X_eq        : {resumen['fuente_X_eq']}",
+            f"  Tiempo de secado   : {resumen['t_secado_h']:.2f} h",
+            f"  Agua extraída      : {resumen['masa_agua_extraida_kg']:.3f} kg",
+            f"  MR objetivo        : {resumen['MR_obj']:.4f}",
+            f"  Convergencia       : "
+            + ("OK" if resumen['convergencia_ok'] else
+               f"FALLA — {resumen['mensaje_convergencia']}"),
+        ]
+        if resumen["HR_media"] is not None:
+            lines += [
+                f"  HR media (psicro)  : {resumen['HR_media']:.3f}",
+                f"  X_eq corregido     : "
+                + (f"{resumen['X_eq_corregido_kg_kg']:.4f} kg/kg"
+                   if resumen['X_eq_corregido_kg_kg'] is not None else "—"),
+                f"  t_secado corregido : "
+                + (f"{resumen['t_secado_corregido_h']:.2f} h"
+                   if resumen['t_secado_corregido_h'] is not None else "—"),
+            ]
+        if resumen["advertencias"]:
+            lines.append("  Advertencias cálculo:")
+            for adv in resumen["advertencias"]:
+                lines.append(f"    - {adv}")
+    lines.append("")
     return "\n".join(lines)
+
+
+def _from_json_camara(data: dict) -> "Camara":
+    """Reconstruye una ``Camara`` desde un dict producido por
+    ``_json_config_camara``.
+
+    Raises:
+        KeyError/ValueError/TypeError: si el JSON está corrupto o un id de
+            material/producto no existe en el catálogo actual.
+    """
+    g_d = data.get("geometria") or {}
+    cn_d = data.get("construccion") or {}
+    b_d = data.get("bandejas") or {}
+    c_d = data.get("carga_producto") or {}
+    f_d = data.get("flujo") or {}
+
+    geometria = GeometriaCamara(
+        largo_m=float(g_d["largo_m"]),
+        ancho_m=float(g_d["ancho_m"]),
+        alto_m=float(g_d["alto_m"]),
+    )
+
+    pared_d = cn_d.get("pared") or {}
+    capas_d = pared_d.get("capas") or []
+    capas = [
+        CapaPared(
+            material_id=c["material_id"],
+            espesor_m=float(c["espesor_m"]),
+            catalogo=c["catalogo"],
+        )
+        for c in capas_d
+    ]
+    pared = ParedCamara(capas=capas)
+    construccion = ConstruccionCamara(
+        cubierta_translucida_id=cn_d.get("cubierta_translucida_id"),
+        A_rad_m2=(
+            float(cn_d["A_rad_m2"]) if cn_d.get("A_rad_m2") is not None else None
+        ),
+        pared=pared,
+    )
+
+    bandejas = ConfiguracionBandejas(
+        n_bandejas=int(b_d["n_bandejas"]),
+        area_bandeja_m2=float(b_d["area_bandeja_m2"]),
+        espesor_capa_m=float(b_d["espesor_capa_m"]),
+        separacion_entre_bandejas_m=float(b_d["separacion_entre_bandejas_m"]),
+        tipo_malla=b_d.get("tipo_malla"),
+        porosidad_lecho=float(b_d.get("porosidad_lecho", 0.45)),
+        diametro_eq_particula_m=(
+            float(b_d["diametro_eq_particula_m"])
+            if b_d.get("diametro_eq_particula_m") is not None else None
+        ),
+        esfericidad=float(b_d.get("esfericidad", 0.60)),
+    )
+
+    carga = CargaProducto(
+        producto_id=c_d["producto_id"],
+        masa_total_kg=float(c_d["masa_total_kg"]),
+        humedad_inicial_X=float(c_d["humedad_inicial_X"]),
+        humedad_objetivo_X=float(c_d["humedad_objetivo_X"]),
+        modelo_capa_fina=c_d["modelo_capa_fina"],
+        modelo_isoterma=c_d["modelo_isoterma"],
+        T_prod_inicial_K=(
+            float(c_d["T_prod_inicial_K"])
+            if c_d.get("T_prod_inicial_K") is not None else None
+        ),
+    )
+
+    flujo = ConfiguracionFlujo(
+        caudal_masico_kg_s=float(f_d["caudal_masico_kg_s"]),
+        fraccion_recirculacion=float(f_d.get("fraccion_recirculacion", 0.0)),
+        direccion_flujo=DireccionFlujo(f_d.get("direccion_flujo", "HORIZONTAL")),
+        HR_entrada_fraccion=(
+            float(f_d["HR_entrada_fraccion"])
+            if f_d.get("HR_entrada_fraccion") is not None else None
+        ),
+    )
+
+    return Camara(
+        geometria=geometria,
+        construccion=construccion,
+        bandejas=bandejas,
+        flujo=flujo,
+        carga_producto=carga,
+        modo_calculo=data.get("modo_calculo", "capa_fina"),
+    )
+
+
+def _json_config_camara(cam: "Camara", session_state=None) -> dict:
+    """Snapshot reconstruible (dict) de la cámara con resultados."""
+    from datetime import date
+    from core import catalogo as _cat
+    from core.camara import advertencias_camara as _advs_cam
+
+    g = cam.geometria
+    cn = cam.construccion
+    b = cam.bandejas
+    f = cam.flujo
+    c = cam.carga_producto
+    datos_prod = _cat.PRODUCTOS.get(c.producto_id) or {}
+
+    snapshot: dict = {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "camara",
+        "modo_calculo": cam.modo_calculo,
+        "geometria": {
+            "largo_m": g.largo_m,
+            "ancho_m": g.ancho_m,
+            "alto_m": g.alto_m,
+            "volumen_m3": g.largo_m * g.ancho_m * g.alto_m,
+        },
+        "construccion": {
+            "cubierta_translucida_id": cn.cubierta_translucida_id,
+            "cubierta_translucida_props": (
+                dict(_cat.CUBIERTAS.get(cn.cubierta_translucida_id, {}))
+                if cn.cubierta_translucida_id else None
+            ),
+            "A_rad_m2": cn.A_rad_m2,
+            "pared": {
+                "es_compuesta": cn.pared.es_compuesta,
+                "espesor_total_m": cn.pared.espesor_total_m,
+                "R_total_m2K_W": cn.pared.R_conduccion_m2K_W,
+                "U_pared_W_m2K": cn.U_muros_W_m2K,
+                "capas": [
+                    {
+                        "material_id": capa.material_id,
+                        "catalogo": capa.catalogo,
+                        "espesor_m": capa.espesor_m,
+                        "conductividad_W_mK": capa.conductividad_termica_W_mK,
+                        "R_m2K_W": capa.R_conduccion_m2K_W,
+                    }
+                    for capa in cn.pared.capas
+                ],
+            },
+        },
+        "bandejas": {
+            "n_bandejas": b.n_bandejas,
+            "area_bandeja_m2": b.area_bandeja_m2,
+            "area_total_bandejas_m2": b.n_bandejas * b.area_bandeja_m2,
+            "espesor_capa_m": b.espesor_capa_m,
+            "separacion_entre_bandejas_m": b.separacion_entre_bandejas_m,
+            "tipo_malla": b.tipo_malla,
+            "porosidad_lecho": b.porosidad_lecho,
+            "diametro_eq_particula_m": b.diametro_eq_particula_m,
+            "esfericidad": b.esfericidad,
+        },
+        "carga_producto": {
+            "producto_id": c.producto_id,
+            "categoria": datos_prod.get("categoria"),
+            "masa_total_kg": c.masa_total_kg,
+            "humedad_inicial_X": c.humedad_inicial_X,
+            "humedad_objetivo_X": c.humedad_objetivo_X,
+            "modelo_capa_fina": c.modelo_capa_fina,
+            "modelo_isoterma": c.modelo_isoterma,
+            "T_prod_inicial_K": c.T_prod_inicial_K,
+            "propiedades_basicas_catalogo": datos_prod.get("propiedades_basicas") or {},
+        },
+        "flujo": {
+            "caudal_masico_kg_s": f.caudal_masico_kg_s,
+            "direccion_flujo": f.direccion_flujo.value,
+            "fraccion_recirculacion": f.fraccion_recirculacion,
+            "HR_entrada_fraccion": f.HR_entrada_fraccion,
+        },
+        "advertencias_diseno": [
+            {
+                "codigo": a.codigo,
+                "severidad": a.severidad.value,
+                "mensaje": a.mensaje,
+                "campo": a.campo,
+                "sugerencia": a.sugerencia,
+                "contexto": a.contexto,
+            }
+            for a in _advs_cam(cam)
+        ],
+    }
+
+    tipo_res, res, meta = _obtener_resultado_camara(
+        session_state if session_state is not None else {}
+    )
+    if res is None:
+        snapshot["resultados"] = {
+            "ejecutado": False,
+            "nota": "Cálculo no ejecutado en esta sesión.",
+        }
+    elif tipo_res == "termodinamico_horizonte":
+        snapshot["resultados"] = {
+            "ejecutado": True,
+            "tipo": "termodinamico_horizonte",
+            "meta_horizonte": meta,
+            "resumen": _resumen_resultado_termodinamico(res),
+        }
+    elif tipo_res == "capa_fina":
+        snapshot["resultados"] = {
+            "ejecutado": True,
+            "tipo": "capa_fina",
+            "resumen": _resumen_resultado_capa_fina(res),
+        }
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -460,6 +832,42 @@ def render() -> None:
             "El techo translúcido es obligatorio (única fuente de energía) "
             "y la temperatura de operación es la del aire ambiente."
         )
+
+    # -----------------------------------------------------------------------
+    # Cargar configuración guardada (.json)
+    # -----------------------------------------------------------------------
+    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+        from ui.componentes.serializacion import (
+            limpiar_session_state_prefijo,
+            parsear_json_seccion,
+        )
+        archivo = st.file_uploader(
+            "Subí un archivo .json de la cámara previamente guardado",
+            type=["json"], key="p4_cargar_json",
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "camara")
+            if err:
+                st.error(f"❌ {err}")
+            else:
+                try:
+                    cam_cargada = _from_json_camara(data)
+                except (KeyError, ValueError, TypeError) as exc:
+                    st.error(f"❌ Error reconstruyendo la cámara: {exc}")
+                else:
+                    proyecto.camara = cam_cargada
+                    # Limpiar widgets + resultados viejos de la cámara
+                    # y del horizonte que dependa de ella.
+                    n_borr = limpiar_session_state_prefijo(
+                        st.session_state, "p4_"
+                    )
+                    limpiar_session_state_prefijo(st.session_state, "cam_")
+                    st.session_state.pop("p4_cargar_json", None)
+                    st.success(
+                        f"✅ Cámara cargada desde JSON "
+                        f"(se reiniciaron {n_borr} valores de la sesión)."
+                    )
+                    st.rerun()
 
     # -----------------------------------------------------------------------
     # Sección A: Producto
@@ -1304,7 +1712,7 @@ def render() -> None:
                 )
 
             fig = _grafica_secado_termodinamico(res, X_obj, prod_id)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             with st.expander(
                 "ℹ️ Sobre la forma de la curva de ṁ_w (modelo difusivo)",
@@ -1371,7 +1779,7 @@ def render() -> None:
                 st.warning(f"⚠️ {res.mensaje_convergencia}")
 
             fig = _grafica_curva_secado(res, X_ini, X_obj, prod_id)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
         # Resumen compacto
         with st.expander("Resumen de la configuración"):
@@ -1399,10 +1807,21 @@ def render() -> None:
     # --- Guardar configuración ---
     if proyecto.camara is not None:
         st.divider()
-        st.download_button(
-            "Guardar configuración de la cámara (.txt)",
-            data=_texto_config_camara(proyecto.camara),
-            file_name="config_camara.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
+        from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+        col_txt, col_json = st.columns(2)
+        with col_txt:
+            st.download_button(
+                "Guardar configuración de la cámara (.txt)",
+                data=_texto_config_camara(proyecto.camara, st.session_state),
+                file_name=nombre_archivo_descarga(proyecto, "camara", "txt"),
+                mime="text/plain",
+                width="stretch",
+            )
+        with col_json:
+            st.download_button(
+                "Guardar configuración de la cámara (.json)",
+                data=dump_json(_json_config_camara(proyecto.camara, st.session_state)),
+                file_name=nombre_archivo_descarga(proyecto, "camara", "json"),
+                mime="application/json",
+                width="stretch",
+            )

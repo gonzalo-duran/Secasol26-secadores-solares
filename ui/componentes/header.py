@@ -5,7 +5,7 @@ Oculta el toolbar nativo de Streamlit (espacio vacío con enlace de deploy).
 
 Ubicación en el repo: ui/componentes/header.py
 
-Uso en app.py::
+Uso en Secasol.py::
 
     from ui.componentes.header import render_header
 
@@ -85,7 +85,7 @@ _HTML_TITULO = """
 def render_header() -> None:
     """Renderiza el header institucional de Secasol26.
 
-    Debe llamarse en app.py inmediatamente después de st.set_page_config()
+    Debe llamarse en Secasol.py inmediatamente después de st.set_page_config()
     y antes de cualquier st.tabs() u otro contenido.
 
     Efectos:

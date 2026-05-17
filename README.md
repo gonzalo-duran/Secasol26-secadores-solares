@@ -85,7 +85,7 @@ pip install -r requirements.txt
 ### 4. Ejecutar la aplicación
 
 ```bash
-streamlit run app.py
+streamlit run Secasol.py
 ```
 
 La aplicación se abre automáticamente en el navegador en `http://localhost:8501`.
@@ -132,7 +132,7 @@ pytest
 
 ```
 secador_solar/
-├── app.py                        # Entry point de Streamlit
+├── Secasol.py                    # Entry point de Streamlit
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── pyproject.toml
@@ -185,7 +185,7 @@ secador_solar/
 
 1. Hacer push del repo a GitHub (repositorio público).
 2. Ingresar a [share.streamlit.io](https://share.streamlit.io).
-3. Conectar el repositorio y seleccionar `app.py` como entry point.
+3. Conectar el repositorio y seleccionar `Secasol.py` como entry point.
 4. Streamlit Cloud instala automáticamente las dependencias de `requirements.txt`.
 
 ---

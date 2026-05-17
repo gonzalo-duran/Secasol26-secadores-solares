@@ -401,11 +401,11 @@ cat > .vscode/launch.json << 'EOF'
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Streamlit: app.py",
+            "name": "Streamlit: Secasol.py",
             "type": "debugpy",
             "request": "launch",
             "module": "streamlit",
-            "args": ["run", "app.py"],
+            "args": ["run", "Secasol.py"],
             "console": "integratedTerminal",
             "justMyCode": false
         },
@@ -468,7 +468,7 @@ Próximos pasos:
        ${ACTIVATE_MSG}
 
   5. Para correr la aplicación Streamlit:
-       streamlit run app.py
+       streamlit run Secasol.py
 
   6. Para crear el repo en GitHub, seguí las instrucciones en:
        docs/SETUP_GIT.md

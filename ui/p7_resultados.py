@@ -145,7 +145,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         title="Forzantes climáticas del horizonte",
         height=320, hovermode="x unified",
     )
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width="stretch")
 
     # --- Panel 2: T_sal_col, ΔT_aux, T_ent_cam ---
     fig2 = go.Figure()
@@ -168,7 +168,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         title="Acoplamiento colector → auxiliar → entrada de cámara",
         height=320, hovermode="x unified",
     )
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, width="stretch")
 
     # --- Panel 3: producto T_prod, X_prod ---
     fig3 = make_subplots(specs=[[{"secondary_y": True}]])
@@ -196,7 +196,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
             annotation_text="X_obj alcanzado",
             annotation_position="top",
         )
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, width="stretch")
 
     # --- Panel 4: tasa de evaporación ---
     fig4 = go.Figure()
@@ -210,7 +210,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         title="Tasa de evaporación de agua del producto",
         height=280, hovermode="x unified",
     )
-    st.plotly_chart(fig4, use_container_width=True)
+    st.plotly_chart(fig4, width="stretch")
 
     # ---- Diagnósticos extra ----
     with st.expander("Diagnósticos del horizonte"):
@@ -325,6 +325,130 @@ def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
 # Generador de texto de resultados completos (mejora 5)
 # ---------------------------------------------------------------------------
 
+def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
+    """Devuelve (líneas de texto, dict para JSON) de meta + P1 + P2 + clima."""
+    cfg = getattr(proyecto, "configuracion", None)
+    empl = getattr(proyecto, "emplazamiento", None)
+    clima = getattr(proyecto, "clima", None)
+    meta = getattr(proyecto, "meta", None)
+
+    lines: list[str] = ["METADATOS DEL PROYECTO"]
+    json_meta: dict = {}
+    if meta is not None:
+        lines += [
+            f"  Nombre              : {meta.nombre}",
+            f"  Autor               : {meta.autor or '(no especificado)'}",
+            f"  Fecha creación      : {meta.fecha_creacion.isoformat()}",
+            f"  Fecha modificación  : {meta.fecha_modificacion.isoformat()}",
+            f"  Versión software    : {meta.version_software}",
+        ]
+        if meta.notas:
+            lines.append(f"  Notas               : {meta.notas}")
+        json_meta = {
+            "nombre": meta.nombre,
+            "autor": meta.autor,
+            "fecha_creacion": meta.fecha_creacion.isoformat(),
+            "fecha_modificacion": meta.fecha_modificacion.isoformat(),
+            "version_software": meta.version_software,
+            "notas": meta.notas,
+        }
+
+    lines += ["", "TIPOLOGÍA Y MODO DE ANÁLISIS (P1)"]
+    json_cfg: dict = {}
+    if cfg is not None:
+        lines += [
+            f"  Tipología           : {cfg.tipologia.value}",
+            f"  Modo análisis       : {cfg.modo_analisis.value}",
+            f"  Día de análisis     : {cfg.dia_analisis.value}",
+        ]
+        if cfg.fecha_especifica is not None:
+            lines.append(f"  Fecha específica    : {cfg.fecha_especifica.isoformat()}")
+        json_cfg = {
+            "tipologia": cfg.tipologia.value,
+            "modo_analisis": cfg.modo_analisis.value,
+            "dia_analisis": cfg.dia_analisis.value,
+            "fecha_especifica": (
+                cfg.fecha_especifica.isoformat() if cfg.fecha_especifica else None
+            ),
+        }
+    else:
+        lines.append("  (sin configurar)")
+
+    lines += ["", "EMPLAZAMIENTO (P2)"]
+    json_empl: dict = {}
+    if empl is not None:
+        lines += [
+            f"  Latitud             : {empl.latitud_deg:.4f}°",
+            f"  Longitud            : {empl.longitud_deg:.4f}°",
+            f"  Altitud             : {empl.altitud_m:.1f} m",
+            f"  Acimut colector     : {empl.acimut_colector_deg:.1f}° "
+            "(convención Duffie: 0°=Sur)",
+            f"  Pendiente colector  : {empl.pendiente_colector_deg:.1f}°",
+            f"  Zona horaria        : {empl.zona_horaria}",
+        ]
+        json_empl = {
+            "latitud_deg": empl.latitud_deg,
+            "longitud_deg": empl.longitud_deg,
+            "altitud_m": empl.altitud_m,
+            "acimut_colector_deg_duffie": empl.acimut_colector_deg,
+            "pendiente_colector_deg": empl.pendiente_colector_deg,
+            "zona_horaria": empl.zona_horaria,
+        }
+    else:
+        lines.append("  (sin configurar)")
+
+    lines += ["", "CLIMA (NASA POWER)"]
+    json_clima: dict = {}
+    if clima is not None and clima.datos is not None:
+        n_total = len(clima.datos)
+        T_media_C = (
+            float(clima.datos["T_amb_K"].mean()) - 273.15
+            if "T_amb_K" in clima.datos.columns else None
+        )
+        GHI_media = (
+            float(clima.datos["GHI_Wm2"].mean())
+            if "GHI_Wm2" in clima.datos.columns else None
+        )
+        lines += [
+            f"  Año fuente          : {clima.anio}",
+            f"  Altitud NASA grid   : "
+            + (f"{clima.altitud_nasa_m:.1f} m"
+               if clima.altitud_nasa_m is not None else "—"),
+            f"  Horas disponibles   : {n_total}",
+            f"  T_amb media anual   : "
+            + (f"{T_media_C:.1f} °C" if T_media_C is not None else "—"),
+            f"  GHI media anual     : "
+            + (f"{GHI_media:.0f} W/m²" if GHI_media is not None else "—"),
+            f"  Calidad — huecos originales : {clima.calidad.n_huecos_originales}",
+            f"  Calidad — interpoladas (h) : {clima.calidad.n_horas_interpoladas}",
+            f"  Calidad — bloqueadas (h)   : {clima.calidad.n_horas_bloqueadas}",
+            f"  Mayor hueco (h)            : {clima.calidad.mayor_hueco_h}",
+        ]
+        json_clima = {
+            "anio": clima.anio,
+            "altitud_nasa_m": clima.altitud_nasa_m,
+            "n_horas": n_total,
+            "T_amb_media_C": T_media_C,
+            "GHI_media_W_m2": GHI_media,
+            "calidad": {
+                "n_huecos_originales": clima.calidad.n_huecos_originales,
+                "n_horas_interpoladas": clima.calidad.n_horas_interpoladas,
+                "n_horas_bloqueadas": clima.calidad.n_horas_bloqueadas,
+                "mayor_hueco_h": clima.calidad.mayor_hueco_h,
+                "decision_usuario": clima.calidad.decision_usuario,
+            },
+        }
+    else:
+        lines.append("  (sin datos descargados)")
+
+    return lines, {
+        "meta": json_meta,
+        "configuracion": json_cfg,
+        "emplazamiento": json_empl,
+        "clima": json_clima,
+    }
+
+
 def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
                                 T_amb_C: float, I_g: float,
                                 v_viento: float, HR_cam_pct: float) -> str:
@@ -334,14 +458,20 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
     def desc(cat_dict: dict, id_mat: str) -> str:
         return cat_dict.get(id_mat, {}).get("descripcion", id_mat)
 
-    sep = "=" * 55
+    sep = "=" * 60
     lines = [
         sep,
-        "   PREDISEÑO DE SECADOR SOLAR",
+        "         PREDISEÑO COMPLETO DE SECADOR SOLAR",
         sep,
-        f"  Fecha: {date.today()}",
+        f"Fecha de exportación: {date.today()}",
         "",
-        "CONDICIONES DE OPERACIÓN REPRESENTATIVAS",
+    ]
+    # Bloque P1/P2/clima
+    meta_lines, _meta_dict = _bloque_meta_emplazamiento_clima(proyecto)
+    lines += meta_lines
+    lines += [
+        "",
+        "CONDICIONES DE OPERACIÓN REPRESENTATIVAS (P7)",
         f"  T ambiente          : {T_amb_C:.1f} °C",
         f"  Irradiancia (POA)   : {I_g:.0f} W/m²",
         f"  Velocidad viento    : {v_viento:.1f} m/s",
@@ -404,10 +534,13 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
             lines.append(f"  P inst.: {mot_cfg.potencia_a_instalar_W:.1f} W")
 
     # ---- RESULTADOS ----
+    # Se usa getattr para tolerar tanto ResultadosCompletos (modo "constantes")
+    # como ResultadosCompletosTransitorio (modo "horizonte"), que tienen
+    # firmas distintas (p.ej. el transitorio no expone .colector como solver).
     lines += ["", sep, "  RESULTADOS", sep]
 
-    if res.colector is not None:
-        col = res.colector
+    col = getattr(res, "colector", None)
+    if col is not None:
         _t_sal = getattr(col, 'T_salida_K', getattr(col, 'T_salida_mezcla_K', None))
         _regimen = getattr(col, 'regimen_flujo', getattr(col, 'regimen_ci', getattr(col, 'regimen_cs', '—')))
         lines += [
@@ -423,24 +556,46 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
         if _re:
             lines.append(f"  Re medio  : {_re:.0f} | h_int = {_hint:.1f} W/(m²·K)")
 
-    if res.auxiliar is not None:
-        aux = res.auxiliar
-        lines += [
-            "",
-            "AUXILIAR",
-            f"  ΔT       : {aux.delta_T_K:.1f} °C",
-            f"  Q efect. : {aux.Q_efectivo_W:.0f} W",
-        ]
+    aux = getattr(res, "auxiliar", None)
+    if aux is not None:
+        # En transitorio aux.delta_T_K y aux.Q_efectivo_W son arrays;
+        # mostramos sólo si son escalares (constantes).
+        dt_aux = getattr(aux, "delta_T_K", None)
+        q_aux = getattr(aux, "Q_efectivo_W", None)
+        es_escalar = (
+            dt_aux is not None and isinstance(dt_aux, (int, float))
+        )
+        if es_escalar:
+            lines += [
+                "",
+                "AUXILIAR",
+                f"  ΔT       : {dt_aux:.1f} °C",
+                f"  Q efect. : {q_aux:.0f} W"
+                if isinstance(q_aux, (int, float)) else "",
+            ]
+        else:
+            # Transitorio: mostramos series resumidas si están
+            dt_max = getattr(aux, "delta_T_max_K", None)
+            q_max = getattr(aux, "Q_max_W", None)
+            horas_act = getattr(aux, "horas_activo_s", None)
+            lines += ["", "AUXILIAR (transitorio)"]
+            if dt_max is not None:
+                lines.append(f"  ΔT máx        : {dt_max:.1f} K")
+            if q_max is not None:
+                lines.append(f"  Q máx         : {q_max:.0f} W")
+            if horas_act is not None:
+                lines.append(f"  Horas activo  : {horas_act / 3600.0:.2f} h")
 
     # Cámara: resultado estático o termodinámico
-    _cam_show = res.camara
+    _cam_show = getattr(res, "camara", None)
     if _cam_show is not None:
         t_h_cam, masa_cam, status_cam, _ok = _resumen_camara(_cam_show)
+        T_ent_cam_K = getattr(res, "T_entrada_camara_K", None)
         lines += [
             "",
             "CÁMARA",
-            f"  T oper.       : {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C"
-            if res.T_entrada_camara_K else "  T oper.       : —",
+            f"  T oper.       : {kelvin_a_celsius(T_ent_cam_K):.1f} °C"
+            if T_ent_cam_K else "  T oper.       : —",
         ]
         if isinstance(_cam_show, ResultadoMotorTermodinamico):
             X_final = float(_cam_show.X_prod_kg_kg[-1]) if len(_cam_show.X_prod_kg_kg) else 0.0
@@ -465,22 +620,156 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
                 f"  Convergencia  : {status_cam}",
             ]
 
-    if res.energia_total_MJ:
+    energia_total = getattr(res, "energia_total_MJ", None)
+    if energia_total:
         lines += [
             "",
             "BALANCE ENERGÉTICO",
-            f"  E solar útil : {res.energia_solar_util_MJ:.4f} MJ",
-            f"  E auxiliar   : {res.energia_auxiliar_MJ:.4f} MJ",
-            f"  E motor      : {res.energia_motor_MJ:.4f} MJ",
-            f"  E secado     : {res.energia_secado_MJ:.4f} MJ",
+            f"  E solar útil : {getattr(res, 'energia_solar_util_MJ', 0) or 0:.4f} MJ",
+            f"  E auxiliar   : {getattr(res, 'energia_auxiliar_MJ', 0) or 0:.4f} MJ",
+            f"  E motor      : {getattr(res, 'energia_motor_MJ', 0) or 0:.4f} MJ",
+            f"  E secado     : {getattr(res, 'energia_secado_MJ', 0) or 0:.4f} MJ",
         ]
-        if res.COP_secado:
-            lines.append(f"  COP secado   : {res.COP_secado:.4f}")
-        if res.fraccion_solar is not None:
-            lines.append(f"  Fracción solar: {res.fraccion_solar:.1%}")
+        cop = getattr(res, "COP_secado", None)
+        if cop:
+            lines.append(f"  COP secado   : {cop:.4f}")
+        f_sol = getattr(res, "fraccion_solar", None)
+        if f_sol is not None:
+            lines.append(f"  Fracción solar: {f_sol:.1%}")
 
     lines.append("")
     return "\n".join(lines)
+
+
+def _json_resultados_completo(proyecto, res: "ResultadosCompletos",
+                                T_amb_C: float, I_g: float,
+                                v_viento: float, HR_cam_pct: float) -> dict:
+    """Snapshot completo reconstruible (dict) del prediseño."""
+    from datetime import date
+    from ui.p3_colector import _json_config_colector
+    from ui.p4_camara import _json_config_camara
+    from ui.p5_auxiliar import _json_config_auxiliar
+    from ui.p6_motor import _json_config_motor
+
+    _, meta_dict = _bloque_meta_emplazamiento_clima(proyecto)
+
+    snapshot: dict = {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "prediseno_completo",
+        **meta_dict,
+        "condiciones_operacion_P7": {
+            "T_amb_C": T_amb_C,
+            "I_g_POA_W_m2": I_g,
+            "v_viento_ms": v_viento,
+            "HR_camara_pct": HR_cam_pct,
+        },
+        "colector": (
+            _json_config_colector(proyecto.colector, st.session_state.get("p3_eval"))
+            if proyecto.colector is not None else None
+        ),
+        "camara": (
+            _json_config_camara(proyecto.camara, st.session_state)
+            if proyecto.camara is not None else None
+        ),
+        "auxiliar": (
+            _json_config_auxiliar(proyecto.auxiliar)
+            if proyecto.auxiliar is not None else None
+        ),
+        "motor": (
+            _json_config_motor(proyecto.motor)
+            if proyecto.motor is not None else None
+        ),
+    }
+
+    # Resultados globales del prediseño (P7)
+    res_globales: dict = {
+        "T_entrada_camara_K": getattr(res, "T_entrada_camara_K", None),
+        "T_entrada_camara_C": (
+            kelvin_a_celsius(res.T_entrada_camara_K)
+            if getattr(res, "T_entrada_camara_K", None) is not None else None
+        ),
+        "energia_total_MJ": getattr(res, "energia_total_MJ", None),
+        "energia_solar_util_MJ": getattr(res, "energia_solar_util_MJ", None),
+        "energia_auxiliar_MJ": getattr(res, "energia_auxiliar_MJ", None),
+        "energia_motor_MJ": getattr(res, "energia_motor_MJ", None),
+        "energia_secado_MJ": getattr(res, "energia_secado_MJ", None),
+        "COP_secado": getattr(res, "COP_secado", None),
+        "fraccion_solar": getattr(res, "fraccion_solar", None),
+    }
+    # Sub-bloques de resultados si existen
+    if getattr(res, "colector", None) is not None:
+        col_r = res.colector
+        res_globales["colector"] = {
+            "T_entrada_K": getattr(col_r, "T_entrada_K", None),
+            "T_salida_K": (
+                getattr(col_r, "T_salida_K", None)
+                or getattr(col_r, "T_salida_mezcla_K", None)
+            ),
+            "Q_util_W": getattr(col_r, "Q_util_W", None),
+            "eta_termica": getattr(col_r, "eta_termica", None),
+            "regimen_flujo": (
+                getattr(col_r, "regimen_flujo", None)
+                or getattr(col_r, "regimen_ci", None)
+                or getattr(col_r, "regimen_cs", None)
+            ),
+            "Re_medio": (
+                getattr(col_r, "Re_medio", None)
+                or getattr(col_r, "Re_ci", None)
+                or getattr(col_r, "Re_cs", None)
+            ),
+            "h_int_medio": (
+                getattr(col_r, "h_int_medio", None)
+                or getattr(col_r, "h_int_ci", None)
+                or getattr(col_r, "h_int_cs", None)
+            ),
+        }
+    if getattr(res, "auxiliar", None) is not None:
+        aux_r = res.auxiliar
+        dt = getattr(aux_r, "delta_T_K", None)
+        q = getattr(aux_r, "Q_efectivo_W", None)
+        if isinstance(dt, (int, float)) or dt is None:
+            # ResultadoAuxiliar (constantes): escalares
+            res_globales["auxiliar"] = {
+                "delta_T_K": dt,
+                "Q_efectivo_W": q if isinstance(q, (int, float)) else None,
+            }
+        else:
+            # ResultadosAuxiliarTransitorio: arrays — guardo solo el resumen
+            res_globales["auxiliar"] = {
+                "tipo": "transitorio",
+                "delta_T_max_K": getattr(aux_r, "delta_T_max_K", None),
+                "Q_max_W": getattr(aux_r, "Q_max_W", None),
+                "horas_activo_s": getattr(aux_r, "horas_activo_s", None),
+                "fraccion_horas_activo": getattr(aux_r, "fraccion_horas_activo", None),
+            }
+    if getattr(res, "camara", None) is not None:
+        cam_r = res.camara
+        if isinstance(cam_r, ResultadoMotorTermodinamico):
+            t_h, masa, status, ok = _resumen_camara(cam_r)
+            res_globales["camara"] = {
+                "modo_calculo": "termodinamico",
+                "t_secado_h": t_h,
+                "masa_evaporada_kg": float(masa),
+                "status": status,
+                "objetivo_alcanzado": ok,
+                "X_final": float(cam_r.X_prod_kg_kg[-1]) if len(cam_r.X_prod_kg_kg) else None,
+                "T_prod_final_C": (
+                    float(cam_r.T_prod_K[-1]) - 273.15
+                    if len(cam_r.T_prod_K) else None
+                ),
+            }
+        else:
+            t_h, masa, status, ok = _resumen_camara(cam_r)
+            res_globales["camara"] = {
+                "modo_calculo": "capa_fina",
+                "t_secado_h": t_h,
+                "masa_agua_extraida_kg": float(masa),
+                "status": status,
+                "convergencia_ok": ok,
+                "X_eq_kg_kg": getattr(cam_r, "X_eq_kg_kg", None),
+            }
+    snapshot["resultados_globales"] = res_globales
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +872,16 @@ def render() -> None:
 
         res_tr = st.session_state["p7_resultados_tr"]
         _render_resultados_transitorios(res_tr, proyecto)
+
+        # Botones de guardado para modo transitorio
+        # (mismo bloque que en constantes, con condiciones representativas
+        # sugeridas a partir de los datos climáticos)
+        T_sug, I_sug, v_sug = _sugerir_condiciones(proyecto)
+        _render_botones_guardado(
+            proyecto, res_tr,
+            T_amb_C=T_sug, I_g=I_sug, v_viento=v_sug,
+            HR_cam_pct=_HR_CAMARA_DEFAULT_PCT,
+        )
         return    # no caer en el flujo de constantes representativas
 
     # -----------------------------------------------------------------------
@@ -743,7 +1042,7 @@ def render() -> None:
             X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
             prod_id = proyecto.camara.carga_producto.producto_id
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
-            st.plotly_chart(fig_td, use_container_width=True)
+            st.plotly_chart(fig_td, width="stretch")
             st.caption(
                 "ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el "
                 "caudal de aire es el término dominante en el balance energético — "
@@ -771,7 +1070,7 @@ def render() -> None:
                 )
 
             fig_dry = _fig_drying_curve(cam)
-            st.plotly_chart(fig_dry, use_container_width=True)
+            st.plotly_chart(fig_dry, width="stretch")
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
@@ -813,7 +1112,7 @@ def render() -> None:
 
         fig_bal = _fig_sankey_simplificado(res)
         if fig_bal:
-            st.plotly_chart(fig_bal, use_container_width=True)
+            st.plotly_chart(fig_bal, width="stretch")
 
     # --- Resumen del ciclo ---
     st.subheader("Resumen del ciclo de secado")
@@ -903,18 +1202,89 @@ def render() -> None:
         if filas:
             import pandas as pd
             df = pd.DataFrame(filas, columns=["Parámetro", "Valor"])
-            st.dataframe(df.set_index("Parámetro"), use_container_width=True)
+            st.dataframe(df.set_index("Parámetro"), width="stretch")
 
     # --- Guardar resultados completos ---
+    _render_botones_guardado(
+        proyecto, res,
+        T_amb_C=T_amb_C, I_g=I_g, v_viento=v_viento, HR_cam_pct=HR_cam_pct,
+    )
+
+
+def _render_botones_guardado(proyecto, res, *, T_amb_C: float, I_g: float,
+                              v_viento: float, HR_cam_pct: float) -> None:
+    """Renderiza el bloque de botones .txt / .json / PDF al pie de P7.
+
+    Compartido entre la rama de modo transitorio y la de constantes
+    representativas. ``res`` puede ser ``ResultadosCompletos`` o
+    ``ResultadosCompletosTransitorio`` — ambos funcionan vía ``getattr``.
+    """
+    from ui.componentes.serializacion import (
+        dump_json,
+        nombre_archivo_descarga,
+        nombre_archivo_reporte,
+    )
+
     st.divider()
     texto_res = _texto_resultados_completo(
         proyecto, res,
         T_amb_C=T_amb_C, I_g=I_g, v_viento=v_viento, HR_cam_pct=HR_cam_pct,
     )
-    st.download_button(
-        "Guardar prediseño completo (.txt)",
-        data=texto_res,
-        file_name="prediseno_secador_solar.txt",
-        mime="text/plain",
-        use_container_width=True,
+    json_res = _json_resultados_completo(
+        proyecto, res,
+        T_amb_C=T_amb_C, I_g=I_g, v_viento=v_viento, HR_cam_pct=HR_cam_pct,
     )
+    col_txt, col_json = st.columns(2)
+    with col_txt:
+        st.download_button(
+            "Guardar prediseño completo (.txt)",
+            data=texto_res,
+            file_name=nombre_archivo_descarga(
+                proyecto, "prediseno_completo", "txt"),
+            mime="text/plain",
+            width="stretch",
+        )
+    with col_json:
+        st.download_button(
+            "Guardar prediseño completo (.json)",
+            data=dump_json(json_res),
+            file_name=nombre_archivo_descarga(
+                proyecto, "prediseno_completo", "json"),
+            mime="application/json",
+            width="stretch",
+        )
+
+    # --- Generar reporte PDF ---
+    st.markdown("##### Reporte PDF")
+    st.caption(
+        "Genera un PDF completo con todas las secciones, tablas de configuración "
+        "y gráficas. Puede tardar 10–30 s al generar las imágenes."
+    )
+    if st.button("Generar reporte PDF", type="primary",
+                  width="stretch", key="p7_generar_pdf"):
+        from ui.reporte import generar_reporte_pdf
+        with st.spinner("Generando reporte PDF (incluye exportación de gráficas)..."):
+            try:
+                pdf_bytes = generar_reporte_pdf(
+                    proyecto, st.session_state, res,
+                    T_amb_C=T_amb_C, I_g=I_g, v_viento=v_viento,
+                    HR_cam_pct=HR_cam_pct,
+                )
+                st.session_state["p7_reporte_pdf"] = pdf_bytes
+                st.success(
+                    f"✅ Reporte generado ({len(pdf_bytes) / 1024:.0f} KB). "
+                    "Descargá con el botón debajo."
+                )
+            except Exception as exc:
+                st.error(f"❌ Error generando el reporte: {exc}")
+                st.session_state.pop("p7_reporte_pdf", None)
+
+    pdf_cached = st.session_state.get("p7_reporte_pdf")
+    if pdf_cached is not None:
+        st.download_button(
+            "Descargar reporte PDF",
+            data=pdf_cached,
+            file_name=nombre_archivo_reporte(proyecto, "pdf"),
+            mime="application/pdf",
+            width="stretch",
+        )

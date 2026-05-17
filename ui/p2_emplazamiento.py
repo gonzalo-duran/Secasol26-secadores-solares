@@ -602,7 +602,7 @@ def render() -> None:
     with c3:
         st.write("")
         st.write("")
-        boton_descarga = st.button("Descargar datos", type="primary", use_container_width=True)
+        boton_descarga = st.button("Descargar datos", type="primary", width="stretch")
 
     clima: Clima | None = proyecto.clima
 
@@ -710,11 +710,11 @@ def render() -> None:
 
         with tab_t:
             fig_t = _fig_temperatura(datos_local)
-            st.plotly_chart(fig_t, use_container_width=True)
+            st.plotly_chart(fig_t, width="stretch")
 
         with tab_rad:
             fig_rad = _fig_irradiancia_comparativa(datos_local, poa_horaria)
-            st.plotly_chart(fig_rad, use_container_width=True)
+            st.plotly_chart(fig_rad, width="stretch")
 
             poa_anual = poa_horaria.sum() / 1000.0
             ghi_anual = datos_local["GHI_Wm2"].sum() / 1000.0
@@ -732,11 +732,11 @@ def render() -> None:
 
         with tab_vhr:
             fig_vhr = _fig_viento_hr(datos_local)
-            st.plotly_chart(fig_vhr, use_container_width=True)
+            st.plotly_chart(fig_vhr, width="stretch")
 
         with tab_tabla:
             df_mens = _resumen_mensual(datos_local)
-            st.dataframe(df_mens.set_index("Mes"), use_container_width=True)
+            st.dataframe(df_mens.set_index("Mes"), width="stretch")
 
         # -----------------------------------------------------------------------
         # Sección 5: Recurso climático del día de diseño (solo modo DIARIO)
@@ -788,11 +788,11 @@ def render() -> None:
 
                 with tab_dt:
                     fig_dt = _fig_temperatura_diaria(datos_dia)
-                    st.plotly_chart(fig_dt, use_container_width=True)
+                    st.plotly_chart(fig_dt, width="stretch")
 
                 with tab_drad:
                     fig_drad = _fig_irradiancia_diaria(datos_dia, poa_dia)
-                    st.plotly_chart(fig_drad, use_container_width=True)
+                    st.plotly_chart(fig_drad, width="stretch")
                     st.caption(
                         "Plano horizontal: datos directos de NASA POWER. "
                         "Plano del colector: modelo Hay-Davies (pvlib), "
@@ -801,7 +801,7 @@ def render() -> None:
 
                 with tab_dvhr:
                     fig_dvhr = _fig_viento_hr_diaria(datos_dia)
-                    st.plotly_chart(fig_dvhr, use_container_width=True)
+                    st.plotly_chart(fig_dvhr, width="stretch")
 
                 # Botón CSV del día
                 csv_dia = _generar_csv(datos_dia, empl.zona_horaria)

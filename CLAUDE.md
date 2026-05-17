@@ -30,7 +30,7 @@ La aplicación es un **prediseñador de secadores solares** (Streamlit). El usua
 ### Capas (separación estricta)
 
 ```
-app.py                    ← entry point Streamlit, construye las pestañas
+Secasol.py                ← entry point Streamlit, construye las pestañas
 ui/p{1-7}_*.py            ← UI por pestaña, llaman a core/ y calculos/
 ui/componentes/           ← widgets reutilizables
 core/                     ← dataclasses del modelo de datos (sin Streamlit)

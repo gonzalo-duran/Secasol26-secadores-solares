@@ -215,33 +215,121 @@ def _inputs_fondo_usuario(key_prefix: str) -> dict:
 # Generador de texto de configuración (mejora 4)
 # ---------------------------------------------------------------------------
 
-def _texto_config_colector(col: "Colector") -> str:
+def _mat_props(cat_dict: dict, id_mat: str) -> dict:
+    """Devuelve todas las propiedades del material para snapshot reconstruible."""
+    return dict(cat_dict.get(id_mat, {}))
+
+
+def _resumen_eval_diario(r: dict) -> dict | None:
+    """Extrae métricas representativas de la evaluación diaria del colector."""
+    if not r:
+        return None
+    T_sal = [t for t in r.get("T_salida_C", []) if t is not None]
+    T_amb = r.get("T_amb_C", [])
+    if not T_sal:
+        return None
+    # ΔT máx en horas con T_salida válida
+    pares = [
+        (ts, T_amb[i])
+        for i, ts in enumerate(r.get("T_salida_C", []))
+        if ts is not None and i < len(T_amb)
+    ]
+    dT_max = max(ts - ta for ts, ta in pares) if pares else None
+    return {
+        "T_salida_max_C": float(max(T_sal)),
+        "T_salida_min_C": float(min(T_sal)),
+        "T_salida_mediodia_C": float(T_sal[len(T_sal) // 2]),
+        "delta_T_max_C": float(dT_max) if dT_max is not None else None,
+        "hora_transit": r.get("hora_transit"),
+        "n_horas_con_radiacion": len(T_sal),
+    }
+
+
+def _resumen_eval_anual(r: dict) -> dict | None:
+    """Extrae métricas representativas de la evaluación anual del colector."""
+    if not r or not r.get("meses"):
+        return None
+    meses = r["meses"]
+    T_sal_noon = r.get("T_salida_noon_C", [])
+    T_amb_noon = r.get("T_amb_noon_C", [])
+    if not T_sal_noon:
+        return None
+    idx_max = T_sal_noon.index(max(T_sal_noon))
+    idx_min = T_sal_noon.index(min(T_sal_noon))
+    dT_min = min(ts - ta for ts, ta in zip(T_sal_noon, T_amb_noon))
+    return {
+        "T_salida_max_C": float(max(T_sal_noon)),
+        "T_salida_max_mes": meses[idx_max],
+        "T_salida_min_C": float(min(T_sal_noon)),
+        "T_salida_min_mes": meses[idx_min],
+        "delta_T_min_C": float(dT_min),
+        "T_salida_por_mes": {m: float(v) for m, v in zip(meses, T_sal_noon)},
+    }
+
+
+def _texto_config_colector(col: "Colector", eval_dict: dict | None = None) -> str:
+    """Genera el snapshot .txt del colector incluyendo resultados si están.
+
+    Args:
+        col: Instancia configurada del colector.
+        eval_dict: ``st.session_state["p3_eval"]`` (o ``None`` si no se corrió).
+    """
     from datetime import date
     u = col.unidad
 
     def desc(cat_dict: dict, id_mat: str) -> str:
         return cat_dict.get(id_mat, {}).get("descripcion", id_mat)
 
+    def material_block(label: str, cat: dict, mat_id: str, espesor_m: float,
+                         espesor_unit: str = "mm") -> list[str]:
+        props = _mat_props(cat, mat_id)
+        if espesor_unit == "mm":
+            e_str = f"{espesor_m * 1000:.1f} mm"
+        else:
+            e_str = f"{espesor_m * 100:.1f} cm"
+        out = [
+            f"  {label:8}: {desc(cat, mat_id)}  [id={mat_id}]",
+            f"             e = {e_str}",
+        ]
+        for k, etiq in [
+            ("conductividad_termica", "k [W/(m·K)]"),
+            ("densidad", "ρ [kg/m³]"),
+            ("calor_especifico", "cp [J/(kg·K)]"),
+            ("emisividad_ir", "ε_ir"),
+            ("absortancia_solar", "α_sol"),
+            ("transmitancia_solar", "τ_sol"),
+            ("T_max_servicio", "T_max [K]"),
+        ]:
+            if k in props and props[k] is not None:
+                v = props[k]
+                if isinstance(v, float):
+                    out.append(f"               {etiq} = {v:.3f}")
+                else:
+                    out.append(f"               {etiq} = {v}")
+        return out
+
+    sep = "=" * 60
     lines = [
-        "=== CONFIGURACIÓN DEL COLECTOR SOLAR ===",
-        f"Fecha: {date.today()}",
+        sep,
+        "       CONFIGURACIÓN DEL COLECTOR SOLAR",
+        sep,
+        f"Fecha de exportación: {date.today()}",
         "",
         "MATERIALES",
-        f"  Cubierta : {desc(catalogo.CUBIERTAS, u.id_cubierta)}",
-        f"             e = {u.espesor_cubierta_m * 1000:.1f} mm | N° cubiertas = {u.n_cubiertas}",
-        f"  Placa    : {desc(catalogo.PLACAS, u.id_placa)}",
-        f"             e = {u.espesor_placa_m * 1000:.1f} mm",
-        f"  Aislante : {desc(catalogo.AISLANTES, u.id_aislante)}",
-        f"             e = {u.espesor_aislante_m * 100:.1f} cm",
-        f"  Fondo    : {desc(catalogo.FONDOS, u.id_fondo)}",
-        f"             e = {u.espesor_fondo_m * 1000:.1f} mm",
+        *material_block("Cubierta", catalogo.CUBIERTAS, u.id_cubierta,
+                          u.espesor_cubierta_m, "mm"),
+        f"             N° cubiertas = {u.n_cubiertas}",
+        *material_block("Placa", catalogo.PLACAS, u.id_placa, u.espesor_placa_m, "mm"),
+        *material_block("Aislante", catalogo.AISLANTES, u.id_aislante,
+                          u.espesor_aislante_m, "cm"),
+        *material_block("Fondo", catalogo.FONDOS, u.id_fondo, u.espesor_fondo_m, "mm"),
         "",
         "TIPO DE COLECTOR",
         f"  {_TIPOS_COLECTOR.get(u.tipo_colector, f'Tipo {u.tipo_colector}')}",
         "",
         "GEOMETRÍA Y CONDICIÓN DE DISEÑO",
-        f"  Ancho           : {u.ancho_m:.2f} m",
-        f"  Largo           : {u.largo_m:.2f} m",
+        f"  Ancho           : {u.ancho_m:.3f} m",
+        f"  Largo           : {u.largo_m:.3f} m",
         f"  Canal superior  : {u.espaciado_m * 1000:.1f} mm"
         if u.tipo_colector in (2, 3, 4)
         else f"  Espaciado canal : {u.espaciado_m * 1000:.1f} mm",
@@ -249,27 +337,236 @@ def _texto_config_colector(col: "Colector") -> str:
             [f"  Canal inferior  : {u.espaciado_inferior_m * 1000:.1f} mm"]
             if u.tipo_colector in (2, 3, 4) else []
         ),
-        f"  Vel. diseño     : {u.velocidad_diseno_ms:.2f} m/s",
-        f"  Área captación  : {u.area_captacion_m2():.2f} m²",
-        f"  Caudal unitario : {u.caudal_volumetrico_m3_s() * 1000:.2f} L/s",
+        f"  Vel. diseño     : {u.velocidad_diseno_ms:.3f} m/s",
+        f"  Sección canal   : {u.seccion_canal_m2() * 1e4:.2f} cm²",
+        f"  Área captación  : {u.area_captacion_m2():.3f} m²",
+        f"  Caudal unitario : {u.caudal_volumetrico_m3_s() * 1000:.3f} L/s",
         "",
         "BANCO DE COLECTORES",
-        f"  Serie           : {col.banco.n_serie}",
-        f"  Paralelo        : {col.banco.n_paralelo}",
-        f"  Área total      : {col.banco.n_serie * col.banco.n_paralelo * u.area_captacion_m2():.2f} m²",
-        f"  Caudal total    : {col.banco.n_paralelo * u.caudal_volumetrico_m3_s() * 1000:.2f} L/s",
-        f"  Camino del aire : {col.banco.n_serie * u.largo_m:.1f} m",
+        f"  N° serie        : {col.banco.n_serie}",
+        f"  N° paralelo     : {col.banco.n_paralelo}",
+        f"  Área total      : {col.area_total_m2():.3f} m²",
+        f"  Caudal total    : {col.caudal_total_m3_s() * 1000:.3f} L/s",
+        f"  Camino del aire : {col.largo_camino_aire_m():.2f} m",
     ]
     if col.chimenea is not None:
         ch = col.chimenea
         lines += [
             "",
             "CHIMENEA SOLAR",
-            f"  Diámetro : {ch.diametro_m:.2f} m",
-            f"  Altura   : {ch.altura_m:.1f} m",
-            f"  Material : {desc(catalogo.FONDOS, ch.id_material)}",
+            f"  Diámetro : {ch.diametro_m:.3f} m",
+            f"  Altura   : {ch.altura_m:.2f} m",
+            f"  Material : {desc(catalogo.FONDOS, ch.id_material)}  [id={ch.id_material}]",
         ]
+
+    # Advertencias estáticas activas
+    advs = advertencias_colector(col)
+    lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
+    if not advs:
+        lines.append("  (ninguna)")
+    else:
+        for a in advs:
+            lines.append(f"  [{a.severidad.value}] {a.codigo}: {a.mensaje}")
+
+    # Resultados de simulación si están disponibles
+    lines += ["", sep, "  RESULTADOS DE SIMULACIÓN", sep]
+    if eval_dict is None or not eval_dict.get("r"):
+        lines.append("  ⚠ Cálculo no ejecutado. Volver a P3 y presionar")
+        lines.append("    'Calcular desempeño del colector' para incluirlos.")
+    else:
+        modo = eval_dict.get("modo")
+        r = eval_dict["r"]
+        if modo == "diario":
+            label = eval_dict.get("label", "—")
+            res = _resumen_eval_diario(r)
+            lines += [
+                f"  Modo evaluación   : DIARIO",
+                f"  Día representativo: {label}",
+            ]
+            if res is None:
+                lines.append("  (sin horas con radiación suficiente)")
+            else:
+                lines += [
+                    f"  T salida máx     : {res['T_salida_max_C']:.1f} °C",
+                    f"  T salida mediodía: {res['T_salida_mediodia_C']:.1f} °C",
+                    f"  T salida mín     : {res['T_salida_min_C']:.1f} °C",
+                    f"  ΔT máx           : "
+                    f"{res['delta_T_max_C']:.1f} °C"
+                    if res['delta_T_max_C'] is not None else "  ΔT máx           : —",
+                    f"  Hora tránsito    : {res['hora_transit'] or '—'}",
+                    f"  Horas con sol    : {res['n_horas_con_radiacion']}",
+                ]
+        elif modo == "anual":
+            res = _resumen_eval_anual(r)
+            lines.append(f"  Modo evaluación  : ANUAL (12 meses representativos)")
+            if res is None:
+                lines.append("  (sin resultados válidos)")
+            else:
+                lines += [
+                    f"  T salida máx     : {res['T_salida_max_C']:.1f} °C "
+                    f"(en {res['T_salida_max_mes']})",
+                    f"  T salida mín     : {res['T_salida_min_C']:.1f} °C "
+                    f"(en {res['T_salida_min_mes']})",
+                    f"  ΔT mín           : {res['delta_T_min_C']:.1f} °C",
+                    "  T salida por mes : ",
+                ]
+                for mes, val in res["T_salida_por_mes"].items():
+                    lines.append(f"    {mes:3s} : {val:5.1f} °C")
+    lines.append("")
     return "\n".join(lines)
+
+
+def _from_json_colector(data: dict) -> "Colector":
+    """Reconstruye un ``Colector`` desde un dict producido por
+    ``_json_config_colector``.
+
+    Solo usa los campos del dict que el constructor del dataclass requiere.
+    Los campos derivados (área total, advertencias, resultados) se ignoran
+    porque se recomputan al instanciar.
+
+    Raises:
+        KeyError: si faltan campos obligatorios.
+        ValueError: si un id de material no existe en el catálogo.
+    """
+    u = data.get("unidad") or {}
+    mats = data.get("materiales") or {}
+    banco = data.get("banco") or {}
+    chim = data.get("chimenea")
+
+    def _mat_id(key: str) -> str:
+        m = mats.get(key) or {}
+        if "id" not in m:
+            raise KeyError(f"materiales.{key}.id ausente en el JSON cargado")
+        return m["id"]
+
+    def _mat_espesor(key: str) -> float:
+        m = mats.get(key) or {}
+        if "espesor_m" not in m:
+            raise KeyError(f"materiales.{key}.espesor_m ausente en el JSON cargado")
+        return float(m["espesor_m"])
+
+    unidad = ColectorUnidad(
+        ancho_m=float(u["ancho_m"]),
+        largo_m=float(u["largo_m"]),
+        espaciado_m=float(u["espaciado_m"]),
+        n_cubiertas=int(u["n_cubiertas"]),
+        velocidad_diseno_ms=float(u["velocidad_diseno_ms"]),
+        tipo_colector=int(u.get("tipo_colector", 1)),
+        espaciado_inferior_m=float(u.get("espaciado_inferior_m", u["espaciado_m"])),
+        id_cubierta=_mat_id("cubierta"),
+        espesor_cubierta_m=_mat_espesor("cubierta"),
+        id_placa=_mat_id("placa"),
+        espesor_placa_m=_mat_espesor("placa"),
+        id_aislante=_mat_id("aislante"),
+        espesor_aislante_m=_mat_espesor("aislante"),
+        id_fondo=_mat_id("fondo"),
+        espesor_fondo_m=_mat_espesor("fondo"),
+    )
+    bco = BancoColectores(
+        n_serie=int(banco.get("n_serie", 1)),
+        n_paralelo=int(banco.get("n_paralelo", 1)),
+    )
+    chimenea = None
+    if chim is not None:
+        chimenea = Chimenea(
+            diametro_m=float(chim["diametro_m"]),
+            altura_m=float(chim["altura_m"]),
+            id_material=chim["id_material"],
+        )
+    return Colector(unidad=unidad, banco=bco, chimenea=chimenea)
+
+
+def _json_config_colector(col: "Colector", eval_dict: dict | None = None) -> dict:
+    """Genera el snapshot reconstruible (dict serializable) del colector."""
+    from datetime import date
+    u = col.unidad
+
+    snapshot: dict = {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "colector",
+        "unidad": {
+            "ancho_m": u.ancho_m,
+            "largo_m": u.largo_m,
+            "espaciado_m": u.espaciado_m,
+            "espaciado_inferior_m": u.espaciado_inferior_m,
+            "n_cubiertas": u.n_cubiertas,
+            "velocidad_diseno_ms": u.velocidad_diseno_ms,
+            "tipo_colector": u.tipo_colector,
+            "tipo_colector_descripcion": _TIPOS_COLECTOR.get(u.tipo_colector),
+        },
+        "materiales": {
+            "cubierta": {
+                "id": u.id_cubierta,
+                "espesor_m": u.espesor_cubierta_m,
+                "props_catalogo": _mat_props(catalogo.CUBIERTAS, u.id_cubierta),
+            },
+            "placa": {
+                "id": u.id_placa,
+                "espesor_m": u.espesor_placa_m,
+                "props_catalogo": _mat_props(catalogo.PLACAS, u.id_placa),
+            },
+            "aislante": {
+                "id": u.id_aislante,
+                "espesor_m": u.espesor_aislante_m,
+                "props_catalogo": _mat_props(catalogo.AISLANTES, u.id_aislante),
+            },
+            "fondo": {
+                "id": u.id_fondo,
+                "espesor_m": u.espesor_fondo_m,
+                "props_catalogo": _mat_props(catalogo.FONDOS, u.id_fondo),
+            },
+        },
+        "banco": {
+            "n_serie": col.banco.n_serie,
+            "n_paralelo": col.banco.n_paralelo,
+        },
+        "derivados": {
+            "seccion_canal_m2": u.seccion_canal_m2(),
+            "area_captacion_unidad_m2": u.area_captacion_m2(),
+            "caudal_unidad_m3_s": u.caudal_volumetrico_m3_s(),
+            "area_total_m2": col.area_total_m2(),
+            "caudal_total_m3_s": col.caudal_total_m3_s(),
+            "largo_camino_aire_m": col.largo_camino_aire_m(),
+        },
+        "chimenea": None,
+        "advertencias_diseno": [
+            {
+                "codigo": a.codigo,
+                "severidad": a.severidad.value,
+                "mensaje": a.mensaje,
+                "campo": a.campo,
+                "sugerencia": a.sugerencia,
+                "contexto": a.contexto,
+            }
+            for a in advertencias_colector(col)
+        ],
+    }
+    if col.chimenea is not None:
+        snapshot["chimenea"] = {
+            "diametro_m": col.chimenea.diametro_m,
+            "altura_m": col.chimenea.altura_m,
+            "id_material": col.chimenea.id_material,
+            "props_catalogo": _mat_props(catalogo.FONDOS, col.chimenea.id_material),
+        }
+
+    # Resultados
+    if eval_dict is None or not eval_dict.get("r"):
+        snapshot["resultados"] = {
+            "ejecutado": False,
+            "nota": "Cálculo no ejecutado en esta sesión.",
+        }
+    else:
+        modo = eval_dict.get("modo")
+        r = eval_dict["r"]
+        bloque = {"ejecutado": True, "modo": modo}
+        if modo == "diario":
+            bloque["dia_representativo"] = eval_dict.get("label")
+            bloque["resumen"] = _resumen_eval_diario(r)
+        elif modo == "anual":
+            bloque["resumen"] = _resumen_eval_anual(r)
+        snapshot["resultados"] = bloque
+
+    return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -676,6 +973,45 @@ def render() -> None:
     # Inicializar colector si es la primera vez
     if proyecto.colector is None:
         proyecto.colector = Colector()
+
+    # -----------------------------------------------------------------------
+    # Cargar configuración guardada (.json)
+    # -----------------------------------------------------------------------
+    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+        from ui.componentes.serializacion import (
+            limpiar_session_state_prefijo,
+            parsear_json_seccion,
+        )
+        archivo = st.file_uploader(
+            "Subí un archivo .json del colector previamente guardado",
+            type=["json"], key="p3_cargar_json",
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "colector")
+            if err:
+                st.error(f"❌ {err}")
+            else:
+                try:
+                    col_cargado = _from_json_colector(data)
+                except (KeyError, ValueError, TypeError) as exc:
+                    st.error(f"❌ Error reconstruyendo el colector: {exc}")
+                else:
+                    proyecto.colector = col_cargado
+                    # Limpiar widgets cacheados y resultados viejos de P3.
+                    # Preservamos la clave del file_uploader para no entrar
+                    # en bucle de "archivo todavía está cargado".
+                    n_borr = limpiar_session_state_prefijo(
+                        st.session_state, "p3_"
+                    )
+                    # Volvemos a poner el archivo (sin él, file_uploader
+                    # quedaría en estado "no hay archivo" y al hacer
+                    # rerun la siguiente render trataría de cargar de nuevo).
+                    st.session_state.pop("p3_cargar_json", None)
+                    st.success(
+                        f"✅ Colector cargado desde JSON "
+                        f"(se reiniciaron {n_borr} valores de la sesión)."
+                    )
+                    st.rerun()
 
     colector: Colector = proyecto.colector
 
@@ -1123,12 +1459,12 @@ def render() -> None:
 
             with tab_a:
                 _fig_a = _fig_T_salida_dia(_r, _lbl)
-                st.plotly_chart(_fig_a, use_container_width=True)
+                st.plotly_chart(_fig_a, width="stretch")
 
             with tab_b:
                 _fig_b = _fig_T_fluido_dia(_r, _lbl)
                 if _fig_b is not None:
-                    st.plotly_chart(_fig_b, use_container_width=True)
+                    st.plotly_chart(_fig_b, width="stretch")
                 else:
                     st.info("No hay radiación solar suficiente a mediodía para calcular el perfil.")
 
@@ -1146,22 +1482,34 @@ def render() -> None:
 
                 with tab_a:
                     _fig_a = _fig_T_salida_anual(_r)
-                    st.plotly_chart(_fig_a, use_container_width=True)
+                    st.plotly_chart(_fig_a, width="stretch")
                     st.caption("Evaluación en el mediodía solar del día 15 de cada mes.")
 
                 with tab_b:
                     _fig_b = _fig_T_fluido_anual(_r)
                     if _fig_b is not None:
-                        st.plotly_chart(_fig_b, use_container_width=True)
+                        st.plotly_chart(_fig_b, width="stretch")
             else:
                 st.warning("No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente.")
 
     # --- Guardar configuración (mejora 4) ---
     st.divider()
-    st.download_button(
-        "Guardar configuración del colector (.txt)",
-        data=_texto_config_colector(proyecto.colector),
-        file_name="config_colector.txt",
-        mime="text/plain",
-        use_container_width=True,
-    )
+    from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+    _eval_p3 = st.session_state.get("p3_eval")
+    col_txt, col_json = st.columns(2)
+    with col_txt:
+        st.download_button(
+            "Guardar configuración del colector (.txt)",
+            data=_texto_config_colector(proyecto.colector, _eval_p3),
+            file_name=nombre_archivo_descarga(proyecto, "colector", "txt"),
+            mime="text/plain",
+            width="stretch",
+        )
+    with col_json:
+        st.download_button(
+            "Guardar configuración del colector (.json)",
+            data=dump_json(_json_config_colector(proyecto.colector, _eval_p3)),
+            file_name=nombre_archivo_descarga(proyecto, "colector", "json"),
+            mime="application/json",
+            width="stretch",
+        )

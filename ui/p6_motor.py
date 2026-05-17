@@ -61,32 +61,216 @@ def _mostrar_advertencias(adv_list: list) -> None:
 # ---------------------------------------------------------------------------
 
 def _texto_config_motor(motor: "Motor") -> str:
+    """Snapshot .txt del motor con desglose completo de ΔP y potencias."""
     from datetime import date
+    from core.motor import TipoAccionamiento
+
+    sep = "=" * 60
     lines = [
-        "=== CONFIGURACIÓN DEL MOTOR / VENTILADOR ===",
-        f"Fecha: {date.today()}",
+        sep,
+        "        CONFIGURACIÓN DEL MOTOR / VENTILADOR",
+        sep,
+        f"Fecha de exportación: {date.today()}",
         "",
-        f"Tipo accionamiento : {motor.tipo_accionamiento.value}",
-        f"ΔP total           : {motor.perdida_carga_total_Pa:.1f} Pa",
-        f"η ventilador       : {motor.eficiencia_ventilador:.0%}",
-        f"η motor            : {motor.eficiencia_motor:.0%}",
-        f"Factor servicio    : {motor.factor_servicio:.2f}",
+        "TIPO Y CAUDAL",
+        f"  Tipo accionamiento : {motor.tipo_accionamiento.value}",
+        f"  Caudal volumétrico : {motor.caudal_volumetrico_m3_s * 1000:.3f} L/s "
+        f"({motor.caudal_volumetrico_m3_s:.5f} m³/s)",
+        "",
+        "PÉRDIDA DE CARGA",
+        f"  ΔP total           : {motor.perdida_carga_total_Pa:.2f} Pa",
     ]
-    if motor.potencia_hidraulica_W:
-        lines.append(f"P hidráulica       : {motor.potencia_hidraulica_W:.1f} W")
-    if motor.potencia_eje_W:
-        lines.append(f"P eje              : {motor.potencia_eje_W:.1f} W")
-    if motor.potencia_electrica_W:
-        lines.append(f"P eléctrica        : {motor.potencia_electrica_W:.1f} W")
-    if motor.potencia_a_instalar_W:
-        lines.append(f"P a instalar       : {motor.potencia_a_instalar_W:.1f} W")
-    if motor.corriente_nominal_A:
-        lines.append(f"Corriente nominal  : {motor.corriente_nominal_A:.2f} A")
-    if motor.diametro_extractor_m:
-        lines.append(f"Diámetro extractor : {motor.diametro_extractor_m:.2f} m")
+    if motor.delta_P_colector_Pa is not None:
+        lines.append(f"    · ΔP colector   : {motor.delta_P_colector_Pa:.2f} Pa")
+    if motor.delta_P_camara_Pa is not None:
+        lines.append(f"    · ΔP cámara     : {motor.delta_P_camara_Pa:.2f} Pa")
+    if motor.delta_P_ductos_Pa is not None:
+        lines.append(f"    · ΔP ductos     : {motor.delta_P_ductos_Pa:.2f} Pa")
+    if motor.delta_P_singulares_Pa is not None:
+        lines.append(f"    · ΔP singulares : {motor.delta_P_singulares_Pa:.2f} Pa")
+    if motor.v_descarga_m_s is not None:
+        lines.append(f"  v descarga         : {motor.v_descarga_m_s:.2f} m/s")
+    lines += [
+        "",
+        "EFICIENCIAS Y DIMENSIONAMIENTO",
+        f"  η ventilador       : {motor.eficiencia_ventilador:.1%}",
+        f"  η motor            : {motor.eficiencia_motor:.1%}",
+        f"  Factor servicio    : {motor.factor_servicio:.2f}",
+    ]
+    if motor.tipo_accionamiento == TipoAccionamiento.EXTRACTOR_EOLICO:
+        lines += [
+            "",
+            "EXTRACTOR EÓLICO",
+            f"  Diámetro extractor : "
+            + (f"{motor.diametro_extractor_m:.3f} m"
+               if motor.diametro_extractor_m else "—"),
+            f"  v viento diseño    : "
+            + (f"{motor.velocidad_viento_diseno_m_s:.2f} m/s"
+               if motor.velocidad_viento_diseno_m_s is not None else "—"),
+        ]
+    elif motor.tipo_accionamiento == TipoAccionamiento.MOTOR_ELECTRICO:
+        lines += [
+            "",
+            "MOTOR ELÉCTRICO",
+            f"  Tensión            : "
+            + (f"{motor.tension_V:.0f} V" if motor.tension_V else "(no especificada)"),
+        ]
+    lines += [
+        "",
+        "POTENCIAS CALCULADAS",
+    ]
+    if motor.potencia_hidraulica_W is not None:
+        lines.append(f"  P hidráulica       : {motor.potencia_hidraulica_W:.2f} W")
+    if motor.potencia_eje_W is not None:
+        lines.append(f"  P eje              : {motor.potencia_eje_W:.2f} W")
+    if motor.potencia_electrica_W is not None:
+        lines.append(f"  P eléctrica        : {motor.potencia_electrica_W:.2f} W")
+    if motor.potencia_a_instalar_W is not None:
+        lines.append(f"  P a instalar       : {motor.potencia_a_instalar_W:.2f} W "
+                      f"({motor.potencia_a_instalar_W / 1000:.3f} kW)")
+    if motor.corriente_nominal_A is not None:
+        lines.append(f"  Corriente nominal  : {motor.corriente_nominal_A:.3f} A "
+                      f"(cos φ = 0.85)")
+    if all(p is None for p in (motor.potencia_hidraulica_W, motor.potencia_eje_W,
+                                motor.potencia_electrica_W)):
+        lines.append("  (sin ΔP > 0, no se calcularon potencias)")
+
     if motor.notas:
-        lines += ["", f"Notas: {motor.notas}"]
+        lines += ["", "NOTAS", f"  {motor.notas}"]
+
+    lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
+    if not motor.advertencias:
+        lines.append("  (ninguna)")
+    else:
+        for a in motor.advertencias:
+            lines.append(f"  [{a.severidad.value}] {a.codigo}: {a.mensaje}")
+    lines.append("")
     return "\n".join(lines)
+
+
+def _from_json_motor(data: dict) -> "Motor":
+    """Reconstruye un ``Motor`` desde un dict producido por ``_json_config_motor``.
+
+    Para preservar el dimensionamiento original, si la pérdida total fue
+    explícitamente especificada por el usuario (es decir, no es la suma de
+    los componentes), se pasa al constructor; de lo contrario se deja en
+    None y se deja que ``__post_init__`` la recompute.
+
+    Raises:
+        KeyError/ValueError: si faltan campos o el Enum no es válido.
+    """
+    dp = data.get("perdida_de_carga") or {}
+    eff = data.get("eficiencias") or {}
+    elec = data.get("electrico") or {}
+    eolico = data.get("eolico") or {}
+
+    dp_componentes = [
+        dp.get("delta_P_colector_Pa") or 0.0,
+        dp.get("delta_P_camara_Pa") or 0.0,
+        dp.get("delta_P_ductos_Pa") or 0.0,
+        dp.get("delta_P_singulares_Pa") or 0.0,
+    ]
+    dp_total = dp.get("delta_P_total_Pa")
+    suma_comp = sum(dp_componentes)
+    # Si total ≈ suma de componentes, dejamos None para que __post_init__
+    # lo recompute (consistente con cómo lo calcula Motor); si difiere,
+    # respetamos el valor explícito guardado.
+    pasar_total = None
+    if dp_total is not None and abs(dp_total - suma_comp) > 0.5:
+        pasar_total = float(dp_total)
+
+    return Motor(
+        tipo_accionamiento=TipoAccionamiento(data["tipo_accionamiento"]),
+        caudal_volumetrico_m3_s=float(data["caudal_volumetrico_m3_s"]),
+        perdida_carga_total_Pa=pasar_total,
+        delta_P_colector_Pa=(
+            float(dp["delta_P_colector_Pa"])
+            if dp.get("delta_P_colector_Pa") is not None else None
+        ),
+        delta_P_camara_Pa=(
+            float(dp["delta_P_camara_Pa"])
+            if dp.get("delta_P_camara_Pa") is not None else None
+        ),
+        delta_P_ductos_Pa=(
+            float(dp["delta_P_ductos_Pa"])
+            if dp.get("delta_P_ductos_Pa") is not None else None
+        ),
+        delta_P_singulares_Pa=(
+            float(dp["delta_P_singulares_Pa"])
+            if dp.get("delta_P_singulares_Pa") is not None else None
+        ),
+        v_descarga_m_s=(
+            float(dp["v_descarga_m_s"])
+            if dp.get("v_descarga_m_s") is not None else None
+        ),
+        eficiencia_ventilador=float(eff.get("eficiencia_ventilador", 0.55)),
+        eficiencia_motor=float(eff.get("eficiencia_motor", 0.85)),
+        factor_servicio=float(eff.get("factor_servicio", 1.15)),
+        tension_V=(
+            float(elec["tension_V"]) if elec.get("tension_V") is not None else None
+        ),
+        diametro_extractor_m=(
+            float(eolico["diametro_extractor_m"])
+            if eolico.get("diametro_extractor_m") is not None else None
+        ),
+        velocidad_viento_diseno_m_s=(
+            float(eolico["velocidad_viento_diseno_m_s"])
+            if eolico.get("velocidad_viento_diseno_m_s") is not None else None
+        ),
+        notas=data.get("notas") or "",
+    )
+
+
+def _json_config_motor(motor: "Motor") -> dict:
+    """Snapshot reconstruible (dict) del motor."""
+    from datetime import date
+
+    return {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "motor",
+        "tipo_accionamiento": motor.tipo_accionamiento.value,
+        "caudal_volumetrico_m3_s": motor.caudal_volumetrico_m3_s,
+        "perdida_de_carga": {
+            "delta_P_total_Pa": motor.perdida_carga_total_Pa,
+            "delta_P_colector_Pa": motor.delta_P_colector_Pa,
+            "delta_P_camara_Pa": motor.delta_P_camara_Pa,
+            "delta_P_ductos_Pa": motor.delta_P_ductos_Pa,
+            "delta_P_singulares_Pa": motor.delta_P_singulares_Pa,
+            "v_descarga_m_s": motor.v_descarga_m_s,
+        },
+        "eficiencias": {
+            "eficiencia_ventilador": motor.eficiencia_ventilador,
+            "eficiencia_motor": motor.eficiencia_motor,
+            "factor_servicio": motor.factor_servicio,
+        },
+        "electrico": {
+            "tension_V": motor.tension_V,
+        },
+        "eolico": {
+            "diametro_extractor_m": motor.diametro_extractor_m,
+            "velocidad_viento_diseno_m_s": motor.velocidad_viento_diseno_m_s,
+        },
+        "notas": motor.notas,
+        "resultados": {
+            "ejecutado": (motor.potencia_hidraulica_W is not None),
+            "potencia_hidraulica_W": motor.potencia_hidraulica_W,
+            "potencia_eje_W": motor.potencia_eje_W,
+            "potencia_electrica_W": motor.potencia_electrica_W,
+            "potencia_a_instalar_W": motor.potencia_a_instalar_W,
+            "corriente_nominal_A": motor.corriente_nominal_A,
+        },
+        "advertencias_diseno": [
+            {
+                "codigo": a.codigo,
+                "severidad": a.severidad.value,
+                "mensaje": a.mensaje,
+                "campo": a.campo,
+                "sugerencia": a.sugerencia,
+                "contexto": a.contexto,
+            }
+            for a in motor.advertencias
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -99,6 +283,39 @@ def render() -> None:
     st.header("6 · Motor / Ventilador")
 
     proyecto = st.session_state.proyecto
+
+    # -----------------------------------------------------------------------
+    # Cargar configuración guardada (.json)
+    # -----------------------------------------------------------------------
+    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+        from ui.componentes.serializacion import (
+            limpiar_session_state_prefijo,
+            parsear_json_seccion,
+        )
+        archivo = st.file_uploader(
+            "Subí un archivo .json del motor previamente guardado",
+            type=["json"], key="p6_cargar_json",
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "motor")
+            if err:
+                st.error(f"❌ {err}")
+            else:
+                try:
+                    mot_cargado = _from_json_motor(data)
+                except (KeyError, ValueError, TypeError) as exc:
+                    st.error(f"❌ Error reconstruyendo el motor: {exc}")
+                else:
+                    proyecto.motor = mot_cargado
+                    n_borr = limpiar_session_state_prefijo(
+                        st.session_state, "p6_"
+                    )
+                    st.session_state.pop("p6_cargar_json", None)
+                    st.success(
+                        f"✅ Motor cargado desde JSON "
+                        f"(se reiniciaron {n_borr} valores de la sesión)."
+                    )
+                    st.rerun()
 
     # -----------------------------------------------------------------------
     # Toggle: ¿usar motor?
@@ -546,10 +763,21 @@ def render() -> None:
     # --- Guardar configuración ---
     if proyecto.motor is not None:
         st.divider()
-        st.download_button(
-            "Guardar configuración del motor (.txt)",
-            data=_texto_config_motor(proyecto.motor),
-            file_name="config_motor.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
+        from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+        col_txt, col_json = st.columns(2)
+        with col_txt:
+            st.download_button(
+                "Guardar configuración del motor (.txt)",
+                data=_texto_config_motor(proyecto.motor),
+                file_name=nombre_archivo_descarga(proyecto, "motor", "txt"),
+                mime="text/plain",
+                width="stretch",
+            )
+        with col_json:
+            st.download_button(
+                "Guardar configuración del motor (.json)",
+                data=dump_json(_json_config_motor(proyecto.motor)),
+                file_name=nombre_archivo_descarga(proyecto, "motor", "json"),
+                mime="application/json",
+                width="stretch",
+            )

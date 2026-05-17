@@ -16,3 +16,10 @@ pyarrow>=16.0.0
 
 # === Catálogo de productos y materiales ===
 pyyaml>=6.0.1
+
+# === Reporte PDF ===
+# kaleido pinned a la rama 0.2.x: la 1.x requiere Chrome instalado en el sistema,
+# que no está disponible en Streamlit Community Cloud por defecto. La 0.2.x trae
+# Chromium embebido (~50 MB) y no necesita dependencias del sistema.
+reportlab>=4.0.0
+kaleido==0.2.1

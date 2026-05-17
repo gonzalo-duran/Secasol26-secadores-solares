@@ -69,27 +69,181 @@ def _T_entrada_sugerida() -> float:
 # ---------------------------------------------------------------------------
 
 def _texto_config_auxiliar(aux: "Auxiliar") -> str:
+    """Snapshot .txt del auxiliar (config + cálculos derivados del dataclass)."""
     from datetime import date
+    from core.auxiliar import TipoAuxiliar, advertencias_auxiliar
+
+    sep = "=" * 60
     lines = [
-        "=== CONFIGURACIÓN DEL AUXILIAR TÉRMICO ===",
-        f"Fecha: {date.today()}",
+        sep,
+        "        CONFIGURACIÓN DEL AUXILIAR TÉRMICO",
+        sep,
+        f"Fecha de exportación: {date.today()}",
         "",
-        f"Tipo            : {aux.tipo.value}",
-        f"Modo operación  : {aux.modo_operacion.value}",
-        f"Potencia nominal: {aux.potencia_nominal_W / 1000:.2f} kW",
-        f"Fracción oper.  : {aux.fraccion_potencia_operacion:.0%}",
-        f"T_max salida    : {aux.temperatura_maxima_salida_K - 273.15:.0f} °C",
-        f"Disponible noc. : {'Sí' if aux.disponible_nocturno else 'No'}",
+        "TIPO Y OPERACIÓN",
+        f"  Tipo               : {aux.tipo.value}",
+        f"  Modo operación     : {aux.modo_operacion.value}",
+        f"  Disponible nocturno: {'Sí' if aux.disponible_nocturno else 'No'}",
+        "",
+        "POTENCIA Y TEMPERATURA",
+        f"  Potencia nominal   : {aux.potencia_nominal_W / 1000:.3f} kW "
+        f"({aux.potencia_nominal_W:.0f} W)",
+        f"  Fracción operación : {aux.fraccion_potencia_operacion:.1%}",
+        f"  Potencia efectiva  : {aux.potencia_efectiva_W() / 1000:.3f} kW "
+        f"({aux.potencia_efectiva_W():.0f} W)",
+        f"  T_max salida       : {aux.temperatura_maxima_salida_K - 273.15:.1f} °C "
+        f"({aux.temperatura_maxima_salida_K:.2f} K)",
+        "  Set-point T        : "
+        + (f"{aux.set_point_T_K - 273.15:.1f} °C ({aux.set_point_T_K:.2f} K)"
+           if aux.set_point_T_K is not None
+           else "(libre, sin control de T)"),
     ]
-    if aux.tipo.value == "QUEMADOR_BIOMASA":
+    if aux.tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
+        consumo = aux.consumo_biomasa_efectivo_kg_h()
         lines += [
-            f"Combustible     : {aux.tipo_biomasa or '—'}",
-            f"PCI             : {f'{aux.PCI_MJ_kg:.1f} MJ/kg' if aux.PCI_MJ_kg else '—'}",
-            f"η quemador      : {f'{aux.eficiencia_quemador:.0%}' if aux.eficiencia_quemador else '—'}",
+            "",
+            "QUEMADOR DE BIOMASA",
+            f"  Combustible        : {aux.tipo_biomasa or '—'}",
+            f"  PCI                : "
+            + (f"{aux.PCI_MJ_kg:.2f} MJ/kg" if aux.PCI_MJ_kg else "—"),
+            f"  η quemador         : "
+            + (f"{aux.eficiencia_quemador:.1%}" if aux.eficiencia_quemador else "—"),
+            f"  Consumo nominal    : "
+            + (f"{aux.consumo_biomasa_kg_h:.3f} kg/h"
+               if aux.consumo_biomasa_kg_h else "(calculado por PCI)"),
+            f"  Consumo efectivo   : "
+            + (f"{consumo:.3f} kg/h" if consumo is not None else "—"),
         ]
+    elif aux.tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
+        lines += [
+            "",
+            "RESISTENCIA ELÉCTRICA",
+            f"  Tensión            : "
+            + (f"{aux.tension_V:.0f} V" if aux.tension_V else "(no especificada)"),
+            f"  Corriente máx.     : "
+            + (f"{aux.corriente_maxima_A:.2f} A"
+               if aux.corriente_maxima_A else "(no especificada)"),
+        ]
+        if aux.tension_V:
+            i_aprox = aux.potencia_efectiva_W() / aux.tension_V
+            lines.append(f"  Corriente estimada : {i_aprox:.2f} A (P_efec / V, cos φ = 1)")
     if aux.notas:
-        lines += ["", f"Notas: {aux.notas}"]
+        lines += ["", "NOTAS", f"  {aux.notas}"]
+
+    advs = advertencias_auxiliar(aux)
+    lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
+    if not advs:
+        lines.append("  (ninguna)")
+    else:
+        for a in advs:
+            lines.append(f"  [{a.severidad.value}] {a.codigo}: {a.mensaje}")
+    lines += ["", sep, "  RESULTADOS DE SIMULACIÓN", sep]
+    lines.append("  ⚠ Los resultados del auxiliar se integran en el balance")
+    lines.append("    global de P7 (no hay simulación independiente en P5).")
+    lines.append("  Ver 'Prediseño completo' para Q_efectivo, ΔT y energía aportada.")
+    lines.append("")
     return "\n".join(lines)
+
+
+def _from_json_auxiliar(data: dict) -> "Auxiliar":
+    """Reconstruye un ``Auxiliar`` desde un dict producido por
+    ``_json_config_auxiliar``.
+
+    Raises:
+        KeyError/ValueError: si faltan campos obligatorios o un Enum no es válido.
+    """
+    biomasa = data.get("biomasa") or {}
+    re_dict = data.get("resistencia_electrica") or {}
+    set_point = data.get("set_point_T_K")
+    return Auxiliar(
+        tipo=TipoAuxiliar(data["tipo"]),
+        modo_operacion=ModoOperacionAuxiliar(data["modo_operacion"]),
+        potencia_nominal_W=float(data["potencia_nominal_W"]),
+        temperatura_maxima_salida_K=float(data["temperatura_maxima_salida_K"]),
+        set_point_T_K=float(set_point) if set_point is not None else None,
+        fraccion_potencia_operacion=float(
+            data.get("fraccion_potencia_operacion", 1.0)
+        ),
+        disponible_nocturno=bool(data.get("disponible_nocturno", False)),
+        tipo_biomasa=biomasa.get("tipo_biomasa"),
+        PCI_MJ_kg=(
+            float(biomasa["PCI_MJ_kg"]) if biomasa.get("PCI_MJ_kg") is not None
+            else None
+        ),
+        eficiencia_quemador=(
+            float(biomasa["eficiencia_quemador"])
+            if biomasa.get("eficiencia_quemador") is not None else None
+        ),
+        consumo_biomasa_kg_h=(
+            float(biomasa["consumo_biomasa_kg_h_nominal"])
+            if biomasa.get("consumo_biomasa_kg_h_nominal") is not None else None
+        ),
+        tension_V=(
+            float(re_dict["tension_V"]) if re_dict.get("tension_V") is not None
+            else None
+        ),
+        corriente_maxima_A=(
+            float(re_dict["corriente_maxima_A"])
+            if re_dict.get("corriente_maxima_A") is not None else None
+        ),
+        notas=data.get("notas") or "",
+    )
+
+
+def _json_config_auxiliar(aux: "Auxiliar") -> dict:
+    """Snapshot reconstruible (dict) del auxiliar."""
+    from datetime import date
+    from core.auxiliar import TipoAuxiliar, advertencias_auxiliar
+
+    base = {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "auxiliar",
+        "tipo": aux.tipo.value,
+        "modo_operacion": aux.modo_operacion.value,
+        "potencia_nominal_W": aux.potencia_nominal_W,
+        "fraccion_potencia_operacion": aux.fraccion_potencia_operacion,
+        "potencia_efectiva_W": aux.potencia_efectiva_W(),
+        "temperatura_maxima_salida_K": aux.temperatura_maxima_salida_K,
+        "set_point_T_K": aux.set_point_T_K,
+        "disponible_nocturno": aux.disponible_nocturno,
+        "notas": aux.notas,
+    }
+    if aux.tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
+        base["biomasa"] = {
+            "tipo_biomasa": aux.tipo_biomasa,
+            "PCI_MJ_kg": aux.PCI_MJ_kg,
+            "eficiencia_quemador": aux.eficiencia_quemador,
+            "consumo_biomasa_kg_h_nominal": aux.consumo_biomasa_kg_h,
+            "consumo_biomasa_efectivo_kg_h": aux.consumo_biomasa_efectivo_kg_h(),
+        }
+    elif aux.tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
+        base["resistencia_electrica"] = {
+            "tension_V": aux.tension_V,
+            "corriente_maxima_A": aux.corriente_maxima_A,
+            "corriente_estimada_A": (
+                aux.potencia_efectiva_W() / aux.tension_V if aux.tension_V else None
+            ),
+        }
+    base["advertencias_diseno"] = [
+        {
+            "codigo": a.codigo,
+            "severidad": a.severidad.value,
+            "mensaje": a.mensaje,
+            "campo": a.campo,
+            "sugerencia": a.sugerencia,
+            "contexto": a.contexto,
+        }
+        for a in advertencias_auxiliar(aux)
+    ]
+    base["resultados"] = {
+        "ejecutado": False,
+        "nota": (
+            "El auxiliar no se simula de forma independiente en P5. "
+            "Sus resultados de operación (Q_efectivo, ΔT, energía aportada) "
+            "se computan en el balance global de P7."
+        ),
+    }
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -102,6 +256,41 @@ def render() -> None:
     st.header("5 · Calentamiento Auxiliar")
 
     proyecto = st.session_state.proyecto
+
+    # -----------------------------------------------------------------------
+    # Cargar configuración guardada (.json)
+    # -----------------------------------------------------------------------
+    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+        from ui.componentes.serializacion import (
+            limpiar_session_state_prefijo,
+            parsear_json_seccion,
+        )
+        archivo = st.file_uploader(
+            "Subí un archivo .json del auxiliar previamente guardado",
+            type=["json"], key="p5_cargar_json",
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "auxiliar")
+            if err:
+                st.error(f"❌ {err}")
+            else:
+                try:
+                    aux_cargado = _from_json_auxiliar(data)
+                except (KeyError, ValueError, TypeError) as exc:
+                    st.error(f"❌ Error reconstruyendo el auxiliar: {exc}")
+                else:
+                    proyecto.auxiliar = aux_cargado
+                    n_borr = limpiar_session_state_prefijo(
+                        st.session_state, "p5_"
+                    )
+                    # También aux_*: claves auxiliares usadas por widgets
+                    limpiar_session_state_prefijo(st.session_state, "aux_")
+                    st.session_state.pop("p5_cargar_json", None)
+                    st.success(
+                        f"✅ Auxiliar cargado desde JSON "
+                        f"(se reiniciaron {n_borr} valores de la sesión)."
+                    )
+                    st.rerun()
 
     # -----------------------------------------------------------------------
     # Toggle principal: ¿usar auxiliar?
@@ -500,10 +689,21 @@ def render() -> None:
     # --- Guardar configuración ---
     if proyecto.auxiliar is not None:
         st.divider()
-        st.download_button(
-            "Guardar configuración del auxiliar (.txt)",
-            data=_texto_config_auxiliar(proyecto.auxiliar),
-            file_name="config_auxiliar.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
+        from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+        col_txt, col_json = st.columns(2)
+        with col_txt:
+            st.download_button(
+                "Guardar configuración del auxiliar (.txt)",
+                data=_texto_config_auxiliar(proyecto.auxiliar),
+                file_name=nombre_archivo_descarga(proyecto, "auxiliar", "txt"),
+                mime="text/plain",
+                width="stretch",
+            )
+        with col_json:
+            st.download_button(
+                "Guardar configuración del auxiliar (.json)",
+                data=dump_json(_json_config_auxiliar(proyecto.auxiliar)),
+                file_name=nombre_archivo_descarga(proyecto, "auxiliar", "json"),
+                mime="application/json",
+                width="stretch",
+            )
