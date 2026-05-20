@@ -31,11 +31,11 @@ from calculos.colector_tipos234_calc import (
 from core import catalogo
 from core.colector import (
     BancoColectores,
-    Chimenea,
     Colector,
     ColectorUnidad,
     advertencias_colector,
 )
+from core.chimenea import Chimenea
 from core.advertencias import Severidad
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.unidades import acimut_duffie_a_pvlib, kelvin_a_celsius
@@ -267,7 +267,10 @@ def _resumen_eval_anual(r: dict) -> dict | None:
     }
 
 
-def _texto_config_colector(col: "Colector", eval_dict: dict | None = None) -> str:
+def _texto_config_colector(
+    col: "Colector",
+    eval_dict: dict | None = None,
+) -> str:
     """Genera el snapshot .txt del colector incluyendo resultados si están.
 
     Args:
@@ -349,16 +352,6 @@ def _texto_config_colector(col: "Colector", eval_dict: dict | None = None) -> st
         f"  Caudal total    : {col.caudal_total_m3_s() * 1000:.3f} L/s",
         f"  Camino del aire : {col.largo_camino_aire_m():.2f} m",
     ]
-    if col.chimenea is not None:
-        ch = col.chimenea
-        lines += [
-            "",
-            "CHIMENEA SOLAR",
-            f"  Diámetro : {ch.diametro_m:.3f} m",
-            f"  Altura   : {ch.altura_m:.2f} m",
-            f"  Material : {desc(catalogo.FONDOS, ch.id_material)}  [id={ch.id_material}]",
-        ]
-
     # Advertencias estáticas activas
     advs = advertencias_colector(col)
     lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
@@ -424,6 +417,10 @@ def _from_json_colector(data: dict) -> "Colector":
     Los campos derivados (área total, advertencias, resultados) se ignoran
     porque se recomputan al instanciar.
 
+    Nota: la chimenea ya no forma parte del Colector. Si el .json es viejo
+    y trae la key ``chimenea``, el caller debe restaurarla por separado en
+    ``proyecto.chimenea`` (ver caller en ``render()``).
+
     Raises:
         KeyError: si faltan campos obligatorios.
         ValueError: si un id de material no existe en el catálogo.
@@ -431,7 +428,6 @@ def _from_json_colector(data: dict) -> "Colector":
     u = data.get("unidad") or {}
     mats = data.get("materiales") or {}
     banco = data.get("banco") or {}
-    chim = data.get("chimenea")
 
     def _mat_id(key: str) -> str:
         m = mats.get(key) or {}
@@ -450,6 +446,7 @@ def _from_json_colector(data: dict) -> "Colector":
         largo_m=float(u["largo_m"]),
         espaciado_m=float(u["espaciado_m"]),
         n_cubiertas=int(u["n_cubiertas"]),
+        espaciado_entre_cubiertas_m=float(u.get("espaciado_entre_cubiertas_m", 0.025)),
         velocidad_diseno_ms=float(u["velocidad_diseno_ms"]),
         tipo_colector=int(u.get("tipo_colector", 1)),
         espaciado_inferior_m=float(u.get("espaciado_inferior_m", u["espaciado_m"])),
@@ -466,17 +463,13 @@ def _from_json_colector(data: dict) -> "Colector":
         n_serie=int(banco.get("n_serie", 1)),
         n_paralelo=int(banco.get("n_paralelo", 1)),
     )
-    chimenea = None
-    if chim is not None:
-        chimenea = Chimenea(
-            diametro_m=float(chim["diametro_m"]),
-            altura_m=float(chim["altura_m"]),
-            id_material=chim["id_material"],
-        )
-    return Colector(unidad=unidad, banco=bco, chimenea=chimenea)
+    return Colector(unidad=unidad, banco=bco)
 
 
-def _json_config_colector(col: "Colector", eval_dict: dict | None = None) -> dict:
+def _json_config_colector(
+    col: "Colector",
+    eval_dict: dict | None = None,
+) -> dict:
     """Genera el snapshot reconstruible (dict serializable) del colector."""
     from datetime import date
     u = col.unidad
@@ -490,6 +483,7 @@ def _json_config_colector(col: "Colector", eval_dict: dict | None = None) -> dic
             "espaciado_m": u.espaciado_m,
             "espaciado_inferior_m": u.espaciado_inferior_m,
             "n_cubiertas": u.n_cubiertas,
+            "espaciado_entre_cubiertas_m": u.espaciado_entre_cubiertas_m,
             "velocidad_diseno_ms": u.velocidad_diseno_ms,
             "tipo_colector": u.tipo_colector,
             "tipo_colector_descripcion": _TIPOS_COLECTOR.get(u.tipo_colector),
@@ -528,7 +522,6 @@ def _json_config_colector(col: "Colector", eval_dict: dict | None = None) -> dic
             "caudal_total_m3_s": col.caudal_total_m3_s(),
             "largo_camino_aire_m": col.largo_camino_aire_m(),
         },
-        "chimenea": None,
         "advertencias_diseno": [
             {
                 "codigo": a.codigo,
@@ -541,13 +534,6 @@ def _json_config_colector(col: "Colector", eval_dict: dict | None = None) -> dic
             for a in advertencias_colector(col)
         ],
     }
-    if col.chimenea is not None:
-        snapshot["chimenea"] = {
-            "diametro_m": col.chimenea.diametro_m,
-            "altura_m": col.chimenea.altura_m,
-            "id_material": col.chimenea.id_material,
-            "props_catalogo": _mat_props(catalogo.FONDOS, col.chimenea.id_material),
-        }
 
     # Resultados
     if eval_dict is None or not eval_dict.get("r"):
@@ -582,17 +568,15 @@ _COLORES_MESES = [
 ]
 
 
-def _poa_serie(datos, lat, lon, alt, pendiente, acimut_pvlib_deg):
-    sol_pos = pvlib.solarposition.get_solarposition(datos.index, lat, lon, altitude=alt)
-    poa = pvlib.irradiance.get_total_irradiance(
-        surface_tilt=pendiente, surface_azimuth=acimut_pvlib_deg,
-        solar_zenith=sol_pos["apparent_zenith"], solar_azimuth=sol_pos["azimuth"],
-        dni=datos["DNI_Wm2"], ghi=datos["GHI_Wm2"], dhi=datos["DHI_Wm2"],
-    )
-    return poa["poa_global"].clip(lower=0).fillna(0.0)
+def _poa_serie(datos, empl):
+    """Wrapper sobre ``calculos.clima_calc.calcular_POA_horizonte`` para
+    mantener firma estable en este módulo. POA horaria sobre el plano del
+    colector, derivada de DNI/GHI/DHI + tilt/azimut del emplazamiento."""
+    from calculos.clima_calc import calcular_POA_horizonte
+    return calcular_POA_horizonte(datos, empl)
 
 
-def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms):
+def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms, pendiente_deg=30.0):
     if I_g_W_m2 < 50.0:
         return None
     u = colector.unidad
@@ -601,6 +585,7 @@ def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms):
         colector=colector, T_amb_K=T_amb_K,
         I_g_W_m2=I_g_W_m2, v_viento_ms=max(v_viento_ms, 0.5),
         P_amb_Pa=101325.0, T_entrada_K=T_amb_K,
+        pendiente_deg=pendiente_deg,
     )
     try:
         if tipo == 1:
@@ -612,7 +597,12 @@ def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms):
                 alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m,
             )
         elif tipo == 3:
-            return calcular_colector_tipo3(**kw, alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m)
+            # Tipo 3 usa theta_deg para Hollands del canal estanco; lo unificamos
+            # con la pendiente del colector (ya se reutiliza para la cavidad de cubiertas).
+            kw_t3 = {k: v for k, v in kw.items() if k != "pendiente_deg"}
+            return calcular_colector_tipo3(**kw_t3, alto_cs_m=u.espaciado_m,
+                                            alto_ci_m=u.espaciado_inferior_m,
+                                            theta_deg=pendiente_deg)
         elif tipo == 4:
             return calcular_colector_tipo4(**kw, alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m)
     except Exception:
@@ -669,9 +659,7 @@ def _evaluar_diario(colector, datos_dia, empl):
     el tránsito solar (no en POA máx), siguiendo la convención de "estado
     al mediodía" usada en textos de secado solar.
     """
-    acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
-    poa = _poa_serie(datos_dia, empl.latitud_deg, empl.longitud_deg, empl.altitud_m,
-                     empl.pendiente_colector_deg, acimut_pvlib)
+    poa = _poa_serie(datos_dia, empl)
     tipo = colector.unidad.tipo_colector
 
     horas, T_sal_C, T_amb_C, poa_list = [], [], [], []
@@ -693,7 +681,8 @@ def _evaluar_diario(colector, datos_dia, empl):
         I_g = float(poa.get(ts, 0.0))
         T_amb = float(row["T_amb_K"])
         v_w = float(row["WS_ms"])
-        res = _correr_colector(colector, T_amb, I_g, v_w)
+        res = _correr_colector(colector, T_amb, I_g, v_w,
+                                pendiente_deg=empl.pendiente_colector_deg)
 
         horas.append(ts)
         T_amb_C.append(T_amb - 273.15)
@@ -724,9 +713,7 @@ def _evaluar_anual(colector, datos_local, empl, anio):
     no por POA máxima. Esto evita que un colector con orientación rara
     desplace artificialmente la evaluación a horas tarde / temprano.
     """
-    acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
-    poa_all = _poa_serie(datos_local, empl.latitud_deg, empl.longitud_deg, empl.altitud_m,
-                         empl.pendiente_colector_deg, acimut_pvlib)
+    poa_all = _poa_serie(datos_local, empl)
     tipo = colector.unidad.tipo_colector
 
     meses, T_sal_C, T_amb_C, poa_noon_list, perfiles_C = [], [], [], [], []
@@ -762,7 +749,8 @@ def _evaluar_anual(colector, datos_local, empl, anio):
         T_amb = float(row["T_amb_K"])
         v_w = float(row["WS_ms"])
 
-        res = _correr_colector(colector, T_amb, I_g, v_w)
+        res = _correr_colector(colector, T_amb, I_g, v_w,
+                                pendiente_deg=empl.pendiente_colector_deg)
         if res is None:
             continue
 
@@ -997,6 +985,20 @@ def render() -> None:
                     st.error(f"❌ Error reconstruyendo el colector: {exc}")
                 else:
                     proyecto.colector = col_cargado
+                    # Backward compat: .json viejos guardaban chimenea como
+                    # parte del snapshot de colector. La restauramos a
+                    # proyecto.chimenea para no perder esa configuración al
+                    # cargar archivos previos a la migración.
+                    chim_data = data.get("chimenea")
+                    if chim_data is not None:
+                        try:
+                            proyecto.chimenea = Chimenea(
+                                diametro_m=float(chim_data["diametro_m"]),
+                                altura_m=float(chim_data["altura_m"]),
+                                id_material=chim_data["id_material"],
+                            )
+                        except (KeyError, ValueError, TypeError):
+                            pass  # chimenea malformada en el .json viejo: ignorar
                     # Limpiar widgets cacheados y resultados viejos de P3.
                     # Preservamos la clave del file_uploader para no entrar
                     # en bucle de "archivo todavía está cargado".
@@ -1065,8 +1067,23 @@ def render() -> None:
                 options=[1, 2],
                 index=colector.unidad.n_cubiertas - 1,
                 key="p3_n_cubiertas",
-                help="1 cubierta es lo estándar. 2 cubiertas reduce pérdidas pero baja la transmitancia.",
+                help="1 cubierta es lo estándar. 2 cubiertas reduce pérdidas "
+                     "superiores (mejor en climas fríos o ventosos) pero baja la "
+                     "transmitancia solar.",
             )
+            if n_cubiertas == 2:
+                esp_cub_cub_mm = st.number_input(
+                    "Espaciado entre cubiertas [mm]",
+                    min_value=10.0, max_value=50.0,
+                    value=colector.unidad.espaciado_entre_cubiertas_m * 1000,
+                    step=1.0,
+                    key="p3_esp_cub_cub",
+                    help="Cavidad de aire entre las dos cubiertas. Rango "
+                         "óptimo 20–40 mm (Duffie & Beckman): minimiza convección "
+                         "natural manteniendo la resistencia conductiva.",
+                )
+            else:
+                esp_cub_cub_mm = colector.unidad.espaciado_entre_cubiertas_m * 1000
         if id_cubierta == _ID_USUARIO:
             catalogo.CUBIERTAS[_ID_USUARIO] = _inputs_cubierta_usuario("p3_ucub")
         _tabla_propiedades_cubierta(id_cubierta)
@@ -1276,55 +1293,10 @@ def render() -> None:
                       help="n_serie × largo de unidad. Longitud total que recorre el aire.")
 
     # -----------------------------------------------------------------------
-    # Sección 4: Chimenea (solo si convección natural)
+    # Nota: la chimenea solar se configura en P6 (pestaña Motor / Convección
+    # natural), no acá, porque es independiente del colector y aplica también
+    # a tipología CAJA donde esta pestaña no se muestra.
     # -----------------------------------------------------------------------
-
-    usar_chimenea = st.checkbox(
-        "Incorporar chimenea solar (convección natural o asistida)",
-        value=colector.chimenea is not None,
-        key="p3_usar_chimenea",
-        help="Activa la configuración de chimenea solar para inducir tiraje natural.",
-    )
-
-    chim_data: dict = {}
-    if usar_chimenea:
-        with st.expander("Chimenea solar", expanded=True):
-            ch_ref = colector.chimenea or Chimenea()
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                chim_diametro = st.number_input(
-                    "Diámetro interno [m]",
-                    min_value=0.05, max_value=2.0,
-                    value=float(ch_ref.diametro_m),
-                    step=0.01,
-                    format="%.2f",
-                    key="p3_chim_diam",
-                )
-            with c2:
-                chim_altura = st.number_input(
-                    "Altura [m]",
-                    min_value=0.1, max_value=20.0,
-                    value=float(ch_ref.altura_m),
-                    step=0.1,
-                    format="%.1f",
-                    key="p3_chim_altura",
-                )
-            with c3:
-                opciones_fon_chim = _opciones_material(catalogo.FONDOS)
-                ids_fon_chim = list(opciones_fon_chim.keys())
-                idx_fon_chim = ids_fon_chim.index(ch_ref.id_material) if ch_ref.id_material in ids_fon_chim else 0
-                chim_material = st.selectbox(
-                    "Material",
-                    options=ids_fon_chim,
-                    index=idx_fon_chim,
-                    format_func=lambda x: opciones_fon_chim[x],
-                    key="p3_chim_material",
-                )
-            chim_data = {
-                "diametro_m": chim_diametro,
-                "altura_m": chim_altura,
-                "id_material": chim_material,
-            }
 
     # -----------------------------------------------------------------------
     # Aplicar cambios al session_state
@@ -1336,6 +1308,7 @@ def render() -> None:
             largo_m=largo_m,
             espaciado_m=espaciado_mm / 1000,
             n_cubiertas=n_cubiertas,
+            espaciado_entre_cubiertas_m=esp_cub_cub_mm / 1000,
             velocidad_diseno_ms=velocidad_ms,
             tipo_colector=tipo_colector,
             espaciado_inferior_m=espaciado_inferior_mm / 1000,
@@ -1349,12 +1322,10 @@ def render() -> None:
             espesor_fondo_m=espesor_fondo_mm / 1000,
         )
         nuevo_banco = BancoColectores(n_serie=n_serie, n_paralelo=n_paralelo)
-        nueva_chimenea = Chimenea(**chim_data) if usar_chimenea else None
 
         nuevo_colector = Colector(
             unidad=nueva_unidad,
             banco=nuevo_banco,
-            chimenea=nueva_chimenea,
         )
         proyecto.colector = nuevo_colector
 

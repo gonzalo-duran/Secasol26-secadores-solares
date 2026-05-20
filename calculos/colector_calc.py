@@ -47,7 +47,7 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
-from calculos.correlaciones_nusselt import calcular_h_int
+from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
 
 if TYPE_CHECKING:
     from core.colector import Colector
@@ -58,6 +58,7 @@ if TYPE_CHECKING:
 
 SIGMA_SB: float = 5.670374419e-8  # W/m²·K⁴ — constante de Stefan-Boltzmann
 R_AIRE: float = 287.058           # J/kg·K  — constante específica del aire seco
+G_GRAVEDAD: float = 9.81          # m/s² — aceleración gravitatoria
 
 # Propiedades del aire a 323 K (50 °C), presión estándar
 CP_AIRE: float = 1007.0      # J/kg·K
@@ -230,6 +231,110 @@ def _em_efectiva_paralelas(em_cub: float, em_abs: float) -> float:
     return 1.0 / (1.0 / em_cub + 1.0 / em_abs - 1.0)
 
 
+def _h_cavidad_aire(
+    T_sup_K: float,
+    T_inf_K: float,
+    esp_cav_m: float,
+    em_sup: float,
+    em_inf: float,
+    pendiente_deg: float,
+    P_amb_Pa: float,
+) -> float:
+    """Coeficiente de transferencia en cavidad de aire entre dos superficies paralelas.
+
+    Combina convección natural (Hollands inclinada) y radiación entre superficies
+    grises paralelas. Usado para modelar la cavidad entre cubiertas cuando
+    n_cubiertas == 2.
+
+    Las temperaturas T_sup_K y T_inf_K son las que bordean la cavidad. En el
+    modelo simplificado de doble cubierta se usan como proxies T_cub_e (cara
+    externa de la cubierta exterior) y T_cub_i (cara interna de la interior),
+    aceptando un error <5% porque la resistencia conductiva de cada cubierta
+    es despreciable frente a la de la cavidad.
+
+    Args:
+        T_sup_K: Temperatura de la superficie superior (más fría) [K].
+        T_inf_K: Temperatura de la superficie inferior (más caliente) [K].
+        esp_cav_m: Espesor de la cavidad [m].
+        em_sup: Emisividad IR de la superficie superior [adim].
+        em_inf: Emisividad IR de la superficie inferior [adim].
+        pendiente_deg: Inclinación del colector respecto a la horizontal [°].
+        P_amb_Pa: Presión ambiente para evaluar densidad del aire [Pa].
+
+    Returns:
+        h_cav [W/m²·K] = h_conv_natural + h_rad.
+    """
+    # Propiedades del aire a la temperatura media de cavidad (gas ideal).
+    T_film = 0.5 * (T_sup_K + T_inf_K)
+    rho = P_amb_Pa / (R_AIRE * T_film)
+    beta = 1.0 / T_film
+    nu = MU_AIRE / rho
+    alpha = K_AIRE / (rho * CP_AIRE)
+
+    delta_T = abs(T_inf_K - T_sup_K)
+    if delta_T < 1e-6:
+        # cavidad isotérmica → solo conducción pura del aire
+        Nu = 1.0
+    else:
+        Ra = G_GRAVEDAD * beta * delta_T * esp_cav_m**3 / (nu * alpha)
+        Nu = nusselt_hollands_inclinada(Ra, min(pendiente_deg, 75.0))
+
+    h_conv = Nu * K_AIRE / esp_cav_m
+
+    # Radiación entre superficies grises paralelas: linealizada como
+    # h_rad = ε_eff·σ·(T_sup² + T_inf²)(T_sup + T_inf)
+    em_eff = 1.0 / (1.0 / em_sup + 1.0 / em_inf - 1.0)
+    h_rad = em_eff * SIGMA_SB * (T_sup_K**2 + T_inf_K**2) * (T_sup_K + T_inf_K)
+
+    return h_conv + h_rad
+
+
+def _U_cubierta_efectiva(
+    n_cubiertas: int,
+    T_cub_e_K: float,
+    T_cub_i_K: float,
+    k_cub: float,
+    esp_cub_m: float,
+    em_cub: float,
+    esp_cav_m: float,
+    pendiente_deg: float,
+    P_amb_Pa: float,
+) -> float:
+    """Conductancia efectiva entre la cara externa y la cara interna de la cubierta.
+
+    Para n_cubiertas == 1, devuelve la conductancia conductiva clásica
+    k_cub/esp_cub. Para n_cubiertas == 2, devuelve una conductancia serie que
+    suma dos conductancias conductivas (una por cubierta) y la cavidad de aire
+    entre ellas (convección natural + radiación entre superficies grises).
+
+    Args:
+        n_cubiertas: 1 ó 2.
+        T_cub_e_K: Temperatura cara externa de la cubierta exterior [K].
+        T_cub_i_K: Temperatura cara interna de la cubierta interior [K].
+        k_cub: Conductividad térmica del material de cubierta [W/m·K].
+        esp_cub_m: Espesor de CADA cubierta [m].
+        em_cub: Emisividad IR de la cubierta [adim].
+        esp_cav_m: Espaciado entre cubiertas (solo usado si n_cubiertas==2) [m].
+        pendiente_deg: Inclinación del colector [°].
+        P_amb_Pa: Presión ambiente [Pa].
+
+    Returns:
+        U_eff [W/m²·K].
+    """
+    if n_cubiertas == 1:
+        return k_cub / esp_cub_m
+
+    h_cav = _h_cavidad_aire(
+        T_sup_K=T_cub_e_K, T_inf_K=T_cub_i_K,
+        esp_cav_m=esp_cav_m,
+        em_sup=em_cub, em_inf=em_cub,
+        pendiente_deg=pendiente_deg,
+        P_amb_Pa=P_amb_Pa,
+    )
+    R_total = 2.0 * (esp_cub_m / k_cub) + 1.0 / h_cav
+    return 1.0 / R_total
+
+
 # =============================================================================
 # Sistema no lineal en cada nodo
 # =============================================================================
@@ -252,6 +357,10 @@ def _sistema_nodo(
     alfa_abs: float,
     W_m: float,
     W_abs_m: float,
+    n_cubiertas: int = 1,
+    esp_cav_m: float = 0.025,
+    pendiente_deg: float = 30.0,
+    P_amb_Pa: float = 101325.0,
 ) -> np.ndarray:
     """Sistema de 3 ecuaciones algebraicas no lineales en cada nodo x.
 
@@ -293,18 +402,28 @@ def _sistema_nodo(
     T_cub_e, T_cub_i, T_abs = vars_
 
     em_eff = _em_efectiva_paralelas(em_cub, em_abs)
-    U_cub = k_cub / esp_cub   # conductancia cubierta [W/m²·K]
+    # Conductancia cubierta: simple (n=1) o efectiva con cavidad de aire (n=2).
+    U_cub = _U_cubierta_efectiva(
+        n_cubiertas=n_cubiertas,
+        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
+        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
+        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        P_amb_Pa=P_amb_Pa,
+    )
     U_ais = k_ais / esp_ais   # conductancia aislante [W/m²·K]
     T_bot = _T_bot_K(T_abs, T_amb_K, k_ais, esp_ais, h_wind)
 
     # --- F1: balance cara externa de cubierta ---
-    # Ganancia: conducción desde interior.
-    # Pérdidas: convección viento + radiación al cielo.
-    # Por unidad de área (dA_cub = W·dx, se cancela):
+    # En operación normal T_cub_i > T_cub_e: la cara externa GANA por conducción
+    # desde la cara interna y PIERDE por convección al viento + radiación al cielo.
+    # Con conduccion_cub = U·(T_cub_e − T_cub_i), eso es NEGATIVO en op. normal,
+    # por lo que el aporte conductivo a T_cub_e es −conduccion_cub (positivo).
+    # Balance: ganancia − pérdidas = 0  →  −conduccion_cub − (conv + rad) = 0
+    # equivalente a:  conv + rad + conduccion_cub = 0.
     conv_viento = h_wind * (T_cub_e - T_amb_K)
     rad_cielo = em_cub * SIGMA_SB * (T_cub_e ** 4 - T_cie_K ** 4)
     conduccion_cub = U_cub * (T_cub_e - T_cub_i)
-    F1 = conv_viento + rad_cielo - conduccion_cub
+    F1 = conv_viento + rad_cielo + conduccion_cub
 
     # --- F2: balance cara interna de cubierta ---
     # Ganancia: conducción desde cara externa.
@@ -314,6 +433,10 @@ def _sistema_nodo(
     F2 = conduccion_cub - conv_fluido_cub - rad_abs_cub
 
     # --- F3: balance absorbedor ---
+    # Ganancia: radiación solar transmitida y absorbida.
+    # Pérdidas: convección al fluido (T_abs > T_f), radiación a la cubierta
+    # interna (T_abs > T_cub_i) y conducción a la cara externa del fondo
+    # vía el aislante (T_abs > T_bot).
     # Nota: W_abs_m puede diferir de W_m (absorbedor ondulado).
     # Los términos que involucran el canal (conv fluido, rad cubierta)
     # se escalan con W_m (área proyectada); la absorción solar y la pérdida
@@ -324,7 +447,7 @@ def _sistema_nodo(
     rad_cub_abs = em_eff * SIGMA_SB * (T_abs ** 4 - T_cub_i ** 4) * W_m
     cond_fondo = U_ais * (T_abs - T_bot) * W_abs_m
 
-    F3 = rad_solar_abs + conv_fluido_abs - rad_cub_abs - cond_fondo
+    F3 = rad_solar_abs - conv_fluido_abs - rad_cub_abs - cond_fondo
 
     return np.array([F1, F2, F3])
 
@@ -383,6 +506,10 @@ def _construir_rhs(params: dict):
                 params["alfa_abs"],
                 params["W_m"],
                 params["W_abs_m"],
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             full_output=True,
             xtol=TOL_FSOLVE,
@@ -424,6 +551,7 @@ def calcular_colector_tipo1(
     P_amb_Pa: float,
     T_entrada_K: float,
     correlacion_nusselt: str | None = None,
+    pendiente_deg: float = 30.0,
 ) -> ResultadosColectorTipo1:
     """Calcula el comportamiento térmico del colector solar Tipo 1.
 
@@ -545,6 +673,10 @@ def calcular_colector_tipo1(
         "W_m": W_m,
         "W_abs_m": W_abs_m,
         "m_punto_kgs": m_punto_rama_kgs,
+        "n_cubiertas": unidad.n_cubiertas,
+        "esp_cav_m": unidad.espaciado_entre_cubiertas_m,
+        "pendiente_deg": pendiente_deg,
+        "P_amb_Pa": P_amb_Pa,
     }
 
     # --- Integración con solve_ivp ---
@@ -613,6 +745,10 @@ def calcular_colector_tipo1(
                 params["alfa_abs"],
                 params["W_m"],
                 params["W_abs_m"],
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             xtol=TOL_FSOLVE,
         )

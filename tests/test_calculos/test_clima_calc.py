@@ -132,3 +132,138 @@ def test_politica_columnas_preservadas():
     df = _df_con_hueco(inicio_hueco=2, duracion=2)
     df_corr, _ = _aplicar_politica_huecos(df)
     assert list(df_corr.columns) == list(df.columns)
+
+
+# ---------------------------------------------------------------------------
+# POA (Plane of Array) — transposición GHI/DNI/DHI → plano inclinado
+# ---------------------------------------------------------------------------
+
+
+from calculos.clima_calc import calcular_POA_horizonte
+from core.emplazamiento import Emplazamiento
+
+
+def _df_clima_dia_claro(
+    lat: float = -24.79, lon: float = -65.41, n_horas: int = 24,
+    fecha: str = "2022-06-21",
+) -> pd.DataFrame:
+    """DataFrame horario con perfil de día claro y DNI/DHI coherentes con GHI.
+
+    El timestamp se localiza en Argentina/Salta — pvlib requiere tz-aware.
+    Se genera una GHI semicampana razonable y luego se descompone en DNI/DHI
+    con el modelo Erbs (que respeta GHI = DNI·cosθz + DHI), de modo que el
+    test horizontal (tilt=0) tenga POA ≡ GHI.
+    """
+    import pvlib.irradiance
+    import pvlib.solarposition
+
+    idx = pd.date_range(
+        fecha, periods=n_horas, freq="h", tz="America/Argentina/Salta",
+    )
+    horas = np.arange(n_horas, dtype=float)
+    fase = np.pi * (horas - 6.0) / 12.0
+    ghi = np.where(
+        (horas >= 6) & (horas <= 18),
+        900.0 * np.sin(np.clip(fase, 0, np.pi)),
+        0.0,
+    )
+    sol_pos = pvlib.solarposition.get_solarposition(idx, lat, lon)
+    # Erbs descompone GHI → DNI/DHI consistentes con la geometría solar.
+    descomp = pvlib.irradiance.erbs(
+        ghi=ghi, zenith=sol_pos["apparent_zenith"], datetime_or_doy=idx,
+    )
+    dni = np.asarray(descomp["dni"], dtype=float)
+    dhi = np.asarray(descomp["dhi"], dtype=float)
+    return pd.DataFrame(
+        {
+            "T_amb_K": np.full(n_horas, 288.15),
+            "GHI_Wm2": ghi,
+            "DNI_Wm2": dni,
+            "DHI_Wm2": dhi,
+            "HR": np.full(n_horas, 0.40),
+            "WS_ms": np.full(n_horas, 2.0),
+            "presion_Pa": np.full(n_horas, 101325.0),
+        },
+        index=idx,
+    )
+
+
+def test_POA_horizontal_aproxima_GHI():
+    """Colector horizontal (tilt=0): POA debe ser ~GHI hora a hora."""
+    empl = Emplazamiento(
+        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
+        acimut_colector_deg=180.0,    # Norte en Duffie — irrelevante con tilt=0
+        pendiente_colector_deg=0.0,
+        zona_horaria="America/Argentina/Salta",
+    )
+    df = _df_clima_dia_claro()
+    poa = calcular_POA_horizonte(df, empl)
+    # En tilt=0 el plano coincide con horizontal → POA = GHI (modulo
+    # contribución del suelo, que es 0 con β=0).
+    ghi_diurno = df["GHI_Wm2"][df["GHI_Wm2"] > 50.0]
+    poa_diurno = poa[df["GHI_Wm2"] > 50.0]
+    # Tolerancia 1 % — pequeño desajuste numérico entre Erbs (separa GHI en
+    # DNI/DHI) y la transposición inversa de pvlib (modelo isotrópico).
+    np.testing.assert_allclose(poa_diurno.values, ghi_diurno.values, rtol=1e-2)
+
+
+def test_POA_invierno_Salta_supera_GHI_al_mediodia():
+    """Lat -24.79°, tilt 30°, azimut Norte, junio (invierno hemisferio Sur):
+    al mediodía la POA debe superar a GHI por el factor de incidencia más
+    favorable al plano inclinado. Cociente esperado en rango razonable."""
+    empl = Emplazamiento(
+        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
+        acimut_colector_deg=180.0,    # 180° en Duffie = Norte hemisferio S
+        pendiente_colector_deg=30.0,
+        zona_horaria="America/Argentina/Salta",
+    )
+    df = _df_clima_dia_claro()
+    poa = calcular_POA_horizonte(df, empl)
+    # Hora con GHI máximo (mediodía solar aproximado, hora 12 en el día tipo).
+    h_pico = df["GHI_Wm2"].idxmax()
+    ratio = float(poa.loc[h_pico]) / float(df.loc[h_pico, "GHI_Wm2"])
+    # Para invierno (junio) en lat sur con tilt 30°, el cociente debe ser
+    # claramente > 1. Rango amplio para no quedar atado al modelo difuso.
+    assert 1.10 < ratio < 1.80, f"POA/GHI al mediodía = {ratio:.3f}, fuera de rango"
+
+
+def test_POA_clipea_negativos_y_nan():
+    """POA siempre ≥ 0; horas nocturnas con DNI/DHI=0 → POA=0."""
+    empl = Emplazamiento(
+        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
+        acimut_colector_deg=180.0, pendiente_colector_deg=30.0,
+        zona_horaria="America/Argentina/Salta",
+    )
+    df = _df_clima_dia_claro()
+    poa = calcular_POA_horizonte(df, empl)
+    assert (poa >= 0.0).all()
+    # Horas nocturnas (GHI=0) → POA = 0
+    nocturnas = df["GHI_Wm2"] == 0.0
+    assert (poa[nocturnas] == 0.0).all()
+
+
+def test_POA_fallback_a_GHI_con_dni_nan():
+    """Si DNI o DHI son NaN en una hora, esa hora cae a POA=GHI (clip)."""
+    empl = Emplazamiento(
+        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
+        acimut_colector_deg=180.0, pendiente_colector_deg=30.0,
+        zona_horaria="America/Argentina/Salta",
+    )
+    df = _df_clima_dia_claro()
+    # Inyectar NaN en una hora puntual del mediodía
+    h_pico = df["GHI_Wm2"].idxmax()
+    df.loc[h_pico, "DNI_Wm2"] = np.nan
+    poa = calcular_POA_horizonte(df, empl)
+    assert float(poa.loc[h_pico]) == pytest.approx(
+        float(df.loc[h_pico, "GHI_Wm2"]), rel=1e-9,
+    )
+
+
+def test_POA_rechaza_indice_naive():
+    """Sin tz-aware en el índice, debe rechazar con mensaje claro."""
+    empl = Emplazamiento(latitud_deg=-24.79, longitud_deg=-65.41,
+                          altitud_m=1200.0)
+    df = _df_clima_dia_claro()
+    df.index = df.index.tz_localize(None)  # naive
+    with pytest.raises(ValueError, match="CLIMA_INDICE_NAIVE"):
+        calcular_POA_horizonte(df, empl)

@@ -4,8 +4,11 @@ Dataclasses del sistema de colectores solares de aire tipo placa plana.
 Jerarquía:
     Colector
     ├── ColectorUnidad  — describe un módulo físico (materiales + geometría + velocidad)
-    ├── BancoColectores — configuración en serie/paralelo
-    └── Optional[Chimenea] — chimenea solar para convección natural
+    └── BancoColectores — configuración en serie/paralelo
+
+La chimenea solar es ahora un componente top-level (``Proyecto.chimenea``,
+definido en ``core/chimenea.py``) porque es utilizable también en tipología
+CAJA donde ``Proyecto.colector`` es None.
 
 Flujo de aire en banco en paralelo:
     Q_total = n_paralelo × (v × ancho × espaciado)  [m³/s]
@@ -19,7 +22,6 @@ con pvlib.irradiance, no se guarda en Colector.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from core.advertencias import Advertencia, Severidad
 from core import catalogo
@@ -36,51 +38,10 @@ _ESP_ALTO_M: float = 0.080      # espaciado alto → advertencia convección [m]
 _LARGO_MIN_M: float = 0.5       # largo mínimo recomendado [m]
 _LARGO_MAX_M: float = 10.0      # largo máximo recomendado [m]
 _N_SERIE_MAX: int = 3           # series máximas antes de advertencia
-_CHIM_D_MIN_M: float = 0.10     # diámetro mínimo chimenea [m]
-_CHIM_H_MIN_M: float = 1.0      # altura mínima chimenea [m]
 _T_AISLANTE_CRITICA_K: float = 400.0  # T_max mínima aceptable para aislante [K]
 _T_CUBIERTA_MIN_K: float = 423.0      # T_max mínima recomendada para cubierta [K]
-
-
-# ---------------------------------------------------------------------------
-# Chimenea
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class Chimenea:
-    """Chimenea solar para inducir convección natural.
-
-    El material se selecciona del catálogo de fondos (materiales estructurales).
-    El diámetro y la altura determinan el tiraje disponible.
-
-    Attributes:
-        diametro_m: Diámetro interno de la chimenea [m].
-        altura_m: Altura de la chimenea sobre la cámara de secado [m].
-        id_material: Identificador del material en fondos.yaml.
-    """
-
-    diametro_m: float = 0.20
-    altura_m: float = 2.0
-    id_material: str = "galvanizada_sin_pintura"
-
-    def __post_init__(self) -> None:
-        if self.diametro_m <= 0:
-            raise ValueError(
-                f"CHIM_DIAMETRO_NO_POSITIVO: diámetro {self.diametro_m:.4f} m ≤ 0. "
-                "El diámetro interno de la chimenea debe ser positivo."
-            )
-        if self.altura_m <= 0:
-            raise ValueError(
-                f"CHIM_ALTURA_NO_POSITIVA: altura {self.altura_m:.2f} m ≤ 0. "
-                "La altura de la chimenea debe ser positiva."
-            )
-        if self.id_material not in catalogo.FONDOS:
-            ids = list(catalogo.FONDOS.keys())
-            raise ValueError(
-                f"CHIM_MATERIAL_NO_ENCONTRADO: '{self.id_material}' no existe en el "
-                f"catálogo de materiales estructurales. Disponibles: {ids}."
-            )
+_ESP_CUB_CUB_MIN_M: float = 0.010  # separación mínima entre cubiertas [m]
+_ESP_CUB_CUB_MAX_M: float = 0.050  # separación máxima recomendada entre cubiertas [m]
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +62,10 @@ class ColectorUnidad:
         largo_m: Largo del colector [m]. Variable de diseño para la optimización.
         espaciado_m: Separación cubierta-placa = altura del canal de flujo [m].
         n_cubiertas: Número de cubiertas transparentes (1 ó 2).
+        espaciado_entre_cubiertas_m: Separación entre cubiertas cuando
+            n_cubiertas=2 [m]. Define la cavidad de aire que actúa como
+            resistencia adicional contra pérdidas superiores. Ignorado si
+            n_cubiertas=1. Rango recomendado: 10–50 mm (Duffie & Beckman).
         velocidad_diseno_ms: Velocidad superficial del aire en el canal [m/s].
             Rango recomendado: 0.3–3.0 m/s.
         tipo_colector: Configuración del canal de flujo: 1=canal único sobre el
@@ -123,6 +88,7 @@ class ColectorUnidad:
     largo_m: float = 2.0
     espaciado_m: float = 0.025
     n_cubiertas: int = 1
+    espaciado_entre_cubiertas_m: float = 0.025
     velocidad_diseno_ms: float = 0.5
 
     tipo_colector: int = 1
@@ -161,6 +127,12 @@ class ColectorUnidad:
             raise ValueError(
                 f"GEO_N_CUBIERTAS_INVALIDO: n_cubiertas={self.n_cubiertas}. "
                 "Solo se soportan 1 ó 2 cubiertas transparentes."
+            )
+        if self.n_cubiertas == 2 and self.espaciado_entre_cubiertas_m <= 0:
+            raise ValueError(
+                f"GEO_ESP_CUB_CUB_NO_POSITIVO: espaciado_entre_cubiertas="
+                f"{self.espaciado_entre_cubiertas_m:.4f} m ≤ 0. "
+                "Con n_cubiertas=2 se requiere un espaciado positivo entre las cubiertas."
             )
         if self.velocidad_diseno_ms <= 0:
             raise ValueError(
@@ -286,12 +258,10 @@ class Colector:
     Attributes:
         unidad: Descripción física de un colector unitario.
         banco: Configuración en serie/paralelo.
-        chimenea: Chimenea solar opcional (convección natural).
     """
 
     unidad: ColectorUnidad = field(default_factory=ColectorUnidad)
     banco: BancoColectores = field(default_factory=BancoColectores)
-    chimenea: Optional[Chimenea] = None
 
     def caudal_total_m3_s(self) -> float:
         """Caudal volumétrico total del banco de colectores [m³/s].
@@ -485,6 +455,35 @@ def advertencias_colector(colector: Colector) -> list[Advertencia]:
             },
         ))
 
+    # --- GEO: espaciado entre cubiertas (solo si n_cubiertas == 2) ---
+    if u.n_cubiertas == 2:
+        if u.espaciado_entre_cubiertas_m < _ESP_CUB_CUB_MIN_M:
+            adv.append(Advertencia(
+                codigo="GEO_ESP_CUB_CUB_PEQUENO",
+                severidad=Severidad.WARNING,
+                mensaje=f"Separación entre cubiertas ({u.espaciado_entre_cubiertas_m*1000:.1f} mm) "
+                        f"< {_ESP_CUB_CUB_MIN_M*1000:.0f} mm. Cavidad muy estrecha: la "
+                        "convección natural es despreciable pero la conducción de aire domina, "
+                        "reduciendo el efecto de la doble cubierta.",
+                campo="espaciado_entre_cubiertas_m",
+                sugerencia=f"Aumentá la separación a 20–40 mm para minimizar pérdidas superiores.",
+                contexto={"espaciado_mm": u.espaciado_entre_cubiertas_m * 1000,
+                          "minimo_mm": _ESP_CUB_CUB_MIN_M * 1000},
+            ))
+        elif u.espaciado_entre_cubiertas_m > _ESP_CUB_CUB_MAX_M:
+            adv.append(Advertencia(
+                codigo="GEO_ESP_CUB_CUB_GRANDE",
+                severidad=Severidad.INFO,
+                mensaje=f"Separación entre cubiertas ({u.espaciado_entre_cubiertas_m*1000:.0f} mm) "
+                        f"> {_ESP_CUB_CUB_MAX_M*1000:.0f} mm. La convección natural en la cavidad "
+                        "puede activarse y reducir el beneficio de la doble cubierta.",
+                campo="espaciado_entre_cubiertas_m",
+                sugerencia=f"Reducí la separación a 20–40 mm para mantener la cavidad en régimen "
+                           "principalmente conductivo.",
+                contexto={"espaciado_mm": u.espaciado_entre_cubiertas_m * 1000,
+                          "maximo_mm": _ESP_CUB_CUB_MAX_M * 1000},
+            ))
+
     # --- MAT: placa no selectiva con doble cubierta ---
     eps_placa = mat_placa.get("emisividad_ir", 1.0)
     if u.n_cubiertas == 2 and eps_placa > 0.5:
@@ -510,29 +509,5 @@ def advertencias_colector(colector: Colector) -> list[Advertencia]:
             sugerencia="Verificá que los materiales y las juntas soporten la temperatura de salida esperada.",
             contexto={"n_serie": b.n_serie, "n_serie_max_recomendado": _N_SERIE_MAX},
         ))
-
-    # --- CHIM: dimensiones de chimenea ---
-    if colector.chimenea is not None:
-        ch = colector.chimenea
-        if ch.diametro_m < _CHIM_D_MIN_M:
-            adv.append(Advertencia(
-                codigo="CHIM_DIAMETRO_PEQUENO",
-                severidad=Severidad.WARNING,
-                mensaje=f"Diámetro de chimenea ({ch.diametro_m*100:.0f} cm) < "
-                        f"{_CHIM_D_MIN_M*100:.0f} cm. Puede ser insuficiente para el tiraje necesario.",
-                campo="chimenea.diametro_m",
-                sugerencia=f"Usá un diámetro ≥ {_CHIM_D_MIN_M*100:.0f} cm para garantizar tiraje efectivo.",
-                contexto={"diametro_m": ch.diametro_m, "minimo_m": _CHIM_D_MIN_M},
-            ))
-        if ch.altura_m < _CHIM_H_MIN_M:
-            adv.append(Advertencia(
-                codigo="CHIM_ALTURA_PEQUENA",
-                severidad=Severidad.WARNING,
-                mensaje=f"Altura de chimenea ({ch.altura_m:.1f} m) < {_CHIM_H_MIN_M} m. "
-                        "El tiraje natural puede ser insuficiente para mover el aire.",
-                campo="chimenea.altura_m",
-                sugerencia=f"Aumentá la altura a ≥ {_CHIM_H_MIN_M} m para asegurar convección natural.",
-                contexto={"altura_m": ch.altura_m, "minima_m": _CHIM_H_MIN_M},
-            ))
 
     return adv

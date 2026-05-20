@@ -29,6 +29,8 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pvlib.iotools
+import pvlib.irradiance
+import pvlib.solarposition
 
 from core.clima import CalidadClima, Clima, COLUMNAS_SI
 from core.emplazamiento import Emplazamiento
@@ -260,3 +262,97 @@ def obtener_clima(
         calidad=calidad,
         altitud_nasa_m=altitud_nasa,
     )
+
+
+# ---------------------------------------------------------------------------
+# POA (Plane of Array) horaria — transposición de GHI/DNI/DHI al plano del colector
+# ---------------------------------------------------------------------------
+
+
+def _acimut_duffie_a_pvlib(acimut_duffie_deg: float) -> float:
+    """Convierte acimut de convención Duffie a convención pvlib.
+
+    Duffie: 0°=Sur, +90°=Oeste, -90°=Este, ±180°=Norte. Rango [-180, +180].
+    pvlib:  0°=Norte, 90°=Este, 180°=Sur, 270°=Oeste. Rango [0°, 360°).
+    """
+    return (180.0 + float(acimut_duffie_deg)) % 360.0
+
+
+def calcular_POA_horizonte(
+    datos_clima: pd.DataFrame,
+    emplazamiento: Emplazamiento,
+    *,
+    modelo_difuso: str = "isotropic",
+) -> pd.Series:
+    """Calcula POA horaria sobre el plano del colector [W/m²].
+
+    Aplica transposición de Liu-Jordan (componente directa: DNI·cos(θ_i);
+    componente difusa: ``modelo_difuso``; componente reflejada del suelo:
+    GHI·ρ_g·(1−cos β)/2) usando pvlib.
+
+    Args:
+        datos_clima: DataFrame horario con columnas ``GHI_Wm2``, ``DNI_Wm2``,
+            ``DHI_Wm2`` y un índice DatetimeIndex tz-aware (típicamente el
+            que produce ``obtener_clima``).
+        emplazamiento: Emplazamiento del secador (lat, lon, alt, tilt y
+            acimut en convención Duffie).
+        modelo_difuso: Modelo de transposición difusa que acepta pvlib
+            (``isotropic``, ``klucher``, ``haydavies``, ``reindl``, ``king``,
+            ``perez``). Default ``isotropic`` por simplicidad y coherencia
+            con P3.
+
+    Returns:
+        ``pd.Series`` POA horaria [W/m²], índice idéntico a ``datos_clima``.
+        Valores negativos (artefacto numérico cerca del horizonte) se
+        clipean a 0. Horas con DNI o DHI NaN reciben fallback a GHI (el
+        colector no puede saber cuánto era directa vs difusa, así que se
+        asume conservadoramente POA = GHI esa hora).
+
+    Raises:
+        ValueError: Si ``datos_clima`` no tiene las columnas esperadas o
+            el índice no es DatetimeIndex tz-aware.
+    """
+    columnas_necesarias = {"GHI_Wm2", "DNI_Wm2", "DHI_Wm2"}
+    faltantes = columnas_necesarias - set(datos_clima.columns)
+    if faltantes:
+        raise ValueError(
+            f"CLIMA_COLUMNAS_POA_FALTANTES: faltan {faltantes} en datos_clima."
+        )
+    if not isinstance(datos_clima.index, pd.DatetimeIndex):
+        raise ValueError(
+            "CLIMA_INDICE_NO_DATETIME: datos_clima.index debe ser DatetimeIndex."
+        )
+    if datos_clima.index.tz is None:
+        raise ValueError(
+            "CLIMA_INDICE_NAIVE: datos_clima.index debe ser tz-aware "
+            "(timestamps localizados). pvlib.solarposition lo requiere."
+        )
+
+    sol_pos = pvlib.solarposition.get_solarposition(
+        datos_clima.index,
+        latitude=emplazamiento.latitud_deg,
+        longitude=emplazamiento.longitud_deg,
+        altitude=emplazamiento.altitud_m,
+    )
+
+    acimut_pvlib = _acimut_duffie_a_pvlib(emplazamiento.acimut_colector_deg)
+
+    poa = pvlib.irradiance.get_total_irradiance(
+        surface_tilt=emplazamiento.pendiente_colector_deg,
+        surface_azimuth=acimut_pvlib,
+        solar_zenith=sol_pos["apparent_zenith"],
+        solar_azimuth=sol_pos["azimuth"],
+        dni=datos_clima["DNI_Wm2"],
+        ghi=datos_clima["GHI_Wm2"],
+        dhi=datos_clima["DHI_Wm2"],
+        model=modelo_difuso,
+    )
+
+    poa_global = poa["poa_global"].clip(lower=0.0)
+    # Fallback hora-a-hora si DNI o DHI son NaN: usamos GHI como POA. Es
+    # conservador (subestima POA en colectores con tilt > 0) pero evita
+    # propagar NaN al solver del colector.
+    mask_nan = poa_global.isna() | datos_clima["DNI_Wm2"].isna() | datos_clima["DHI_Wm2"].isna()
+    if mask_nan.any():
+        poa_global = poa_global.where(~mask_nan, datos_clima["GHI_Wm2"].clip(lower=0.0))
+    return poa_global.fillna(0.0)

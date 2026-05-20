@@ -71,6 +71,7 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
 from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
+from calculos.colector_calc import _U_cubierta_efectiva
 
 if TYPE_CHECKING:
     from core.colector import Colector
@@ -408,6 +409,10 @@ def _sistema_nodo_tipo2(
     alfa_abs: float,
     W_m: float,
     W_abs_m: float,
+    n_cubiertas: int = 1,
+    esp_cav_m: float = 0.025,
+    pendiente_deg: float = 30.0,
+    P_amb_Pa: float = 101325.0,
 ) -> np.ndarray:
     """Sistema de 4 ecuaciones algebraicas por nodo — Tipo 2.
 
@@ -417,7 +422,7 @@ def _sistema_nodo_tipo2(
     F1 — cubierta cara externa: conv viento + rad cielo = conducción interna.
     F2 — cubierta cara interna: conducción = conv cs + rad abs.
     F3 — absorbedor: rad solar + conv cs + conv ci = rad cub + rad fondo.
-    F4 — cara interna fondo: conv ci abs→ci + conv ci int→ci = cond aislante.
+    F4 — cara interna fondo: rad abs→fondo = cond aislante + conv ci int→fluido.
 
     Nota sobre F3 — el absorbedor recibe calor de ambos lados:
     - Cara superior: rad solar (transmitida) + rad cubierta + conv canal superior.
@@ -437,19 +442,30 @@ def _sistema_nodo_tipo2(
 
     em_eff_cub_abs = _em_efectiva_paralelas(em_cub, em_abs)
     em_eff_abs_fondo = _em_efectiva_paralelas(em_abs, em_fondo)
-    U_cub = k_cub / esp_cub
+    # Conductancia cubierta: simple (n=1) o serie cubierta-cavidad-cubierta (n=2).
+    U_cub = _U_cubierta_efectiva(
+        n_cubiertas=n_cubiertas,
+        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
+        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
+        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        P_amb_Pa=P_amb_Pa,
+    )
     T_bot = _T_bot_desde_T_int(T_int, T_amb_K, k_ais, esp_ais, h_wind)
     U_ais = k_ais / esp_ais
 
     # --- F1: balance cara externa cubierta ---
+    # En operación normal T_cub_i > T_cub_e: la cara externa GANA por conducción
+    # desde la interna y PIERDE por viento + cielo. Con cond_cub = U·(T_cub_e − T_cub_i)
+    # negativo en op. normal, el aporte conductivo a T_cub_e es −cond_cub.
+    # F1 = conv + rad + cond_cub = 0 (raíz física).
     conv_viento = h_wind * (T_cub_e - T_amb_K)
     rad_cielo = em_cub * SIGMA_SB * (T_cub_e**4 - T_cie_K**4)
     cond_cub = U_cub * (T_cub_e - T_cub_i)
-    F1 = conv_viento + rad_cielo - cond_cub
+    F1 = conv_viento + rad_cielo + cond_cub
 
     # --- F2: balance cara interna cubierta ---
-    # Gana: conducción desde cara externa.
-    # Pierde: convección al canal superior + radiación al absorbedor.
+    # Gana: radiación desde absorbedor (cuando T_abs > T_cub_i).
+    # Pierde: conducción hacia la cara externa + convección al fluido del canal superior.
     conv_cs_cub = h_int_cs * (T_cub_i - T_f_cs_K)
     rad_cub_abs = em_eff_cub_abs * SIGMA_SB * (T_cub_i**4 - T_abs**4)
     F2 = cond_cub - conv_cs_cub - rad_cub_abs
@@ -469,13 +485,15 @@ def _sistema_nodo_tipo2(
     F3 = rad_solar - conv_cs_abs - conv_ci_abs + rad_cub_abs - rad_abs_fondo
 
     # --- F4: balance cara interna fondo ---
-    # Gana: convección desde fluido canal inferior (abs→ci y fondo→ci se cancelan
-    # neto → la cara interna solo recibe conducción del absorbedor vía radiación
-    # y pierde por conducción al exterior a través del aislante).
-    # Balance: rad abs→fondo = cond aislante (T_int → T_bot → T_amb).
+    # Gana: radiación neta desde absorbedor (cuando T_abs > T_int).
+    # Pierde/gana: convección con fluido del canal inferior (signo según T_int vs T_f_ci).
+    # Pierde: conducción al exterior a través del aislante (T_int → T_bot → T_amb).
+    # Nota: la EDO del fluido ci ya cobra h·(T_int−T_f_ci) como aporte al fluido,
+    # así que el balance global cierra sólo si F4 incluye explícitamente conv_ci_int.
     cond_ais = U_ais * (T_int - T_bot)
     rad_abs_fondo_F4 = em_eff_abs_fondo * SIGMA_SB * (T_abs**4 - T_int**4) * W_abs_m
-    F4 = rad_abs_fondo_F4 - cond_ais * W_abs_m
+    conv_ci_int = h_int_ci * (T_int - T_f_ci_K) * W_abs_m
+    F4 = rad_abs_fondo_F4 - cond_ais * W_abs_m - conv_ci_int
 
     return np.array([F1, F2, F3, F4])
 
@@ -507,6 +525,10 @@ def _sistema_nodo_tipos34(
     W_m: float,
     W_abs_m: float,
     canal_activo: str,
+    n_cubiertas: int = 1,
+    esp_cav_m: float = 0.025,
+    pendiente_deg: float = 30.0,
+    P_amb_Pa: float = 101325.0,
 ) -> np.ndarray:
     """Sistema de 4 ecuaciones algebraicas por nodo — Tipos 3 y 4.
 
@@ -531,7 +553,14 @@ def _sistema_nodo_tipos34(
 
     em_eff_cub_abs = _em_efectiva_paralelas(em_cub, em_abs)
     em_eff_abs_fondo = _em_efectiva_paralelas(em_abs, em_fondo)
-    U_cub = k_cub / esp_cub
+    # Conductancia cubierta: simple (n=1) o serie cubierta-cavidad-cubierta (n=2).
+    U_cub = _U_cubierta_efectiva(
+        n_cubiertas=n_cubiertas,
+        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
+        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
+        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        P_amb_Pa=P_amb_Pa,
+    )
     U_ais = k_ais / esp_ais
     T_bot = _T_bot_desde_T_int(T_int, T_amb_K, k_ais, esp_ais, h_wind)
 
@@ -550,10 +579,11 @@ def _sistema_nodo_tipos34(
         h_ci = h_int_activo
 
     # --- F1: balance cara externa cubierta (idéntico a Tipo 2) ---
+    # F1 = conv + rad + cond_cub = 0 (raíz física; ver nota en Tipo 2).
     conv_viento = h_wind * (T_cub_e - T_amb_K)
     rad_cielo = em_cub * SIGMA_SB * (T_cub_e**4 - T_cie_K**4)
     cond_cub = U_cub * (T_cub_e - T_cub_i)
-    F1 = conv_viento + rad_cielo - cond_cub
+    F1 = conv_viento + rad_cielo + cond_cub
 
     # --- F2: balance cara interna cubierta ---
     conv_cs_cub = h_cs * (T_cub_i - T_f_cs)
@@ -569,9 +599,13 @@ def _sistema_nodo_tipos34(
     F3 = rad_solar - conv_cs_abs - conv_ci_abs + rad_cub_abs - rad_abs_fondo
 
     # --- F4: balance cara interna fondo ---
+    # Para Tipo 3 (canal ci activo): T_f_ci tiene perfil propio, conv_ci_int es real.
+    # Para Tipo 4 (canal ci estanco): T_f_ci = (T_abs+T_int)/2 → conv_ci_int = −conv_ci_abs,
+    # capturando el aporte convectivo mediado por el fluido estanco al fondo.
     rad_abs_fondo_F4 = em_eff_abs_fondo * SIGMA_SB * (T_abs**4 - T_int**4) * W_abs_m
     cond_ais = U_ais * (T_int - T_bot) * W_abs_m
-    F4 = rad_abs_fondo_F4 - cond_ais
+    conv_ci_int = h_ci * (T_int - T_f_ci) * W_abs_m
+    F4 = rad_abs_fondo_F4 - cond_ais - conv_ci_int
 
     return np.array([F1, F2, F3, F4])
 
@@ -630,6 +664,10 @@ def _construir_rhs_tipo2(params: dict) -> tuple:
                 params["alfa_abs"],
                 params["W_m"],
                 params["W_abs_m"],
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             full_output=True,
             xtol=TOL_FSOLVE,
@@ -726,6 +764,10 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
                 params["W_m"],
                 params["W_abs_m"],
                 "inferior",  # canal activo = inferior
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             full_output=True,
             xtol=TOL_FSOLVE,
@@ -802,6 +844,10 @@ def _construir_rhs_tipo4(params: dict) -> tuple:
                 params["W_m"],
                 params["W_abs_m"],
                 "superior",  # canal activo = superior
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             full_output=True,
             xtol=TOL_FSOLVE,
@@ -876,6 +922,10 @@ def _reconstruir_perfiles_tipo2(
                 params["alfa_abs"],
                 params["W_m"],
                 params["W_abs_m"],
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             xtol=TOL_FSOLVE,
         )
@@ -957,6 +1007,10 @@ def _reconstruir_perfiles_tipos34(
                 params["W_m"],
                 params["W_abs_m"],
                 canal_activo,
+                params.get("n_cubiertas", 1),
+                params.get("esp_cav_m", 0.025),
+                params.get("pendiente_deg", 30.0),
+                params.get("P_amb_Pa", 101325.0),
             ),
             xtol=TOL_FSOLVE,
         )
@@ -1059,6 +1113,7 @@ def calcular_colector_tipo2(
     alto_ci_m: float | None = None,
     correlacion_nusselt_cs: str | None = None,
     correlacion_nusselt_ci: str | None = None,
+    pendiente_deg: float = 30.0,
 ) -> ResultadosColectorTipo2:
     """Calcula el comportamiento térmico del colector solar Tipo 2.
 
@@ -1184,6 +1239,10 @@ def calcular_colector_tipo2(
         "W_abs_m": W_abs_m,
         "m_punto_cs_kgs": m_cs_rama,
         "m_punto_ci_kgs": m_ci_rama,
+        "n_cubiertas": colector.unidad.n_cubiertas,
+        "esp_cav_m": colector.unidad.espaciado_entre_cubiertas_m,
+        "pendiente_deg": pendiente_deg,
+        "P_amb_Pa": P_amb_Pa,
     }
 
     rhs_fn, log_nc = _construir_rhs_tipo2(params)
@@ -1363,6 +1422,10 @@ def calcular_colector_tipo3(
         "m_punto_ci_kgs": m_ci_rama,
         "alto_cs_m": alto_cs_m,
         "theta_deg": theta_deg,
+        "n_cubiertas": colector.unidad.n_cubiertas,
+        "esp_cav_m": colector.unidad.espaciado_entre_cubiertas_m,
+        "pendiente_deg": theta_deg,
+        "P_amb_Pa": P_amb_Pa,
     }
 
     rhs_fn, log_nc = _construir_rhs_tipo3(params)
@@ -1421,6 +1484,7 @@ def calcular_colector_tipo4(
     alto_cs_m: float | None = None,
     alto_ci_m: float | None = None,
     correlacion_nusselt: str | None = None,
+    pendiente_deg: float = 30.0,
 ) -> ResultadosColectorTipo4:
     """Calcula el comportamiento térmico del colector solar Tipo 4.
 
@@ -1525,6 +1589,10 @@ def calcular_colector_tipo4(
         "W_m": W_m,
         "W_abs_m": W_abs_m,
         "m_punto_cs_kgs": m_cs_rama,
+        "n_cubiertas": colector.unidad.n_cubiertas,
+        "esp_cav_m": colector.unidad.espaciado_entre_cubiertas_m,
+        "pendiente_deg": pendiente_deg,
+        "P_amb_Pa": P_amb_Pa,
     }
 
     rhs_fn, log_nc = _construir_rhs_tipo4(params)

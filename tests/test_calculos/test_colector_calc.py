@@ -511,6 +511,92 @@ class TestSistemaNodo:
 
 
 # =============================================================================
+# 9. Doble cubierta (n_cubiertas = 2)
+# =============================================================================
+
+class TestDobleCubierta:
+    """Verifica que n_cubiertas=2 mejore el desempeño en línea con la física."""
+
+    @staticmethod
+    def _col(n_cubiertas: int, gap_m: float = 0.025,
+              id_cub: str = "vidrio_comun",
+              id_pla: str = "aluminio_tinox"):
+        from core.colector import Colector, ColectorUnidad, BancoColectores
+        return Colector(
+            unidad=ColectorUnidad(
+                ancho_m=1.0, largo_m=2.0,
+                n_cubiertas=n_cubiertas,
+                espaciado_entre_cubiertas_m=gap_m,
+                id_cubierta=id_cub, id_placa=id_pla,
+            ),
+            banco=BancoColectores(),
+        )
+
+    @staticmethod
+    def _correr(col, dT_in_K: float = 0.0):
+        from calculos.colector_calc import calcular_colector_tipo1
+        T_amb = 293.15
+        return calcular_colector_tipo1(
+            colector=col, T_amb_K=T_amb, I_g_W_m2=800.0, v_viento_ms=2.0,
+            P_amb_Pa=101325.0, T_entrada_K=T_amb + dT_in_K, pendiente_deg=30.0,
+        )
+
+    def test_eta_n2_mayor_que_n1(self):
+        """Doble cubierta reduce pérdidas → η debe aumentar."""
+        r1 = self._correr(self._col(1))
+        r2 = self._correr(self._col(2))
+        assert r2.eta_termica > r1.eta_termica, (
+            f"η(n=2)={r2.eta_termica:.3f} no es mayor que η(n=1)={r1.eta_termica:.3f}"
+        )
+
+    def test_T_cub_e_n2_menor_que_n1(self):
+        """Con doble cubierta la cara externa queda más fría (mejor aislada)."""
+        r1 = self._correr(self._col(1))
+        r2 = self._correr(self._col(2))
+        Te1 = float(np.mean(r1.T_cub_e_K))
+        Te2 = float(np.mean(r2.T_cub_e_K))
+        assert Te2 < Te1, f"T_cub_e(n=2)={Te2-273.15:.1f}°C debe ser menor que T_cub_e(n=1)={Te1-273.15:.1f}°C"
+
+    def test_T_cub_i_n2_mayor_que_n1(self):
+        """Con doble cubierta la cara interna queda más caliente (atrapada)."""
+        r1 = self._correr(self._col(1))
+        r2 = self._correr(self._col(2))
+        Ti1 = float(np.mean(r1.T_cub_i_K))
+        Ti2 = float(np.mean(r2.T_cub_i_K))
+        assert Ti2 > Ti1, f"T_cub_i(n=2)={Ti2-273.15:.1f}°C debe ser mayor que T_cub_i(n=1)={Ti1-273.15:.1f}°C"
+
+    def test_ganancia_mayor_a_alta_delta_T(self):
+        """La ventaja de la doble cubierta crece con (T_in − T_amb)."""
+        # Sin sobrecalentamiento de entrada
+        r1_baja = self._correr(self._col(1), dT_in_K=0.0)
+        r2_baja = self._correr(self._col(2), dT_in_K=0.0)
+        # Con T_in elevada (mayor pérdida → más ventaja con 2 cubiertas)
+        r1_alta = self._correr(self._col(1), dT_in_K=30.0)
+        r2_alta = self._correr(self._col(2), dT_in_K=30.0)
+        ganancia_baja = r2_baja.eta_termica - r1_baja.eta_termica
+        ganancia_alta = r2_alta.eta_termica - r1_alta.eta_termica
+        assert ganancia_alta > ganancia_baja, (
+            f"Ganancia con ΔT alto ({ganancia_alta*100:.1f} pp) debe ser mayor que "
+            f"con ΔT bajo ({ganancia_baja*100:.1f} pp)"
+        )
+
+    def test_temperaturas_fisicas(self):
+        """Con doble cubierta el modelo debe converger a temperaturas físicas."""
+        r = self._correr(self._col(2))
+        T_amb = 293.15
+        Te = float(np.mean(r.T_cub_e_K))
+        Ti = float(np.mean(r.T_cub_i_K))
+        Ta = float(np.mean(r.T_abs_K))
+        # Monotonía física: T_amb ≤ T_cub_e ≤ T_cub_i ≤ T_abs
+        assert T_amb - 5.0 < Te < Ti < Ta, (
+            f"Monotonía violada: T_amb={T_amb-273.15:.1f}, T_cub_e={Te-273.15:.1f}, "
+            f"T_cub_i={Ti-273.15:.1f}, T_abs={Ta-273.15:.1f}"
+        )
+        # T_abs en rango razonable bajo 800 W/m² y aire de paso
+        assert 50 + 273.15 < Ta < 200 + 273.15, f"T_abs absurdo: {Ta-273.15:.1f}°C"
+
+
+# =============================================================================
 # Punto de entrada para ejecución directa
 # =============================================================================
 

@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import streamlit as st
 
+from calculos.chimenea_calc import delta_P_tiro_Pa
 from calculos.motor_calc import (
     caudal_masico_a_volumetrico,
     estimar_delta_P_camara,
     estimar_delta_P_colector,
     estimar_delta_P_singulares,
 )
+from core import catalogo
 from core.advertencias import Severidad
+from core.chimenea import Chimenea, advertencias_chimenea
 from core.motor import Motor, TipoAccionamiento
 
 # ---------------------------------------------------------------------------
@@ -274,6 +277,232 @@ def _json_config_motor(motor: "Motor") -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Chimenea solar — serialización
+# ---------------------------------------------------------------------------
+
+
+def _from_json_chimenea(data: dict) -> Chimenea:
+    """Reconstruye una Chimenea desde un dict producido por _json_config_chimenea."""
+    ch = data.get("chimenea") or {}
+    return Chimenea(
+        diametro_m=float(ch["diametro_m"]),
+        altura_m=float(ch["altura_m"]),
+        id_material=ch["id_material"],
+    )
+
+
+def _json_config_chimenea(chimenea: Chimenea) -> dict:
+    """Snapshot reconstruible (dict) de la chimenea solar."""
+    from datetime import date
+
+    props = dict(catalogo.FONDOS.get(chimenea.id_material, {}))
+    advs = advertencias_chimenea(chimenea)
+    return {
+        "fecha_exportacion": date.today().isoformat(),
+        "seccion": "chimenea",
+        "chimenea": {
+            "diametro_m": chimenea.diametro_m,
+            "altura_m": chimenea.altura_m,
+            "id_material": chimenea.id_material,
+            "props_catalogo": props,
+        },
+        "advertencias_diseno": [
+            {
+                "codigo": a.codigo,
+                "severidad": a.severidad.value,
+                "mensaje": a.mensaje,
+                "campo": a.campo,
+                "sugerencia": a.sugerencia,
+                "contexto": a.contexto,
+            }
+            for a in advs
+        ],
+    }
+
+
+def _texto_config_chimenea(chimenea: Chimenea) -> str:
+    """Snapshot .txt de la chimenea solar."""
+    from datetime import date
+
+    desc = catalogo.FONDOS.get(chimenea.id_material, {}).get("descripcion", chimenea.id_material)
+    sep = "=" * 60
+    lines = [
+        sep,
+        "        CONFIGURACIÓN DE LA CHIMENEA SOLAR",
+        sep,
+        f"Fecha de exportación: {date.today()}",
+        "",
+        "GEOMETRÍA Y MATERIAL",
+        f"  Diámetro interno : {chimenea.diametro_m:.3f} m  ({chimenea.diametro_m*100:.1f} cm)",
+        f"  Altura           : {chimenea.altura_m:.2f} m",
+        f"  Material         : {desc}  [id={chimenea.id_material}]",
+    ]
+    advs = advertencias_chimenea(chimenea)
+    lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
+    if not advs:
+        lines.append("  (ninguna)")
+    else:
+        for a in advs:
+            lines.append(f"  [{a.severidad.value}] {a.codigo}: {a.mensaje}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Chimenea solar — render section
+# ---------------------------------------------------------------------------
+
+
+def _render_chimenea_section(proyecto) -> None:
+    """Renderiza la configuración de chimenea solar.
+
+    Se invoca cuando no hay motor (convección natural). La chimenea vive
+    como componente top-level en ``proyecto.chimenea``, independiente del
+    colector (utilizable también en tipología CAJA).
+    """
+    st.divider()
+    st.subheader("Chimenea solar")
+
+    # --- Cargar configuración guardada ---
+    with st.expander("📥 Cargar configuración de chimenea (.json)", expanded=False):
+        from ui.componentes.serializacion import (
+            limpiar_session_state_prefijo,
+            parsear_json_seccion,
+        )
+        archivo = st.file_uploader(
+            "Subí un archivo .json de chimenea previamente guardado",
+            type=["json"], key="p6_chim_cargar_json",
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "chimenea")
+            if err:
+                st.error(f"❌ {err}")
+            else:
+                try:
+                    ch_cargada = _from_json_chimenea(data)
+                except (KeyError, ValueError, TypeError) as exc:
+                    st.error(f"❌ Error reconstruyendo la chimenea: {exc}")
+                else:
+                    proyecto.chimenea = ch_cargada
+                    n_borr = limpiar_session_state_prefijo(
+                        st.session_state, "p6_chim_"
+                    )
+                    st.session_state.pop("p6_chim_cargar_json", None)
+                    st.success(
+                        f"✅ Chimenea cargada desde JSON "
+                        f"(se reiniciaron {n_borr} valores)."
+                    )
+                    st.rerun()
+
+    usar_chimenea = st.toggle(
+        "Incorporar chimenea solar",
+        value=proyecto.chimenea is not None,
+        key="p6_usar_chimenea",
+        help=(
+            "Una chimenea genera tiraje térmico por diferencia de densidad entre "
+            "el aire caliente (cámara + chimenea) y el ambiente. Modelo en "
+            "`calculos.chimenea_calc`."
+        ),
+    )
+
+    if not usar_chimenea:
+        proyecto.chimenea = None
+        st.caption("Sin chimenea. El aire se moverá solo por difusión libre.")
+        return
+
+    ch_ref = proyecto.chimenea or Chimenea()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        diam = st.number_input(
+            "Diámetro interno [m]",
+            min_value=0.05, max_value=2.0,
+            value=float(ch_ref.diametro_m),
+            step=0.01, format="%.2f",
+            key="p6_chim_diam",
+        )
+    with c2:
+        alt = st.number_input(
+            "Altura [m]",
+            min_value=0.1, max_value=20.0,
+            value=float(ch_ref.altura_m),
+            step=0.1, format="%.1f",
+            key="p6_chim_altura",
+        )
+    with c3:
+        opciones = {
+            id_mat: datos.get("descripcion", id_mat)
+            for id_mat, datos in catalogo.FONDOS.items()
+        }
+        ids = list(opciones.keys())
+        idx = ids.index(ch_ref.id_material) if ch_ref.id_material in ids else 0
+        mat = st.selectbox(
+            "Material",
+            options=ids, index=idx,
+            format_func=lambda x: opciones[x],
+            key="p6_chim_material",
+        )
+
+    try:
+        nueva = Chimenea(diametro_m=diam, altura_m=alt, id_material=mat)
+    except ValueError as err:
+        st.error(f"**Error de validación** — {err}")
+        return
+    proyecto.chimenea = nueva
+
+    # --- Advertencias ---
+    adv_list = advertencias_chimenea(nueva)
+    if adv_list:
+        for a in adv_list:
+            _mostrar_advertencias([a])
+
+    # --- Preview de tiro térmico ---
+    st.markdown("**Tiro térmico estimado** (cámara + chimenea como columna ascendente)")
+    H_camara_default = 1.5  # m, placeholder hasta integrar con P4
+    if proyecto.camara is not None and getattr(proyecto.camara, "geometria", None) is not None:
+        try:
+            H_camara_default = float(proyecto.camara.geometria.alto_m)
+        except (AttributeError, TypeError):
+            pass
+    H_eff = nueva.altura_m + H_camara_default
+    T_amb_C = 20.0
+    delta_T_ejemplos = (10.0, 20.0, 30.0, 40.0)
+    cols = st.columns(len(delta_T_ejemplos))
+    for col_w, dT in zip(cols, delta_T_ejemplos):
+        dP = delta_P_tiro_Pa(
+            T_amb_K=273.15 + T_amb_C,
+            T_chim_K=273.15 + T_amb_C + dT,
+            H_eff_m=H_eff,
+        )
+        col_w.metric(f"ΔT = +{dT:.0f} K", f"{dP:.2f} Pa")
+    st.caption(
+        f"Cálculo informativo con T_amb=20 °C, H_efectiva = altura_chimenea ({nueva.altura_m:.1f} m) "
+        f"+ alto_cámara ({H_camara_default:.2f} m) = {H_eff:.2f} m. El caudal de equilibrio "
+        f"se resuelve en `balance_global` con T_chim del lazo y pérdidas reales."
+    )
+
+    # --- Guardar configuración ---
+    st.divider()
+    from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+    col_txt, col_json = st.columns(2)
+    with col_txt:
+        st.download_button(
+            "Guardar configuración de chimenea (.txt)",
+            data=_texto_config_chimenea(nueva),
+            file_name=nombre_archivo_descarga(proyecto, "chimenea", "txt"),
+            mime="text/plain",
+            width="stretch",
+        )
+    with col_json:
+        st.download_button(
+            "Guardar configuración de chimenea (.json)",
+            data=dump_json(_json_config_chimenea(nueva)),
+            file_name=nombre_archivo_descarga(proyecto, "chimenea", "json"),
+            mime="application/json",
+            width="stretch",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Render principal
 # ---------------------------------------------------------------------------
 
@@ -333,8 +562,10 @@ def render() -> None:
         proyecto.motor = None
         st.info(
             "Sin motor. El secador opera por convección natural. "
-            "Activar el toggle para dimensionar el ventilador."
+            "Configurá la chimenea solar abajo para inducir tiraje térmico, "
+            "o activá el toggle para dimensionar un ventilador."
         )
+        _render_chimenea_section(proyecto)
         return
 
     mot_prev = proyecto.motor

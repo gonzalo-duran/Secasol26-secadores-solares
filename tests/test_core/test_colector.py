@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import pytest
 
+from core.chimenea import Chimenea, advertencias_chimenea
 from core.colector import (
     BancoColectores,
-    Chimenea,
     Colector,
     ColectorUnidad,
     advertencias_colector,
@@ -62,14 +62,12 @@ def test_colector_unidad_defaults_validos():
 
 
 def test_colector_valido_completo():
-    """Colector completo con banco y chimenea debe instanciarse sin error."""
+    """Colector completo con banco debe instanciarse sin error."""
     c = Colector(
         unidad=_unidad_valida(),
         banco=BancoColectores(n_serie=2, n_paralelo=3),
-        chimenea=Chimenea(diametro_m=0.25, altura_m=3.0),
     )
     assert c.banco.n_serie == 2
-    assert c.chimenea is not None
 
 
 # ---------------------------------------------------------------------------
@@ -303,10 +301,18 @@ def test_adv_banco_serie_alto():
 
 def test_adv_chimenea_diametro_pequeno():
     """Chimenea con diámetro < 10 cm debe generar CHIM_DIAMETRO_PEQUENO."""
-    c = Colector(
-        unidad=_unidad_valida(),
-        banco=BancoColectores(),
-        chimenea=Chimenea(diametro_m=0.05, altura_m=2.0),
-    )
-    codigos = [a.codigo for a in advertencias_colector(c)]
+    ch = Chimenea(diametro_m=0.05, altura_m=2.0)
+    codigos = [a.codigo for a in advertencias_chimenea(ch)]
     assert "CHIM_DIAMETRO_PEQUENO" in codigos
+
+
+def test_adv_chimenea_altura_pequena():
+    """Chimenea con altura < 1 m debe generar CHIM_ALTURA_PEQUENA."""
+    ch = Chimenea(diametro_m=0.20, altura_m=0.5)
+    codigos = [a.codigo for a in advertencias_chimenea(ch)]
+    assert "CHIM_ALTURA_PEQUENA" in codigos
+
+
+def test_adv_chimenea_none_sin_advertencias():
+    """Si no hay chimenea, advertencias_chimenea(None) devuelve []."""
+    assert advertencias_chimenea(None) == []

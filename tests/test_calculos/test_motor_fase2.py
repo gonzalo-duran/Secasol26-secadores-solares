@@ -23,7 +23,7 @@ from core.camara import (
     DireccionFlujo, GeometriaCamara,
 )
 from core.colector import (
-    BancoColectores, Colector, ColectorUnidad, Chimenea,
+    BancoColectores, Colector, ColectorUnidad,
 )
 from core.motor import Motor
 

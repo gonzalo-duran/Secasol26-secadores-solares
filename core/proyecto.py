@@ -101,6 +101,7 @@ class Proyecto:
     camara: Optional[object] = None          # Camara
     auxiliar: Optional[object] = None        # Auxiliar — None si sin auxiliar
     motor: Optional[object] = None           # Motor — None si convección natural
+    chimenea: Optional[object] = None        # Chimenea — None si sin tiro natural
     resultados: Optional[object] = None      # Resultados
 
     def validar_coherencia_global(self) -> list:

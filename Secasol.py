@@ -15,25 +15,13 @@ from core.proyecto import Proyecto
 
 from ui.componentes.header import render_header
 
-st.set_page_config(page_title="Secasol26", page_icon="☀️", layout="wide")
-render_header()   # ← antes del st.tabs()
-
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-    "Tipología y Configuración",
-    "Emplazamiento y Clima",
-    "Colector Solar",
-    "Cámara de Secado",
-    "Calentamiento Auxiliar",
-    "Motor / Ventilador",
-    "Resultados",
-])
-
 st.set_page_config(
     page_title="Secasol26 - Prediseño de Secadores Solares",
     page_icon="☀️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+render_header()   # ← antes del st.tabs()
 
 # ---------------------------------------------------------------------------
 # Inicialización del estado de sesión
