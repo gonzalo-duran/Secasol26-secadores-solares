@@ -5,7 +5,9 @@ streamlit>=1.35.0
 numpy>=1.26.0
 scipy>=1.13.0
 pandas>=2.2.0
-matplotlib>=3.9.0
+
+# === Gráficas interactivas (Plotly reemplazó a matplotlib durante el ciclo S23-S29).
+# kaleido (más abajo, pin a 0.2.x) se usa para exportar Plotly → PNG en el reporte PDF.
 plotly>=6.0.0
 
 # === Datos solares ===

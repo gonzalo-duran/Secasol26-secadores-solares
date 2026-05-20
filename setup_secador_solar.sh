@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Setup del proyecto Secador Solar — Software de Prediseño
+# Setup del proyecto Secasol — Software de Prediseño de Secadores Solares
 # =============================================================================
 # Este script automatiza el setup inicial del entorno de desarrollo.
 # Plataformas soportadas:
 #   - Fedora 40 o superior
 #   - Windows 10 / 11  (ejecutar desde Git Bash, NO desde cmd ni PowerShell)
+#
+# Stack del proyecto:
+#   - Streamlit (interfaz web)
+#   - numpy / scipy / pandas (cálculo científico)
+#   - pvlib (datos solares y POA)
+#   - Plotly + Kaleido (gráficos interactivos en la UI y export a PNG para
+#     el reporte PDF). Nota: matplotlib NO se usa en el proyecto desde el
+#     ciclo S23-S29; el motor gráfico es exclusivamente Plotly.
+#   - ReportLab (generación de PDF)
 #
 # Qué hace:
 #   1. Detecta el sistema operativo.
@@ -302,7 +311,13 @@ pip install --upgrade pip --quiet
 ok "pip actualizado: $(pip --version)"
 
 info "Instalando dependencias del proyecto (requirements-dev.txt)..."
-info "Esto puede tardar unos minutos la primera vez (numpy, scipy, pvlib...)."
+info "Esto puede tardar unos minutos la primera vez:"
+info "  - numpy, scipy, pandas, pvlib (cálculo científico y datos solares)"
+info "  - streamlit (interfaz web)"
+info "  - plotly + kaleido (gráficas interactivas + export a PNG para el reporte PDF)"
+info "  - reportlab (generación del PDF)"
+info "El paquete más pesado es kaleido (~50 MB — trae Chromium embebido para"
+info "exportar gráficos de Plotly a imágenes sin un navegador del sistema)."
 pip install -r requirements-dev.txt
 ok "Todas las dependencias instaladas."
 
