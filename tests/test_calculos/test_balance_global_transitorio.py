@@ -240,3 +240,177 @@ class TestCoherencia:
         res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
         assert res.camara is None
         assert any("BG_TR_MODO_CAMARA_INCOMPATIBLE" in e for e in res.errores)
+
+
+# ---------------------------------------------------------------------------
+# Picard transitorio con chimenea (motor=None + chimenea + cámara TD)
+# ---------------------------------------------------------------------------
+
+
+class TestChimeneaTransitoria:
+    """Cuando ``calcular_todo_transitorio`` corre sin motor pero con chimenea,
+    debe iterar el lazo natural por hora (Picard) y poblar ``res.chimenea``
+    con series horarias del caudal, T_chim y pérdidas."""
+
+    from core.chimenea import Chimenea as _Chimenea_cls
+
+    def _proyecto_armario_chimenea(self) -> Proyecto:
+        proy = _proyecto_armario(con_auxiliar=False, con_motor=False)
+        proy.chimenea = self._Chimenea_cls(diametro_m=0.30, altura_m=4.0)
+        return proy
+
+    def test_sin_chimenea_chimenea_es_None(self):
+        """Pipeline transitoria sin chimenea: ``res.chimenea`` queda None."""
+        proy = _proyecto_armario(con_auxiliar=False, con_motor=True)
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        assert res.chimenea is None
+
+    def test_chimenea_con_motor_no_se_invoca(self):
+        """Si hay motor además de chimenea, el motor manda — no se invoca."""
+        proy = _proyecto_armario(con_auxiliar=False, con_motor=True)
+        proy.chimenea = self._Chimenea_cls(diametro_m=0.30, altura_m=4.0)
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        assert res.chimenea is None
+
+    def test_picard_metadata_y_series_presentes(self):
+        """``res.chimenea`` trae metadata Picard y series horarias de shape N."""
+        proy = self._proyecto_armario_chimenea()
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        ch = res.chimenea
+        assert ch is not None
+        for k in ("iteraciones", "convergio", "delta_T_chim_final_K",
+                  "m_promedio_kgs", "m_max_kgs", "horas_sin_tiro"):
+            assert k in ch, f"falta {k!r}"
+        # Series horarias del mismo largo que t_s
+        N = len(fz.t_s)
+        for k in ("m_punto_kgs", "v_chim_ms", "delta_P_tiro_Pa",
+                  "delta_P_chimenea_Pa", "delta_P_resto_Pa",
+                  "Re_chimenea", "T_chim_K", "t_s"):
+            assert len(ch[k]) == N, f"{k!r} tiene shape {len(ch[k])}, esperado {N}"
+
+    def test_picard_converge(self):
+        """El lazo natural debe converger en ≤ 5 iteraciones con ΔT < 0.5 K."""
+        proy = self._proyecto_armario_chimenea()
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        ch = res.chimenea
+        assert ch["convergio"] is True
+        assert ch["iteraciones"] <= 5
+        assert ch["delta_T_chim_final_K"] < 0.5
+
+    def test_m_punto_varia_con_T_amb(self):
+        """ṁ_nat(t) debe variar significativamente día/noche (gradiente solar)."""
+        proy = self._proyecto_armario_chimenea()
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        m = res.chimenea["m_punto_kgs"]
+        # ṁ máximo del día debe ser ≥ 10 % mayor que el mínimo.
+        assert (m.max() - m.min()) / m.max() > 0.10
+
+    def test_forzantes_aplicadas_usa_m_dot_natural(self):
+        """Las forzantes que ve el motor TD deben tener m_dot = m_nat (no design)."""
+        proy = self._proyecto_armario_chimenea()
+        fz = _forzantes_dia_sintetico()
+        caudal_design = proy.camara.flujo.caudal_masico_kg_s
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        m_dot_aplicado = res.forzantes_aplicadas.m_dot_aire_seco_kg_s
+        # No debe coincidir con el caudal de diseño constante
+        assert not np.allclose(m_dot_aplicado, caudal_design)
+        # Y debe coincidir con la serie de m_nat
+        assert np.allclose(m_dot_aplicado, res.chimenea["m_punto_kgs"], rtol=1e-6)
+
+    def test_colector_se_re_corre_por_hora(self):
+        """Con colector y chimenea, las T_ent de las forzantes aplicadas
+        deben diferir de las forzantes_base (precomputadas con velocidad
+        de diseño): el colector se re-corre con v efectiva del ṁ_nat."""
+        proy = self._proyecto_armario_chimenea()
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        # T_ent aplicada y T_ent base no deben coincidir (sin auxiliar,
+        # T_ent es T_sal_col; con colector re-corrido cambia).
+        assert res.auxiliar is None
+        Δ = np.abs(res.forzantes_aplicadas.T_ent_K - fz.T_ent_K)
+        assert Δ.max() > 1.0, (
+            f"T_sal_col no se re-calculó (Δ máx = {Δ.max():.2f} K)"
+        )
+
+    def test_picard_con_POA_difiere_de_picard_con_GHI(self):
+        """El acople con POA distinto a GHI debe dar T_sal_col distinto y, por
+        tanto, ṁ_nat distinto. Sanity: si POA > GHI (caso colector inclinado
+        en hemisferio Sur), T_chim y ṁ del lazo natural son mayores."""
+        proy = self._proyecto_armario_chimenea()
+        fz_base = _forzantes_dia_sintetico()
+        # Fz "GHI-only": sin POA → fallback a GHI con aviso.
+        fz_solo_ghi = fz_base
+        # Fz "con POA inflada 25%": simula un caso donde POA > GHI (típico
+        # de colector con tilt en invierno hemisferio Sur).
+        from core.camara import ForzantesAire as _FZA
+        fz_con_poa = _FZA(
+            t_s=fz_base.t_s.copy(),
+            T_ent_K=fz_base.T_ent_K.copy(),
+            omega_ent=fz_base.omega_ent.copy(),
+            m_dot_aire_seco_kg_s=fz_base.m_dot_aire_seco_kg_s.copy(),
+            T_amb_K=fz_base.T_amb_K.copy(),
+            v_viento_ms=fz_base.v_viento_ms.copy(),
+            I_g_W_m2=fz_base.I_g_W_m2.copy(),
+            I_g_POA_W_m2=fz_base.I_g_W_m2 * 1.25,
+        )
+        # Sanity: fz_solo_ghi NO tiene POA → debe disparar el aviso.
+        res_ghi = calcular_todo_transitorio(proy, forzantes_base=fz_solo_ghi, n_dias=1)
+        assert any("POA_NO_DISPONIBLE" in a for a in res_ghi.advertencias)
+
+        # Mismo proyecto con POA poblada → debe usar la POA real, sin aviso.
+        proy2 = self._proyecto_armario_chimenea()
+        res_poa = calcular_todo_transitorio(proy2, forzantes_base=fz_con_poa, n_dias=1)
+        assert not any("POA_NO_DISPONIBLE" in a for a in res_poa.advertencias)
+
+        # T_sal_col máximo de la corrida con POA > GHI debe superar la corrida
+        # con GHI sola — más radiación al absorbedor → mayor calentamiento.
+        T_sal_ghi = res_ghi.forzantes_aplicadas.T_ent_K
+        T_sal_poa = res_poa.forzantes_aplicadas.T_ent_K
+        assert T_sal_poa.max() > T_sal_ghi.max()
+        # Y el caudal natural promedio debe ser mayor (más tiro).
+        assert res_poa.chimenea["m_promedio_kgs"] > res_ghi.chimenea["m_promedio_kgs"]
+
+    def test_restaura_velocidad_diseno_del_colector(self):
+        """La mutación temporal de ``velocidad_diseno_ms`` durante la
+        re-corrida por hora debe revertirse al salir de calcular_todo_transitorio."""
+        proy = self._proyecto_armario_chimenea()
+        v_orig = proy.colector.unidad.velocidad_diseno_ms
+        fz = _forzantes_dia_sintetico()
+        calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        assert proy.colector.unidad.velocidad_diseno_ms == v_orig
+
+    def test_caja_con_chimenea_transitoria_funciona(self):
+        """CAJA (sin colector) + chimenea + TD: lazo se resuelve sin colector."""
+        from core.camara import ConstruccionCamara
+        proy = Proyecto(
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+            ),
+        )
+        proy.camara = Camara(
+            geometria=GeometriaCamara(largo_m=1.0, ancho_m=0.8, alto_m=1.2),
+            bandejas=ConfiguracionBandejas(
+                n_bandejas=3, area_bandeja_m2=0.20,
+                espesor_capa_m=0.015, separacion_entre_bandejas_m=0.06,
+            ),
+            construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.020),
+            carga_producto=CargaProducto(
+                producto_id="manzana", masa_total_kg=3.0,
+                humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+                modelo_capa_fina="logaritmico",
+            ),
+            modo_calculo="termodinamico",
+        )
+        proy.chimenea = self._Chimenea_cls(diametro_m=0.20, altura_m=2.5)
+        # Forzantes: T_ent ≈ T_amb (no hay colector "real" — usamos T_amb).
+        fz = _forzantes_dia_sintetico()
+        res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
+        assert res.errores == []
+        assert res.chimenea is not None
+        assert res.chimenea["m_promedio_kgs"] > 0.0

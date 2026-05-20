@@ -241,6 +241,18 @@ def _construir_forzantes_reales(
     # En cámaras opacas el motor anula el término Q_rad sin coste; pasarla siempre
     # simplifica el wire-up.
     I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+    # POA horaria sobre el plano del colector (transposición de DNI/GHI/DHI
+    # con tilt/azimut). El balance global la usa al re-correr el colector
+    # con el caudal natural impuesto por el lazo de chimenea (Picard).
+    try:
+        from calculos.clima_calc import calcular_POA_horizonte
+        I_g_POA_arr = np.asarray(
+            calcular_POA_horizonte(datos_dia, empl), dtype=float,
+        )
+    except Exception:
+        # Si POA falla (p.ej. DNI/DHI faltantes), no la propagamos; el
+        # balance global caerá al fallback con aviso.
+        I_g_POA_arr = None
 
     if len(T_amb_K_arr) != n_horas:
         raise RuntimeError(
@@ -272,6 +284,7 @@ def _construir_forzantes_reales(
         v_viento_ms=v_viento_arr,
         T_amb_K=T_amb_K_arr,
         I_g_W_m2=I_g_arr,
+        I_g_POA_W_m2=I_g_POA_arr,
         dt_s=3600.0,
     )
 

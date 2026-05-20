@@ -21,6 +21,7 @@ from core.camara import (
     Camara, CargaProducto, ConfiguracionBandejas, ConfiguracionFlujo,
     GeometriaCamara,
 )
+from core.chimenea import Chimenea
 from core.colector import Colector
 from core.motor import Motor, TipoAccionamiento
 from core.proyecto import (
@@ -306,6 +307,231 @@ class TestCalcularTodo:
                                 v_viento_ms=2.0, T_entrada_K=298.15,
                                 HR_camara=0.20)
         assert res_con.colector.T_salida_K > res_sin.colector.T_salida_K
+
+
+# ---------------------------------------------------------------------------
+# Integración de chimenea solar (caudal natural en ausencia de motor)
+# ---------------------------------------------------------------------------
+
+
+class TestChimeneaIntegrada:
+    """Verifica que ``calcular_todo`` activa el cálculo de caudal natural
+    cuando hay chimenea + sin motor, y deja el resto del flujo intacto en
+    otros casos. La integración mutea temporalmente
+    ``proyecto.camara.flujo.caudal_masico_kg_s`` para que la cámara
+    consuma el caudal natural, restaurándolo después."""
+
+    def _proyecto_chimenea(self) -> Proyecto:
+        p = Proyecto(
+            configuracion=Configuracion(
+                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO,
+            ),
+        )
+        p.colector = Colector()
+        p.camara = Camara(
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=10.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
+                modelo_capa_fina="logaritmico",
+            ),
+        )
+        # motor = None (default), chimenea presente
+        p.chimenea = Chimenea(diametro_m=0.25, altura_m=3.0)
+        return p
+
+    def test_sin_chimenea_res_chimenea_es_None(self, proyecto_armario_completo):
+        """Proyecto con motor y sin chimenea: res.chimenea no se computa."""
+        res = calcular_todo(
+            proyecto_armario_completo,
+            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        assert res.chimenea is None
+
+    def test_chimenea_con_motor_no_se_invoca(self, proyecto_armario_completo):
+        """Si hay motor además de chimenea, el motor manda — no se computa."""
+        proyecto_armario_completo.chimenea = Chimenea(diametro_m=0.25, altura_m=3.0)
+        res = calcular_todo(
+            proyecto_armario_completo,
+            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        assert res.chimenea is None
+
+    def test_sin_motor_con_chimenea_calcula_caudal(self):
+        """motor=None + chimenea → res.chimenea poblado con dict del solver."""
+        p = self._proyecto_chimenea()
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        assert res.chimenea is not None
+        assert "m_punto_kgs" in res.chimenea
+        assert "delta_P_tiro_Pa" in res.chimenea
+        assert res.chimenea["m_punto_kgs"] > 0.0
+        assert res.chimenea["delta_P_tiro_Pa"] > 0.0
+
+    def test_caudal_camara_se_restaura_despues_de_calcular(self):
+        """Aunque la integración mutea camara.flujo.caudal_masico_kg_s para
+        que la cámara consuma el caudal natural, debe restaurarse antes de
+        que calcular_todo retorne — no contaminamos el proyecto del usuario."""
+        p = self._proyecto_chimenea()
+        caudal_orig = p.camara.flujo.caudal_masico_kg_s
+        calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        assert p.camara.flujo.caudal_masico_kg_s == caudal_orig
+
+    def test_caudal_natural_difiere_del_diseno(self):
+        """El caudal de equilibrio típicamente no coincide con el caudal de
+        diseño que el usuario puso en P4 — la chimenea impone su propio
+        punto de operación."""
+        p = self._proyecto_chimenea()
+        caudal_design = p.camara.flujo.caudal_masico_kg_s
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        # No es razonable exigir un valor exacto, pero deberían diferir > 1%
+        # en casi cualquier configuración no-trivial.
+        rel_diff = abs(res.chimenea["m_punto_kgs"] - caudal_design) / caudal_design
+        assert rel_diff > 0.01
+
+    def test_balance_chimenea_se_cierra(self):
+        """En el equilibrio: ΔP_tiro = ΔP_chimenea + ΔP_resto."""
+        p = self._proyecto_chimenea()
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        ch = res.chimenea
+        assert ch["delta_P_tiro_Pa"] == pytest.approx(
+            ch["delta_P_chimenea_Pa"] + ch["delta_P_resto_Pa"], rel=1e-5,
+        )
+
+    def test_caja_con_chimenea_funciona(self):
+        """Tipología CAJA (sin colector) + chimenea: no debe fallar y
+        debe producir un caudal natural con T_chim fallback."""
+        from core.camara import GeometriaCamara
+        p = Proyecto(
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+            ),
+        )
+        # CAJA requiere cubierta translúcida en la cámara
+        from core.camara import ConstruccionCamara
+        p.camara = Camara(
+            geometria=GeometriaCamara(largo_m=1.0, ancho_m=0.8, alto_m=1.2),
+            construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.020),
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=5.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
+                modelo_capa_fina="logaritmico",
+            ),
+        )
+        p.chimenea = Chimenea(diametro_m=0.20, altura_m=2.5)
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        # No errores fatales; chimenea calculada
+        assert res.errores == [] or all("CAMARA" not in e for e in res.errores)
+        assert res.chimenea is not None
+        assert res.chimenea["m_punto_kgs"] > 0.0
+
+    def test_picard_metadata_presente(self):
+        """El dict res.chimenea debe traer la metadata del Picard."""
+        p = self._proyecto_chimenea()
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        ch = res.chimenea
+        for k in ("iteraciones", "convergio", "delta_T_chim_final_K", "T_chim_K"):
+            assert k in ch, f"Falta {k!r} en res.chimenea"
+        assert isinstance(ch["iteraciones"], int) and ch["iteraciones"] >= 1
+        assert isinstance(ch["convergio"], bool)
+
+    def test_picard_converge_armario(self):
+        """ARMARIO típico: el lazo natural converge dentro del máximo de
+        iteraciones permitido y ΔT_chim final < tolerancia."""
+        p = self._proyecto_chimenea()
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        ch = res.chimenea
+        assert ch["convergio"] is True
+        assert ch["delta_T_chim_final_K"] < 0.5
+        assert ch["iteraciones"] <= 10
+
+    def test_picard_re_corre_colector(self):
+        """El colector debe re-correrse con la velocidad efectiva del lazo
+        natural: el Q_util / η resultantes responden al ṁ convergido, no
+        a la velocidad de diseño que puso el usuario en P3."""
+        p = self._proyecto_chimenea()
+        # Corrida 1: D, H = (0.25, 3.0) → ṁ_nat distinto a corrida 2.
+        res1 = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        # Corrida 2: chimenea más grande (D=0.40, H=5.0) → más tiro, ṁ mayor.
+        p.chimenea = Chimenea(diametro_m=0.40, altura_m=5.0)
+        res2 = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        # ṁ mayor con chimenea más grande
+        assert res2.chimenea["m_punto_kgs"] > res1.chimenea["m_punto_kgs"]
+        # Cambia el colector también (Q_util responde a v efectiva).
+        assert res1.colector.Q_util_W != pytest.approx(res2.colector.Q_util_W, rel=1e-3)
+
+    def test_picard_caja_converge_trivialmente(self):
+        """CAJA sin colector: T_chim no depende del lazo (heurística estática
+        T_amb + 25 K), Picard converge en 1 iter."""
+        from core.camara import GeometriaCamara, ConstruccionCamara
+        p = Proyecto(
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+            ),
+        )
+        p.camara = Camara(
+            geometria=GeometriaCamara(largo_m=1.0, ancho_m=0.8, alto_m=1.2),
+            construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
+            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.020),
+            carga_producto=CargaProducto(
+                producto_id="manzana", masa_total_kg=5.0,
+                humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+                modelo_capa_fina="logaritmico",
+            ),
+        )
+        p.chimenea = Chimenea(diametro_m=0.20, altura_m=2.5)
+        res = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        ch = res.chimenea
+        assert ch["convergio"] is True
+        assert ch["iteraciones"] == 1
+
+    def test_picard_restaura_v_diseno_colector(self):
+        """La mutación temporal de velocidad_diseno_ms del colector debe
+        restaurarse al valor original tras calcular_todo (igual que el
+        caudal de la cámara)."""
+        p = self._proyecto_chimenea()
+        v_diseno_orig = p.colector.unidad.velocidad_diseno_ms
+        calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_entrada_K=298.15, HR_camara=0.20,
+        )
+        assert p.colector.unidad.velocidad_diseno_ms == v_diseno_orig
 
 
 # ---------------------------------------------------------------------------

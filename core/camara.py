@@ -861,6 +861,14 @@ class ForzantesAire:
         I_g_W_m2: Irradiancia global horizontal incidente sobre el techo de
             la cámara [W/m²]. ``None`` → rellena con ceros (cámara opaca o
             modo Constantes sin ciclo día/noche).
+        I_g_POA_W_m2: Irradiancia sobre el plano del colector (POA, Plane
+            of Array) [W/m²]. Es la que reciben los 4 solvers de colector
+            para calcular el aporte radiativo absorbido. ``None`` → no se
+            re-corre el colector con caudal natural en la pipeline
+            transitoria (los solvers que dependan de POA caen al fallback
+            que documenten — típicamente ``I_g_W_m2`` con aviso). Calcúlese
+            en el armado de forzantes con ``calcular_POA_horizonte`` cuando
+            haya DNI/GHI/DHI de NASA POWER + tilt/azimut del emplazamiento.
     """
 
     t_s: np.ndarray
@@ -870,19 +878,25 @@ class ForzantesAire:
     T_amb_K: np.ndarray
     v_viento_ms: np.ndarray
     I_g_W_m2: Optional[np.ndarray] = None
+    I_g_POA_W_m2: Optional[np.ndarray] = None
 
     def __post_init__(self):
         n = len(self.t_s)
         if self.I_g_W_m2 is None:
             self.I_g_W_m2 = np.zeros(n, dtype=float)
-        for nombre, arr in [
+        # I_g_POA queda None si no se provee (señal de "no calculado");
+        # el balance global decide el fallback con aviso explícito.
+        _campos_validar = [
             ("T_ent_K", self.T_ent_K),
             ("omega_ent", self.omega_ent),
             ("m_dot_aire_seco_kg_s", self.m_dot_aire_seco_kg_s),
             ("T_amb_K", self.T_amb_K),
             ("v_viento_ms", self.v_viento_ms),
             ("I_g_W_m2", self.I_g_W_m2),
-        ]:
+        ]
+        if self.I_g_POA_W_m2 is not None:
+            _campos_validar.append(("I_g_POA_W_m2", self.I_g_POA_W_m2))
+        for nombre, arr in _campos_validar:
             if len(arr) != n:
                 raise ValueError(
                     f"FORZANTES_LONGITUD_INCONSISTENTE: {nombre} tiene {len(arr)} "

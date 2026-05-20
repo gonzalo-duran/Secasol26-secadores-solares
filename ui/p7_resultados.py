@@ -66,6 +66,84 @@ def _mostrar_advertencias(advs: list[str]) -> None:
         st.warning(f"⚠️ {a}")
 
 
+def _desviacion_caudal_natural(res_chim: dict, proyecto) -> float | None:
+    """Desviación relativa caudal natural vs caudal de diseño de cámara.
+
+    Returns:
+        |m_natural − m_design| / m_design (adim), o None si no aplica.
+    """
+    if proyecto is None or proyecto.camara is None:
+        return None
+    m_design = float(proyecto.camara.flujo.caudal_masico_kg_s or 0.0)
+    m_nat = float(res_chim.get("m_punto_kgs", 0.0))
+    if m_design <= 0:
+        return None
+    return abs(m_nat - m_design) / m_design
+
+
+def _render_chimenea_resultados(res_chim: dict, proyecto) -> None:
+    """Renderiza el bloque de resultados del lazo natural por chimenea.
+
+    Solo se llama cuando ``res.chimenea is not None`` (motor=None + chimenea
+    + cámara presentes, ver `calcular_todo`).
+    """
+    st.subheader("Chimenea Solar (convección natural)")
+
+    m_punto = float(res_chim.get("m_punto_kgs", 0.0))
+    # Caudal volumétrico a 1.1 kg/m³ (ρ_amb típica 25 °C, coherente con
+    # _advertencia_caudal_inconsistente en balance_global).
+    Q_m3h = m_punto / 1.1 * 3600.0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Caudal natural", f"{m_punto * 1000:.1f} g/s",
+              help="ṁ de equilibrio del lazo (cámara + colector + chimenea).")
+    c2.metric("Q volumétrico", f"{Q_m3h:.0f} m³/h",
+              help="ṁ / ρ_amb (ρ ≈ 1.1 kg/m³).")
+    c3.metric("v chimenea", f"{res_chim.get('v_chim_ms', 0.0):.2f} m/s")
+    c4.metric("Re chimenea", f"{res_chim.get('Re_chimenea', 0.0):.0f}")
+
+    dP_tiro = float(res_chim.get("delta_P_tiro_Pa", 0.0))
+    dP_chim = float(res_chim.get("delta_P_chimenea_Pa", 0.0))
+    dP_resto = float(res_chim.get("delta_P_resto_Pa", 0.0))
+    H_eff = float(res_chim.get("H_eff_m", 0.0))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("ΔP tiro", f"{dP_tiro:.2f} Pa",
+              help="Empuje hidrostático disponible (g·H_eff·Δρ).")
+    c2.metric("ΔP chimenea", f"{dP_chim:.2f} Pa",
+              help="Fricción + singulares del ducto de chimenea.")
+    c3.metric("ΔP resto lazo", f"{dP_resto:.2f} Pa",
+              help="Pérdidas de colector + cámara escaladas ∝ (ṁ/ṁ_diseño)².")
+    c4.metric("H efectiva", f"{H_eff:.2f} m",
+              help="altura_chimenea + alto_cámara.")
+
+    # Caption con el balance del lazo (verificación cualitativa de cierre).
+    if dP_tiro > 0:
+        balance_err = abs(dP_tiro - dP_chim - dP_resto) / dP_tiro
+        st.caption(
+            f"Balance del lazo: ΔP_tiro = ΔP_chim + ΔP_resto "
+            f"({dP_tiro:.2f} ≈ {dP_chim:.2f} + {dP_resto:.2f}, "
+            f"error {balance_err:.1%})."
+        )
+
+    # Comparación con caudal de diseño de cámara: si difiere >30%, warning.
+    desv = _desviacion_caudal_natural(res_chim, proyecto)
+    if desv is not None and desv > 0.30:
+        m_design = proyecto.camara.flujo.caudal_masico_kg_s
+        st.warning(
+            f"⚠️ El caudal natural ({m_punto * 1000:.1f} g/s) difiere "
+            f"**{desv:.0%}** del caudal de diseño de la cámara "
+            f"({m_design * 1000:.1f} g/s). Revisar diámetro/altura de la "
+            "chimenea en P6 o el caudal de diseño en P4 para que ambos "
+            "queden consistentes."
+        )
+
+    # Advertencias propias de la solución del lazo (laminar, v alta, sin tiro).
+    advs_chim = res_chim.get("advertencias", []) or []
+    if advs_chim:
+        _mostrar_advertencias(advs_chim)
+
+
 # ---------------------------------------------------------------------------
 # Render: pipeline transitoria (mejora 19)
 # ---------------------------------------------------------------------------
@@ -212,6 +290,57 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
     )
     st.plotly_chart(fig4, width="stretch")
 
+    # --- Panel 5: Chimenea solar (lazo natural) ---
+    res_ch = getattr(res_tr, "chimenea", None)
+    if res_ch is not None:
+        st.subheader("Chimenea Solar — lazo natural (convección)")
+        m_arr = np.asarray(res_ch["m_punto_kgs"])
+        Tch_C = np.asarray(res_ch["T_chim_K"]) - 273.15
+        dPT = np.asarray(res_ch["delta_P_tiro_Pa"])
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("ṁ promedio", f"{res_ch['m_promedio_kgs'] * 1000:.1f} g/s")
+        c2.metric("ṁ máximo", f"{res_ch['m_max_kgs'] * 1000:.1f} g/s")
+        c3.metric("T_chim min/max",
+                  f"{Tch_C.min():.1f} / {Tch_C.max():.1f} °C")
+        c4.metric("Horas sin tiro", f"{int(res_ch['horas_sin_tiro'])} h",
+                  help="T_chim ≤ T_amb → caudal natural nulo en esa hora.")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Iteraciones Picard", f"{res_ch['iteraciones']}",
+                  help="Convergencia del lazo T_chim ↔ ṁ_nat.")
+        c2.metric("Convergencia",
+                  "✅ sí" if res_ch["convergio"] else "❌ no",
+                  help=f"|ΔT_chim final| = {res_ch['delta_T_chim_final_K']:.2f} K")
+        c3.metric("H efectiva", f"{res_ch['H_eff_m']:.2f} m")
+
+        fig_ch = make_subplots(specs=[[{"secondary_y": True}]])
+        fig_ch.add_trace(
+            go.Scatter(x=t_h_fz, y=m_arr * 1000.0,
+                       name="ṁ natural", line=dict(color="#17becf", width=2)),
+            secondary_y=False,
+        )
+        fig_ch.add_trace(
+            go.Scatter(x=t_h_fz, y=Tch_C,
+                       name="T_chim", line=dict(color="#e377c2", width=2)),
+            secondary_y=True,
+        )
+        fig_ch.add_trace(
+            go.Scatter(x=t_h_fz, y=dPT,
+                       name="ΔP tiro [Pa]",
+                       line=dict(color="#7f7f7f", width=1, dash="dot")),
+            secondary_y=False,
+        )
+        fig_ch.update_yaxes(title_text="ṁ [g/s]  ·  ΔP_tiro [Pa]",
+                            secondary_y=False)
+        fig_ch.update_yaxes(title_text="T_chim [°C]", secondary_y=True)
+        fig_ch.update_xaxes(title_text="Tiempo [h]")
+        fig_ch.update_layout(
+            title="Lazo natural por chimenea: caudal, T_chim y tiro disponible",
+            height=320, hovermode="x unified",
+        )
+        st.plotly_chart(fig_ch, width="stretch")
+
     # ---- Diagnósticos extra ----
     with st.expander("Diagnósticos del horizonte"):
         d1, d2, d3 = st.columns(3)
@@ -251,7 +380,14 @@ def _seccion_config(proyecto) -> None:
 
 
 def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
-    """Devuelve (T_amb_C, I_g, v_viento) sugeridos desde datos de clima."""
+    """Devuelve (T_amb_C, I_g, v_viento) sugeridos desde datos de clima.
+
+    Para ``I_g`` (POA representativa) calcula la transposición horaria
+    GHI/DNI/DHI → POA con el tilt/azimut del emplazamiento (helper
+    ``calcular_POA_horizonte``) y toma el quantile 90 de la serie. Si la
+    transposición falla (falta de DNI/DHI o sin emplazamiento), cae a
+    ``GHI_Wm2.quantile(0.90)`` como aproximación conservadora.
+    """
     T_sug = _T_AMB_DEFAULT_C
     I_sug = _I_G_DEFAULT_W_M2
     v_sug = _V_VIENTO_DEFAULT_MS
@@ -259,8 +395,17 @@ def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
     if proyecto.clima is not None and proyecto.clima.datos is not None:
         d = proyecto.clima.datos
         T_sug = round(kelvin_a_celsius(float(d["T_amb_K"].quantile(0.75))), 1)
-        I_sug = round(float(d["GHI_Wm2"].quantile(0.90)), 0)
         v_sug = round(float(d["WS_ms"].mean()), 1)
+        # I_g representativa: POA si hay emplazamiento + DNI/DHI; sino GHI.
+        if proyecto.emplazamiento is not None:
+            try:
+                from calculos.clima_calc import calcular_POA_horizonte
+                poa = calcular_POA_horizonte(d, proyecto.emplazamiento)
+                I_sug = round(float(poa.quantile(0.90)), 0)
+            except Exception:
+                I_sug = round(float(d["GHI_Wm2"].quantile(0.90)), 0)
+        else:
+            I_sug = round(float(d["GHI_Wm2"].quantile(0.90)), 0)
     return T_sug, I_sug, v_sug
 
 
@@ -620,6 +765,66 @@ def _texto_resultados_completo(proyecto, res: "ResultadosCompletos",
                 f"  Convergencia  : {status_cam}",
             ]
 
+    res_chim = getattr(res, "chimenea", None)
+    if res_chim is not None:
+        m_raw = res_chim.get("m_punto_kgs", 0.0)
+        es_serie = hasattr(m_raw, "__len__") and not isinstance(m_raw, str)
+        if es_serie:
+            # Modo transitorio: series horarias. Mostramos resumen escalar.
+            import numpy as _np
+            m_arr = _np.asarray(m_raw, dtype=float)
+            T_chim_arr = _np.asarray(res_chim.get("T_chim_K", []), dtype=float)
+            dPT_arr = _np.asarray(res_chim.get("delta_P_tiro_Pa", []), dtype=float)
+            v_arr = _np.asarray(res_chim.get("v_chim_ms", []), dtype=float)
+            Re_arr = _np.asarray(res_chim.get("Re_chimenea", []), dtype=float)
+            lines += [
+                "",
+                "CHIMENEA SOLAR (lazo natural — transitorio)",
+                f"  ṁ promedio     : {res_chim.get('m_promedio_kgs', float(_np.mean(m_arr))) * 1000:.2f} g/s",
+                f"  ṁ máximo       : {res_chim.get('m_max_kgs', float(_np.max(m_arr))) * 1000:.2f} g/s",
+                f"  v chim media   : {float(_np.mean(v_arr)):.2f} m/s",
+                f"  Re medio       : {float(_np.mean(Re_arr)):.0f}",
+                f"  ΔP tiro medio  : {float(_np.mean(dPT_arr)):.2f} Pa",
+                (f"  T_chim min/max : {T_chim_arr.min()-273.15:.1f} / "
+                 f"{T_chim_arr.max()-273.15:.1f} °C")
+                if T_chim_arr.size else "  T_chim         : —",
+                f"  Horas sin tiro : {int(res_chim.get('horas_sin_tiro', 0))} h",
+                f"  H efectiva     : {res_chim.get('H_eff_m', 0.0):.2f} m",
+                f"  Picard         : {res_chim.get('iteraciones', '?')} iter, "
+                f"{'convergió' if res_chim.get('convergio') else 'NO convergió'} "
+                f"(ΔT_max final {res_chim.get('delta_T_chim_final_K', 0.0):.2f} K)",
+            ]
+        else:
+            m_punto = float(m_raw)
+            lines += [
+                "",
+                "CHIMENEA SOLAR (convección natural)",
+                f"  Caudal natural : {m_punto * 1000:.2f} g/s "
+                f"({m_punto / 1.1 * 3600.0:.1f} m³/h)",
+                f"  v chimenea     : {res_chim.get('v_chim_ms', 0.0):.2f} m/s",
+                f"  Re chimenea    : {res_chim.get('Re_chimenea', 0.0):.0f}",
+                f"  ΔP tiro        : {res_chim.get('delta_P_tiro_Pa', 0.0):.2f} Pa",
+                f"  ΔP ducto       : {res_chim.get('delta_P_chimenea_Pa', 0.0):.2f} Pa",
+                f"  ΔP resto lazo  : {res_chim.get('delta_P_resto_Pa', 0.0):.2f} Pa",
+                f"  H efectiva     : {res_chim.get('H_eff_m', 0.0):.2f} m",
+            ]
+            if "iteraciones" in res_chim:
+                lines.append(
+                    f"  Picard         : {res_chim['iteraciones']} iter, "
+                    f"{'convergió' if res_chim.get('convergio') else 'NO convergió'} "
+                    f"(ΔT final {res_chim.get('delta_T_chim_final_K', 0.0):.2f} K)"
+                )
+            desv = _desviacion_caudal_natural(res_chim, proyecto)
+            if desv is not None and desv > 0.30:
+                m_design = proyecto.camara.flujo.caudal_masico_kg_s
+                lines.append(
+                    f"  ⚠ Desviación vs caudal de diseño "
+                    f"({m_design * 1000:.1f} g/s): {desv:.0%}"
+                )
+        for adv in res_chim.get("advertencias", []) or []:
+            if adv:
+                lines.append(f"  ⚠ {adv}")
+
     energia_total = getattr(res, "energia_total_MJ", None)
     if energia_total:
         lines += [
@@ -649,7 +854,7 @@ def _json_resultados_completo(proyecto, res: "ResultadosCompletos",
     from ui.p3_colector import _json_config_colector
     from ui.p4_camara import _json_config_camara
     from ui.p5_auxiliar import _json_config_auxiliar
-    from ui.p6_motor import _json_config_motor
+    from ui.p6_motor import _json_config_chimenea, _json_config_motor
 
     _, meta_dict = _bloque_meta_emplazamiento_clima(proyecto)
 
@@ -678,6 +883,10 @@ def _json_resultados_completo(proyecto, res: "ResultadosCompletos",
         "motor": (
             _json_config_motor(proyecto.motor)
             if proyecto.motor is not None else None
+        ),
+        "chimenea": (
+            _json_config_chimenea(proyecto.chimenea)
+            if getattr(proyecto, "chimenea", None) is not None else None
         ),
     }
 
@@ -767,6 +976,62 @@ def _json_resultados_completo(proyecto, res: "ResultadosCompletos",
                 "status": status,
                 "convergencia_ok": ok,
                 "X_eq_kg_kg": getattr(cam_r, "X_eq_kg_kg", None),
+            }
+    res_chim = getattr(res, "chimenea", None)
+    if res_chim is not None:
+        m_raw = res_chim.get("m_punto_kgs", 0.0)
+        es_serie = hasattr(m_raw, "__len__") and not isinstance(m_raw, str)
+        if es_serie:
+            import numpy as _np
+            def _arr(k):
+                return _np.asarray(res_chim.get(k, []), dtype=float).tolist()
+            res_globales["chimenea"] = {
+                "modo": "transitorio",
+                "m_promedio_kgs": float(res_chim.get(
+                    "m_promedio_kgs", float(_np.mean(m_raw)),
+                )),
+                "m_max_kgs": float(res_chim.get(
+                    "m_max_kgs", float(_np.max(m_raw)),
+                )),
+                "horas_sin_tiro": int(res_chim.get("horas_sin_tiro", 0)),
+                "H_eff_m": float(res_chim.get("H_eff_m", 0.0)),
+                "iteraciones": int(res_chim.get("iteraciones", 0)),
+                "convergio": bool(res_chim.get("convergio", False)),
+                "delta_T_chim_final_K": float(
+                    res_chim.get("delta_T_chim_final_K", 0.0)
+                ),
+                "advertencias": list(res_chim.get("advertencias", []) or []),
+                "series": {
+                    "t_s": _arr("t_s"),
+                    "m_punto_kgs": _arr("m_punto_kgs"),
+                    "v_chim_ms": _arr("v_chim_ms"),
+                    "Re_chimenea": _arr("Re_chimenea"),
+                    "T_chim_K": _arr("T_chim_K"),
+                    "delta_P_tiro_Pa": _arr("delta_P_tiro_Pa"),
+                    "delta_P_chimenea_Pa": _arr("delta_P_chimenea_Pa"),
+                    "delta_P_resto_Pa": _arr("delta_P_resto_Pa"),
+                },
+            }
+        else:
+            m_punto = float(m_raw)
+            res_globales["chimenea"] = {
+                "modo": "constantes",
+                "m_punto_kgs": m_punto,
+                "Q_volumetrico_m3_h": m_punto / 1.1 * 3600.0,
+                "v_chim_ms": float(res_chim.get("v_chim_ms", 0.0)),
+                "Re_chimenea": float(res_chim.get("Re_chimenea", 0.0)),
+                "delta_P_tiro_Pa": float(res_chim.get("delta_P_tiro_Pa", 0.0)),
+                "delta_P_chimenea_Pa": float(res_chim.get("delta_P_chimenea_Pa", 0.0)),
+                "delta_P_resto_Pa": float(res_chim.get("delta_P_resto_Pa", 0.0)),
+                "H_eff_m": float(res_chim.get("H_eff_m", 0.0)),
+                "iteraciones": int(res_chim.get("iteraciones", 0)) or None,
+                "convergio": bool(res_chim.get("convergio", False)),
+                "delta_T_chim_final_K": float(
+                    res_chim.get("delta_T_chim_final_K", 0.0)
+                ),
+                "T_chim_K": float(res_chim.get("T_chim_K", 0.0)),
+                "advertencias": list(res_chim.get("advertencias", []) or []),
+                "desviacion_vs_diseno": _desviacion_caudal_natural(res_chim, proyecto),
             }
     snapshot["resultados_globales"] = res_globales
     return snapshot
@@ -1081,6 +1346,10 @@ def render() -> None:
         c2.metric("P eléctrica", f"{mot.potencia_electrica_W:.0f} W")
         c3.metric("P a instalar", f"{mot.potencia_a_instalar_W:.0f} W")
 
+    # --- Chimenea solar (convección natural) ---
+    if getattr(res, "chimenea", None) is not None:
+        _render_chimenea_resultados(res.chimenea, proyecto)
+
     # --- Balance global ---
     if res.energia_total_MJ is not None and res.energia_total_MJ > 0:
         st.subheader("Balance Energético Global")
@@ -1182,6 +1451,19 @@ def render() -> None:
                 ("Motor — ΔP [Pa]", f"{mot.perdida_carga_total_Pa:.1f}"),
                 ("Motor — P eléctrica [W]", f"{mot.potencia_electrica_W:.1f}"),
                 ("Motor — P a instalar [W]", f"{mot.potencia_a_instalar_W:.1f}"),
+            ]
+        if getattr(res, "chimenea", None) is not None:
+            ch = res.chimenea
+            m_punto = float(ch.get("m_punto_kgs", 0.0))
+            filas += [
+                ("Chimenea — Caudal natural [g/s]", f"{m_punto * 1000:.2f}"),
+                ("Chimenea — Caudal vol. [m³/h]", f"{m_punto / 1.1 * 3600.0:.1f}"),
+                ("Chimenea — v [m/s]", f"{ch.get('v_chim_ms', 0.0):.3f}"),
+                ("Chimenea — Re", f"{ch.get('Re_chimenea', 0.0):.0f}"),
+                ("Chimenea — ΔP tiro [Pa]", f"{ch.get('delta_P_tiro_Pa', 0.0):.3f}"),
+                ("Chimenea — ΔP ducto [Pa]", f"{ch.get('delta_P_chimenea_Pa', 0.0):.3f}"),
+                ("Chimenea — ΔP resto [Pa]", f"{ch.get('delta_P_resto_Pa', 0.0):.3f}"),
+                ("Chimenea — H efectiva [m]", f"{ch.get('H_eff_m', 0.0):.2f}"),
             ]
         if res.energia_total_MJ:
             filas += [
