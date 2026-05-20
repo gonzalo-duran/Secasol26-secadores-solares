@@ -329,9 +329,9 @@ graph LR
   CHIMC --> NATH
   NATH --> BG_T
   BG_T --> CORH
-  CORH -->|T_sal_col(t)| BG_T
-  BG_T -->|m_dot(t) en forzantes| TD["motor TD (camara_termodinamica)"]
-  TD -->|T_flujo(t) = T_chim| BG_T
+  CORH -->|"T_sal_col(t)"| BG_T
+  BG_T -->|"m_dot(t) en forzantes"| TD["motor TD (camara_termodinamica)"]
+  TD -->|"T_flujo(t) = T_chim"| BG_T
 
   classDef pic fill:#d4edda,stroke:#155724
   class BG_C,BG_T,NATH,CORH pic
