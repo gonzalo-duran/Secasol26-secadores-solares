@@ -49,6 +49,8 @@ Primer release post-prototipo. Cierre físico del modelo de colector solar y del
 
 - **Adaptación a deprecación de Streamlit**: reemplazo global de `use_container_width=True` por `width="stretch"` (deprecación programada para 2025-12-31).
 
+- **Limpieza de dependencias**: se quita `matplotlib` de `requirements.txt`. La migración a Plotly para gráficas interactivas ocurrió durante el ciclo S23-S29; ningún módulo del proyecto importa matplotlib hoy, y ninguna otra dependencia lo requiere. Instalaciones nuevas pesan ~30 MB menos.
+
 ### Fixed
 
 - **Corrección crítica de signos** en el residual algebraico del solver de colector (F1 en los 4 tipos y F3 en Tipo 1). El bug producía raíces espurias con la cara externa de la cubierta a temperaturas físicamente imposibles (≈ −200 °C) y residuos numéricos cero, enmascarando el problema. Impacto al corregir: la eficiencia térmica η baja aproximadamente 25 puntos porcentuales en air heaters (los valores anteriores estaban sobreestimados). Validación HWB con R² = 1.0000 confirma el nuevo modelo.
