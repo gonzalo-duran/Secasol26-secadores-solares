@@ -285,6 +285,8 @@ graph LR
     W6[accionamiento/caudal/ΔP/η/tensión]
     T6C["toggle Incorporar chimenea (solo si motor OFF)"]
     W6C[diámetro/altura/material chimenea]
+    T6E["toggle Agregar extractor eólico (solo si chimenea ON)"]
+    W6E[Cp / Kt / D_ext / z0_terreno]
   end
 
   subgraph CORE56["core/"]
@@ -318,6 +320,9 @@ graph LR
   NULL_M --> T6C
   T6C -->|ON| W6C
   W6C --> CHIM_DC
+  T6C -->|ON| T6E
+  T6E -->|ON| W6E
+  W6E --> CHIM_DC
   CHIM_DC --> CHIMC
 
   %% Modo constantes
@@ -351,7 +356,7 @@ graph LR
 ## Tabla maestra — widget → campo → consumidor
 
 | Pestaña | Widget UI | Campo `Proyecto.*` | Leído por |
-|---------|-----------|---------------------|-----------|
+| ------- | --------- | ------------------- | --------- |
 | P1 | tipología (radio) | `configuracion.tipologia` | `balance_global` |
 | P1 | modo_analisis | `configuracion.modo_analisis` | `balance_global` |
 | P1 | dia_analisis | `configuracion.dia_analisis` | UI únicamente (P2 selección de fecha) |
@@ -374,11 +379,14 @@ graph LR
 | P4 | bandejas (todo) | `camara.bandejas.*` | `camara_calc`, `motor_calc` |
 | P4 | caudal/dirección/recirc/HR | `camara.flujo.*` | `camara_calc`, `motor_calc` |
 | P4 | modo_calculo | `camara.modo_calculo` | `camara_calc` (selección de rama) |
+| P4 | batches_por_mes (slider, solo ANUAL) | `camara.operacion_anual.batches_por_mes` | `operacion_anual_camara.calcular_operacion_anual_camara` (escala mensual) |
+| P4 → P7 | `ResultadosAnualCamara` (session_state) | `st.session_state["p4_resultado_anual"]` | `p7_resultados._render_operacion_anual_detalle` (tabla + barras 12 meses) |
 | P5 | tipo/modo/P_nom/setpoint/T_max/η_quem/PCI | `auxiliar.*` | `auxiliar_calc` |
 | P5 | disponible_nocturno ⚑ | `auxiliar.disponible_nocturno` | `calcular_auxiliar_transitorio` |
 | P5 | tipo_biomasa/PCI/η | `auxiliar.*` | `auxiliar.consumo_biomasa_efectivo_kg_h()` |
 | P6 | accionamiento/caudal/ΔP/η/factor | `motor.*` | `motor_calc`, `Motor.__post_init__` |
 | P6 | chimenea (D, H, material) | `proyecto.chimenea.*` (top-level) | `chimenea_calc.{delta_P_tiro_Pa, caudal_natural_kgs}`, `balance_global._caudal_natural_loop` (constantes) y `_caudal_natural_horizonte` + `_correr_colector_horizonte` (transitorio, dentro de Picard) |
+| P6 | extractor eólico en chimenea (`extractor_activo`, `diametro_extractor_m`, `Cp_turbina`, `Kt_turbina`, `z0_terreno_m`) | `proyecto.chimenea.{extractor_activo, ...}` | `chimenea_calc.{delta_P_turbina_motriz_Pa, _v_viento_a_altura, caudal_natural_kgs}` (motriz + Kt + perfil log de viento). Propagado a `_caudal_natural_loop`/`_caudal_natural_horizonte` con `v_viento_10m_ms` desde forzantes |
 | P4→core | I_g_POA(t) sobre plano colector | `forzantes_base.I_g_POA_W_m2` (transitorio) | `balance_global._correr_colector_horizonte` → `_correr_colector` → `colector_calc`/`tipos234_calc` |
 | P4→core | GHI(t) sobre techo cámara | `forzantes_base.I_g_W_m2` (transitorio) | `camara_termodinamica.simular_secado` (Q_rad por techo translúcido) |
 | (interno) | POA representativa anual (sugerido P7) | — | `ui/p7_resultados._sugerir_condiciones` → `calcular_POA_horizonte` (quantile 90) |
@@ -415,6 +423,7 @@ Ver `docs/bitacora/bitacora_sesion30.md` (§84-§101) y `validacion/{validacion_
 ## Cómo regenerar este mapa
 
 Este documento se construyó con tres pasadas de exploración paralela:
+
 - Inventario de dataclasses en `core/`
 - Asignaciones `proyecto.* = ...` en `ui/p*.py`
 - Lecturas `proyecto.*` / `colector.*` en `calculos/*.py`
