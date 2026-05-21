@@ -24,9 +24,14 @@ from calculos.balance_global import (
 )
 from calculos.camara_calc import ResultadosCamara, calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from calculos.motor_calc import _D_P_DEFAULT_M, _K_rugosidad_default
 from calculos.psicrometria import humedad_absoluta
 from core import catalogo
 from core.advertencias import Severidad
+from calculos.operacion_anual_camara import (
+    ResultadosAnualCamara,
+    calcular_operacion_anual_camara,
+)
 from core.camara import (
     Camara,
     CapaPared,
@@ -37,10 +42,12 @@ from core.camara import (
     DireccionFlujo,
     ForzantesAire,
     GeometriaCamara,
+    OperacionAnualConfig,
     ParedCamara,
     _modelos_disponibles,
     advertencias_camara,
 )
+from core.proyecto import ModoAnalisis
 from ui.componentes.graficas import grafica_termodinamica_camara
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
@@ -103,35 +110,50 @@ def _T_amb_representativa_K(proyecto) -> tuple[float, str]:
     return 298.15, "fallback 25 °C (sin clima cargado)"
 
 
-
-
 def _grafica_curva_secado(resultados, X_0: float, X_obj: float, prod_id: str) -> go.Figure:
     """Genera la figura de la curva de secado X(t)."""
     t_h = resultados.t_array_s / 3600.0
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(resultados.X_array_kg_kg), mode="lines",
-        line=dict(color="#1f77b4", width=2), name="X(t)",
-    ))
-    fig.add_hline(y=resultados.X_eq_kg_kg, line=dict(color="gray", dash="dash", width=1),
-                  annotation_text=f"X_eq={resultados.X_eq_kg_kg:.3f}",
-                  annotation_position="bottom right")
-    fig.add_hline(y=X_obj, line=dict(color="red", dash="dot", width=1.5),
-                  annotation_text=f"X_obj={X_obj:.3f}")
-    fig.add_hline(y=X_0, line=dict(color="green", dash="dot", width=1),
-                  annotation_text=f"X₀={X_0:.3f}", annotation_position="top right")
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(resultados.X_array_kg_kg),
+            mode="lines",
+            line=dict(color="#1f77b4", width=2),
+            name="X(t)",
+        )
+    )
+    fig.add_hline(
+        y=resultados.X_eq_kg_kg,
+        line=dict(color="gray", dash="dash", width=1),
+        annotation_text=f"X_eq={resultados.X_eq_kg_kg:.3f}",
+        annotation_position="bottom right",
+    )
+    fig.add_hline(
+        y=X_obj, line=dict(color="red", dash="dot", width=1.5), annotation_text=f"X_obj={X_obj:.3f}"
+    )
+    fig.add_hline(
+        y=X_0,
+        line=dict(color="green", dash="dot", width=1),
+        annotation_text=f"X₀={X_0:.3f}",
+        annotation_position="top right",
+    )
 
     if resultados.convergencia_ok:
         t_sec_h = resultados.t_secado_s / 3600.0
-        fig.add_vline(x=t_sec_h, line=dict(color="orange", dash="dashdot", width=1.5),
-                      annotation_text=f"t={t_sec_h:.1f}h")
+        fig.add_vline(
+            x=t_sec_h,
+            line=dict(color="orange", dash="dashdot", width=1.5),
+            annotation_text=f"t={t_sec_h:.1f}h",
+        )
 
     fig.update_xaxes(title_text="Tiempo [h]")
     fig.update_yaxes(title_text="Humedad X [kg agua / kg ms]", rangemode="tozero")
     fig.update_layout(
         title_text=f"Curva de secado — {prod_id} · modelo {resultados.modelo_usado}",
-        height=400, showlegend=True,
+        height=400,
+        showlegend=True,
     )
     return fig
 
@@ -182,14 +204,22 @@ def _construir_forzantes_termodinamico(
         )
     if tipo_forzantes == "real":
         return _construir_forzantes_reales(
-            p3_eval=p3_eval, proyecto=proyecto, caudal_kg_s=caudal_kg_s,
-            n_dias=n_dias, P_Pa=P_Pa,
+            p3_eval=p3_eval,
+            proyecto=proyecto,
+            caudal_kg_s=caudal_kg_s,
+            n_dias=n_dias,
+            P_Pa=P_Pa,
         )
     raise ValueError(f"tipo_forzantes desconocido: {tipo_forzantes!r}")
 
 
 def _construir_forzantes_reales(
-    *, p3_eval, proyecto, caudal_kg_s: float, n_dias: int, P_Pa: float = 101325.0,
+    *,
+    p3_eval,
+    proyecto,
+    caudal_kg_s: float,
+    n_dias: int,
+    P_Pa: float = 101325.0,
 ) -> ForzantesAire:
     """Construye ForzantesAire desde el día de análisis real (P2 + P3).
 
@@ -246,8 +276,10 @@ def _construir_forzantes_reales(
     # con el caudal natural impuesto por el lazo de chimenea (Picard).
     try:
         from calculos.clima_calc import calcular_POA_horizonte
+
         I_g_POA_arr = np.asarray(
-            calcular_POA_horizonte(datos_dia, empl), dtype=float,
+            calcular_POA_horizonte(datos_dia, empl),
+            dtype=float,
         )
     except Exception:
         # Si POA falla (p.ej. DNI/DHI faltantes), no la propagamos; el
@@ -269,10 +301,10 @@ def _construir_forzantes_reales(
             T_sal_col_K[i] = float(t_sal_c) + 273.15
 
     # ω_amb desde HR y T_amb (gas ideal)
-    omega_amb_arr = np.array([
-        humedad_absoluta(float(hr), float(T), P_Pa)
-        for hr, T in zip(HR_arr, T_amb_K_arr)
-    ], dtype=float)
+    omega_amb_arr = np.array(
+        [humedad_absoluta(float(hr), float(T), P_Pa) for hr, T in zip(HR_arr, T_amb_K_arr)],
+        dtype=float,
+    )
 
     modo = "multi_dia" if n_dias > 1 else "diario"
     return armar_forzantes_aire(
@@ -314,7 +346,10 @@ def _grafica_secado_termodinamico(
     t_h = res.t_array_s / 3600.0
 
     fig = make_subplots(
-        rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.06,
+        rows=4,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.06,
         subplot_titles=(
             "Humedad del producto X(t)",
             "Temperaturas: producto, aire y paredes",
@@ -324,49 +359,109 @@ def _grafica_secado_termodinamico(
     )
 
     # Panel 1: X(t)
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.X_prod_kg_kg), mode="lines",
-        line=dict(color="#1f77b4", width=2), name="X(t)",
-    ), row=1, col=1)
-    fig.add_hline(y=X_obj, line=dict(color="red", dash="dot", width=1.5),
-                  annotation_text=f"X_obj={X_obj:.3f}", row=1, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.X_prod_kg_kg),
+            mode="lines",
+            line=dict(color="#1f77b4", width=2),
+            name="X(t)",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_hline(
+        y=X_obj,
+        line=dict(color="red", dash="dot", width=1.5),
+        annotation_text=f"X_obj={X_obj:.3f}",
+        row=1,
+        col=1,
+    )
     if res.status == "X_obj_alcanzado" and res.t_secado_s is not None:
         t_sec_h = res.t_secado_s / 3600.0
-        fig.add_vline(x=t_sec_h, line=dict(color="orange", dash="dashdot", width=1.5),
-                      annotation_text=f"t={t_sec_h:.1f}h", row=1, col=1)
+        fig.add_vline(
+            x=t_sec_h,
+            line=dict(color="orange", dash="dashdot", width=1.5),
+            annotation_text=f"t={t_sec_h:.1f}h",
+            row=1,
+            col=1,
+        )
 
     # Panel 2: Temperaturas
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.T_prod_K - 273.15), mode="lines",
-        line=dict(color="#d62728", width=2), name="T_producto",
-    ), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.T_flujo_K - 273.15), mode="lines",
-        line=dict(color="#ff7f0e", width=1.5, dash="dash"), name="T_aire (flujo)",
-    ), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.T_cam_int_K - 273.15), mode="lines",
-        line=dict(color="#2ca02c", width=1, dash="dot"), name="T_pared interna",
-    ), row=2, col=1)
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.T_cam_ext_K - 273.15), mode="lines",
-        line=dict(color="#8c564b", width=1, dash="dot"), name="T_pared externa",
-    ), row=2, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.T_prod_K - 273.15),
+            mode="lines",
+            line=dict(color="#d62728", width=2),
+            name="T_producto",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.T_flujo_K - 273.15),
+            mode="lines",
+            line=dict(color="#ff7f0e", width=1.5, dash="dash"),
+            name="T_aire (flujo)",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.T_cam_int_K - 273.15),
+            mode="lines",
+            line=dict(color="#2ca02c", width=1, dash="dot"),
+            name="T_pared interna",
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.T_cam_ext_K - 273.15),
+            mode="lines",
+            line=dict(color="#8c564b", width=1, dash="dot"),
+            name="T_pared externa",
+        ),
+        row=2,
+        col=1,
+    )
 
     # Panel 3: HR_flujo
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(res.HR_flujo * 100.0), mode="lines",
-        line=dict(color="#9467bd", width=1.5), name="HR_flujo [%]",
-    ), row=3, col=1)
-    fig.add_hline(y=95.0, line=dict(color="red", dash="dot", width=1.0),
-                  annotation_text="95%", row=3, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(res.HR_flujo * 100.0),
+            mode="lines",
+            line=dict(color="#9467bd", width=1.5),
+            name="HR_flujo [%]",
+        ),
+        row=3,
+        col=1,
+    )
+    fig.add_hline(
+        y=95.0, line=dict(color="red", dash="dot", width=1.0), annotation_text="95%", row=3, col=1
+    )
 
     # Panel 4: ṁ_w (g/h)
     m_dot_g_h = res.m_dot_w_kg_s * 1000.0 * 3600.0
-    fig.add_trace(go.Scatter(
-        x=list(t_h), y=list(m_dot_g_h), mode="lines",
-        line=dict(color="#17becf", width=1.5), name="ṁ_w [g/h]",
-    ), row=4, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(m_dot_g_h),
+            mode="lines",
+            line=dict(color="#17becf", width=1.5),
+            name="ṁ_w [g/h]",
+        ),
+        row=4,
+        col=1,
+    )
     fig.add_hline(y=0.0, line=dict(color="gray", dash="solid", width=0.8), row=4, col=1)
 
     fig.update_yaxes(title_text="X [kg/kg ms]", rangemode="tozero", row=1, col=1)
@@ -376,7 +471,8 @@ def _grafica_secado_termodinamico(
     fig.update_xaxes(title_text="Tiempo [h]", row=4, col=1)
     fig.update_layout(
         title_text=f"Motor termodinámico — {prod_id}",
-        height=900, showlegend=True,
+        height=900,
+        showlegend=True,
     )
     return fig
 
@@ -385,9 +481,11 @@ def _grafica_secado_termodinamico(
 # Generador de texto de configuración
 # ---------------------------------------------------------------------------
 
+
 def _resumen_resultado_termodinamico(res) -> dict:
     """Extrae métricas escalares del resultado del motor termodinámico."""
     import numpy as np
+
     n = len(res.t_array_s) if hasattr(res, "t_array_s") else 0
     out = {
         "status": res.status,
@@ -433,8 +531,7 @@ def _resumen_resultado_capa_fina(res) -> dict:
         "X_eq_corregido_kg_kg": res.X_eq_corregido_kg_kg,
         "t_secado_corregido_s": res.t_secado_corregido_s,
         "t_secado_corregido_h": (
-            res.t_secado_corregido_s / 3600.0
-            if res.t_secado_corregido_s is not None else None
+            res.t_secado_corregido_s / 3600.0 if res.t_secado_corregido_s is not None else None
         ),
     }
 
@@ -456,12 +553,14 @@ def _obtener_resultado_camara(session_state) -> tuple[str | None, object | None,
 def _texto_config_camara(cam: "Camara", session_state=None) -> str:
     """Genera el snapshot .txt de la cámara con resultados si están en session."""
     from datetime import date
+
     g = cam.geometria
     cn = cam.construccion
     b = cam.bandejas
     f = cam.flujo
     c = cam.carga_producto
     from core import catalogo as _cat
+
     datos_prod = _cat.PRODUCTOS.get(c.producto_id) or {}
     props_prod = datos_prod.get("propiedades_basicas") or {}
 
@@ -512,6 +611,8 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
     ]
     if b.diametro_eq_particula_m is not None:
         lines.append(f"  d_eq partícula      : {b.diametro_eq_particula_m * 1000:.2f} mm")
+    if b.K_rugosidad_producto is not None:
+        lines.append(f"  K rugosidad (forzado): {b.K_rugosidad_producto:.2f}")
     lines += [
         "",
         "PRODUCTO Y CARGA",
@@ -549,6 +650,7 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
 
     # Advertencias
     from core.camara import advertencias_camara as _advs_cam
+
     advs = _advs_cam(cam)
     lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
     if not advs:
@@ -569,14 +671,15 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         resumen = _resumen_resultado_termodinamico(res)
         lines.append("  Modo               : termodinámico (horizonte)")
         if meta:
-            lines.append(f"  Horizonte          : {meta.get('n_dias')} día(s), "
-                          f"forzantes={meta.get('modo_forzantes')}")
+            lines.append(
+                f"  Horizonte          : {meta.get('n_dias')} día(s), "
+                f"forzantes={meta.get('modo_forzantes')}"
+            )
         lines += [
             f"  Status             : {resumen['status']}",
             f"  Tiempo simulación  : {resumen.get('t_simulacion_h', 0):.2f} h",
             f"  Tiempo de secado   : "
-            + (f"{resumen['t_secado_h']:.2f} h" if resumen['t_secado_h']
-               else "no alcanzado"),
+            + (f"{resumen['t_secado_h']:.2f} h" if resumen["t_secado_h"] else "no alcanzado"),
             f"  Agua evaporada     : {resumen['masa_evaporada_total_kg']:.3f} kg",
             f"  X inicial          : {resumen.get('X_prod_inicial', 0):.4f} kg/kg",
             f"  X final            : {resumen.get('X_prod_final', 0):.4f} kg/kg",
@@ -603,18 +706,25 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
             f"  Agua extraída      : {resumen['masa_agua_extraida_kg']:.3f} kg",
             f"  MR objetivo        : {resumen['MR_obj']:.4f}",
             f"  Convergencia       : "
-            + ("OK" if resumen['convergencia_ok'] else
-               f"FALLA — {resumen['mensaje_convergencia']}"),
+            + (
+                "OK" if resumen["convergencia_ok"] else f"FALLA — {resumen['mensaje_convergencia']}"
+            ),
         ]
         if resumen["HR_media"] is not None:
             lines += [
                 f"  HR media (psicro)  : {resumen['HR_media']:.3f}",
                 f"  X_eq corregido     : "
-                + (f"{resumen['X_eq_corregido_kg_kg']:.4f} kg/kg"
-                   if resumen['X_eq_corregido_kg_kg'] is not None else "—"),
+                + (
+                    f"{resumen['X_eq_corregido_kg_kg']:.4f} kg/kg"
+                    if resumen["X_eq_corregido_kg_kg"] is not None
+                    else "—"
+                ),
                 f"  t_secado corregido : "
-                + (f"{resumen['t_secado_corregido_h']:.2f} h"
-                   if resumen['t_secado_corregido_h'] is not None else "—"),
+                + (
+                    f"{resumen['t_secado_corregido_h']:.2f} h"
+                    if resumen["t_secado_corregido_h"] is not None
+                    else "—"
+                ),
             ]
         if resumen["advertencias"]:
             lines.append("  Advertencias cálculo:")
@@ -657,9 +767,7 @@ def _from_json_camara(data: dict) -> "Camara":
     pared = ParedCamara(capas=capas)
     construccion = ConstruccionCamara(
         cubierta_translucida_id=cn_d.get("cubierta_translucida_id"),
-        A_rad_m2=(
-            float(cn_d["A_rad_m2"]) if cn_d.get("A_rad_m2") is not None else None
-        ),
+        A_rad_m2=(float(cn_d["A_rad_m2"]) if cn_d.get("A_rad_m2") is not None else None),
         pared=pared,
     )
 
@@ -672,9 +780,15 @@ def _from_json_camara(data: dict) -> "Camara":
         porosidad_lecho=float(b_d.get("porosidad_lecho", 0.45)),
         diametro_eq_particula_m=(
             float(b_d["diametro_eq_particula_m"])
-            if b_d.get("diametro_eq_particula_m") is not None else None
+            if b_d.get("diametro_eq_particula_m") is not None
+            else None
         ),
         esfericidad=float(b_d.get("esfericidad", 0.60)),
+        K_rugosidad_producto=(
+            float(b_d["K_rugosidad_producto"])
+            if b_d.get("K_rugosidad_producto") is not None
+            else None
+        ),
     )
 
     carga = CargaProducto(
@@ -685,8 +799,7 @@ def _from_json_camara(data: dict) -> "Camara":
         modelo_capa_fina=c_d["modelo_capa_fina"],
         modelo_isoterma=c_d["modelo_isoterma"],
         T_prod_inicial_K=(
-            float(c_d["T_prod_inicial_K"])
-            if c_d.get("T_prod_inicial_K") is not None else None
+            float(c_d["T_prod_inicial_K"]) if c_d.get("T_prod_inicial_K") is not None else None
         ),
     )
 
@@ -696,7 +809,8 @@ def _from_json_camara(data: dict) -> "Camara":
         direccion_flujo=DireccionFlujo(f_d.get("direccion_flujo", "HORIZONTAL")),
         HR_entrada_fraccion=(
             float(f_d["HR_entrada_fraccion"])
-            if f_d.get("HR_entrada_fraccion") is not None else None
+            if f_d.get("HR_entrada_fraccion") is not None
+            else None
         ),
     )
 
@@ -737,7 +851,8 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "cubierta_translucida_id": cn.cubierta_translucida_id,
             "cubierta_translucida_props": (
                 dict(_cat.CUBIERTAS.get(cn.cubierta_translucida_id, {}))
-                if cn.cubierta_translucida_id else None
+                if cn.cubierta_translucida_id
+                else None
             ),
             "A_rad_m2": cn.A_rad_m2,
             "pared": {
@@ -767,6 +882,7 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "porosidad_lecho": b.porosidad_lecho,
             "diametro_eq_particula_m": b.diametro_eq_particula_m,
             "esfericidad": b.esfericidad,
+            "K_rugosidad_producto": b.K_rugosidad_producto,
         },
         "carga_producto": {
             "producto_id": c.producto_id,
@@ -823,6 +939,137 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Operación anual de cámara (cascada A + B)
+# ---------------------------------------------------------------------------
+
+
+def _render_operacion_anual(proyecto, camara_builder) -> None:
+    """Sección prominente de operación anual de cámara (modo ANUAL).
+
+    Muestra slider de batches_por_mes, botón de cálculo y card resumen anual.
+    No requiere que ``proyecto.camara`` esté construido previamente — recibe
+    ``camara_builder``, un callable sin argumentos que construye ``Camara``
+    desde los valores actuales de los widgets de P4 cuando se aprieta el
+    botón anual. Eso permite que el flujo anual sea la vista principal en
+    modo ANUAL y no requiera correr antes el batch puntual del día sintético.
+    """
+    if proyecto.clima is None or proyecto.clima.datos is None:
+        st.info("ℹ️ **Operación anual** disponible solo con clima NASA POWER " "cargado en P2.")
+        return
+    if proyecto.colector is None:
+        st.warning(
+            "⚠️ La operación anual de cámara requiere un colector configurado "
+            "en P3 (modelo lineal de prediseño)."
+        )
+        return
+
+    st.markdown("### 📅 Operación anual de cámara (cascada A + B)")
+    st.caption(
+        "Corre el motor termodinámico sobre el día típico de cada mes, calcula "
+        "las 4 eficiencias de Augustus Leon (RSER 2002) y escala a operación "
+        "mensual con la cantidad de batches configurada. El detalle por mes "
+        "se muestra en P7."
+    )
+
+    # Estado previo (puede ser None si aún no se calculó la cámara)
+    cfg_prev = OperacionAnualConfig()
+    if proyecto.camara is not None and proyecto.camara.operacion_anual is not None:
+        cfg_prev = proyecto.camara.operacion_anual
+
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        batches = st.slider(
+            "Batches del producto por mes",
+            min_value=1,
+            max_value=30,
+            value=int(cfg_prev.batches_por_mes),
+            step=1,
+            help=(
+                "Cantidad de batches completos del producto que se asume "
+                "operar por mes. 10 batches/mes ≈ 1 batch cada 3 días."
+            ),
+            key="p4_anual_batches",
+        )
+    with c2:
+        st.metric(
+            "Días/batch (aprox.)",
+            f"{30 / batches:.1f}",
+            help="30 días/mes ÷ batches/mes",
+        )
+
+    calcular_anual = st.button(
+        "📅 Calcular operación anual",
+        type="primary",
+        key="p4_anual_calcular",
+        help=(
+            "Construye la cámara con los valores actuales de los widgets, "
+            "fija modo_calculo=termodinamico y corre 12 simulaciones (~30 s)."
+        ),
+    )
+
+    if calcular_anual:
+        # Construir la cámara desde los widgets y forzar modo termodinámico
+        # (la cascada A+B no usa capa fina).
+        try:
+            camara = camara_builder(modo_calculo_override="termodinamico")
+        except (ValueError, NotImplementedError) as exc:
+            st.error(f"❌ Error de configuración: {exc}")
+            return
+
+        try:
+            cfg_nuevo = OperacionAnualConfig(batches_por_mes=batches)
+        except ValueError as exc:
+            st.error(f"❌ {exc}")
+            return
+
+        camara.operacion_anual = cfg_nuevo
+        proyecto.camara = camara
+
+        with st.spinner("Corriendo motor termodinámico mes a mes..."):
+            try:
+                res_anual = calcular_operacion_anual_camara(proyecto)
+            except ValueError as exc:
+                st.error(f"❌ {exc}")
+                return
+            except Exception as exc:
+                st.error(f"❌ Error en cálculo anual: {exc}")
+                return
+        st.session_state["p4_resultado_anual"] = res_anual
+        st.success("✅ Operación anual calculada. Ver detalle mensual en P7.")
+
+    res_anual: ResultadosAnualCamara | None = st.session_state.get("p4_resultado_anual")
+    if res_anual is None:
+        return
+
+    if res_anual.advertencias:
+        for msg in res_anual.advertencias:
+            st.warning(f"⚠️ {msg}")
+
+    st.markdown("**Resumen anual**")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric(
+        "kg secados/año",
+        f"{res_anual.kg_secados_anual:.0f}",
+        help="Suma de kg de producto fresco secados en los 12 meses.",
+    )
+    col2.metric(
+        "η_total media",
+        f"{res_anual.eta_total_anual_media * 100:.1f}%",
+        help="Eficiencia global del sistema ponderada por kg/mes.",
+    )
+    col3.metric(
+        "t_secado promedio",
+        f"{res_anual.t_secado_promedio_h:.1f} h",
+        help="Promedio sobre meses que convergieron al X_objetivo.",
+    )
+    col4.metric(
+        "Energía solar anual",
+        f"{res_anual.E_solar_anual_MJ:.0f} MJ",
+        help="Sobre el plano del colector durante batches operativos.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Render principal
 # ---------------------------------------------------------------------------
 
@@ -835,10 +1082,9 @@ def render() -> None:
 
     # Detectar tipología temprano: condiciona defaults de cubierta y T_op.
     from core.proyecto import Tipologia
-    _tipologia_actual = getattr(
-        getattr(proyecto, "configuracion", None), "tipologia", None
-    )
-    es_caja_pre = (_tipologia_actual == Tipologia.CAJA)
+
+    _tipologia_actual = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
+    es_caja_pre = _tipologia_actual == Tipologia.CAJA
     if es_caja_pre:
         st.info(
             "📦 **Tipología CAJA**: la cámara actúa como secador directo. "
@@ -854,9 +1100,11 @@ def render() -> None:
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
+
         archivo = st.file_uploader(
             "Subí un archivo .json de la cámara previamente guardado",
-            type=["json"], key="p4_cargar_json",
+            type=["json"],
+            key="p4_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "camara")
@@ -871,9 +1119,7 @@ def render() -> None:
                     proyecto.camara = cam_cargada
                     # Limpiar widgets + resultados viejos de la cámara
                     # y del horizonte que dependa de ella.
-                    n_borr = limpiar_session_state_prefijo(
-                        st.session_state, "p4_"
-                    )
+                    n_borr = limpiar_session_state_prefijo(st.session_state, "p4_")
                     limpiar_session_state_prefijo(st.session_state, "cam_")
                     st.session_state.pop("p4_cargar_json", None)
                     st.success(
@@ -900,7 +1146,10 @@ def render() -> None:
 
     # Valor previo guardado
     prod_previo = "manzana"
-    if proyecto.camara is not None and proyecto.camara.carga_producto.producto_id in ids_disponibles:
+    if (
+        proyecto.camara is not None
+        and proyecto.camara.carga_producto.producto_id in ids_disponibles
+    ):
         prod_previo = proyecto.camara.carga_producto.producto_id
 
     idx_default = ids_disponibles.index(prod_previo) if prod_previo in ids_disponibles else 0
@@ -937,11 +1186,13 @@ def render() -> None:
             "Humedad objetivo X_obj [kg agua / kg ms]",
             min_value=0.01,
             max_value=X_ini - 0.01,
-            value=min(
-                0.15,
-                X_ini - 0.01,
-            ) if proyecto.camara is None else min(
-                proyecto.camara.carga_producto.humedad_objetivo_X, X_ini - 0.01
+            value=(
+                min(
+                    0.15,
+                    X_ini - 0.01,
+                )
+                if proyecto.camara is None
+                else min(proyecto.camara.carga_producto.humedad_objetivo_X, X_ini - 0.01)
             ),
             step=0.01,
             format="%.3f",
@@ -957,7 +1208,8 @@ def render() -> None:
             max_value=10000.0,
             value=float(
                 proyecto.camara.carga_producto.masa_total_kg
-                if proyecto.camara is not None else 10.0
+                if proyecto.camara is not None
+                else 10.0
             ),
             step=0.5,
             format="%.1f",
@@ -965,7 +1217,10 @@ def render() -> None:
 
     with col2:
         modelo_cf_idx = 0
-        if proyecto.camara is not None and proyecto.camara.carga_producto.modelo_capa_fina in modelos_disp:
+        if (
+            proyecto.camara is not None
+            and proyecto.camara.carga_producto.modelo_capa_fina in modelos_disp
+        ):
             modelo_cf_idx = modelos_disp.index(proyecto.camara.carga_producto.modelo_capa_fina)
 
         modelo_cf = st.selectbox(
@@ -993,8 +1248,9 @@ def render() -> None:
         if T_K_cal:
             T_rango = T_K_cal if isinstance(T_K_cal, list) else [T_K_cal]
             T_str = f"{min(T_rango)-273.15:.0f}–{max(T_rango)-273.15:.0f} °C"
-            st.caption(f"🌡️ Rango calibración: {T_str}"
-                       + (f"  |  💨 v = {v_cal} m/s" if v_cal else ""))
+            st.caption(
+                f"🌡️ Rango calibración: {T_str}" + (f"  |  💨 v = {v_cal} m/s" if v_cal else "")
+            )
         if fuente_cf and fuente_cf != "—":
             with st.expander("Fuente bibliográfica"):
                 st.caption(fuente_cf[:300] + "..." if len(fuente_cf) > 300 else fuente_cf)
@@ -1022,24 +1278,45 @@ def render() -> None:
     with st.expander("Geometría de la cámara", expanded=True):
         c1, c2, c3 = st.columns(3)
         geo_prev = proyecto.camara.geometria if proyecto.camara is not None else GeometriaCamara()
-        largo = c1.number_input("Largo [m]", min_value=0.1, max_value=20.0,
-                                value=geo_prev.largo_m, step=0.05, format="%.2f")
-        ancho = c2.number_input("Ancho [m]", min_value=0.1, max_value=10.0,
-                                value=geo_prev.ancho_m, step=0.05, format="%.2f")
-        alto = c3.number_input("Alto [m]", min_value=0.1, max_value=5.0,
-                               value=geo_prev.alto_m, step=0.05, format="%.2f")
-        vol = largo * ancho * alto
-        st.caption(
-            f"Volumen interno: {vol:.3f} m³  |  Área de planta: {largo*ancho:.3f} m²"
+        largo = c1.number_input(
+            "Largo [m]",
+            min_value=0.1,
+            max_value=20.0,
+            value=geo_prev.largo_m,
+            step=0.05,
+            format="%.2f",
         )
+        ancho = c2.number_input(
+            "Ancho [m]",
+            min_value=0.1,
+            max_value=10.0,
+            value=geo_prev.ancho_m,
+            step=0.05,
+            format="%.2f",
+        )
+        alto = c3.number_input(
+            "Alto [m]",
+            min_value=0.1,
+            max_value=5.0,
+            value=geo_prev.alto_m,
+            step=0.05,
+            format="%.2f",
+        )
+        vol = largo * ancho * alto
+        st.caption(f"Volumen interno: {vol:.3f} m³  |  Área de planta: {largo*ancho:.3f} m²")
 
-        cons_prev = proyecto.camara.construccion if proyecto.camara is not None else ConstruccionCamara()
-        opciones_cubierta = ["(opaca — sin radiación al producto)"] + list(catalogo.CUBIERTAS.keys())
+        cons_prev = (
+            proyecto.camara.construccion if proyecto.camara is not None else ConstruccionCamara()
+        )
+        opciones_cubierta = ["(opaca — sin radiación al producto)"] + list(
+            catalogo.CUBIERTAS.keys()
+        )
         # Default: para CAJA, "vidrio_comun" (no opaca); para el resto, lo previo o opaca.
         if cons_prev.cubierta_translucida_id is None:
             idx_cub_default = (
                 opciones_cubierta.index("vidrio_comun")
-                if es_caja_pre and "vidrio_comun" in opciones_cubierta else 0
+                if es_caja_pre and "vidrio_comun" in opciones_cubierta
+                else 0
             )
         else:
             try:
@@ -1084,12 +1361,15 @@ def render() -> None:
         es_compuesta_prev = cons_prev.pared.es_compuesta
         tipo_pared_default = (
             "Compuesta (cara externa + aislante + cara interna)"
-            if es_compuesta_prev else "Simple (1 material + espesor)"
+            if es_compuesta_prev
+            else "Simple (1 material + espesor)"
         )
         tipo_pared = st.radio(
             "Tipo de pared",
-            options=["Simple (1 material + espesor)",
-                     "Compuesta (cara externa + aislante + cara interna)"],
+            options=[
+                "Simple (1 material + espesor)",
+                "Compuesta (cara externa + aislante + cara interna)",
+            ],
             index=0 if not es_compuesta_prev else 1,
             horizontal=True,
             help=(
@@ -1114,7 +1394,8 @@ def render() -> None:
 
             c_cat, c_mat, c_esp = st.columns([1, 2, 1])
             cat_sel = c_cat.selectbox(
-                "Catálogo", options=["fondos", "aislantes"],
+                "Catálogo",
+                options=["fondos", "aislantes"],
                 index=0 if cat_prev == "fondos" else 1,
                 key="p4_pared_simple_cat",
                 help="fondos = chapa/madera estructural; aislantes = lana, EPS, PUR.",
@@ -1125,17 +1406,25 @@ def render() -> None:
             except ValueError:
                 idx_mat = 0
             mat_sel = c_mat.selectbox(
-                "Material", options=opciones_mat, index=idx_mat,
+                "Material",
+                options=opciones_mat,
+                index=idx_mat,
                 key="p4_pared_simple_mat",
             )
             esp_sel = c_esp.number_input(
-                "Espesor [m]", min_value=0.001, max_value=0.50,
-                value=float(esp_prev), step=0.005, format="%.4f",
+                "Espesor [m]",
+                min_value=0.001,
+                max_value=0.50,
+                value=float(esp_prev),
+                step=0.005,
+                format="%.4f",
                 key="p4_pared_simple_esp",
             )
-            pared_widget = ParedCamara(capas=[
-                CapaPared(material_id=mat_sel, espesor_m=esp_sel, catalogo=cat_sel),
-            ])
+            pared_widget = ParedCamara(
+                capas=[
+                    CapaPared(material_id=mat_sel, espesor_m=esp_sel, catalogo=cat_sel),
+                ]
+            )
         else:
             # --- Pared compuesta: 3 capas (externa + aislante + interna) ---
             if es_compuesta_prev and len(cons_prev.pared.capas) >= 3:
@@ -1143,63 +1432,101 @@ def render() -> None:
                 cap_ais_prev = cons_prev.pared.capas[1]
                 cap_int_prev = cons_prev.pared.capas[-1]
             else:
-                cap_ext_prev = CapaPared(material_id="galvanizada_pintada",
-                                         espesor_m=0.0006, catalogo="fondos")
-                cap_ais_prev = CapaPared(material_id="lana_vidrio_media",
-                                         espesor_m=0.05, catalogo="aislantes")
-                cap_int_prev = CapaPared(material_id="galvanizada_pintada",
-                                         espesor_m=0.0006, catalogo="fondos")
+                cap_ext_prev = CapaPared(
+                    material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"
+                )
+                cap_ais_prev = CapaPared(
+                    material_id="lana_vidrio_media", espesor_m=0.05, catalogo="aislantes"
+                )
+                cap_int_prev = CapaPared(
+                    material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"
+                )
 
             st.caption("**Cara externa**")
             c1, c2 = st.columns([2, 1])
             try:
-                idx_ext = fondos_keys.index(cap_ext_prev.material_id) if cap_ext_prev.catalogo == "fondos" else 0
+                idx_ext = (
+                    fondos_keys.index(cap_ext_prev.material_id)
+                    if cap_ext_prev.catalogo == "fondos"
+                    else 0
+                )
             except ValueError:
                 idx_ext = 0
-            mat_ext = c1.selectbox("Material (fondos.yaml)",
-                                   options=fondos_keys, index=idx_ext,
-                                   key="p4_pared_comp_mat_ext")
-            esp_ext = c2.number_input("Espesor externa [m]",
-                                      min_value=0.0001, max_value=0.20,
-                                      value=float(cap_ext_prev.espesor_m),
-                                      step=0.0005, format="%.4f",
-                                      key="p4_pared_comp_esp_ext")
+            mat_ext = c1.selectbox(
+                "Material (fondos.yaml)",
+                options=fondos_keys,
+                index=idx_ext,
+                key="p4_pared_comp_mat_ext",
+            )
+            esp_ext = c2.number_input(
+                "Espesor externa [m]",
+                min_value=0.0001,
+                max_value=0.20,
+                value=float(cap_ext_prev.espesor_m),
+                step=0.0005,
+                format="%.4f",
+                key="p4_pared_comp_esp_ext",
+            )
 
             st.caption("**Aislante**")
             c3, c4 = st.columns([2, 1])
             try:
-                idx_ais = aislantes_keys.index(cap_ais_prev.material_id) if cap_ais_prev.catalogo == "aislantes" else 0
+                idx_ais = (
+                    aislantes_keys.index(cap_ais_prev.material_id)
+                    if cap_ais_prev.catalogo == "aislantes"
+                    else 0
+                )
             except ValueError:
                 idx_ais = 0
-            mat_ais = c3.selectbox("Material (aislantes.yaml)",
-                                   options=aislantes_keys, index=idx_ais,
-                                   key="p4_pared_comp_mat_ais")
-            esp_ais = c4.number_input("Espesor aislante [m]",
-                                      min_value=0.001, max_value=0.50,
-                                      value=float(cap_ais_prev.espesor_m),
-                                      step=0.005, format="%.4f",
-                                      key="p4_pared_comp_esp_ais")
+            mat_ais = c3.selectbox(
+                "Material (aislantes.yaml)",
+                options=aislantes_keys,
+                index=idx_ais,
+                key="p4_pared_comp_mat_ais",
+            )
+            esp_ais = c4.number_input(
+                "Espesor aislante [m]",
+                min_value=0.001,
+                max_value=0.50,
+                value=float(cap_ais_prev.espesor_m),
+                step=0.005,
+                format="%.4f",
+                key="p4_pared_comp_esp_ais",
+            )
 
             st.caption("**Cara interna**")
             c5, c6 = st.columns([2, 1])
             try:
-                idx_int = fondos_keys.index(cap_int_prev.material_id) if cap_int_prev.catalogo == "fondos" else 0
+                idx_int = (
+                    fondos_keys.index(cap_int_prev.material_id)
+                    if cap_int_prev.catalogo == "fondos"
+                    else 0
+                )
             except ValueError:
                 idx_int = 0
-            mat_int = c5.selectbox("Material (fondos.yaml)",
-                                   options=fondos_keys, index=idx_int,
-                                   key="p4_pared_comp_mat_int")
-            esp_int = c6.number_input("Espesor interna [m]",
-                                      min_value=0.0001, max_value=0.20,
-                                      value=float(cap_int_prev.espesor_m),
-                                      step=0.0005, format="%.4f",
-                                      key="p4_pared_comp_esp_int")
+            mat_int = c5.selectbox(
+                "Material (fondos.yaml)",
+                options=fondos_keys,
+                index=idx_int,
+                key="p4_pared_comp_mat_int",
+            )
+            esp_int = c6.number_input(
+                "Espesor interna [m]",
+                min_value=0.0001,
+                max_value=0.20,
+                value=float(cap_int_prev.espesor_m),
+                step=0.0005,
+                format="%.4f",
+                key="p4_pared_comp_esp_int",
+            )
 
-            pared_widget = ParedCamara(capas=[
-                CapaPared(material_id=mat_ext, espesor_m=esp_ext, catalogo="fondos"),
-                CapaPared(material_id=mat_ais, espesor_m=esp_ais, catalogo="aislantes"),
-                CapaPared(material_id=mat_int, espesor_m=esp_int, catalogo="fondos"),
-            ])
+            pared_widget = ParedCamara(
+                capas=[
+                    CapaPared(material_id=mat_ext, espesor_m=esp_ext, catalogo="fondos"),
+                    CapaPared(material_id=mat_ais, espesor_m=esp_ais, catalogo="aislantes"),
+                    CapaPared(material_id=mat_int, espesor_m=esp_int, catalogo="fondos"),
+                ]
+            )
 
         # Resumen del U computado
         _U_cond = pared_widget.U_conduccion_W_m2K
@@ -1224,21 +1551,34 @@ def render() -> None:
             proyecto.camara.bandejas if proyecto.camara is not None else ConfiguracionBandejas()
         )
         c1, c2 = st.columns(2)
-        n_bandejas = c1.number_input("Número de bandejas", min_value=1, max_value=100,
-                                      value=band_prev.n_bandejas, step=1)
-        area_bandeja = c2.number_input("Área por bandeja [m²]", min_value=0.01, max_value=10.0,
-                                        value=band_prev.area_bandeja_m2, step=0.05, format="%.3f")
+        n_bandejas = c1.number_input(
+            "Número de bandejas", min_value=1, max_value=100, value=band_prev.n_bandejas, step=1
+        )
+        area_bandeja = c2.number_input(
+            "Área por bandeja [m²]",
+            min_value=0.01,
+            max_value=10.0,
+            value=band_prev.area_bandeja_m2,
+            step=0.05,
+            format="%.3f",
+        )
         c3, c4 = st.columns(2)
         espesor_capa = c3.number_input(
             "Espesor de capa de producto [m]",
-            min_value=0.002, max_value=0.2, value=band_prev.espesor_capa_m,
-            step=0.005, format="%.3f",
+            min_value=0.002,
+            max_value=0.2,
+            value=band_prev.espesor_capa_m,
+            step=0.005,
+            format="%.3f",
             help="Modelos de capa fina válidos para espesor ≤ 5 cm.",
         )
         sep_bandejas = c4.number_input(
             "Separación entre bandejas [m]",
-            min_value=0.02, max_value=1.0, value=band_prev.separacion_entre_bandejas_m,
-            step=0.01, format="%.3f",
+            min_value=0.02,
+            max_value=1.0,
+            value=band_prev.separacion_entre_bandejas_m,
+            step=0.01,
+            format="%.3f",
             help="Distancia libre entre superficies de bandejas consecutivas.",
         )
         st.caption(
@@ -1246,6 +1586,57 @@ def render() -> None:
             f"Área total de bandeja: {n_bandejas * area_bandeja:.2f} m²  |  "
             f"Carga estimada: {masa_kg / n_bandejas / area_bandeja:.1f} kg/m²/bandeja"
         )
+
+        # -------------------------------------------------------------------
+        # Pérdida de carga por rugosidad del producto sobre la bandeja
+        # -------------------------------------------------------------------
+        st.markdown("**Pérdida de carga por rugosidad del producto**")
+        _forma = (catalogo.PRODUCTOS.get(prod_id) or {}).get("forma_geometrica") or {}
+        _d_p_auto = float(_forma.get("diametro_eq_m") or _D_P_DEFAULT_M)
+        _espacio_libre_auto = max(0.0, sep_bandejas - espesor_capa)
+        _K_auto = _K_rugosidad_default(_d_p_auto, _espacio_libre_auto)
+        _ratio = _d_p_auto / _espacio_libre_auto if _espacio_libre_auto > 0 else 0.0
+
+        K_rug_help = (
+            "Coeficiente K de pérdida de forma aplicado como K·ρv²/2 una vez "
+            "por bandeja para capturar la rugosidad del lecho de producto en "
+            "cross-flow (HORIZONTAL). Darcy-Weisbach de pared lisa subestima "
+            "esta pérdida porque el aire no encuentra una superficie pulida "
+            "sino partículas que sobresalen y generan estelas locales.\n\n"
+            "**Fundamento del default automático** (sin correlación específica "
+            "en literatura): tabla de anclajes inspirada en Idelchik / Crane "
+            "TP-410, interpolada linealmente sobre el ratio d_p/espacio_libre:\n"
+            "• ratio < 0.05  →  K = 0.2  (casi liso)\n"
+            "• 0.05–0.15     →  K = 0.2–0.5  (rugosidad significativa)\n"
+            "• 0.15–0.30     →  K = 0.5–1.0  (obstrucción parcial)\n"
+            "• 0.30–0.50     →  K = 1.0–2.0  (cuasi-bloqueo)\n\n"
+            "En VERTICAL_ASCENDENTE este término no se aplica porque la "
+            "ecuación de Ergun ya captura la rugosidad del producto vía la "
+            "esfericidad Φ_s y el diámetro de partícula d_p."
+        )
+
+        forzar_K_rug = st.checkbox(
+            "Forzar K_rugosidad (override del default automático)",
+            value=band_prev.K_rugosidad_producto is not None,
+            help=K_rug_help,
+        )
+        K_rugosidad_val: Optional[float] = None
+        if forzar_K_rug:
+            K_rugosidad_val = st.number_input(
+                "K_rugosidad [adim]",
+                min_value=0.0,
+                max_value=10.0,
+                value=float(band_prev.K_rugosidad_producto or _K_auto),
+                step=0.1,
+                format="%.2f",
+                help="Se aplica como K·ρv²/2 una vez por bandeja.",
+            )
+        else:
+            st.caption(
+                f"K_rugosidad estimado automáticamente: **{_K_auto:.2f}**  "
+                f"(d_p = {_d_p_auto * 1000:.1f} mm, espacio libre = "
+                f"{_espacio_libre_auto * 100:.1f} cm, ratio = {_ratio:.3f})"
+            )
 
     # -----------------------------------------------------------------------
     # Sección D: Flujo de aire
@@ -1268,8 +1659,11 @@ def render() -> None:
         c1, c2 = st.columns(2)
         caudal = c1.number_input(
             "Caudal másico [kg/s]",
-            min_value=0.001, max_value=10.0, value=caudal_sugerido,
-            step=0.001, format="%.4f",
+            min_value=0.001,
+            max_value=10.0,
+            value=caudal_sugerido,
+            step=0.001,
+            format="%.4f",
             help=hint_caudal or "Caudal de aire seco que circula por la cámara.",
         )
         if hint_caudal:
@@ -1296,7 +1690,8 @@ def render() -> None:
         if usar_HR:
             HR_pct = st.slider(
                 "HR del aire en entrada a la cámara [%]",
-                min_value=5, max_value=95,
+                min_value=5,
+                max_value=95,
                 value=int((flujo_prev.HR_entrada_fraccion or _HR_DEFAULT_PCT / 100) * 100),
                 step=1,
             )
@@ -1322,12 +1717,13 @@ def render() -> None:
             )
         else:
             hint_T = (
-                "Temperatura del aire en la cámara. "
-                "Típicamente ≈ T_salida del colector solar."
+                "Temperatura del aire en la cámara. " "Típicamente ≈ T_salida del colector solar."
             )
         T_op_prev_C = _T_OP_DEFAULT_C
         if proyecto.camara is not None and "T_operacion_K" in st.session_state:
-            T_op_prev_C = kelvin_a_celsius(st.session_state.get("cam_T_operacion_K", celsius_a_kelvin(_T_OP_DEFAULT_C)))
+            T_op_prev_C = kelvin_a_celsius(
+                st.session_state.get("cam_T_operacion_K", celsius_a_kelvin(_T_OP_DEFAULT_C))
+            )
 
         T_op_C = st.slider(
             "Temperatura de operación en cámara [°C]",
@@ -1341,7 +1737,8 @@ def render() -> None:
 
         HR_op_pct = st.slider(
             "HR en cámara para cálculo de X_eq [%]",
-            min_value=5, max_value=95,
+            min_value=5,
+            max_value=95,
             value=int(st.session_state.get("cam_HR_op_pct", _HR_DEFAULT_PCT)),
             step=1,
             help=(
@@ -1358,9 +1755,10 @@ def render() -> None:
 
     # Detectar restricciones
     from core.proyecto import Tipologia
+
     tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
-    es_caja = (tipologia == Tipologia.CAJA)
-    solo_midilli = (modelos_disp == ["midilli"])
+    es_caja = tipologia == Tipologia.CAJA
+    solo_midilli = modelos_disp == ["midilli"]
 
     with st.expander("Modo de cálculo (motor numérico)", expanded=False):
 
@@ -1402,7 +1800,8 @@ def render() -> None:
         I_g_max_W_m2 = 0.0
         if modo_calculo == "termodinamico":
             real_ok, real_motivo = _disponibilidad_forzantes_reales(
-                st.session_state.get("p3_eval"), proyecto,
+                st.session_state.get("p3_eval"),
+                proyecto,
             )
 
             _opciones_forz = [
@@ -1434,9 +1833,7 @@ def render() -> None:
                 tipo_forzantes = "real"
 
             if tipo_forzantes == "real" and not real_ok:
-                st.warning(
-                    f"⚠️ Día real no disponible: {real_motivo} Cae a 'Día sintético'."
-                )
+                st.warning(f"⚠️ Día real no disponible: {real_motivo} Cae a 'Día sintético'.")
                 tipo_forzantes = "sintetico"
 
             _opciones_hz = ["1 día", "Multi-día"]
@@ -1454,10 +1851,15 @@ def render() -> None:
             )
             st.session_state["cam_hz_idx"] = _opciones_hz.index(hz_sel)
             if hz_sel == "Multi-día":
-                n_dias = int(st.number_input(
-                    "Número de días", min_value=1, max_value=21,
-                    value=int(st.session_state.get("cam_n_dias", 3)), step=1,
-                ))
+                n_dias = int(
+                    st.number_input(
+                        "Número de días",
+                        min_value=1,
+                        max_value=21,
+                        value=int(st.session_state.get("cam_n_dias", 3)),
+                        step=1,
+                    )
+                )
                 st.session_state["cam_n_dias"] = n_dias
 
             if tipo_forzantes == "real":
@@ -1468,17 +1870,20 @@ def render() -> None:
 
             # I_g_max del día sintético: sólo relevante si hay techo translúcido
             if tipo_forzantes == "sintetico" and cubierta_id_sel is not None:
-                I_g_max_W_m2 = float(st.number_input(
-                    "I_g pico al mediodía [W/m²]",
-                    min_value=0.0, max_value=1400.0,
-                    value=float(st.session_state.get("cam_I_g_max", 800.0)),
-                    step=50.0,
-                    help=(
-                        "Pico de irradiancia global horizontal sobre el techo. "
-                        "Típico día claro: 800–1000 W/m². Curva diaria: semicampana "
-                        "sinusoidal positiva (sol entre 6 h y 18 h)."
-                    ),
-                ))
+                I_g_max_W_m2 = float(
+                    st.number_input(
+                        "I_g pico al mediodía [W/m²]",
+                        min_value=0.0,
+                        max_value=1400.0,
+                        value=float(st.session_state.get("cam_I_g_max", 800.0)),
+                        step=50.0,
+                        help=(
+                            "Pico de irradiancia global horizontal sobre el techo. "
+                            "Típico día claro: 800–1000 W/m². Curva diaria: semicampana "
+                            "sinusoidal positiva (sol entre 6 h y 18 h)."
+                        ),
+                    )
+                )
                 st.session_state["cam_I_g_max"] = I_g_max_W_m2
             else:
                 I_g_max_W_m2 = 0.0
@@ -1501,9 +1906,7 @@ def render() -> None:
             )
             if usar_T_prod_explicita:
                 T_prod_default_C = (
-                    kelvin_a_celsius(
-                        proyecto.camara.carga_producto.T_prod_inicial_K
-                    )
+                    kelvin_a_celsius(proyecto.camara.carga_producto.T_prod_inicial_K)
                     if (
                         proyecto.camara is not None
                         and proyecto.camara.carga_producto.T_prod_inicial_K is not None
@@ -1512,7 +1915,8 @@ def render() -> None:
                 )
                 T_prod_inicial_C = st.number_input(
                     "T inicial del producto [°C]",
-                    min_value=-10.0, max_value=70.0,
+                    min_value=-10.0,
+                    max_value=70.0,
                     value=float(T_prod_default_C),
                     step=1.0,
                     help="Rango razonable: −10 °C (refrigerado) a +70 °C (precalentado).",
@@ -1536,17 +1940,75 @@ def render() -> None:
                 )
 
     # -----------------------------------------------------------------------
-    # Botón de cálculo
+    # Builder de Camara desde los widgets actuales (closure)
+    # -----------------------------------------------------------------------
+    def _build_camara(*, modo_calculo_override: str | None = None) -> Camara:
+        """Construye Camara con los valores actuales de los widgets."""
+        geo = GeometriaCamara(largo_m=largo, ancho_m=ancho, alto_m=alto)
+        cons = ConstruccionCamara(
+            cubierta_translucida_id=cubierta_id_sel,
+            pared=pared_widget,
+        )
+        band = ConfiguracionBandejas(
+            n_bandejas=n_bandejas,
+            area_bandeja_m2=area_bandeja,
+            espesor_capa_m=espesor_capa,
+            separacion_entre_bandejas_m=sep_bandejas,
+            K_rugosidad_producto=K_rugosidad_val,
+        )
+        flujo = ConfiguracionFlujo(
+            caudal_masico_kg_s=caudal,
+            fraccion_recirculacion=0.0,
+            direccion_flujo=direccion,
+            HR_entrada_fraccion=HR_entrada_frac,
+        )
+        carga = CargaProducto(
+            producto_id=prod_id,
+            masa_total_kg=masa_kg,
+            humedad_inicial_X=X_ini,
+            humedad_objetivo_X=X_obj,
+            modelo_capa_fina=modelo_cf,
+            modelo_isoterma="gab",
+            T_prod_inicial_K=T_prod_inicial_K_val,
+        )
+        return Camara(
+            geometria=geo,
+            construccion=cons,
+            bandejas=band,
+            flujo=flujo,
+            carga_producto=carga,
+            modo_calculo=modo_calculo_override or modo_calculo,
+        )
+
+    # -----------------------------------------------------------------------
+    # Sección anual prominente (cuando modo_analisis == ANUAL)
+    # -----------------------------------------------------------------------
+    modo_analisis = getattr(proyecto.configuracion, "modo_analisis", None)
+    if modo_analisis == ModoAnalisis.ANUAL:
+        st.divider()
+        _render_operacion_anual(proyecto, _build_camara)
+
+    # -----------------------------------------------------------------------
+    # Botón de cálculo (batch puntual del día sintético/real)
     # -----------------------------------------------------------------------
     st.divider()
+    if modo_analisis == ModoAnalisis.ANUAL:
+        st.markdown("### Test puntual de un día (opcional)")
+        st.caption(
+            "Permite correr un batch único con día sintético o real para "
+            "validar el motor o explorar transitorios de un día. **No** "
+            "alimenta los resultados anuales — esos salen del botón "
+            "'Calcular operación anual' de arriba."
+        )
     _bloqueo_caja_opaca = es_caja_pre and cubierta_id_sel is None
     calcular = st.button(
         "⚙️ Calcular cámara",
-        type="primary",
+        type="primary" if modo_analisis != ModoAnalisis.ANUAL else "secondary",
         disabled=_bloqueo_caja_opaca,
         help=(
             "Tipología CAJA requiere techo translúcido para poder calcular."
-            if _bloqueo_caja_opaca else None
+            if _bloqueo_caja_opaca
+            else None
         ),
     )
 
@@ -1562,6 +2024,7 @@ def render() -> None:
                 area_bandeja_m2=area_bandeja,
                 espesor_capa_m=espesor_capa,
                 separacion_entre_bandejas_m=sep_bandejas,
+                K_rugosidad_producto=K_rugosidad_val,
             )
             flujo = ConfiguracionFlujo(
                 caudal_masico_kg_s=caudal,
@@ -1619,13 +2082,16 @@ def render() -> None:
                     I_g_max_W_m2=I_g_max_W_m2,
                 )
                 t_max_efectivo = (
-                    float(fz_aire.t_s[-1]) if fz_aire is not None
-                    else float(n_dias) * 24.0 * 3600.0
+                    float(fz_aire.t_s[-1]) if fz_aire is not None else float(n_dias) * 24.0 * 3600.0
                 )
                 with st.spinner("Integrando motor termodinámico..."):
                     res = calcular_camara(
-                        camara, T_op_K, HR_op, T_amb_K=T_amb_calc_K,
-                        t_max_s=t_max_efectivo, forzantes_aire=fz_aire,
+                        camara,
+                        T_op_K,
+                        HR_op,
+                        T_amb_K=T_amb_calc_K,
+                        t_max_s=t_max_efectivo,
+                        forzantes_aire=fz_aire,
                     )
                 # Persistir horizonte para que P7 pueda re-correr la pipeline
                 # transitoria con auxiliar + motor (mejora 19).
@@ -1643,7 +2109,10 @@ def render() -> None:
                     st.session_state.pop("p4_horizonte_meta", None)
             else:
                 res = calcular_camara(
-                    camara, T_op_K, HR_op, T_amb_K=T_amb_calc_K,
+                    camara,
+                    T_op_K,
+                    HR_op,
+                    T_amb_K=T_amb_calc_K,
                 )
                 # Modo capa fina: no se propaga horizonte a P7.
                 st.session_state.pop("p4_forzantes_horizonte", None)
@@ -1742,7 +2211,7 @@ def render() -> None:
                     "que ω_sup ≈ ω_ent y ṁ_w arranca cerca de cero. A medida "
                     "que T_prod sube, ω_sup crece rápido y ṁ_w escala con él. "
                     "Esto se ve como una **rampa inicial creciente**, no como "
-                    "el clásico \"velocidad constante desde t=0\" de los "
+                    'el clásico "velocidad constante desde t=0" de los '
                     "modelos empíricos (Lewis, Page).\n\n"
                     "**Período de velocidad decreciente:** aparece sólo cuando "
                     "X cruza X_m (humedad de monocapa GAB). Recién ahí a_w "
@@ -1821,6 +2290,7 @@ def render() -> None:
     if proyecto.camara is not None:
         st.divider()
         from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+
         col_txt, col_json = st.columns(2)
         with col_txt:
             st.download_button(

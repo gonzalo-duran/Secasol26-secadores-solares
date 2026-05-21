@@ -34,8 +34,8 @@ import numpy as np
 # Modos válidos de cálculo de cámara
 _MODOS_CALCULO_VALIDOS: tuple[str, ...] = ("capa_fina", "termodinamico")
 # Rango razonable para T inicial del producto (caso refrigerado a precalentado)
-_T_PROD_INICIAL_MIN_K: float = 263.15   # −10 °C
-_T_PROD_INICIAL_MAX_K: float = 343.15   # +70 °C
+_T_PROD_INICIAL_MIN_K: float = 263.15  # −10 °C
+_T_PROD_INICIAL_MAX_K: float = 343.15  # +70 °C
 
 from core import catalogo
 from core.advertencias import Advertencia, Severidad
@@ -44,18 +44,18 @@ from core.advertencias import Advertencia, Severidad
 # Umbrales de diseño
 # ---------------------------------------------------------------------------
 
-_VOL_MIN_M3: float = 0.01           # 10 litros — mínimo para secador funcional
-_ALTO_MIN_TIPICO_M: float = 0.3     # límite inferior de rango típico [m]
-_ALTO_MAX_TIPICO_M: float = 3.0     # límite superior de rango típico [m]
+_VOL_MIN_M3: float = 0.01  # 10 litros — mínimo para secador funcional
+_ALTO_MIN_TIPICO_M: float = 0.3  # límite inferior de rango típico [m]
+_ALTO_MAX_TIPICO_M: float = 3.0  # límite superior de rango típico [m]
 _RATIO_LARGO_ANCHO_MAX: float = 10.0
 _RATIO_LARGO_ANCHO_MIN: float = 0.1
-_ESPESOR_MAX_CAPA_FINA_M: float = 0.05   # 5 cm — límite de capa fina
+_ESPESOR_MAX_CAPA_FINA_M: float = 0.05  # 5 cm — límite de capa fina
 _N_BANDEJAS_ALTO: int = 20
-_V_SUP_MIN_MS: float = 0.3          # velocidad superficial mínima [m/s]
-_V_SUP_MAX_MS: float = 3.0          # velocidad superficial máxima [m/s]
-_RHO_AIRE_EST: float = 1.1          # densidad de aire estimada a ~50°C [kg/m³]
-_CARGA_MAX_KG_M2: float = 20.0      # carga máxima de producto por m² de bandeja
-_U_MUROS_ALTO_W_M2K: float = 2.0   # umbral de conductancia lateral alta
+_V_SUP_MIN_MS: float = 0.3  # velocidad superficial mínima [m/s]
+_V_SUP_MAX_MS: float = 3.0  # velocidad superficial máxima [m/s]
+_RHO_AIRE_EST: float = 1.1  # densidad de aire estimada a ~50°C [kg/m³]
+_CARGA_MAX_KG_M2: float = 20.0  # carga máxima de producto por m² de bandeja
+_U_MUROS_ALTO_W_M2K: float = 2.0  # umbral de conductancia lateral alta
 
 
 # ---------------------------------------------------------------------------
@@ -135,13 +135,10 @@ class CapaPared:
 
     def __post_init__(self) -> None:
         if self.espesor_m <= 0:
-            raise ValueError(
-                f"CAPA_ESPESOR_NO_POSITIVO: espesor_m={self.espesor_m:.4f} m ≤ 0."
-            )
+            raise ValueError(f"CAPA_ESPESOR_NO_POSITIVO: espesor_m={self.espesor_m:.4f} m ≤ 0.")
         if self.catalogo not in _CATALOGOS_PARED:
             raise ValueError(
-                f"CAPA_CATALOGO_INVALIDO: '{self.catalogo}'. "
-                f"Opciones: {_CATALOGOS_PARED}."
+                f"CAPA_CATALOGO_INVALIDO: '{self.catalogo}'. " f"Opciones: {_CATALOGOS_PARED}."
             )
         cat = _catalogo_pared(self.catalogo)
         if self.material_id not in cat:
@@ -182,9 +179,7 @@ class ParedCamara:
 
     def __post_init__(self) -> None:
         if not self.capas:
-            raise ValueError(
-                "PARED_SIN_CAPAS: la pared debe tener al menos una capa."
-            )
+            raise ValueError("PARED_SIN_CAPAS: la pared debe tener al menos una capa.")
 
     @property
     def R_conduccion_m2K_W(self) -> float:
@@ -209,11 +204,13 @@ def _default_pared_camara() -> ParedCamara:
     U_conduccion ≈ 0.8 W/(m²·K), próximo al U_muros=0.5 histórico. Realista
     para un secador armario con aislación estándar.
     """
-    return ParedCamara(capas=[
-        CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
-        CapaPared(material_id="lana_vidrio_media", espesor_m=0.05, catalogo="aislantes"),
-        CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
-    ])
+    return ParedCamara(
+        capas=[
+            CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
+            CapaPared(material_id="lana_vidrio_media", espesor_m=0.05, catalogo="aislantes"),
+            CapaPared(material_id="galvanizada_pintada", espesor_m=0.0006, catalogo="fondos"),
+        ]
+    )
 
 
 @dataclass
@@ -253,9 +250,7 @@ class ConstruccionCamara:
                     f"{list(catalogo.CUBIERTAS.keys())}."
                 )
         if self.A_rad_m2 is not None and self.A_rad_m2 <= 0:
-            raise ValueError(
-                f"CONS_A_RAD_NO_POSITIVA: A_rad_m2={self.A_rad_m2:.4f} m² ≤ 0."
-            )
+            raise ValueError(f"CONS_A_RAD_NO_POSITIVA: A_rad_m2={self.A_rad_m2:.4f} m² ≤ 0.")
 
     @property
     def U_muros_W_m2K(self) -> float:
@@ -281,6 +276,12 @@ class ConfiguracionBandejas:
             consecutivas [m]. Debe ser > espesor_capa_m + 0.01 m.
         tipo_malla: Identificador del tipo de malla (para cálculo de caída de presión).
             None si no se especifica.
+        K_rugosidad_producto: Coeficiente K (adimensional) de pérdida de
+            forma por rugosidad del producto sobre la bandeja, aplicado
+            como K·ρv²/2 una vez por bandeja. ``None`` indica
+            autocalcular desde ``d_p / espacio_libre`` (cross-flow
+            HORIZONTAL) o ignorar (en VERTICAL no aplica porque Ergun
+            ya captura la rugosidad del producto).
     """
 
     n_bandejas: int = 5
@@ -291,6 +292,7 @@ class ConfiguracionBandejas:
     porosidad_lecho: float = 0.45
     diametro_eq_particula_m: Optional[float] = None
     esfericidad: float = 0.60
+    K_rugosidad_producto: Optional[float] = None
 
     def __post_init__(self) -> None:
         if self.n_bandejas < 1:
@@ -332,6 +334,11 @@ class ConfiguracionBandejas:
             raise ValueError(
                 f"BAND_ESFERICIDAD_INVALIDA: esfericidad={self.esfericidad:.3f} "
                 "fuera del rango válido (0, 1]."
+            )
+        if self.K_rugosidad_producto is not None and self.K_rugosidad_producto < 0:
+            raise ValueError(
+                f"BAND_K_RUGOSIDAD_INVALIDO: K_rugosidad_producto="
+                f"{self.K_rugosidad_producto:.3f} debe ser ≥ 0."
             )
 
 
@@ -425,9 +432,7 @@ class CargaProducto:
                 f">= inicial {self.humedad_inicial_X:.4f}. El secado reduce la humedad."
             )
         if self.T_prod_inicial_K is not None:
-            if not (
-                _T_PROD_INICIAL_MIN_K <= self.T_prod_inicial_K <= _T_PROD_INICIAL_MAX_K
-            ):
+            if not (_T_PROD_INICIAL_MIN_K <= self.T_prod_inicial_K <= _T_PROD_INICIAL_MAX_K):
                 raise ValueError(
                     f"PROD_T_INICIAL_FUERA_RANGO: T_prod_inicial_K="
                     f"{self.T_prod_inicial_K:.2f} K ∉ "
@@ -435,6 +440,57 @@ class CargaProducto:
                     "Rango razonable: producto refrigerado (−10 °C) a precalentado (70 °C). "
                     "Si es None, el motor termodinámico usa T_amb como fallback."
                 )
+
+
+# ---------------------------------------------------------------------------
+# Configuración de operación anual (solo aplica si modo_analisis == ANUAL)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class OperacionAnualConfig:
+    """Política de operación anual de la cámara de secado.
+
+    Se usa solo cuando ``proyecto.configuracion.modo_analisis == ANUAL``. Define
+    cuántos batches del producto se asume operar por mes y los umbrales de
+    operabilidad. El motor anual (en ``calculos/operacion_anual_camara.py``)
+    consume esta config para escalar los resultados de un batch representativo
+    mensual a operación de todo el mes.
+
+    Attributes:
+        batches_por_mes: Cantidad de batches completos del producto que el
+            usuario asume operar por mes. Default 10 (≈ 1 batch cada 3 días).
+            Rango operativo razonable: 1–30 batches/mes.
+        I_g_diaria_minima_MJ_m2: Umbral de irradiación diaria total mínima
+            para considerar un día como "operable". Días con I_g_diaria
+            menor a este umbral se descuentan del conteo mensual de días
+            disponibles. Default 8.0 MJ/m²·día (≈ 2.2 kWh/m²·día, mínimo
+            práctico para secador solar funcional).
+        horizonte_horas_batch: Horas máximas del horizonte de simulación
+            por batch en el motor termodinámico. Si el secado no converge
+            antes, se trunca al final del horizonte. Default 72 (3 días).
+    """
+
+    batches_por_mes: int = 10
+    I_g_diaria_minima_MJ_m2: float = 8.0
+    horizonte_horas_batch: int = 72
+
+    def __post_init__(self) -> None:
+        if not (1 <= self.batches_por_mes <= 30):
+            raise ValueError(
+                f"ANUAL_BATCHES_FUERA_RANGO: batches_por_mes={self.batches_por_mes} "
+                "fuera del rango operativo [1, 30]."
+            )
+        if self.I_g_diaria_minima_MJ_m2 < 0:
+            raise ValueError(
+                f"ANUAL_I_G_MINIMA_NEGATIVA: I_g_diaria_minima_MJ_m2="
+                f"{self.I_g_diaria_minima_MJ_m2:.2f} < 0."
+            )
+        if not (24 <= self.horizonte_horas_batch <= 168):
+            raise ValueError(
+                f"ANUAL_HORIZONTE_FUERA_RANGO: horizonte_horas_batch="
+                f"{self.horizonte_horas_batch} fuera del rango [24, 168] h (1–7 días)."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +524,7 @@ class Camara:
     flujo: ConfiguracionFlujo = field(default_factory=ConfiguracionFlujo)
     carga_producto: CargaProducto = field(default_factory=CargaProducto)
     modo_calculo: Literal["capa_fina", "termodinamico"] = "capa_fina"
+    operacion_anual: Optional[OperacionAnualConfig] = None
 
     def __post_init__(self) -> None:
         if self.modo_calculo not in _MODOS_CALCULO_VALIDOS:
@@ -502,9 +559,7 @@ class Camara:
         modelo_entry = cf.get(p.modelo_capa_fina) or {}
         params_cf = modelo_entry.get("params") or {} if modelo_entry else {}
         params_cf_vacios = not params_cf or all(
-            v is None
-            for v in params_cf.values()
-            if not isinstance(v, (list, dict))
+            v is None for v in params_cf.values() if not isinstance(v, (list, dict))
         )
         if params_cf_vacios:
             modelos_disponibles = _modelos_disponibles(datos)
@@ -520,13 +575,9 @@ class Camara:
         iso_entry = iso.get(p.modelo_isoterma) or {}
         params_iso = iso_entry.get("params") or {} if iso_entry else {}
         params_iso_vacios = not params_iso or all(
-            v is None
-            for v in params_iso.values()
-            if not isinstance(v, (list, dict))
+            v is None for v in params_iso.values() if not isinstance(v, (list, dict))
         )
-        X_eq_fallback = (datos.get("propiedades_basicas") or {}).get(
-            "humedad_equilibrio_aire_seco"
-        )
+        X_eq_fallback = (datos.get("propiedades_basicas") or {}).get("humedad_equilibrio_aire_seco")
         if params_iso_vacios and X_eq_fallback is None:
             raise ValueError(
                 f"MOD_ISOTERMA_NO_DISPONIBLE: isoterma '{p.modelo_isoterma}' sin parámetros "
@@ -584,9 +635,7 @@ def _modelos_disponibles(datos_producto: dict) -> list[str]:
             continue
         params = entry.get("params") or {}
         tiene_params = params and not all(
-            v is None
-            for v in params.values()
-            if not isinstance(v, (list, dict))
+            v is None for v in params.values() if not isinstance(v, (list, dict))
         )
         if tiene_params:
             disponibles.append(modelo_id)
@@ -623,161 +672,183 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
     # --- GEO: relación de aspecto ---
     ratio = g.largo_m / g.ancho_m
     if ratio > _RATIO_LARGO_ANCHO_MAX or ratio < _RATIO_LARGO_ANCHO_MIN:
-        adv.append(Advertencia(
-            codigo="GEO_RELACION_ASPECTO_EXTREMA",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Relación largo/ancho = {ratio:.1f}. "
-                f"Rango recomendado: {_RATIO_LARGO_ANCHO_MIN}–{_RATIO_LARGO_ANCHO_MAX}. "
-                "Una cámara muy alargada o cuadrada puede generar flujo no uniforme."
-            ),
-            campo="geometria",
-            sugerencia="Verificar uniformidad de flujo de aire sobre las bandejas.",
-            contexto={"ratio_largo_ancho": round(ratio, 2)},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="GEO_RELACION_ASPECTO_EXTREMA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Relación largo/ancho = {ratio:.1f}. "
+                    f"Rango recomendado: {_RATIO_LARGO_ANCHO_MIN}–{_RATIO_LARGO_ANCHO_MAX}. "
+                    "Una cámara muy alargada o cuadrada puede generar flujo no uniforme."
+                ),
+                campo="geometria",
+                sugerencia="Verificar uniformidad de flujo de aire sobre las bandejas.",
+                contexto={"ratio_largo_ancho": round(ratio, 2)},
+            )
+        )
 
     # --- GEO: alto inusual ---
     if not (_ALTO_MIN_TIPICO_M <= g.alto_m <= _ALTO_MAX_TIPICO_M):
-        adv.append(Advertencia(
-            codigo="GEO_ALTO_INUSUAL",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Alto de cámara {g.alto_m:.2f} m fuera del rango típico "
-                f"({_ALTO_MIN_TIPICO_M}–{_ALTO_MAX_TIPICO_M} m) para secadores solares."
-            ),
-            campo="geometria.alto_m",
-            sugerencia="Verificar el dimensionamiento vertical del secador.",
-            contexto={"alto_m": g.alto_m},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="GEO_ALTO_INUSUAL",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Alto de cámara {g.alto_m:.2f} m fuera del rango típico "
+                    f"({_ALTO_MIN_TIPICO_M}–{_ALTO_MAX_TIPICO_M} m) para secadores solares."
+                ),
+                campo="geometria.alto_m",
+                sugerencia="Verificar el dimensionamiento vertical del secador.",
+                contexto={"alto_m": g.alto_m},
+            )
+        )
 
     # --- CONS: cubierta translúcida + producto fotosensible ---
     if c.cubierta_translucida_id is not None and datos.get("fotosensible", False):
-        adv.append(Advertencia(
-            codigo="CONS_CUBIERTA_TRANSLUCIDA_FOTOSENSIBLE",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Producto fotosensible '{p.producto_id}' con cubierta translúcida "
-                f"'{c.cubierta_translucida_id}'. La exposición a radiación UV puede "
-                "degradar pigmentos o aceites esenciales."
-            ),
-            campo="construccion.cubierta_translucida_id",
-            sugerencia="Considerar cubierta opaca o filtro UV.",
-            contexto={"producto_id": p.producto_id, "cubierta_id": c.cubierta_translucida_id},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="CONS_CUBIERTA_TRANSLUCIDA_FOTOSENSIBLE",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Producto fotosensible '{p.producto_id}' con cubierta translúcida "
+                    f"'{c.cubierta_translucida_id}'. La exposición a radiación UV puede "
+                    "degradar pigmentos o aceites esenciales."
+                ),
+                campo="construccion.cubierta_translucida_id",
+                sugerencia="Considerar cubierta opaca o filtro UV.",
+                contexto={"producto_id": p.producto_id, "cubierta_id": c.cubierta_translucida_id},
+            )
+        )
 
     # --- CONS: muros sin aislación ---
     if c.U_muros_W_m2K > _U_MUROS_ALTO_W_M2K:
-        adv.append(Advertencia(
-            codigo="CONS_SIN_AISLACION_LATERAL",
-            severidad=Severidad.INFO,
-            mensaje=(
-                f"Muros laterales con U = {c.U_muros_W_m2K:.1f} W/(m²·K) > "
-                f"{_U_MUROS_ALTO_W_M2K} W/(m²·K). Baja resistencia térmica."
-            ),
-            campo="construccion.U_muros_W_m2K",
-            sugerencia="Agregar aislación para mejorar la eficiencia térmica del secador.",
-            contexto={"U_muros": c.U_muros_W_m2K},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="CONS_SIN_AISLACION_LATERAL",
+                severidad=Severidad.INFO,
+                mensaje=(
+                    f"Muros laterales con U = {c.U_muros_W_m2K:.1f} W/(m²·K) > "
+                    f"{_U_MUROS_ALTO_W_M2K} W/(m²·K). Baja resistencia térmica."
+                ),
+                campo="construccion.U_muros_W_m2K",
+                sugerencia="Agregar aislación para mejorar la eficiencia térmica del secador.",
+                contexto={"U_muros": c.U_muros_W_m2K},
+            )
+        )
 
     # --- BAND: espesor de capa grande ---
     if b.espesor_capa_m > _ESPESOR_MAX_CAPA_FINA_M:
-        adv.append(Advertencia(
-            codigo="BAND_ESPESOR_CAPA_GRANDE",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Espesor de capa {b.espesor_capa_m * 100:.1f} cm > "
-                f"{_ESPESOR_MAX_CAPA_FINA_M * 100:.0f} cm. "
-                "Los modelos de capa fina pueden subestimar el tiempo de secado."
-            ),
-            campo="bandejas.espesor_capa_m",
-            sugerencia="Reducir espesor de capa o evaluar un modelo difusivo.",
-            contexto={"espesor_m": b.espesor_capa_m, "limite_m": _ESPESOR_MAX_CAPA_FINA_M},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="BAND_ESPESOR_CAPA_GRANDE",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Espesor de capa {b.espesor_capa_m * 100:.1f} cm > "
+                    f"{_ESPESOR_MAX_CAPA_FINA_M * 100:.0f} cm. "
+                    "Los modelos de capa fina pueden subestimar el tiempo de secado."
+                ),
+                campo="bandejas.espesor_capa_m",
+                sugerencia="Reducir espesor de capa o evaluar un modelo difusivo.",
+                contexto={"espesor_m": b.espesor_capa_m, "limite_m": _ESPESOR_MAX_CAPA_FINA_M},
+            )
+        )
 
     # --- BAND: muchas bandejas ---
     if b.n_bandejas > _N_BANDEJAS_ALTO:
-        adv.append(Advertencia(
-            codigo="BAND_N_BANDEJAS_ELEVADO",
-            severidad=Severidad.INFO,
-            mensaje=f"{b.n_bandejas} bandejas. Verificar uniformidad de flujo entre bandejas.",
-            campo="bandejas.n_bandejas",
-            sugerencia="Con muchas bandejas en serie, la última recibe aire más húmedo.",
-            contexto={"n_bandejas": b.n_bandejas, "limite": _N_BANDEJAS_ALTO},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="BAND_N_BANDEJAS_ELEVADO",
+                severidad=Severidad.INFO,
+                mensaje=f"{b.n_bandejas} bandejas. Verificar uniformidad de flujo entre bandejas.",
+                campo="bandejas.n_bandejas",
+                sugerencia="Con muchas bandejas en serie, la última recibe aire más húmedo.",
+                contexto={"n_bandejas": b.n_bandejas, "limite": _N_BANDEJAS_ALTO},
+            )
+        )
 
     # --- BAND: malla sin especificar ---
     if b.tipo_malla is None:
-        adv.append(Advertencia(
-            codigo="BAND_MALLA_SIN_ESPECIFICAR",
-            severidad=Severidad.INFO,
-            mensaje="Tipo de malla de bandeja no especificado. Afecta la caída de presión.",
-            campo="bandejas.tipo_malla",
-            sugerencia="Especificar tipo de malla para estimación de pérdida de carga en motor.",
-            contexto={},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="BAND_MALLA_SIN_ESPECIFICAR",
+                severidad=Severidad.INFO,
+                mensaje="Tipo de malla de bandeja no especificado. Afecta la caída de presión.",
+                campo="bandejas.tipo_malla",
+                sugerencia="Especificar tipo de malla para estimación de pérdida de carga en motor.",
+                contexto={},
+            )
+        )
 
     # --- FLUJO: velocidad superficial ---
     Q_vol = f.caudal_masico_kg_s / _RHO_AIRE_EST
     v_sup = Q_vol / (g.ancho_m * g.alto_m)
     if v_sup < _V_SUP_MIN_MS:
-        adv.append(Advertencia(
-            codigo="FLUJO_VELOCIDAD_SUPERFICIAL_BAJA",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Velocidad superficial de aire {v_sup:.2f} m/s < {_V_SUP_MIN_MS} m/s. "
-                "El coeficiente convectivo externo puede ser bajo. "
-                "El modelo de capa fina puede sobrestimar la tasa de secado."
-            ),
-            campo="flujo.caudal_masico_kg_s",
-            sugerencia=(
-                f"Aumentar caudal de aire para superar {_V_SUP_MIN_MS} m/s "
-                "de velocidad superficial."
-            ),
-            contexto={"v_sup_m_s": round(v_sup, 3)},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="FLUJO_VELOCIDAD_SUPERFICIAL_BAJA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Velocidad superficial de aire {v_sup:.2f} m/s < {_V_SUP_MIN_MS} m/s. "
+                    "El coeficiente convectivo externo puede ser bajo. "
+                    "El modelo de capa fina puede sobrestimar la tasa de secado."
+                ),
+                campo="flujo.caudal_masico_kg_s",
+                sugerencia=(
+                    f"Aumentar caudal de aire para superar {_V_SUP_MIN_MS} m/s "
+                    "de velocidad superficial."
+                ),
+                contexto={"v_sup_m_s": round(v_sup, 3)},
+            )
+        )
     elif v_sup > _V_SUP_MAX_MS:
-        adv.append(Advertencia(
-            codigo="FLUJO_VELOCIDAD_SUPERFICIAL_ALTA",
-            severidad=Severidad.INFO,
-            mensaje=(
-                f"Velocidad superficial de aire {v_sup:.2f} m/s > {_V_SUP_MAX_MS} m/s. "
-                "Verificar compatibilidad del motor con la pérdida de presión."
-            ),
-            campo="flujo.caudal_masico_kg_s",
-            sugerencia="Reducir caudal o aumentar la sección transversal de la cámara.",
-            contexto={"v_sup_m_s": round(v_sup, 3)},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="FLUJO_VELOCIDAD_SUPERFICIAL_ALTA",
+                severidad=Severidad.INFO,
+                mensaje=(
+                    f"Velocidad superficial de aire {v_sup:.2f} m/s > {_V_SUP_MAX_MS} m/s. "
+                    "Verificar compatibilidad del motor con la pérdida de presión."
+                ),
+                campo="flujo.caudal_masico_kg_s",
+                sugerencia="Reducir caudal o aumentar la sección transversal de la cámara.",
+                contexto={"v_sup_m_s": round(v_sup, 3)},
+            )
+        )
 
     # --- FLUJO: HR de entrada no especificada ---
     if f.HR_entrada_fraccion is None:
-        adv.append(Advertencia(
-            codigo="FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                "HR de entrada del aire no especificada. "
-                "El cálculo de X_eq usará el fallback escalar del catálogo."
-            ),
-            campo="flujo.HR_entrada_fraccion",
-            sugerencia="Especificar HR de entrada para mayor precisión en el cálculo de X_eq.",
-            contexto={},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    "HR de entrada del aire no especificada. "
+                    "El cálculo de X_eq usará el fallback escalar del catálogo."
+                ),
+                campo="flujo.HR_entrada_fraccion",
+                sugerencia="Especificar HR de entrada para mayor precisión en el cálculo de X_eq.",
+                contexto={},
+            )
+        )
 
     # --- PROD: calidad de datos baja ---
     cf = datos.get("capa_fina") or {}
     modelo_entry = cf.get(p.modelo_capa_fina) or {}
     calidad = (modelo_entry.get("calidad_datos") or "").upper() if modelo_entry else ""
     if calidad in ("BAJA", "ESTIMADA_POR_ANALOGIA"):
-        adv.append(Advertencia(
-            codigo="PROD_CALIDAD_DATOS_BAJA",
-            severidad=Severidad.WARNING,
-            mensaje=(
-                f"Modelo '{p.modelo_capa_fina}' para '{p.producto_id}' tiene "
-                f"calidad '{calidad}'. Resultados orientativos."
-            ),
-            campo="carga_producto.modelo_capa_fina",
-            sugerencia="Verificar con datos experimentales propios o literatura específica.",
-            contexto={"calidad": calidad},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="PROD_CALIDAD_DATOS_BAJA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Modelo '{p.modelo_capa_fina}' para '{p.producto_id}' tiene "
+                    f"calidad '{calidad}'. Resultados orientativos."
+                ),
+                campo="carga_producto.modelo_capa_fina",
+                sugerencia="Verificar con datos experimentales propios o literatura específica.",
+                contexto={"calidad": calidad},
+            )
+        )
 
     # --- PROD: isoterma fallback ---
     iso = datos.get("isoterma") or {}
@@ -790,51 +861,57 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
     )
     X_eq_fallback = props.get("humedad_equilibrio_aire_seco")
     if not params_iso_validos and X_eq_fallback is not None:
-        adv.append(Advertencia(
-            codigo="PROD_ISOTERMA_FALLBACK",
-            severidad=Severidad.CRITICAL,
-            mensaje=(
-                f"Sin isoterma GAB calibrada para '{p.producto_id}'. "
-                f"Se usará X_eq = {X_eq_fallback:.3f} kg/kg ms (fallback escalar). "
-                "La humedad de equilibrio real depende de la HR del aire."
-            ),
-            campo="carga_producto.modelo_isoterma",
-            sugerencia="Cargar parámetros GAB en el catálogo para mayor precisión.",
-            contexto={"X_eq_fallback": X_eq_fallback},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="PROD_ISOTERMA_FALLBACK",
+                severidad=Severidad.CRITICAL,
+                mensaje=(
+                    f"Sin isoterma GAB calibrada para '{p.producto_id}'. "
+                    f"Se usará X_eq = {X_eq_fallback:.3f} kg/kg ms (fallback escalar). "
+                    "La humedad de equilibrio real depende de la HR del aire."
+                ),
+                campo="carga_producto.modelo_isoterma",
+                sugerencia="Cargar parámetros GAB en el catálogo para mayor precisión.",
+                contexto={"X_eq_fallback": X_eq_fallback},
+            )
+        )
 
     # --- PROD: humedad objetivo inalcanzable (vs fallback estático) ---
     if X_eq_fallback is not None and p.humedad_objetivo_X < X_eq_fallback * 0.95:
-        adv.append(Advertencia(
-            codigo="PROD_HUMEDAD_OBJETIVO_INALCANZABLE",
-            severidad=Severidad.CRITICAL,
-            mensaje=(
-                f"Humedad objetivo {p.humedad_objetivo_X:.3f} kg/kg ms está por debajo "
-                f"del X_eq estimado ({X_eq_fallback:.3f} × 0.95 = {X_eq_fallback * 0.95:.3f}). "
-                "El secador puede no alcanzar ese objetivo bajo las condiciones de operación."
-            ),
-            campo="carga_producto.humedad_objetivo_X",
-            sugerencia="Aumentar X_objetivo o mejorar las condiciones de operación del secador.",
-            contexto={"X_eq_estimado": X_eq_fallback, "X_objetivo": p.humedad_objetivo_X},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="PROD_HUMEDAD_OBJETIVO_INALCANZABLE",
+                severidad=Severidad.CRITICAL,
+                mensaje=(
+                    f"Humedad objetivo {p.humedad_objetivo_X:.3f} kg/kg ms está por debajo "
+                    f"del X_eq estimado ({X_eq_fallback:.3f} × 0.95 = {X_eq_fallback * 0.95:.3f}). "
+                    "El secador puede no alcanzar ese objetivo bajo las condiciones de operación."
+                ),
+                campo="carga_producto.humedad_objetivo_X",
+                sugerencia="Aumentar X_objetivo o mejorar las condiciones de operación del secador.",
+                contexto={"X_eq_estimado": X_eq_fallback, "X_objetivo": p.humedad_objetivo_X},
+            )
+        )
 
     # --- INIO: carne sin isoterma ---
     categoria = datos.get("categoria", "").upper()
     if categoria == "CARNE" and not params_iso_validos:
-        adv.append(Advertencia(
-            codigo="INIO_PRODUCTO_CARNE_SIN_ISOTERMA",
-            severidad=Severidad.CRITICAL,
-            mensaje=(
-                f"ALERTA DE INOCUIDAD: '{p.producto_id}' (CARNE) sin isoterma calibrada. "
-                "No es posible verificar que a_w < 0.85 en el producto seco."
-            ),
-            campo="carga_producto.modelo_isoterma",
-            sugerencia=(
-                "Cargar isoterma de carne con el nivel de sal equivalente al producto "
-                "antes de usar los resultados para toma de decisiones."
-            ),
-            contexto={"producto_id": p.producto_id, "categoria": "CARNE"},
-        ))
+        adv.append(
+            Advertencia(
+                codigo="INIO_PRODUCTO_CARNE_SIN_ISOTERMA",
+                severidad=Severidad.CRITICAL,
+                mensaje=(
+                    f"ALERTA DE INOCUIDAD: '{p.producto_id}' (CARNE) sin isoterma calibrada. "
+                    "No es posible verificar que a_w < 0.85 en el producto seco."
+                ),
+                campo="carga_producto.modelo_isoterma",
+                sugerencia=(
+                    "Cargar isoterma de carne con el nivel de sal equivalente al producto "
+                    "antes de usar los resultados para toma de decisiones."
+                ),
+                contexto={"producto_id": p.producto_id, "categoria": "CARNE"},
+            )
+        )
 
     return adv
 
@@ -903,6 +980,4 @@ class ForzantesAire:
                     f"elementos, esperado {n}."
                 )
         if float(self.t_s[0]) != 0.0:
-            raise ValueError(
-                f"FORZANTES_T_INICIAL: t_s[0] debe ser 0.0. Recibido: {self.t_s[0]}."
-            )
+            raise ValueError(f"FORZANTES_T_INICIAL: t_s[0] debe ser 0.0. Recibido: {self.t_s[0]}.")

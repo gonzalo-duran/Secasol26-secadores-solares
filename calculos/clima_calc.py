@@ -38,13 +38,13 @@ from core.emplazamiento import Emplazamiento
 # Parámetros solicitados a NASA POWER (mezcla de nombres pvlib y nativos NASA).
 # pvlib traduce los nombres pvlib → NASA internamente al armar la URL.
 _PARAMETROS_NASA: list[str] = [
-    "ghi",           # ALLSKY_SFC_SW_DWN → ghi [W/m²]
-    "dni",           # ALLSKY_SFC_SW_DNI → dni [W/m²]
-    "dhi",           # ALLSKY_SFC_SW_DIFF → dhi [W/m²]
-    "temp_air",      # T2M → temp_air [°C a 2 m]
-    "wind_speed_2m", # WS2M → wind_speed_2m [m/s a 2 m]
-    "RH2M",          # Humedad relativa a 2 m [%] (no mapeado por pvlib, nombre NASA)
-    "PS",            # Presión superficial [kPa] (no mapeado por pvlib, nombre NASA)
+    "ghi",  # ALLSKY_SFC_SW_DWN → ghi [W/m²]
+    "dni",  # ALLSKY_SFC_SW_DNI → dni [W/m²]
+    "dhi",  # ALLSKY_SFC_SW_DIFF → dhi [W/m²]
+    "temp_air",  # T2M → temp_air [°C a 2 m]
+    "wind_speed_2m",  # WS2M → wind_speed_2m [m/s a 2 m]
+    "RH2M",  # Humedad relativa a 2 m [%] (no mapeado por pvlib, nombre NASA)
+    "PS",  # Presión superficial [kPa] (no mapeado por pvlib, nombre NASA)
 ]
 
 # Mapeo columnas pvlib/NASA → nombres SI del proyecto (COLUMNAS_SI)
@@ -241,9 +241,9 @@ def obtener_clima(
     df = df[list(COLUMNAS_SI)]  # ordenar según COLUMNAS_SI
 
     # --- Convertir a SI ---
-    df["T_amb_K"] = df["T_amb_K"] + 273.15      # °C → K
+    df["T_amb_K"] = df["T_amb_K"] + 273.15  # °C → K
     df["presion_Pa"] = df["presion_Pa"] * 1000.0  # kPa → Pa
-    df["HR"] = df["HR"] / 100.0                   # % → fracción [0, 1]
+    df["HR"] = df["HR"] / 100.0  # % → fracción [0, 1]
 
     # --- Política de huecos ---
     df, calidad = _aplicar_politica_huecos(df)
@@ -315,13 +315,9 @@ def calcular_POA_horizonte(
     columnas_necesarias = {"GHI_Wm2", "DNI_Wm2", "DHI_Wm2"}
     faltantes = columnas_necesarias - set(datos_clima.columns)
     if faltantes:
-        raise ValueError(
-            f"CLIMA_COLUMNAS_POA_FALTANTES: faltan {faltantes} en datos_clima."
-        )
+        raise ValueError(f"CLIMA_COLUMNAS_POA_FALTANTES: faltan {faltantes} en datos_clima.")
     if not isinstance(datos_clima.index, pd.DatetimeIndex):
-        raise ValueError(
-            "CLIMA_INDICE_NO_DATETIME: datos_clima.index debe ser DatetimeIndex."
-        )
+        raise ValueError("CLIMA_INDICE_NO_DATETIME: datos_clima.index debe ser DatetimeIndex.")
     if datos_clima.index.tz is None:
         raise ValueError(
             "CLIMA_INDICE_NAIVE: datos_clima.index debe ser tz-aware "
@@ -356,3 +352,69 @@ def calcular_POA_horizonte(
     if mask_nan.any():
         poa_global = poa_global.where(~mask_nan, datos_clima["GHI_Wm2"].clip(lower=0.0))
     return poa_global.fillna(0.0)
+
+
+# ---------------------------------------------------------------------------
+# Día típico mensual (promedio horario sobre el mes)
+# ---------------------------------------------------------------------------
+
+
+def dia_tipo_mensual(
+    datos_clima: pd.DataFrame,
+    mes: int,
+    tz_local: str = "UTC",
+) -> pd.DataFrame:
+    """Genera el día típico horario de un mes promediando NASA POWER.
+
+    Para cada hora del día (h=0..23), promedia todos los registros del mes
+    indicado. El resultado es un DataFrame de 24 filas que representa el
+    "día medio" del mes, útil como forzante para simular un batch
+    representativo en el motor termodinámico.
+
+    Si ``tz_local`` se provee, los datos se convierten a esa zona antes de
+    agrupar — así el pico solar cae cerca de la hora 12 local, no UTC.
+
+    Args:
+        datos_clima: DataFrame horario con índice DatetimeIndex tz-aware y
+            las columnas SI estándar (``T_amb_K``, ``GHI_Wm2``, ``DNI_Wm2``,
+            ``DHI_Wm2``, ``WS_ms``, ``HR``).
+        mes: Mes calendario [1, 12].
+        tz_local: Zona horaria local (string IANA). Default ``"UTC"`` no
+            convierte. Para Argentina usar p.ej. ``"America/Argentina/Salta"``.
+
+    Returns:
+        DataFrame de 24 filas con las mismas columnas promediadas por hora
+        del día, indexado por DatetimeIndex sintético del día 15 del mes
+        del año del clima. Apto para alimentar ``calcular_POA_horizonte``.
+
+    Raises:
+        ValueError: Si ``mes`` no está en [1, 12] o no hay datos del mes
+            en ``datos_clima``.
+    """
+    if not (1 <= mes <= 12):
+        raise ValueError(f"DIA_TIPO_MES_INVALIDO: mes={mes} fuera de [1, 12].")
+
+    df = datos_clima.copy()
+    if tz_local != "UTC" and df.index.tz is not None:
+        df.index = df.index.tz_convert(tz_local)
+
+    df_mes = df[df.index.month == mes]
+    if df_mes.empty:
+        raise ValueError(
+            f"DIA_TIPO_SIN_DATOS: no hay registros del mes {mes} en el clima provisto."
+        )
+
+    df_dia = df_mes.groupby(df_mes.index.hour).mean(numeric_only=True)
+    df_dia = df_dia.reindex(range(24))
+    if df_dia.isna().any().any():
+        df_dia = df_dia.interpolate(limit_direction="both")
+
+    anio = int(df_mes.index[0].year)
+    timestamps = pd.date_range(
+        start=f"{anio}-{mes:02d}-15 00:00",
+        periods=24,
+        freq="1h",
+        tz=tz_local,
+    )
+    df_dia.index = timestamps
+    return df_dia

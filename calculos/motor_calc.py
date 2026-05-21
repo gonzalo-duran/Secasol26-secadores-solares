@@ -48,20 +48,20 @@ if TYPE_CHECKING:
 # Constantes físicas
 # ---------------------------------------------------------------------------
 
-_R_AIRE: float = 287.058     # J/(kg·K) — constante gas ideal aire seco
-_MU_REF: float = 1.716e-5   # Pa·s     — viscosidad referencia Sutherland
-_T_REF_MU: float = 273.11   # K        — temperatura referencia Sutherland
-_S_SUTH: float = 110.4      # K        — constante Sutherland del aire
+_R_AIRE: float = 287.058  # J/(kg·K) — constante gas ideal aire seco
+_MU_REF: float = 1.716e-5  # Pa·s     — viscosidad referencia Sutherland
+_T_REF_MU: float = 273.11  # K        — temperatura referencia Sutherland
+_S_SUTH: float = 110.4  # K        — constante Sutherland del aire
 
 # Coeficientes K de resistencia para diferentes tipos de malla/bandeja
 # (adimensional, aplicado sobre la presión dinámica ρ·v²/2 del aire que la
 # atraviesa). Valores típicos de Idelchik / Crane TP-410, conservadores:
 TIPOS_MALLA: dict[str, float] = {
-    "alambre_fino": 2.0,           # malla mosquitera ≤ 1 mm, alta densidad
-    "alambre_grueso": 1.0,         # malla galvanizada típica de bandeja (1.5–3 mm)
-    "chapa_perforada_50pc": 3.5,   # chapa con 50 % de área abierta
-    "chapa_perforada_30pc": 8.0,   # chapa con 30 % de área abierta (común en industrial)
-    "tela_metalica_densa": 4.0,    # tela tejida fina, paso pequeño
+    "alambre_fino": 2.0,  # malla mosquitera ≤ 1 mm, alta densidad
+    "alambre_grueso": 1.0,  # malla galvanizada típica de bandeja (1.5–3 mm)
+    "chapa_perforada_50pc": 3.5,  # chapa con 50 % de área abierta
+    "chapa_perforada_30pc": 8.0,  # chapa con 30 % de área abierta (común en industrial)
+    "tela_metalica_densa": 4.0,  # tela tejida fina, paso pequeño
 }
 
 # Default usado cuando ``bandejas.tipo_malla`` es None o no figura en TIPOS_MALLA.
@@ -80,6 +80,7 @@ def _K_malla_efectivo(tipo_malla: Optional[str]) -> float:
     if tipo_malla is None:
         return K_MALLA
     return TIPOS_MALLA.get(tipo_malla, K_MALLA)
+
 
 # Defaults conservadores para geometría de lecho cuando ni el usuario ni el
 # catálogo del producto proveen valores. Valor genérico de "trozo de comida
@@ -116,10 +117,9 @@ def _factor_friccion_haaland(Re: float, eps_rel: float) -> float:
     if Re < 2300.0:
         return 64.0 / Re
     import math
-    inv_sqrt_f_turb = -1.8 * math.log10(
-        (eps_rel / 3.7) ** 1.11 + 6.9 / Re
-    )
-    f_turb = 1.0 / (inv_sqrt_f_turb ** 2)
+
+    inv_sqrt_f_turb = -1.8 * math.log10((eps_rel / 3.7) ** 1.11 + 6.9 / Re)
+    f_turb = 1.0 / (inv_sqrt_f_turb**2)
     if Re < 4000.0:
         # Mezcla lineal en zona de transición
         f_lam = 64.0 / Re
@@ -228,8 +228,13 @@ def viscosidad_aire(T_K: float) -> float:
 
 
 def _delta_P_canal_colector(
-    ancho_m: float, alto_m: float, largo_total_m: float,
-    v_ms: float, rugosidad_m: float, rho: float, mu: float,
+    ancho_m: float,
+    alto_m: float,
+    largo_total_m: float,
+    v_ms: float,
+    rugosidad_m: float,
+    rho: float,
+    mu: float,
 ) -> float:
     """ΔP friccional en un canal rectangular del colector via Haaland.
 
@@ -250,7 +255,7 @@ def _delta_P_canal_colector(
     Re = rho * v_ms * Dh / mu
     eps_rel = rugosidad_m / Dh if Dh > 0 else 0.0
     f = _factor_friccion_haaland(Re, eps_rel)
-    return f * (largo_total_m / Dh) * (rho * v_ms ** 2 / 2.0)
+    return f * (largo_total_m / Dh) * (rho * v_ms**2 / 2.0)
 
 
 def estimar_delta_P_colector(
@@ -301,31 +306,67 @@ def estimar_delta_P_colector(
     if tipo == 1:
         # Canal único sobre el absorbedor
         return _delta_P_canal_colector(
-            ancho, u.espaciado_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
     elif tipo == 4:
         # Canal superior activo, inferior estanco
         return _delta_P_canal_colector(
-            ancho, u.espaciado_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
     elif tipo == 3:
         # Canal inferior activo, superior estanco
         return _delta_P_canal_colector(
-            ancho, u.espaciado_inferior_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_inferior_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
     elif tipo == 2:
         # Ambos canales activos en paralelo. Tomamos el más restrictivo.
         dP_cs = _delta_P_canal_colector(
-            ancho, u.espaciado_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
         dP_ci = _delta_P_canal_colector(
-            ancho, u.espaciado_inferior_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_inferior_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
         return max(dP_cs, dP_ci)
     else:
         # Fallback defensivo (no debería pasar por validación de dataclass)
         return _delta_P_canal_colector(
-            ancho, u.espaciado_m, L_total, v, rugosidad, rho, mu,
+            ancho,
+            u.espaciado_m,
+            L_total,
+            v,
+            rugosidad,
+            rho,
+            mu,
         )
 
 
@@ -361,13 +402,67 @@ def _delta_P_lecho_por_bandeja(
     L = bandejas.espesor_capa_m
 
     phi_dp = phi_s * d_p
-    eps3 = eps ** 3
+    eps3 = eps**3
     one_minus_eps = 1.0 - eps
 
-    grad_viscoso = 150.0 * mu * v0 * one_minus_eps ** 2 / (phi_dp ** 2 * eps3)
-    grad_inercial = 1.75 * rho * v0 ** 2 * one_minus_eps / (phi_dp * eps3)
+    grad_viscoso = 150.0 * mu * v0 * one_minus_eps**2 / (phi_dp**2 * eps3)
+    grad_inercial = 1.75 * rho * v0**2 * one_minus_eps / (phi_dp * eps3)
 
     return (grad_viscoso + grad_inercial) * L
+
+
+# ---------------------------------------------------------------------------
+# Pérdida de forma por rugosidad del producto y por transición de lecho
+# ---------------------------------------------------------------------------
+
+# Pérdida de transición entrada/salida del lecho en flujo VERTICAL_ASCENDENTE:
+# contracción brusca al entrar al lecho desde el espacio libre superior
+# (K ≈ 0.5) + expansión brusca al salir al espacio libre inferior
+# (K ≈ 1.0 Borda-Carnot). Aplicado una vez por bandeja, sobre ρ·v₀²/2.
+# Independiente del producto.
+K_TRANSICION_LECHO: float = 1.5
+
+# Tabla de anclajes para K_rugosidad en función de d_p / espacio_libre (sin
+# correlación específica de literatura para "cross-flow sobre lecho rugoso de
+# secador"; valores inspirados en Idelchik para superficies con rugosidad
+# elevada y bancos de obstáculos). Interpolación lineal entre puntos; valor
+# constante fuera de los extremos.
+_K_RUGOSIDAD_TABLA: tuple[tuple[float, float], ...] = (
+    (0.05, 0.2),  # casi liso: pequeñas perturbaciones
+    (0.15, 0.5),  # rugosidad significativa, estelas pequeñas
+    (0.30, 1.0),  # producto comparable al canal, obstrucción parcial
+    (0.50, 2.0),  # cuasi-bloqueo, el aire tropieza
+)
+
+
+def _K_rugosidad_default(d_p: float, espacio_libre: float) -> float:
+    """Estima K_rugosidad por bandeja en función del ratio ``d_p/espacio_libre``.
+
+    Interpolación lineal por tramos sobre ``_K_RUGOSIDAD_TABLA``. Saturada
+    por debajo del primer punto (K = 0.2) y por encima del último (K = 2.0).
+
+    Args:
+        d_p: Diámetro equivalente de partícula [m].
+        espacio_libre: Altura libre del canal entre bandejas [m] en flujo
+            HORIZONTAL. Si ≤ 0 devuelve 0 (degenerado).
+
+    Returns:
+        K adimensional para aplicar como K·ρv²/2 una vez por bandeja.
+    """
+    if d_p <= 0 or espacio_libre <= 0:
+        return 0.0
+    ratio = d_p / espacio_libre
+    x0, y0 = _K_RUGOSIDAD_TABLA[0]
+    xN, yN = _K_RUGOSIDAD_TABLA[-1]
+    if ratio <= x0:
+        return y0
+    if ratio >= xN:
+        return yN
+    for (x1, y1), (x2, y2) in zip(_K_RUGOSIDAD_TABLA, _K_RUGOSIDAD_TABLA[1:]):
+        if x1 <= ratio <= x2:
+            t = (ratio - x1) / (x2 - x1)
+            return y1 + t * (y2 - y1)
+    return yN  # defensa contra inexactitud de float
 
 
 # ---------------------------------------------------------------------------
@@ -383,10 +478,14 @@ def estimar_delta_P_camara(
     """Estima la pérdida de carga en la cámara de secado.
 
     Flujo VERTICAL_ASCENDENTE (aire atraviesa cada bandeja):
-        ΔP = (ΔP_malla + ΔP_lecho) × n_bandejas
-        ΔP_malla = K_malla × (ρ·v₀²/2),   v₀ = Q_vol / area_bandeja
-        ΔP_lecho = Ergun(v₀, ε, Φ_s, d_p, L)  con d_p del catálogo del
-            producto si no está explícito en ``bandejas``.
+        ΔP = (ΔP_malla + ΔP_lecho + ΔP_transicion) × n_bandejas
+        ΔP_malla       = K_malla × (ρ·v₀²/2),   v₀ = Q_vol / area_bandeja
+        ΔP_lecho       = Ergun(v₀, ε, Φ_s, d_p, L)  con d_p del catálogo del
+                         producto si no está explícito en ``bandejas``.
+        ΔP_transicion  = K_TRANSICION_LECHO × (ρ·v₀²/2)  (contracción al
+                         entrar al lecho + expansión a la salida, ~1.5)
+        En VERTICAL no se aplica K_rugosidad explícito porque Ergun ya
+        captura la rugosidad del producto vía Φ_s y d_p.
 
     Flujo HORIZONTAL (aire pasa entre bandejas, no las atraviesa):
         Modelo de canal rectangular Darcy-Weisbach por par de bandejas:
@@ -395,14 +494,21 @@ def estimar_delta_P_camara(
                       (Q se reparte entre los espacios libres entre bandejas)
             ΔP_friccion = f · (largo/Dh) · (ρ·v_canal²/2)   por espacio
             ΔP_malla    = K_malla_lateral · (ρ·v_canal²/2)   (~0.5, baja)
-        Total = (ΔP_friccion + ΔP_malla) × (n_bandejas − 1)  [N-1 canales]
+        ΔP_rugosidad = K_rug × (ρ·v_canal²/2) × n_bandejas
+            K_rug del usuario (``bandejas.K_rugosidad_producto``) o
+            autocalculado por ``_K_rugosidad_default`` a partir del ratio
+            ``d_p / espacio_libre``. Captura la pérdida de forma por
+            superficie rugosa del lecho de producto en cross-flow, que
+            Darcy-Weisbach de pared lisa subestima.
+        Total = (ΔP_friccion + ΔP_malla) × (n_bandejas − 1) + ΔP_rugosidad
 
         Notas:
         - K_malla aplicado lateralmente es bajo (~0.5) porque la malla está
           paralela al flujo, no atravesada. La pérdida principal es por
           fricción contra la pared y las superficies de las bandejas.
-        - Si hay sólo 1 bandeja, no hay canal definido; se usa el modelo
-          de fricción en el ducto vacío (ancho·alto).
+        - Si hay sólo 1 bandeja, no hay canal definido; se omite el término
+          de fricción/malla y queda sólo K_rugosidad sobre la velocidad del
+          ducto vacío.
 
     Args:
         camara: Objeto Camara con geometría, bandejas y flujo definidos.
@@ -423,25 +529,23 @@ def estimar_delta_P_camara(
     mu = viscosidad_aire(T_K)
     Q_vol = f.caudal_masico_kg_s / rho
 
-    producto_id = (
-        camara.carga_producto.producto_id
-        if camara.carga_producto is not None else None
-    )
+    producto_id = camara.carga_producto.producto_id if camara.carga_producto is not None else None
 
     K_malla_eff = _K_malla_efectivo(b.tipo_malla)
 
     if f.direccion_flujo == DireccionFlujo.VERTICAL_ASCENDENTE:
         v0 = Q_vol / b.area_bandeja_m2 if b.area_bandeja_m2 > 0 else 0.0
-        dP_malla = K_malla_eff * (rho * v0 ** 2 / 2.0)
+        dP_malla = K_malla_eff * (rho * v0**2 / 2.0)
         dP_lecho = _delta_P_lecho_por_bandeja(b, v0, rho, mu, producto_id=producto_id)
-        return (dP_malla + dP_lecho) * b.n_bandejas
+        dP_transicion = K_TRANSICION_LECHO * (rho * v0**2 / 2.0)
+        return (dP_malla + dP_lecho + dP_transicion) * b.n_bandejas
 
     # --- HORIZONTAL: canal rectangular entre bandejas ---
     # Espaciado entre bandejas = sep − espesor_capa_producto (espacio libre real)
     espacio_libre = max(0.0, b.separacion_entre_bandejas_m - b.espesor_capa_m)
     n_canales = max(1, b.n_bandejas - 1)  # entre N bandejas hay N-1 canales
 
-    if espacio_libre <= 0 or g.ancho_m <= 0 or n_canales == 0:
+    if espacio_libre <= 0 or g.ancho_m <= 0:
         return 0.0
 
     # Caudal repartido entre canales paralelos
@@ -457,13 +561,25 @@ def estimar_delta_P_camara(
         f_fric = 0.316 * Re ** (-0.25)
 
     L = g.largo_m  # largo del recorrido del aire (igual al largo de la cámara)
-    dP_friccion_por_canal = f_fric * (L / Dh) * (rho * v_canal ** 2 / 2.0)
+    dP_friccion_por_canal = f_fric * (L / Dh) * (rho * v_canal**2 / 2.0)
     # Pérdida lateral por la malla (paralela al flujo). Se aplica una fracción
     # del K_malla (típicamente ~25 %) porque la malla no está perpendicular al
     # flujo en este caso, sólo le agrega rozamiento adicional.
-    dP_malla_por_canal = 0.25 * K_malla_eff * (rho * v_canal ** 2 / 2.0)
+    dP_malla_por_canal = 0.25 * K_malla_eff * (rho * v_canal**2 / 2.0)
+    dP_canales = (dP_friccion_por_canal + dP_malla_por_canal) * n_canales
 
-    return (dP_friccion_por_canal + dP_malla_por_canal) * n_canales
+    # Pérdida de forma por rugosidad del producto sobre cada bandeja. K override
+    # del usuario o autocalculado desde d_p/espacio_libre. Aplicado n_bandejas
+    # veces (una por superficie rugosa, no por canal): si N=1 hay una sola
+    # superficie expuesta; si N>1, cada bandeja agrega su contribución.
+    if b.K_rugosidad_producto is not None:
+        K_rug = float(b.K_rugosidad_producto)
+    else:
+        d_p, _eps, _phi_s = _geometria_lecho(b, producto_id)
+        K_rug = _K_rugosidad_default(d_p, espacio_libre)
+    dP_rugosidad = K_rug * (rho * v_canal**2 / 2.0) * b.n_bandejas
+
+    return dP_canales + dP_rugosidad
 
 
 # ---------------------------------------------------------------------------
@@ -510,7 +626,7 @@ def estimar_delta_P_singulares(
         Dict con claves 'entrada', 'salida', 'codos', 'manifold', 'total' [Pa].
     """
     rho = densidad_aire(T_K, P_Pa)
-    q_dinamica = rho * v_ducto_m_s ** 2 / 2.0
+    q_dinamica = rho * v_ducto_m_s**2 / 2.0
 
     dP_entrada = K_entrada * q_dinamica
     dP_salida = K_salida * q_dinamica
