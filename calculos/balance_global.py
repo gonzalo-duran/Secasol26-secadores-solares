@@ -83,7 +83,7 @@ class ResultadosCompletos:
     colector: Optional[Any] = None
     auxiliar: Optional[_SolverAuxiliar] = None
     camara: Optional[_SolverCamaraUnion] = None
-    chimenea: Optional[dict] = None   # dict de `caudal_natural_kgs` si aplica
+    chimenea: Optional[dict] = None  # dict de `caudal_natural_kgs` si aplica
 
     T_entrada_camara_K: Optional[float] = None
 
@@ -123,36 +123,34 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
     cfg = proyecto.configuracion
 
     if cfg.tipologia == Tipologia.CAJA and proyecto.colector is not None:
-        errores.append(
-            "PROY_CAJA_CON_COLECTOR: tipología CAJA no admite colector externo."
-        )
+        errores.append("PROY_CAJA_CON_COLECTOR: tipología CAJA no admite colector externo.")
     if cfg.tipologia == Tipologia.CAJA and proyecto.motor is not None:
         errores.append(
-            "PROY_CAJA_CON_MOTOR: tipología CAJA usa convección natural; "
-            "motor = None requerido."
+            "PROY_CAJA_CON_MOTOR: tipología CAJA usa convección natural; " "motor = None requerido."
         )
-    if (cfg.tipologia == Tipologia.CAJA
-            and proyecto.camara is not None
-            and proyecto.camara.construccion.cubierta_translucida_id is None):
+    if (
+        cfg.tipologia == Tipologia.CAJA
+        and proyecto.camara is not None
+        and proyecto.camara.construccion.cubierta_translucida_id is None
+    ):
         errores.append(
             "PROY_CAJA_SIN_CUBIERTA_TRANSLUCIDA: tipología CAJA requiere techo "
             "translúcido (cubierta_translucida_id no-None). Sin colector externo, "
             "la radiación solar a través de la cubierta es la única fuente de "
             "energía del producto."
         )
-    if (proyecto.auxiliar is not None
-            and proyecto.auxiliar.modo_operacion == ModoOperacionAuxiliar.SERIE_POSCOLECTOR
-            and proyecto.colector is None):
+    if (
+        proyecto.auxiliar is not None
+        and proyecto.auxiliar.modo_operacion == ModoOperacionAuxiliar.SERIE_POSCOLECTOR
+        and proyecto.colector is None
+    ):
         errores.append(
             "PROY_AUXILIAR_SERIE_SIN_COLECTOR: auxiliar en SERIE_POSCOLECTOR "
             "requiere colector definido."
         )
     if proyecto.motor is not None and proyecto.camara is None:
-        errores.append(
-            "PROY_MOTOR_SIN_CAMARA: motor definido pero sin cámara configurada."
-        )
-    if (cfg.modo_analisis == ModoAnalisis.ANUAL
-            and cfg.tipologia == Tipologia.CAJA):
+        errores.append("PROY_MOTOR_SIN_CAMARA: motor definido pero sin cámara configurada.")
+    if cfg.modo_analisis == ModoAnalisis.ANUAL and cfg.tipologia == Tipologia.CAJA:
         errores.append(
             "PROY_ANUAL_SIN_VECTORIZACION: análisis anual para tipología CAJA "
             "no implementado en v0."
@@ -280,7 +278,8 @@ def _correr_colector(
     tipo = u.tipo_colector
     pendiente_deg = (
         proyecto.emplazamiento.pendiente_colector_deg
-        if proyecto.emplazamiento is not None else 30.0
+        if proyecto.emplazamiento is not None
+        else 30.0
     )
     _kwargs_comunes = dict(
         colector=proyecto.colector,
@@ -292,7 +291,8 @@ def _correr_colector(
     )
     if tipo == 1:
         solver_col = calcular_colector_tipo1(
-            **_kwargs_comunes, correlacion_nusselt=None,
+            **_kwargs_comunes,
+            correlacion_nusselt=None,
             pendiente_deg=pendiente_deg,
         )
         T_salida_K = solver_col.T_salida_K
@@ -342,6 +342,7 @@ def _velocidad_modulo_desde_caudal(
     aplica la mecánica detallada del bicanal en `colector_tipos234_calc`.
     """
     from calculos.motor_calc import densidad_aire
+
     u = colector.unidad
     b = colector.banco
     rho = densidad_aire(T_op_K, P_amb_Pa)
@@ -358,6 +359,7 @@ def _caudal_natural_loop(
     T_chim_K: float,
     m_design_kgs: float,
     P_amb_Pa: float = 101325.0,
+    v_viento_ms: float = 0.0,
 ) -> dict:
     """Caudal másico de equilibrio cuando el flujo lo induce la chimenea.
 
@@ -400,7 +402,8 @@ def _caudal_natural_loop(
     T_op_K = (T_amb_K + T_chim_K) / 2.0
     dP_col_design = (
         estimar_delta_P_colector(proyecto.colector, T_op_K, P_amb_Pa)
-        if proyecto.colector is not None else 0.0
+        if proyecto.colector is not None
+        else 0.0
     )
     dP_cam_design = estimar_delta_P_camara(camara, T_op_K, P_amb_Pa)
     dP_design = dP_col_design + dP_cam_design
@@ -409,7 +412,9 @@ def _caudal_natural_loop(
         # Lazo abierto / sin pérdidas estimadas; modela como muy poco resistivo.
         def delta_P_resto_fn(_m: float) -> float:
             return 0.0
+
     else:
+
         def delta_P_resto_fn(m: float) -> float:
             return dP_design * (m / m_design_kgs) ** 2
 
@@ -421,6 +426,12 @@ def _caudal_natural_loop(
         H_camara_m=H_camara_m,
         delta_P_resto_fn=delta_P_resto_fn,
         P_amb_Pa=P_amb_Pa,
+        extractor_activo=chim.extractor_activo,
+        Cp_turbina=chim.Cp_turbina,
+        Kt_turbina=chim.Kt_turbina,
+        diametro_extractor_m=chim.diametro_extractor_m,
+        z0_terreno_m=chim.z0_terreno_m,
+        v_viento_10m_ms=v_viento_ms,
     )
 
 
@@ -480,7 +491,10 @@ def _correr_colector_horizonte(
             # Velocidad efectiva del módulo a partir del caudal natural.
             T_op_K = 0.5 * (T_amb_i + T_chim_i)
             v_modulo = _velocidad_modulo_desde_caudal(
-                proyecto.colector, m_i, T_op_K, P_amb_Pa,
+                proyecto.colector,
+                m_i,
+                T_op_K,
+                P_amb_Pa,
             )
             v_modulo = float(np.clip(v_modulo, 0.05, 15.0))
             u.velocidad_diseno_ms = v_modulo
@@ -512,6 +526,7 @@ def _caudal_natural_horizonte(
     T_chim_K_serie: np.ndarray,
     m_ref_kgs: float,
     P_amb_Pa: float = 101325.0,
+    v_viento_ms_serie: Optional[np.ndarray] = None,
 ) -> dict:
     """Resuelve el caudal natural por hora sobre un horizonte temporal.
 
@@ -548,15 +563,19 @@ def _caudal_natural_horizonte(
     T_op_K_ref = 0.5 * (float(np.mean(T_amb_K_serie)) + float(np.mean(T_chim_K_serie)))
     dP_col_ref = (
         estimar_delta_P_colector(proyecto.colector, T_op_K_ref, P_amb_Pa)
-        if proyecto.colector is not None else 0.0
+        if proyecto.colector is not None
+        else 0.0
     )
     dP_cam_ref = estimar_delta_P_camara(camara, T_op_K_ref, P_amb_Pa)
     dP_ref = dP_col_ref + dP_cam_ref
 
     if m_ref_kgs <= 0 or dP_ref <= 0:
+
         def _dP_resto(_m: float) -> float:
             return 0.0
+
     else:
+
         def _dP_resto(m: float) -> float:
             return dP_ref * (m / m_ref_kgs) ** 2
 
@@ -570,6 +589,10 @@ def _caudal_natural_horizonte(
     horas_sin_tiro = 0
     H_eff_m = chim.altura_m + H_camara_m
 
+    v_viento_arr = (
+        np.asarray(v_viento_ms_serie, dtype=float) if v_viento_ms_serie is not None else np.zeros(N)
+    )
+
     for i in range(N):
         try:
             r = caudal_natural_kgs(
@@ -580,6 +603,12 @@ def _caudal_natural_horizonte(
                 H_camara_m=H_camara_m,
                 delta_P_resto_fn=_dP_resto,
                 P_amb_Pa=P_amb_Pa,
+                extractor_activo=chim.extractor_activo,
+                Cp_turbina=chim.Cp_turbina,
+                Kt_turbina=chim.Kt_turbina,
+                diametro_extractor_m=chim.diametro_extractor_m,
+                z0_terreno_m=chim.z0_terreno_m,
+                v_viento_10m_ms=float(v_viento_arr[i]),
             )
         except Exception:
             # Brentq fuera del bracket: marcamos hora como sin tiro.
@@ -690,8 +719,7 @@ def armar_forzantes_aire(
     modos_validos = ("diario", "multi_dia", "anual")
     if modo not in modos_validos:
         raise ValueError(
-            f"FORZANTES_MODO_INVALIDO: modo='{modo}' no reconocido. "
-            f"Opciones: {modos_validos}."
+            f"FORZANTES_MODO_INVALIDO: modo='{modo}' no reconocido. " f"Opciones: {modos_validos}."
         )
 
     T_col = np.asarray(T_salida_colector_K, dtype=float)
@@ -782,9 +810,7 @@ def armar_forzantes_aire(
         T_amb_arr = np.tile(T_amb_base, n_reps)
         m_arr = np.tile(m_base, n_reps)
         I_g_arr = np.tile(I_g_base, n_reps)
-        I_g_POA_arr = (
-            np.tile(I_g_POA_base, n_reps) if I_g_POA_base is not None else None
-        )
+        I_g_POA_arr = np.tile(I_g_POA_base, n_reps) if I_g_POA_base is not None else None
     else:
         T_ent_arr = T_ent_base.copy()
         omega_arr = omega.copy()
@@ -936,13 +962,15 @@ def calcular_todo(
     # --- Solver colector (pase inicial; puede re-correrse abajo si
     # el lazo natural por chimenea cambia el caudal y, por tanto, la
     # velocidad efectiva del aire en el colector).
-    T_salida_colector_K = T_entrada_K   # fallback si no hay colector
+    T_salida_colector_K = T_entrada_K  # fallback si no hay colector
     if proyecto.colector is not None:
         try:
             solver_col, T_salida_colector_K = _correr_colector(
                 proyecto,
-                T_amb_K=T_amb_K, I_g_W_m2=I_g_W_m2,
-                v_viento_ms=v_viento_ms, T_entrada_K=T_entrada_K,
+                T_amb_K=T_amb_K,
+                I_g_W_m2=I_g_W_m2,
+                v_viento_ms=v_viento_ms,
+                T_entrada_K=T_entrada_K,
             )
             res.colector = solver_col
             res.advertencias.extend(solver_col.advertencias)
@@ -957,18 +985,14 @@ def calcular_todo(
     # se re-corre el colector con la nueva velocidad efectiva del aire (ṁ
     # natural mapeado a v_diseno de un módulo).
     caudal_design_kg_s = (
-        proyecto.camara.flujo.caudal_masico_kg_s
-        if proyecto.camara is not None else 0.030
+        proyecto.camara.flujo.caudal_masico_kg_s if proyecto.camara is not None else 0.030
     )
     v_diseno_user_ms = (
-        proyecto.colector.unidad.velocidad_diseno_ms
-        if proyecto.colector is not None else None
+        proyecto.colector.unidad.velocidad_diseno_ms if proyecto.colector is not None else None
     )
     _picard_mutado = False
     chimenea_activa = (
-        proyecto.motor is None
-        and proyecto.chimenea is not None
-        and proyecto.camara is not None
+        proyecto.motor is None and proyecto.chimenea is not None and proyecto.camara is not None
     )
 
     try:
@@ -1025,13 +1049,14 @@ def calcular_todo(
                 # 1) Caudal natural con T_chim del paso previo.
                 try:
                     res_chim_iter = _caudal_natural_loop(
-                        proyecto, T_amb_K, T_chim_K_iter,
+                        proyecto,
+                        T_amb_K,
+                        T_chim_K_iter,
                         proyecto.camara.flujo.caudal_masico_kg_s,
+                        v_viento_ms=v_viento_ms,
                     )
                 except Exception as exc:
-                    res.advertencias.append(
-                        f"ADV_PICARD_CHIM_BRENTQ: {exc} (iter {iter_count})"
-                    )
+                    res.advertencias.append(f"ADV_PICARD_CHIM_BRENTQ: {exc} (iter {iter_count})")
                     break
 
                 m_nat = float(res_chim_iter.get("m_punto_kgs", 0.0))
@@ -1050,7 +1075,9 @@ def calcular_todo(
                 if proyecto.colector is not None:
                     T_op_K = 0.5 * (T_amb_K + T_chim_K_iter)
                     v_nueva = _velocidad_modulo_desde_caudal(
-                        proyecto.colector, m_nat, T_op_K,
+                        proyecto.colector,
+                        m_nat,
+                        T_op_K,
                     )
                     # Limites razonables (Re fuera de calibración).
                     v_nueva = float(np.clip(v_nueva, 0.05, 15.0))
@@ -1058,8 +1085,10 @@ def calcular_todo(
                     try:
                         solver_col_iter, T_salida_colector_K = _correr_colector(
                             proyecto,
-                            T_amb_K=T_amb_K, I_g_W_m2=I_g_W_m2,
-                            v_viento_ms=v_viento_ms, T_entrada_K=T_entrada_K,
+                            T_amb_K=T_amb_K,
+                            I_g_W_m2=I_g_W_m2,
+                            v_viento_ms=v_viento_ms,
+                            T_entrada_K=T_entrada_K,
                         )
                         res.colector = solver_col_iter
                     except Exception as exc:
@@ -1096,17 +1125,11 @@ def calcular_todo(
 
             # Advertencias del último pase (no duplicamos las de iter intermedias).
             if res.colector is not None:
-                res.advertencias.extend(
-                    getattr(res.colector, "advertencias", []) or []
-                )
+                res.advertencias.extend(getattr(res.colector, "advertencias", []) or [])
             if res.auxiliar is not None:
-                res.advertencias.extend(
-                    getattr(res.auxiliar, "advertencias", []) or []
-                )
+                res.advertencias.extend(getattr(res.auxiliar, "advertencias", []) or [])
             if res.camara is not None:
-                res.advertencias.extend(
-                    getattr(res.camara, "advertencias", []) or []
-                )
+                res.advertencias.extend(getattr(res.camara, "advertencias", []) or [])
 
             # Metadata de la iteración en res.chimenea.
             if res_chim_iter is not None:
@@ -1153,9 +1176,7 @@ def calcular_todo(
         else:
             # Energías [MJ]
             E_sol = (res.colector.Q_util_W * t_s / 1e6) if res.colector else 0.0
-            E_aux = (
-                res.auxiliar.Q_efectivo_W * t_s / 1e6 if res.auxiliar else 0.0
-            )
+            E_aux = res.auxiliar.Q_efectivo_W * t_s / 1e6 if res.auxiliar else 0.0
             E_mot = (
                 (proyecto.motor.potencia_electrica_W * t_s / 1e6)
                 if proyecto.motor is not None and proyecto.motor.potencia_electrica_W
@@ -1230,7 +1251,7 @@ class ResultadosCompletosTransitorio:
     forzantes_aplicadas: Optional[ForzantesAire] = None
     camara: Optional[ResultadoMotorTermodinamico] = None
     auxiliar: Optional[ResultadosAuxiliarTransitorio] = None
-    chimenea: Optional[dict] = None   # series horarias del lazo natural si aplica
+    chimenea: Optional[dict] = None  # series horarias del lazo natural si aplica
     motor_P_elec_W: float = 0.0
     horizonte_s: float = 0.0
     n_dias: int = 1
@@ -1276,7 +1297,8 @@ def calcular_todo_transitorio(
         ResultadosCompletosTransitorio con trayectorias y acumulados.
     """
     res = ResultadosCompletosTransitorio(
-        forzantes_base=forzantes_base, n_dias=n_dias,
+        forzantes_base=forzantes_base,
+        n_dias=n_dias,
         horizonte_s=float(forzantes_base.t_s[-1] - forzantes_base.t_s[0]),
     )
 
@@ -1296,10 +1318,7 @@ def calcular_todo_transitorio(
         return res
 
     caudal_kg_s = proyecto.camara.flujo.caudal_masico_kg_s
-    chimenea_activa = (
-        proyecto.motor is None
-        and proyecto.chimenea is not None
-    )
+    chimenea_activa = proyecto.motor is None and proyecto.chimenea is not None
 
     def _correr_aux_y_armar_forzantes(
         m_dot_serie: np.ndarray,
@@ -1342,10 +1361,7 @@ def calcular_todo_transitorio(
             m_dot_aire_seco_kg_s=np.asarray(m_dot_serie, dtype=float).copy(),
             T_amb_K=forzantes_base.T_amb_K.copy(),
             v_viento_ms=forzantes_base.v_viento_ms.copy(),
-            I_g_W_m2=(
-                None if forzantes_base.I_g_W_m2 is None
-                else forzantes_base.I_g_W_m2.copy()
-            ),
+            I_g_W_m2=(None if forzantes_base.I_g_W_m2 is None else forzantes_base.I_g_W_m2.copy()),
         )
 
     def _correr_motor_TD(forzantes: ForzantesAire) -> Optional[ResultadoMotorTermodinamico]:
@@ -1353,6 +1369,7 @@ def calcular_todo_transitorio(
         omega_ent_media = float(np.mean(forzantes.omega_ent))
         try:
             from calculos.psicrometria import HR_desde_omega
+
             HR_op = max(0.05, min(0.95, HR_desde_omega(omega_ent_media, T_ent_media_K)))
         except Exception:
             HR_op = HR_camara_fallback
@@ -1370,7 +1387,8 @@ def calcular_todo_transitorio(
     # ---------------- Pipeline normal (sin chimenea o con motor) ----------------
     if not chimenea_activa:
         forzantes_aplicadas = _correr_aux_y_armar_forzantes(
-            forzantes_base.m_dot_aire_seco_kg_s, caudal_kg_s,
+            forzantes_base.m_dot_aire_seco_kg_s,
+            caudal_kg_s,
         )
         if proyecto.auxiliar is not None and res.auxiliar is not None:
             res.advertencias.extend(res.auxiliar.advertencias_unicas)
@@ -1411,7 +1429,11 @@ def calcular_todo_transitorio(
         for iter_count in range(1, MAX_ITER_TR + 1):
             # 1) ṁ_nat(t) sobre el horizonte.
             chim_dict = _caudal_natural_horizonte(
-                proyecto, forzantes_base.T_amb_K, T_chim_serie, m_ref_kgs,
+                proyecto,
+                forzantes_base.T_amb_K,
+                T_chim_serie,
+                m_ref_kgs,
+                v_viento_ms_serie=forzantes_base.v_viento_ms,
             )
             m_nat_serie = np.maximum(chim_dict["m_punto_kgs"], M_DOT_PISO_KGS)
 
@@ -1452,7 +1474,9 @@ def calcular_todo_transitorio(
             m_dot_medio = float(np.mean(m_nat_serie))
             res.auxiliar = None  # se vuelve a setear si auxiliar presente
             forzantes_aplicadas = _correr_aux_y_armar_forzantes(
-                m_nat_serie, m_dot_medio, T_sal_col_serie=T_sal_col_serie,
+                m_nat_serie,
+                m_dot_medio,
+                T_sal_col_serie=T_sal_col_serie,
             )
 
             # 4) Motor TD con las nuevas forzantes.
@@ -1464,7 +1488,9 @@ def calcular_todo_transitorio(
 
             # 5) T_chim_nueva interpolada al grid horario; clamp ≥ T_amb + 1.
             T_chim_nueva = np.interp(
-                forzantes_base.t_s, solver_cam.t_array_s, solver_cam.T_flujo_K,
+                forzantes_base.t_s,
+                solver_cam.t_array_s,
+                solver_cam.T_flujo_K,
             )
             T_chim_nueva = np.maximum(T_chim_nueva, forzantes_base.T_amb_K + 1.0)
 
@@ -1488,12 +1514,8 @@ def calcular_todo_transitorio(
             chim_dict_final["iteraciones"] = iter_count
             chim_dict_final["convergio"] = converged
             chim_dict_final["delta_T_chim_final_K"] = delta_final
-            chim_dict_final["m_promedio_kgs"] = float(
-                np.mean(chim_dict_final["m_punto_kgs"])
-            )
-            chim_dict_final["m_max_kgs"] = float(
-                np.max(chim_dict_final["m_punto_kgs"])
-            )
+            chim_dict_final["m_promedio_kgs"] = float(np.mean(chim_dict_final["m_punto_kgs"]))
+            chim_dict_final["m_max_kgs"] = float(np.max(chim_dict_final["m_punto_kgs"]))
             res.chimenea = chim_dict_final
             for a in chim_dict_final.get("advertencias", []) or []:
                 if a:
@@ -1533,6 +1555,7 @@ def calcular_todo_transitorio(
     # ``forzantes_aplicadas`` (T_ent_K antes del aporte del auxiliar y
     # ṁ_nat impuesto por el lazo natural).
     from calculos.auxiliar_calc import CP_AIRE
+
     if chimenea_activa and forzantes_aplicadas is not None:
         # T_sal_col coherente con el caudal natural — sustraemos ΔT_aux si
         # hay auxiliar, porque forzantes_aplicadas.T_ent_K ya lo incluye.
@@ -1546,7 +1569,7 @@ def calcular_todo_transitorio(
         m_dot_eval = forzantes_base.m_dot_aire_seco_kg_s
     dT_col = T_sal_col_eval - forzantes_base.T_amb_K
     Q_col_t = m_dot_eval * CP_AIRE * dT_col
-    Q_col_t = np.clip(Q_col_t, 0.0, None)   # noche / colector sin aporte → 0
+    Q_col_t = np.clip(Q_col_t, 0.0, None)  # noche / colector sin aporte → 0
     res.energia_solar_util_MJ = float(np.trapezoid(Q_col_t, forzantes_base.t_s) / 1e6)
 
     # --- Energía de secado ---
@@ -1554,9 +1577,7 @@ def calcular_todo_transitorio(
 
     # --- Acumulados ---
     res.energia_total_MJ = (
-        res.energia_solar_util_MJ
-        + res.energia_auxiliar_MJ
-        + res.energia_motor_MJ
+        res.energia_solar_util_MJ + res.energia_auxiliar_MJ + res.energia_motor_MJ
     )
     if res.energia_total_MJ > 0:
         res.COP_secado = res.energia_secado_MJ / res.energia_total_MJ

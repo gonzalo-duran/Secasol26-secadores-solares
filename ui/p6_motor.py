@@ -7,16 +7,21 @@ motor necesaria para vencerla.
 
 Soporta:
     - Motor eléctrico con ventilador axial o centrífugo.
-    - Extractor eólico tipo turbina.
 
-La convección natural no requiere motor (proyecto.motor = None).
+La convección natural no requiere motor (proyecto.motor = None). En ese caso,
+se configura la chimenea solar — opcionalmente con extractor eólico en el
+tope — desde esta misma pestaña.
 """
 
 from __future__ import annotations
 
 import streamlit as st
 
-from calculos.chimenea_calc import delta_P_tiro_Pa
+from calculos.chimenea_calc import (
+    _v_viento_a_altura,
+    delta_P_tiro_Pa,
+    delta_P_turbina_motriz_Pa,
+)
 from calculos.motor_calc import (
     caudal_masico_a_volumetrico,
     estimar_delta_P_camara,
@@ -38,7 +43,7 @@ _ICONOS_SEVERIDAD = {
     Severidad.CRITICAL: "🚨",
 }
 
-_T_MEDIA_DEFAULT_K: float = 323.15    # 50 °C — temperatura media del sistema
+_T_MEDIA_DEFAULT_K: float = 323.15  # 50 °C — temperatura media del sistema
 _P_ATM_DEFAULT_PA: float = 101325.0
 
 
@@ -62,6 +67,7 @@ def _mostrar_advertencias(adv_list: list) -> None:
 # ---------------------------------------------------------------------------
 # Generador de texto de configuración
 # ---------------------------------------------------------------------------
+
 
 def _texto_config_motor(motor: "Motor") -> str:
     """Snapshot .txt del motor con desglose completo de ΔP y potencias."""
@@ -100,18 +106,7 @@ def _texto_config_motor(motor: "Motor") -> str:
         f"  η motor            : {motor.eficiencia_motor:.1%}",
         f"  Factor servicio    : {motor.factor_servicio:.2f}",
     ]
-    if motor.tipo_accionamiento == TipoAccionamiento.EXTRACTOR_EOLICO:
-        lines += [
-            "",
-            "EXTRACTOR EÓLICO",
-            f"  Diámetro extractor : "
-            + (f"{motor.diametro_extractor_m:.3f} m"
-               if motor.diametro_extractor_m else "—"),
-            f"  v viento diseño    : "
-            + (f"{motor.velocidad_viento_diseno_m_s:.2f} m/s"
-               if motor.velocidad_viento_diseno_m_s is not None else "—"),
-        ]
-    elif motor.tipo_accionamiento == TipoAccionamiento.MOTOR_ELECTRICO:
+    if motor.tipo_accionamiento == TipoAccionamiento.MOTOR_ELECTRICO:
         lines += [
             "",
             "MOTOR ELÉCTRICO",
@@ -129,13 +124,16 @@ def _texto_config_motor(motor: "Motor") -> str:
     if motor.potencia_electrica_W is not None:
         lines.append(f"  P eléctrica        : {motor.potencia_electrica_W:.2f} W")
     if motor.potencia_a_instalar_W is not None:
-        lines.append(f"  P a instalar       : {motor.potencia_a_instalar_W:.2f} W "
-                      f"({motor.potencia_a_instalar_W / 1000:.3f} kW)")
+        lines.append(
+            f"  P a instalar       : {motor.potencia_a_instalar_W:.2f} W "
+            f"({motor.potencia_a_instalar_W / 1000:.3f} kW)"
+        )
     if motor.corriente_nominal_A is not None:
-        lines.append(f"  Corriente nominal  : {motor.corriente_nominal_A:.3f} A "
-                      f"(cos φ = 0.85)")
-    if all(p is None for p in (motor.potencia_hidraulica_W, motor.potencia_eje_W,
-                                motor.potencia_electrica_W)):
+        lines.append(f"  Corriente nominal  : {motor.corriente_nominal_A:.3f} A " f"(cos φ = 0.85)")
+    if all(
+        p is None
+        for p in (motor.potencia_hidraulica_W, motor.potencia_eje_W, motor.potencia_electrica_W)
+    ):
         lines.append("  (sin ΔP > 0, no se calcularon potencias)")
 
     if motor.notas:
@@ -151,7 +149,7 @@ def _texto_config_motor(motor: "Motor") -> str:
     return "\n".join(lines)
 
 
-def _from_json_motor(data: dict) -> "Motor":
+def _from_json_motor(data: dict) -> tuple["Motor | None", "Chimenea | None", str | None]:
     """Reconstruye un ``Motor`` desde un dict producido por ``_json_config_motor``.
 
     Para preservar el dimensionamiento original, si la pérdida total fue
@@ -159,13 +157,45 @@ def _from_json_motor(data: dict) -> "Motor":
     los componentes), se pasa al constructor; de lo contrario se deja en
     None y se deja que ``__post_init__`` la recompute.
 
+    Migración de snapshots pre-S31: si el JSON trae
+    ``tipo_accionamiento == "EXTRACTOR_EOLICO"``, se devuelve
+    ``(None, Chimenea_migrada, aviso)``. El extractor se reemplaza por una
+    Chimenea con ``extractor_activo=True``, preservando el diámetro original
+    como ``diametro_extractor_m`` y usando defaults físicos para Cp/Kt/z0.
+
+    Returns:
+        Tupla ``(motor, chimenea_migrada, aviso)``. Solo uno de ``motor`` y
+        ``chimenea_migrada`` está activo; el otro es None. ``aviso`` es un
+        mensaje legible si hubo migración, o None.
+
     Raises:
         KeyError/ValueError: si faltan campos o el Enum no es válido.
     """
+    tipo_str = data.get("tipo_accionamiento", "")
+    if tipo_str == "EXTRACTOR_EOLICO":
+        eolico = data.get("eolico") or {}
+        diam_ext = eolico.get("diametro_extractor_m")
+        chim_migrada = Chimenea(
+            diametro_m=0.20,
+            altura_m=2.0,
+            id_material="galvanizada_sin_pintura",
+            extractor_activo=True,
+            diametro_extractor_m=(float(diam_ext) if diam_ext is not None else 0.45),
+        )
+        aviso = (
+            "Snapshot pre-S31 detectado: el extractor eólico ya no se modela "
+            "como motor sino como accesorio de la chimenea solar. Se reconstruyó "
+            "automáticamente una chimenea con extractor activo "
+            f"(diámetro {chim_migrada.diametro_extractor_m*100:.0f} cm, "
+            f"Cp={chim_migrada.Cp_turbina}, Kt={chim_migrada.Kt_turbina}). "
+            "Revisá la sección 'Chimenea solar' abajo para ajustar geometría, "
+            "altura y material — los valores son defaults."
+        )
+        return None, chim_migrada, aviso
+
     dp = data.get("perdida_de_carga") or {}
     eff = data.get("eficiencias") or {}
     elec = data.get("electrico") or {}
-    eolico = data.get("eolico") or {}
 
     dp_componentes = [
         dp.get("delta_P_colector_Pa") or 0.0,
@@ -182,46 +212,34 @@ def _from_json_motor(data: dict) -> "Motor":
     if dp_total is not None and abs(dp_total - suma_comp) > 0.5:
         pasar_total = float(dp_total)
 
-    return Motor(
+    motor = Motor(
         tipo_accionamiento=TipoAccionamiento(data["tipo_accionamiento"]),
         caudal_volumetrico_m3_s=float(data["caudal_volumetrico_m3_s"]),
         perdida_carga_total_Pa=pasar_total,
         delta_P_colector_Pa=(
-            float(dp["delta_P_colector_Pa"])
-            if dp.get("delta_P_colector_Pa") is not None else None
+            float(dp["delta_P_colector_Pa"]) if dp.get("delta_P_colector_Pa") is not None else None
         ),
         delta_P_camara_Pa=(
-            float(dp["delta_P_camara_Pa"])
-            if dp.get("delta_P_camara_Pa") is not None else None
+            float(dp["delta_P_camara_Pa"]) if dp.get("delta_P_camara_Pa") is not None else None
         ),
         delta_P_ductos_Pa=(
-            float(dp["delta_P_ductos_Pa"])
-            if dp.get("delta_P_ductos_Pa") is not None else None
+            float(dp["delta_P_ductos_Pa"]) if dp.get("delta_P_ductos_Pa") is not None else None
         ),
         delta_P_singulares_Pa=(
             float(dp["delta_P_singulares_Pa"])
-            if dp.get("delta_P_singulares_Pa") is not None else None
+            if dp.get("delta_P_singulares_Pa") is not None
+            else None
         ),
         v_descarga_m_s=(
-            float(dp["v_descarga_m_s"])
-            if dp.get("v_descarga_m_s") is not None else None
+            float(dp["v_descarga_m_s"]) if dp.get("v_descarga_m_s") is not None else None
         ),
         eficiencia_ventilador=float(eff.get("eficiencia_ventilador", 0.55)),
         eficiencia_motor=float(eff.get("eficiencia_motor", 0.85)),
         factor_servicio=float(eff.get("factor_servicio", 1.15)),
-        tension_V=(
-            float(elec["tension_V"]) if elec.get("tension_V") is not None else None
-        ),
-        diametro_extractor_m=(
-            float(eolico["diametro_extractor_m"])
-            if eolico.get("diametro_extractor_m") is not None else None
-        ),
-        velocidad_viento_diseno_m_s=(
-            float(eolico["velocidad_viento_diseno_m_s"])
-            if eolico.get("velocidad_viento_diseno_m_s") is not None else None
-        ),
+        tension_V=(float(elec["tension_V"]) if elec.get("tension_V") is not None else None),
         notas=data.get("notas") or "",
     )
+    return motor, None, None
 
 
 def _json_config_motor(motor: "Motor") -> dict:
@@ -248,10 +266,6 @@ def _json_config_motor(motor: "Motor") -> dict:
         },
         "electrico": {
             "tension_V": motor.tension_V,
-        },
-        "eolico": {
-            "diametro_extractor_m": motor.diametro_extractor_m,
-            "velocidad_viento_diseno_m_s": motor.velocidad_viento_diseno_m_s,
         },
         "notas": motor.notas,
         "resultados": {
@@ -282,13 +296,29 @@ def _json_config_motor(motor: "Motor") -> dict:
 
 
 def _from_json_chimenea(data: dict) -> Chimenea:
-    """Reconstruye una Chimenea desde un dict producido por _json_config_chimenea."""
+    """Reconstruye una Chimenea desde un dict producido por _json_config_chimenea.
+
+    Compatible con snapshots viejos (sin campos del extractor): los defaults
+    de la dataclass se aplican automáticamente (extractor_activo=False).
+    """
     ch = data.get("chimenea") or {}
-    return Chimenea(
-        diametro_m=float(ch["diametro_m"]),
-        altura_m=float(ch["altura_m"]),
-        id_material=ch["id_material"],
-    )
+    kwargs = {
+        "diametro_m": float(ch["diametro_m"]),
+        "altura_m": float(ch["altura_m"]),
+        "id_material": ch["id_material"],
+    }
+    extractor = ch.get("extractor")
+    if extractor is not None:
+        kwargs["extractor_activo"] = bool(extractor.get("activo", False))
+        if extractor.get("diametro_extractor_m") is not None:
+            kwargs["diametro_extractor_m"] = float(extractor["diametro_extractor_m"])
+        if extractor.get("Cp_turbina") is not None:
+            kwargs["Cp_turbina"] = float(extractor["Cp_turbina"])
+        if extractor.get("Kt_turbina") is not None:
+            kwargs["Kt_turbina"] = float(extractor["Kt_turbina"])
+        if extractor.get("z0_terreno_m") is not None:
+            kwargs["z0_terreno_m"] = float(extractor["z0_terreno_m"])
+    return Chimenea(**kwargs)
 
 
 def _json_config_chimenea(chimenea: Chimenea) -> dict:
@@ -305,6 +335,13 @@ def _json_config_chimenea(chimenea: Chimenea) -> dict:
             "altura_m": chimenea.altura_m,
             "id_material": chimenea.id_material,
             "props_catalogo": props,
+            "extractor": {
+                "activo": chimenea.extractor_activo,
+                "diametro_extractor_m": chimenea.diametro_extractor_m,
+                "Cp_turbina": chimenea.Cp_turbina,
+                "Kt_turbina": chimenea.Kt_turbina,
+                "z0_terreno_m": chimenea.z0_terreno_m,
+            },
         },
         "advertencias_diseno": [
             {
@@ -337,6 +374,16 @@ def _texto_config_chimenea(chimenea: Chimenea) -> str:
         f"  Altura           : {chimenea.altura_m:.2f} m",
         f"  Material         : {desc}  [id={chimenea.id_material}]",
     ]
+    if chimenea.extractor_activo:
+        d_ext = chimenea.diametro_extractor_m
+        lines += [
+            "",
+            "EXTRACTOR EÓLICO",
+            f"  Diámetro extractor : {d_ext*100:.1f} cm" if d_ext else "  Diámetro extractor : —",
+            f"  Cp turbina         : {chimenea.Cp_turbina:.2f}",
+            f"  Kt turbina         : {chimenea.Kt_turbina:.2f}",
+            f"  z0 terreno         : {chimenea.z0_terreno_m:.3f} m",
+        ]
     advs = advertencias_chimenea(chimenea)
     lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
     if not advs:
@@ -369,9 +416,11 @@ def _render_chimenea_section(proyecto) -> None:
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
+
         archivo = st.file_uploader(
             "Subí un archivo .json de chimenea previamente guardado",
-            type=["json"], key="p6_chim_cargar_json",
+            type=["json"],
+            key="p6_chim_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "chimenea")
@@ -384,13 +433,10 @@ def _render_chimenea_section(proyecto) -> None:
                     st.error(f"❌ Error reconstruyendo la chimenea: {exc}")
                 else:
                     proyecto.chimenea = ch_cargada
-                    n_borr = limpiar_session_state_prefijo(
-                        st.session_state, "p6_chim_"
-                    )
+                    n_borr = limpiar_session_state_prefijo(st.session_state, "p6_chim_")
                     st.session_state.pop("p6_chim_cargar_json", None)
                     st.success(
-                        f"✅ Chimenea cargada desde JSON "
-                        f"(se reiniciaron {n_borr} valores)."
+                        f"✅ Chimenea cargada desde JSON " f"(se reiniciaron {n_borr} valores)."
                     )
                     st.rerun()
 
@@ -415,35 +461,197 @@ def _render_chimenea_section(proyecto) -> None:
     with c1:
         diam = st.number_input(
             "Diámetro interno [m]",
-            min_value=0.05, max_value=2.0,
+            min_value=0.05,
+            max_value=2.0,
             value=float(ch_ref.diametro_m),
-            step=0.01, format="%.2f",
+            step=0.01,
+            format="%.2f",
             key="p6_chim_diam",
         )
     with c2:
         alt = st.number_input(
             "Altura [m]",
-            min_value=0.1, max_value=20.0,
+            min_value=0.1,
+            max_value=20.0,
             value=float(ch_ref.altura_m),
-            step=0.1, format="%.1f",
+            step=0.1,
+            format="%.1f",
             key="p6_chim_altura",
         )
     with c3:
         opciones = {
-            id_mat: datos.get("descripcion", id_mat)
-            for id_mat, datos in catalogo.FONDOS.items()
+            id_mat: datos.get("descripcion", id_mat) for id_mat, datos in catalogo.FONDOS.items()
         }
         ids = list(opciones.keys())
         idx = ids.index(ch_ref.id_material) if ch_ref.id_material in ids else 0
         mat = st.selectbox(
             "Material",
-            options=ids, index=idx,
+            options=ids,
+            index=idx,
             format_func=lambda x: opciones[x],
             key="p6_chim_material",
         )
 
+    # --- Extractor eólico (turbina sombrero chino) -------------------------
+    ch_ref_ext = proyecto.chimenea
+    extractor_prev = bool(ch_ref_ext.extractor_activo) if ch_ref_ext else False
+
+    ext_help = (
+        "Turbina pasiva tipo 'sombrero chino' montada en el tope de la "
+        "chimenea. Agrega un término motriz ΔP = Cp·ρ·v_viento²/2 al lazo "
+        "natural, donde v_viento se corrige del valor NASA POWER (10 m) a "
+        "la altura del tope via perfil logarítmico de capa límite. Tambien "
+        "introduce una resistencia adicional Kt·ρ·v_flujo²/2 al flujo "
+        "ascendente.\n\n"
+        "**Casos límite:**\n"
+        "• v_viento = 0 (calma): la turbina sólo agrega resistencia → peor "
+        "que chimenea desnuda.\n"
+        "• Sin sol (noche/nublado): si hay viento, la turbina sigue moviendo "
+        "aire — robustez del sistema.\n"
+        "• v_viento alto + sol: efectos se suman, caudal mayor.\n\n"
+        "Sin correlación específica de literatura; los rangos de Cp y Kt son "
+        "anclajes de orden de magnitud (Idelchik / hojas técnicas de turbinas "
+        "comerciales)."
+    )
+
+    extractor_activo = st.checkbox(
+        "Agregar extractor eólico en el tope",
+        value=extractor_prev,
+        key="p6_chim_ext_activo",
+        help=ext_help,
+    )
+
+    diam_ext_val: float | None = None
+    Cp_val: float = 0.4
+    Kt_val: float = 1.0
+    z0_val: float = 0.05
+
+    if extractor_activo:
+        with st.expander("Parámetros del extractor eólico", expanded=True):
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                diam_ext_default = (
+                    float(ch_ref_ext.diametro_extractor_m)
+                    if (ch_ref_ext and ch_ref_ext.diametro_extractor_m is not None)
+                    else max(diam, 0.30)
+                )
+                diam_ext_val = st.number_input(
+                    "Diámetro del extractor [m]",
+                    min_value=0.10,
+                    max_value=2.0,
+                    value=diam_ext_default,
+                    step=0.05,
+                    format="%.2f",
+                    key="p6_chim_ext_diam",
+                    help=(
+                        "Diámetro del orificio del extractor. Tallas comerciales "
+                        "típicas: 0.30 / 0.45 / 0.60 m. Recomendado ≥ al "
+                        "diámetro de la chimenea para evitar estrangulamiento."
+                    ),
+                )
+            with ec2:
+                Cp_val = st.number_input(
+                    "Cp turbina [adim]",
+                    min_value=0.05,
+                    max_value=2.0,
+                    value=float(ch_ref_ext.Cp_turbina) if ch_ref_ext else 0.4,
+                    step=0.05,
+                    format="%.2f",
+                    key="p6_chim_ext_Cp",
+                    help=(
+                        "Coeficiente de presión motriz: ΔP_motriz = Cp·ρ·v² / 2. "
+                        "Rango típico 0.3–0.6 para turbinas sombrero chino. "
+                        "Valores más altos sólo con datos de fabricante."
+                    ),
+                )
+            ec3, ec4 = st.columns(2)
+            with ec3:
+                Kt_val = st.number_input(
+                    "Kt turbina (resistencia) [adim]",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=float(ch_ref_ext.Kt_turbina) if ch_ref_ext else 1.0,
+                    step=0.1,
+                    format="%.2f",
+                    key="p6_chim_ext_Kt",
+                    help=(
+                        "Coeficiente resistivo: ΔP_resistencia = Kt·ρ·v_flujo²/2 "
+                        "sobre la velocidad del aire en el extractor. "
+                        "1.0 (default) cubre expansión + obstrucción de álabes."
+                    ),
+                )
+            with ec4:
+                z0_opciones = {
+                    "Mar/lago (0.001 m)": 0.001,
+                    "Campo abierto (0.03 m)": 0.03,
+                    "Rural medio (0.05 m)": 0.05,
+                    "Suburbano (0.20 m)": 0.20,
+                    "Urbano denso (0.50 m)": 0.50,
+                }
+                z0_prev_val = float(ch_ref_ext.z0_terreno_m) if ch_ref_ext else 0.05
+                z0_prev_label = next(
+                    (k for k, v in z0_opciones.items() if abs(v - z0_prev_val) < 1e-6),
+                    "Rural medio (0.05 m)",
+                )
+                z0_label = st.selectbox(
+                    "Tipo de terreno (z₀)",
+                    options=list(z0_opciones.keys()),
+                    index=list(z0_opciones.keys()).index(z0_prev_label),
+                    key="p6_chim_ext_z0",
+                    help=(
+                        "Longitud de rugosidad aerodinámica del terreno. Se "
+                        "usa para corregir el viento de NASA POWER (a 10 m) "
+                        "a la altura del tope de chimenea via perfil "
+                        "logarítmico v(z) = v(10)·ln(z/z₀)/ln(10/z₀)."
+                    ),
+                )
+                z0_val = z0_opciones[z0_label]
+
+            # Preview: viento corregido a la altura del tope.
+            v_viento_10m: float | None = None
+            try:
+                if (
+                    proyecto.clima is not None
+                    and proyecto.clima.datos is not None
+                    and "WS_ms" in proyecto.clima.datos.columns
+                ):
+                    v_viento_10m = float(proyecto.clima.datos["WS_ms"].mean())
+            except (AttributeError, KeyError):
+                v_viento_10m = None
+
+            H_cam_default = 1.5
+            if proyecto.camara is not None:
+                try:
+                    H_cam_default = float(proyecto.camara.geometria.alto_m)
+                except (AttributeError, TypeError):
+                    pass
+            z_tope = H_cam_default + alt
+            if v_viento_10m is not None:
+                v_loc = _v_viento_a_altura(v_viento_10m, z_tope, z0_val)
+                dP_turb = delta_P_turbina_motriz_Pa(v_loc, Cp_val, T_amb_K=293.15)
+                st.caption(
+                    f"Viento medio del sitio (P2, a 10 m): "
+                    f"**{v_viento_10m:.1f} m/s** → corregido a {z_tope:.1f} m del "
+                    f"tope: **{v_loc:.2f} m/s** → ΔP motriz turbina (a T_amb 20 °C): "
+                    f"**{dP_turb:.2f} Pa**."
+                )
+            else:
+                st.caption(
+                    "Cargar datos de clima en P2 para previsualizar el efecto "
+                    "del viento a la altura del tope de la chimenea."
+                )
+
     try:
-        nueva = Chimenea(diametro_m=diam, altura_m=alt, id_material=mat)
+        nueva = Chimenea(
+            diametro_m=diam,
+            altura_m=alt,
+            id_material=mat,
+            extractor_activo=extractor_activo,
+            diametro_extractor_m=diam_ext_val if extractor_activo else None,
+            Cp_turbina=Cp_val,
+            Kt_turbina=Kt_val,
+            z0_terreno_m=z0_val,
+        )
     except ValueError as err:
         st.error(f"**Error de validación** — {err}")
         return
@@ -483,6 +691,7 @@ def _render_chimenea_section(proyecto) -> None:
     # --- Guardar configuración ---
     st.divider()
     from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+
     col_txt, col_json = st.columns(2)
     with col_txt:
         st.download_button(
@@ -521,9 +730,11 @@ def render() -> None:
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
+
         archivo = st.file_uploader(
             "Subí un archivo .json del motor previamente guardado",
-            type=["json"], key="p6_cargar_json",
+            type=["json"],
+            key="p6_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "motor")
@@ -531,15 +742,17 @@ def render() -> None:
                 st.error(f"❌ {err}")
             else:
                 try:
-                    mot_cargado = _from_json_motor(data)
+                    mot_cargado, chim_migrada, aviso_migracion = _from_json_motor(data)
                 except (KeyError, ValueError, TypeError) as exc:
                     st.error(f"❌ Error reconstruyendo el motor: {exc}")
                 else:
                     proyecto.motor = mot_cargado
-                    n_borr = limpiar_session_state_prefijo(
-                        st.session_state, "p6_"
-                    )
+                    if chim_migrada is not None:
+                        proyecto.chimenea = chim_migrada
+                    n_borr = limpiar_session_state_prefijo(st.session_state, "p6_")
                     st.session_state.pop("p6_cargar_json", None)
+                    if aviso_migracion:
+                        st.warning(f"⚠️ {aviso_migracion}")
                     st.success(
                         f"✅ Motor cargado desde JSON "
                         f"(se reiniciaron {n_borr} valores de la sesión)."
@@ -575,26 +788,15 @@ def render() -> None:
     # -----------------------------------------------------------------------
     st.subheader("Tipo de accionamiento")
 
-    tipo_opciones = {
-        "Motor eléctrico": TipoAccionamiento.MOTOR_ELECTRICO,
-        "Extractor eólico": TipoAccionamiento.EXTRACTOR_EOLICO,
-    }
-    tipo_prev_label = next(
-        (k for k, v in tipo_opciones.items()
-         if mot_prev is not None and v == mot_prev.tipo_accionamiento),
-        "Motor eléctrico",
+    # Sólo queda un tipo de motor: eléctrico. El extractor eólico se modela
+    # como accesorio de la chimenea, no como tipo de motor (ver P6 sección
+    # de chimenea cuando motor=None).
+    tipo = TipoAccionamiento.MOTOR_ELECTRICO
+    st.caption(
+        "Motor eléctrico (ventilador axial o centrífugo). Para convección "
+        "natural — eventualmente con extractor eólico en el tope de chimenea "
+        "— desactivar el motor en el toggle de arriba."
     )
-    tipo_label = st.selectbox(
-        "Tipo de accionamiento",
-        options=list(tipo_opciones.keys()),
-        index=list(tipo_opciones.keys()).index(tipo_prev_label),
-        help=(
-            "**Motor eléctrico:** ventilador axial o centrífugo con motor eléctrico.\n\n"
-            "**Extractor eólico:** turbina tipo 'sombrero chino' accionada por el viento. "
-            "Sin consumo eléctrico pero dependiente de la velocidad del viento del sitio."
-        ),
-    )
-    tipo = tipo_opciones[tipo_label]
 
     # -----------------------------------------------------------------------
     # Sección B: Caudal volumétrico
@@ -624,17 +826,18 @@ def render() -> None:
         with c1:
             Q_vol_ls = st.number_input(
                 "Caudal volumétrico [L/s]",
-                min_value=0.1, max_value=10000.0,
+                min_value=0.1,
+                max_value=10000.0,
                 value=round(Q_vol_sugerido * 1000.0, 1),
-                step=0.5, format="%.1f",
+                step=0.5,
+                format="%.1f",
                 help=hint_caudal or "Caudal que debe mover el ventilador.",
             )
             Q_vol_m3s = Q_vol_ls / 1000.0
         with c2:
             if hint_caudal:
                 st.info(f"💡 {hint_caudal}")
-            st.metric("Caudal", f"{Q_vol_ls:.1f} L/s",
-                      help=f"{Q_vol_m3s:.5f} m³/s")
+            st.metric("Caudal", f"{Q_vol_ls:.1f} L/s", help=f"{Q_vol_m3s:.5f} m³/s")
 
     # -----------------------------------------------------------------------
     # Sección C: Pérdidas de carga
@@ -661,13 +864,15 @@ def render() -> None:
         if modo_dP == "ΔP total directo":
             dP_total_override = st.number_input(
                 "ΔP total del sistema [Pa]",
-                min_value=1.0, max_value=5000.0,
+                min_value=1.0,
+                max_value=5000.0,
                 value=float(
                     mot_prev.perdida_carga_total_Pa
                     if (mot_prev is not None and mot_prev.perdida_carga_total_Pa)
                     else 50.0
                 ),
-                step=1.0, format="%.1f",
+                step=1.0,
+                format="%.1f",
                 help="Incluye colector, cámara y ductos.",
             )
 
@@ -690,14 +895,18 @@ def render() -> None:
             with c1:
                 dP_col_input = st.number_input(
                     "ΔP colector [Pa]",
-                    min_value=0.0, max_value=2000.0,
+                    min_value=0.0,
+                    max_value=2000.0,
                     value=dP_col_default,
-                    step=1.0, format="%.1f",
+                    step=1.0,
+                    format="%.1f",
                     help=(
                         "Pérdida de carga en el banco de colectores (Darcy-Weisbach). "
-                        + (f"Auto (P3): {dP_col_auto:.1f} Pa."
-                           if dP_col_auto is not None
-                           else "Configurar P3 para auto-estimación.")
+                        + (
+                            f"Auto (P3): {dP_col_auto:.1f} Pa."
+                            if dP_col_auto is not None
+                            else "Configurar P3 para auto-estimación."
+                        )
                     ),
                 )
                 dP_colector_val = dP_col_input if dP_col_input > 0 else None
@@ -720,14 +929,18 @@ def render() -> None:
             with c2:
                 dP_cam_input = st.number_input(
                     "ΔP cámara [Pa]",
-                    min_value=0.0, max_value=2000.0,
+                    min_value=0.0,
+                    max_value=2000.0,
                     value=dP_cam_default,
-                    step=1.0, format="%.1f",
+                    step=1.0,
+                    format="%.1f",
                     help=(
                         "Pérdida de carga en las bandejas de la cámara. "
-                        + (f"Auto (P4): {dP_cam_auto:.1f} Pa (K_malla=2.0)."
-                           if dP_cam_auto is not None
-                           else "Configurar P4 para auto-estimación.")
+                        + (
+                            f"Auto (P4): {dP_cam_auto:.1f} Pa (K_malla=2.0)."
+                            if dP_cam_auto is not None
+                            else "Configurar P4 para auto-estimación."
+                        )
                     ),
                 )
                 dP_camara_val = dP_cam_input if dP_cam_input > 0 else None
@@ -743,10 +956,15 @@ def render() -> None:
                 if usar_ductos_manual:
                     dP_duc_input = st.number_input(
                         "ΔP ductos [Pa]",
-                        min_value=0.0, max_value=500.0,
-                        value=float(mot_prev.delta_P_ductos_Pa or 10.0)
-                        if mot_prev is not None else 10.0,
-                        step=1.0, format="%.1f",
+                        min_value=0.0,
+                        max_value=500.0,
+                        value=(
+                            float(mot_prev.delta_P_ductos_Pa or 10.0)
+                            if mot_prev is not None
+                            else 10.0
+                        ),
+                        step=1.0,
+                        format="%.1f",
                     )
                     dP_ductos_val = dP_duc_input
                 else:
@@ -778,8 +996,11 @@ def render() -> None:
             ):
                 v_ducto_input = st.number_input(
                     "Velocidad del aire en ducto principal [m/s]",
-                    min_value=1.0, max_value=20.0,
-                    value=v_ducto, step=0.5, format="%.1f",
+                    min_value=1.0,
+                    max_value=20.0,
+                    value=v_ducto,
+                    step=0.5,
+                    format="%.1f",
                     help=(
                         "Velocidad típica en ductos de secadores solares: 5–10 m/s. "
                         "Más alta → más pérdida singular. Para ductos de ø≈15 cm con "
@@ -790,8 +1011,10 @@ def render() -> None:
                     st.session_state["p6_v_ducto"] = v_ducto_input
                     # Recalcular display si el usuario tocó la velocidad
                     sing = estimar_delta_P_singulares(
-                        Q_vol_m3_s=Q_vol_m3s, v_ducto_m_s=v_ducto_input,
-                        n_paralelo=n_paralelo, n_codos=2,
+                        Q_vol_m3_s=Q_vol_m3s,
+                        v_ducto_m_s=v_ducto_input,
+                        n_paralelo=n_paralelo,
+                        n_codos=2,
                     )
                     dP_singulares_val = sing["total"]
                     v_ducto = v_ducto_input
@@ -804,12 +1027,9 @@ def render() -> None:
                 )
 
             dP_ductos_efectivo = (
-                dP_ductos_val if dP_ductos_val is not None
-                else 0.20 * (dP_col_input + dP_cam_input)
+                dP_ductos_val if dP_ductos_val is not None else 0.20 * (dP_col_input + dP_cam_input)
             )
-            dP_tot_preview = (
-                dP_col_input + dP_cam_input + dP_ductos_efectivo + dP_singulares_val
-            )
+            dP_tot_preview = dP_col_input + dP_cam_input + dP_ductos_efectivo + dP_singulares_val
             st.caption(
                 f"**ΔP total estimada: {dP_tot_preview:.1f} Pa** "
                 f"(col={dP_col_input:.1f} + cam={dP_cam_input:.1f} + "
@@ -822,29 +1042,39 @@ def render() -> None:
     with st.expander("Parámetros del ventilador y motor", expanded=True):
         c1, c2, c3 = st.columns(3)
         with c1:
-            eta_vent = st.slider(
-                "η ventilador [%]",
-                min_value=20, max_value=85,
-                value=int((mot_prev.eficiencia_ventilador
-                           if mot_prev is not None else 0.55) * 100),
-                step=5,
-                help="Axial simple: 45–60%. Centrífugo media presión: 60–75%.",
-            ) / 100.0
+            eta_vent = (
+                st.slider(
+                    "η ventilador [%]",
+                    min_value=20,
+                    max_value=85,
+                    value=int(
+                        (mot_prev.eficiencia_ventilador if mot_prev is not None else 0.55) * 100
+                    ),
+                    step=5,
+                    help="Axial simple: 45–60%. Centrífugo media presión: 60–75%.",
+                )
+                / 100.0
+            )
         with c2:
-            eta_motor_val = st.slider(
-                "η motor eléctrico [%]",
-                min_value=50, max_value=97,
-                value=int((mot_prev.eficiencia_motor
-                           if mot_prev is not None else 0.85) * 100),
-                step=5,
-                help="Motores < 1 kW: 75–85%.",
-            ) / 100.0
+            eta_motor_val = (
+                st.slider(
+                    "η motor eléctrico [%]",
+                    min_value=50,
+                    max_value=97,
+                    value=int((mot_prev.eficiencia_motor if mot_prev is not None else 0.85) * 100),
+                    step=5,
+                    help="Motores < 1 kW: 75–85%.",
+                )
+                / 100.0
+            )
         with c3:
             fs = st.number_input(
                 "Factor de servicio [-]",
-                min_value=1.0, max_value=2.0,
+                min_value=1.0,
+                max_value=2.0,
                 value=mot_prev.factor_servicio if mot_prev is not None else 1.15,
-                step=0.05, format="%.2f",
+                step=0.05,
+                format="%.2f",
                 help="Sobredimensionamiento del motor. Estándar NEMA continuo: 1.15.",
             )
 
@@ -856,52 +1086,13 @@ def render() -> None:
                 key="motor_usar_tension",
             )
             if usar_tension:
-                tension_val = float(st.selectbox(
-                    "Tensión [V]",
-                    options=[220, 380],
-                    index=0 if (mot_prev is None or mot_prev.tension_V != 380.0) else 1,
-                ))
-
-    # -----------------------------------------------------------------------
-    # Sección E: Extractor eólico
-    # -----------------------------------------------------------------------
-    diametro_ext_val: float | None = None
-    v_viento_val: float | None = None
-
-    if tipo == TipoAccionamiento.EXTRACTOR_EOLICO:
-        with st.expander("Parámetros del extractor eólico", expanded=True):
-            c1, c2 = st.columns(2)
-            with c1:
-                diametro_ext_val = st.selectbox(
-                    "Diámetro del extractor [m]",
-                    options=[0.30, 0.45, 0.60],
-                    index=1,
-                    format_func=lambda d: f"{d:.2f} m ({d * 100:.0f} cm)",
-                    help="Tallas comerciales típicas de turbinas tipo sombrero chino.",
-                )
-            with c2:
-                usar_v_viento = st.checkbox(
-                    "Especificar velocidad de viento de diseño",
-                    value=mot_prev is not None
-                          and mot_prev.velocidad_viento_diseno_m_s is not None,
-                )
-                if usar_v_viento:
-                    v_default = 3.0
-                    if proyecto.clima is not None and proyecto.clima.datos is not None:
-                        v_default = round(
-                            float(proyecto.clima.datos["WS_ms"].mean()), 1
-                        )
-                    v_viento_val = st.number_input(
-                        "Velocidad de viento de diseño [m/s]",
-                        min_value=0.5, max_value=20.0,
-                        value=v_default, step=0.5, format="%.1f",
-                        help="Usar la mediana del viento del emplazamiento (P50).",
+                tension_val = float(
+                    st.selectbox(
+                        "Tensión [V]",
+                        options=[220, 380],
+                        index=0 if (mot_prev is None or mot_prev.tension_V != 380.0) else 1,
                     )
-            st.info(
-                "ℹ️ En v0 el caudal del extractor no se calcula automáticamente. "
-                "El caudal indicado es el **requerimiento del sistema**. "
-                "Verificar capacidad contra el catálogo del fabricante."
-            )
+                )
 
     # -----------------------------------------------------------------------
     # Botón: calcular
@@ -918,15 +1109,12 @@ def render() -> None:
                 delta_P_ductos_Pa=dP_ductos_val,
                 delta_P_singulares_Pa=dP_singulares_val,
                 v_descarga_m_s=(
-                    st.session_state.get("p6_v_ducto", 6.0)
-                    if dP_total_override is None else None
+                    st.session_state.get("p6_v_ducto", 6.0) if dP_total_override is None else None
                 ),
                 eficiencia_ventilador=eta_vent,
                 eficiencia_motor=eta_motor_val,
                 factor_servicio=fs,
                 tension_V=tension_val,
-                diametro_extractor_m=diametro_ext_val,
-                velocidad_viento_diseno_m_s=v_viento_val,
             )
             proyecto.motor = motor
         except (ValueError, NotImplementedError) as exc:
@@ -945,20 +1133,17 @@ def render() -> None:
         c1.metric("ΔP total", f"{motor.perdida_carga_total_Pa:.1f} Pa")
         c2.metric(
             "P hidráulica",
-            f"{motor.potencia_hidraulica_W:.1f} W"
-            if motor.potencia_hidraulica_W else "—",
+            f"{motor.potencia_hidraulica_W:.1f} W" if motor.potencia_hidraulica_W else "—",
             help="Q × ΔP",
         )
         c3.metric(
             "P eléctrica",
-            f"{motor.potencia_electrica_W:.1f} W"
-            if motor.potencia_electrica_W else "—",
+            f"{motor.potencia_electrica_W:.1f} W" if motor.potencia_electrica_W else "—",
             help=f"P_hid / (η_vent={eta_vent:.0%} × η_motor={eta_motor_val:.0%})",
         )
         c4.metric(
             "P a instalar",
-            f"{motor.potencia_a_instalar_W:.1f} W"
-            if motor.potencia_a_instalar_W else "—",
+            f"{motor.potencia_a_instalar_W:.1f} W" if motor.potencia_a_instalar_W else "—",
             help=f"P_elec × FS={fs:.2f}. Potencia nominal del motor a comprar.",
         )
 
@@ -971,7 +1156,7 @@ def render() -> None:
         with st.expander("Resumen de la configuración"):
             c1, c2 = st.columns(2)
             with c1:
-                st.write(f"**Tipo:** {tipo_label}")
+                st.write("**Tipo:** Motor eléctrico")
                 st.write(f"**Caudal:** {Q_vol_ls:.1f} L/s")
                 st.write(f"**ΔP total:** {motor.perdida_carga_total_Pa:.1f} Pa")
                 st.write(f"**η ventilador:** {eta_vent:.0%}")
@@ -988,13 +1173,12 @@ def render() -> None:
                     st.write(f"**P a instalar:** {motor.potencia_a_instalar_W:.1f} W")
                 if motor.corriente_nominal_A:
                     st.write(f"**Corriente:** {motor.corriente_nominal_A:.2f} A")
-                if tipo == TipoAccionamiento.EXTRACTOR_EOLICO and diametro_ext_val:
-                    st.write(f"**Diámetro extractor:** {diametro_ext_val:.2f} m")
 
     # --- Guardar configuración ---
     if proyecto.motor is not None:
         st.divider()
         from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+
         col_txt, col_json = st.columns(2)
         with col_txt:
             st.download_button(

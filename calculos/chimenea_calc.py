@@ -9,6 +9,11 @@ Fenómenos modelados:
 - Tiro térmico (stack effect): ΔP_tiro = g·H_eff·(ρ_amb − ρ_chim).
 - Fricción en el ducto de chimenea: Darcy-Weisbach con Haaland.
 - Pérdidas singulares de entrada y salida (K bundleado por defecto = 1.5).
+- Extractor eólico opcional en el tope (turbina sombrero chino): agrega un
+  término motriz ΔP = Cp·ρ_amb·v_viento²/2 al balance, donde v_viento se
+  corrige del valor NASA POWER (10 m) a la altura del tope via perfil
+  logarítmico. La turbina también introduce una resistencia adicional al
+  flujo Kt·ρ_chim·v_extractor²/2.
 
 Convención termodinámica:
 - T_chim es la temperatura promedio de la columna ascendente (cámara + chimenea).
@@ -19,15 +24,19 @@ Convención termodinámica:
 
 API pública:
 - `delta_P_tiro_Pa`: tiro térmico disponible.
-- `delta_P_chimenea_Pa`: pérdida en el ducto (fricción + singulares).
+- `delta_P_turbina_motriz_Pa`: depresión motriz del extractor eólico.
+- `delta_P_chimenea_Pa`: pérdida en el ducto (fricción + singulares + turbina).
 - `caudal_natural_kgs`: caudal másico de equilibrio del lazo completo.
 
 El módulo es puro: no depende de `core/` ni de `streamlit`. Toma primitivas
 para mantenerse testeable y reusable desde cualquier capa.
 """
+
 from __future__ import annotations
 
+import math
 from math import pi
+from typing import Optional
 
 import numpy as np
 from scipy.optimize import brentq
@@ -61,6 +70,39 @@ _K_SINGULAR_DEFAULT: float = 1.5
 # (10 kg/s ≈ 36 000 m³/h). Si el problema cae fuera, brentq lanza ValueError.
 _M_MIN_KGS: float = 1.0e-8
 _M_MAX_KGS: float = 10.0
+
+# Altura de referencia del viento NASA POWER (estándar meteorológico) [m].
+_Z_REF_VIENTO_M: float = 10.0
+
+
+# ---------------------------------------------------------------------------
+# Perfil logarítmico de viento (capa límite atmosférica)
+# ---------------------------------------------------------------------------
+
+
+def _v_viento_a_altura(v_10m_ms: float, z_m: float, z0_m: float = 0.05) -> float:
+    """Corrige el viento medido a 10 m a una altura ``z`` via perfil logarítmico.
+
+    Perfil de capa límite neutra (Monin-Obukhov simplificado):
+
+        v(z) = v(10) · ln(z/z₀) / ln(10/z₀)
+
+    Args:
+        v_10m_ms: Velocidad del viento a 10 m sobre el suelo [m/s] (estándar
+            NASA POWER y la mayoría de las estaciones meteorológicas).
+        z_m: Altura de interés [m] (tope de la chimenea).
+        z0_m: Longitud de rugosidad aerodinámica del terreno [m]. Valores
+            típicos: 0.001 (mar/lago), 0.03 (campo abierto/cultivo bajo),
+            0.05 (rural medio, default), 0.10-0.25 (suburbano), 0.5-1.0
+            (urbano denso, árboles altos).
+
+    Returns:
+        v(z) [m/s]. Devuelve 0 si v_10m_ms ≤ 0 o z ≤ z0 (dentro de la capa
+        de rugosidad, sin viento útil).
+    """
+    if v_10m_ms <= 0 or z_m <= z0_m or z0_m <= 0:
+        return 0.0
+    return v_10m_ms * math.log(z_m / z0_m) / math.log(_Z_REF_VIENTO_M / z0_m)
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +147,45 @@ def delta_P_tiro_Pa(
 
 
 # ---------------------------------------------------------------------------
+# Extractor eólico — término motriz
+# ---------------------------------------------------------------------------
+
+
+def delta_P_turbina_motriz_Pa(
+    v_viento_local_ms: float,
+    Cp_turbina: float,
+    T_amb_K: float,
+    P_amb_Pa: float = 101325.0,
+) -> float:
+    """Depresión motriz generada por un extractor eólico en su base [Pa].
+
+    Modelo empírico de turbina pasiva tipo "sombrero chino": la rotación de
+    los álabes inclinados por la presión dinámica del viento crea depresión
+    en la base, succionando aire desde la chimenea hacia afuera.
+
+        ΔP_turbina = Cp · ρ_amb · v_viento² / 2
+
+    La densidad se evalúa a T_amb porque es el aire externo el que mueve la
+    turbina (no la columna ascendente caliente).
+
+    Args:
+        v_viento_local_ms: Velocidad del viento a la altura del extractor
+            (corregida por perfil log si v_NASA es a 10 m) [m/s].
+        Cp_turbina: Coeficiente de presión motriz [adim]. Típico 0.3-0.6
+            para turbinas comerciales tipo sombrero chino.
+        T_amb_K: Temperatura ambiente [K].
+        P_amb_Pa: Presión ambiente [Pa].
+
+    Returns:
+        ΔP_turbina [Pa]. Cero si v_viento o Cp son ≤ 0.
+    """
+    if v_viento_local_ms <= 0 or Cp_turbina <= 0:
+        return 0.0
+    rho_amb = densidad_aire(T_amb_K, P_amb_Pa)
+    return Cp_turbina * rho_amb * v_viento_local_ms**2 / 2.0
+
+
+# ---------------------------------------------------------------------------
 # Pérdida de carga del ducto de chimenea
 # ---------------------------------------------------------------------------
 
@@ -117,15 +198,21 @@ def delta_P_chimenea_Pa(
     P_amb_Pa: float = 101325.0,
     rugosidad_m: float = _RUGOSIDAD_DEFAULT_M,
     K_singular: float = _K_SINGULAR_DEFAULT,
+    Kt_turbina: float = 0.0,
+    diametro_extractor_m: Optional[float] = None,
 ) -> float:
     """Pérdida de carga en el ducto de chimenea [Pa].
 
-    Incluye fricción (Darcy-Weisbach con Haaland) y singulares de entrada+salida.
+    Incluye fricción (Darcy-Weisbach con Haaland), singulares de entrada+salida
+    y, opcionalmente, la resistencia adicional de un extractor eólico montado
+    en el tope:
 
-        ΔP_chim = (f · L/D + K_singular) · ρ_chim · v² / 2
+        ΔP_chim   = (f · L/D + K_singular) · ρ_chim · v² / 2
+        ΔP_turb_K = Kt · ρ_chim · v_extractor² / 2
+        v_extractor = ṁ / (ρ_chim · A_extractor)
 
-    Las propiedades del aire (ρ, μ) se evalúan a T_chim (temperatura local
-    dentro de la columna, no la del ambiente).
+    Total = ΔP_chim + ΔP_turb_K. Las propiedades del aire (ρ, μ) se evalúan a
+    T_chim (temperatura local dentro de la columna).
 
     Args:
         m_punto_kgs: Caudal másico [kg/s].
@@ -138,6 +225,10 @@ def delta_P_chimenea_Pa(
         K_singular: Coeficiente bundleado de pérdidas singulares
             (entrada + salida). Default 1.5 = 0.5 (contracción suave) +
             1.0 (descarga a atmósfera).
+        Kt_turbina: Coeficiente resistivo del extractor eólico [adim]. 0
+            (default) si no hay extractor.
+        diametro_extractor_m: Diámetro del extractor [m]. None (default) si
+            no hay extractor. Si está, se calcula v_extractor con su área.
 
     Returns:
         ΔP [Pa]. Siempre ≥ 0.
@@ -152,7 +243,18 @@ def delta_P_chimenea_Pa(
     eps_rel = rugosidad_m / diametro_m
     f = _haaland(Re, eps_rel)
     K_total = f * (altura_m / diametro_m) + K_singular
-    return K_total * (rho * v ** 2) / 2.0
+    dP_ducto = K_total * (rho * v**2) / 2.0
+
+    # Resistencia del extractor (si aplica). Se aplica sobre la velocidad
+    # del flujo a través del diámetro propio del extractor (que puede ser
+    # mayor o menor que el de la chimenea).
+    dP_turbina_K = 0.0
+    if Kt_turbina > 0 and diametro_extractor_m is not None and diametro_extractor_m > 0:
+        A_ext = pi * (diametro_extractor_m / 2.0) ** 2
+        v_ext = m_punto_kgs / (rho * A_ext)
+        dP_turbina_K = Kt_turbina * (rho * v_ext**2) / 2.0
+
+    return dP_ducto + dP_turbina_K
 
 
 # ---------------------------------------------------------------------------
@@ -170,17 +272,26 @@ def caudal_natural_kgs(
     P_amb_Pa: float = 101325.0,
     rugosidad_m: float = _RUGOSIDAD_DEFAULT_M,
     K_singular_chim: float = _K_SINGULAR_DEFAULT,
+    extractor_activo: bool = False,
+    Cp_turbina: float = 0.0,
+    Kt_turbina: float = 0.0,
+    diametro_extractor_m: Optional[float] = None,
+    z0_terreno_m: float = 0.05,
+    v_viento_10m_ms: float = 0.0,
 ) -> dict:
     """Caudal másico de equilibrio del lazo con chimenea solar [kg/s].
 
-    Resuelve la ecuación de equilibrio:
+    Resuelve la ecuación de equilibrio motriz vs resistiva:
 
-        ΔP_tiro(T_amb, T_chim, H_eff) = ΔP_chimenea(ṁ, T_chim, ...) + ΔP_resto(ṁ)
+        ΔP_tiro_térmico + ΔP_turbina_motriz = ΔP_chimenea(ṁ) + ΔP_resto(ṁ)
 
-    donde ΔP_resto agrupa colector + cámara + ductos + singulares del resto
-    del lazo. La temperatura T_chim se toma como dato; el acoplamiento térmico
-    completo (T_chim depende de ṁ) requiere iteración externa sobre esta
-    función.
+    donde:
+        ΔP_chimenea = fricción + singulares + Kt·turbina (función de ṁ)
+        ΔP_resto    = colector + cámara + ductos + singulares (función de ṁ)
+
+    El término ΔP_turbina_motriz aparece sólo si ``extractor_activo``. La
+    temperatura T_chim se toma como dato; el acoplamiento térmico completo
+    (T_chim depende de ṁ) requiere iteración externa sobre esta función.
 
     Args:
         T_amb_K: Temperatura del aire ambiente [K].
@@ -197,16 +308,29 @@ def caudal_natural_kgs(
         P_amb_Pa: Presión ambiente [Pa].
         rugosidad_m: Rugosidad de la chimenea [m].
         K_singular_chim: Pérdidas singulares de la chimenea (entrada+salida).
+        extractor_activo: Si True, se modela un extractor eólico en el tope.
+        Cp_turbina: Coeficiente de presión motriz del extractor [adim].
+        Kt_turbina: Coeficiente resistivo del extractor [adim].
+        diametro_extractor_m: Diámetro del extractor [m]. Obligatorio si
+            ``extractor_activo``.
+        z0_terreno_m: Rugosidad aerodinámica del terreno [m] para corregir
+            v_viento por perfil logarítmico.
+        v_viento_10m_ms: Velocidad del viento a 10 m (NASA POWER) [m/s].
 
     Returns:
         Dict con:
             - ``m_punto_kgs``: caudal másico de equilibrio.
             - ``v_chim_ms``: velocidad media en la chimenea.
-            - ``delta_P_tiro_Pa``: tiro disponible.
-            - ``delta_P_chimenea_Pa``: pérdida en el ducto de chimenea.
+            - ``delta_P_tiro_Pa``: tiro térmico disponible.
+            - ``delta_P_turbina_motriz_Pa``: depresión motriz del extractor
+              (0 si no hay extractor).
+            - ``delta_P_chimenea_Pa``: pérdida en el ducto de chimenea
+              (incluye Kt del extractor si aplica).
             - ``delta_P_resto_Pa``: pérdida en el resto del lazo.
             - ``Re_chimenea``: Reynolds en la chimenea.
             - ``H_eff_m``: altura efectiva usada.
+            - ``v_viento_local_ms``: velocidad de viento corregida a la
+              altura del tope (0 si no hay extractor).
             - ``advertencias``: lista de códigos.
 
     Raises:
@@ -214,29 +338,56 @@ def caudal_natural_kgs(
             restrictivo o caudal de equilibrio fuera de ``[_M_MIN_KGS, _M_MAX_KGS]``).
     """
     H_eff = altura_chim_m + H_camara_m
-    dPT = delta_P_tiro_Pa(T_amb_K, T_chim_K, H_eff, P_amb_Pa)
+    dPT_termico = delta_P_tiro_Pa(T_amb_K, T_chim_K, H_eff, P_amb_Pa)
     advertencias: list[str] = []
 
-    # Caso sin tiro: T_chim ≤ T_amb (noche, día nublado sin gradiente, etc.)
-    if dPT <= 0.0:
+    # Componente motriz del extractor (si aplica). El viento se evalúa a la
+    # altura del tope de la chimenea = H_camara + altura_chim.
+    if extractor_activo:
+        z_top = H_camara_m + altura_chim_m
+        v_loc = _v_viento_a_altura(v_viento_10m_ms, z_top, z0_terreno_m)
+        dPT_turbina = delta_P_turbina_motriz_Pa(v_loc, Cp_turbina, T_amb_K, P_amb_Pa)
+        Kt_eff = Kt_turbina
+        d_ext_eff = diametro_extractor_m
+    else:
+        v_loc = 0.0
+        dPT_turbina = 0.0
+        Kt_eff = 0.0
+        d_ext_eff = None
+
+    dPT_total = dPT_termico + dPT_turbina
+
+    # Caso sin tiro motriz: ni térmico ni eólico.
+    if dPT_total <= 0.0:
         return {
             "m_punto_kgs": 0.0,
             "v_chim_ms": 0.0,
-            "delta_P_tiro_Pa": dPT,
+            "delta_P_tiro_Pa": dPT_termico,
+            "delta_P_turbina_motriz_Pa": dPT_turbina,
             "delta_P_chimenea_Pa": 0.0,
             "delta_P_resto_Pa": 0.0,
             "Re_chimenea": 0.0,
             "H_eff_m": H_eff,
-            "advertencias": ["CHIM_SIN_TIRO: T_chim ≤ T_amb, no hay flujo natural."],
+            "v_viento_local_ms": v_loc,
+            "advertencias": [
+                "CHIM_SIN_TIRO: T_chim ≤ T_amb y sin viento útil — no hay flujo natural."
+            ],
         }
 
     def residuo(m: float) -> float:
         dPC = delta_P_chimenea_Pa(
-            m, T_chim_K, diametro_chim_m, altura_chim_m,
-            P_amb_Pa, rugosidad_m, K_singular_chim,
+            m,
+            T_chim_K,
+            diametro_chim_m,
+            altura_chim_m,
+            P_amb_Pa,
+            rugosidad_m,
+            K_singular_chim,
+            Kt_turbina=Kt_eff,
+            diametro_extractor_m=d_ext_eff,
         )
         dPR = float(delta_P_resto_fn(m))
-        return dPT - dPC - dPR
+        return dPT_total - dPC - dPR
 
     m_eq = brentq(residuo, _M_MIN_KGS, _M_MAX_KGS, xtol=1e-8, rtol=1e-6)
 
@@ -246,8 +397,15 @@ def caudal_natural_kgs(
     mu_chim = viscosidad_aire(T_chim_K)
     Re = rho_chim * v_chim * diametro_chim_m / mu_chim
     dPC_eq = delta_P_chimenea_Pa(
-        m_eq, T_chim_K, diametro_chim_m, altura_chim_m,
-        P_amb_Pa, rugosidad_m, K_singular_chim,
+        m_eq,
+        T_chim_K,
+        diametro_chim_m,
+        altura_chim_m,
+        P_amb_Pa,
+        rugosidad_m,
+        K_singular_chim,
+        Kt_turbina=Kt_eff,
+        diametro_extractor_m=d_ext_eff,
     )
     dPR_eq = float(delta_P_resto_fn(m_eq))
 
@@ -262,10 +420,12 @@ def caudal_natural_kgs(
     return {
         "m_punto_kgs": float(m_eq),
         "v_chim_ms": float(v_chim),
-        "delta_P_tiro_Pa": float(dPT),
+        "delta_P_tiro_Pa": float(dPT_termico),
+        "delta_P_turbina_motriz_Pa": float(dPT_turbina),
         "delta_P_chimenea_Pa": float(dPC_eq),
         "delta_P_resto_Pa": float(dPR_eq),
         "Re_chimenea": float(Re),
         "H_eff_m": float(H_eff),
+        "v_viento_local_ms": float(v_loc),
         "advertencias": advertencias,
     }

@@ -28,11 +28,10 @@ from core.advertencias import Advertencia, Severidad
 # Umbrales de diseño
 # ---------------------------------------------------------------------------
 
-_POTENCIA_BAJA_W: float = 30.0      # advertencia: motor posiblemente innecesario
-_POTENCIA_ALTA_W: float = 5000.0    # advertencia: revisar pérdidas de carga
-_V_VIENTO_BAJA_MS: float = 2.0      # advertencia: extractor eólico poco efectivo
-_FRACCION_DUCTOS: float = 0.20      # margen automático de ductos (20% de ΔP_col+cam)
-_COS_PHI: float = 0.85              # factor de potencia típico motor pequeño monofásico
+_POTENCIA_BAJA_W: float = 30.0  # advertencia: motor posiblemente innecesario
+_POTENCIA_ALTA_W: float = 5000.0  # advertencia: revisar pérdidas de carga
+_FRACCION_DUCTOS: float = 0.20  # margen automático de ductos (20% de ΔP_col+cam)
+_COS_PHI: float = 0.85  # factor de potencia típico motor pequeño monofásico
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +41,6 @@ _COS_PHI: float = 0.85              # factor de potencia típico motor pequeño 
 
 class TipoAccionamiento(Enum):
     MOTOR_ELECTRICO = "MOTOR_ELECTRICO"
-    EXTRACTOR_EOLICO = "EXTRACTOR_EOLICO"
     CONVECCION_NATURAL = "CONVECCION_NATURAL"
 
 
@@ -77,9 +75,6 @@ class Motor:
         eficiencia_motor: η del motor eléctrico [0, 1]. Default: 0.85.
         factor_servicio: Factor de sobredimensionamiento nominal [-]. Default: 1.15.
         tension_V: Tensión de alimentación [V]. 220 (monofásico) o 380 (trifásico).
-        diametro_extractor_m: Diámetro del extractor eólico [m]. Obligatorio
-            si tipo == EXTRACTOR_EOLICO.
-        velocidad_viento_diseno_m_s: Velocidad de viento de diseño [m/s].
         notas: Campo libre.
 
     Campos calculados en __post_init__ (no forman parte de __init__):
@@ -99,8 +94,6 @@ class Motor:
     eficiencia_motor: float = 0.85
     factor_servicio: float = 1.15
     tension_V: Optional[float] = None
-    diametro_extractor_m: Optional[float] = None
-    velocidad_viento_diseno_m_s: Optional[float] = None
     notas: str = ""
 
     # Calculados en __post_init__ — no reciben valor del usuario
@@ -109,9 +102,7 @@ class Motor:
     potencia_electrica_W: Optional[float] = field(default=None, init=False, repr=False)
     potencia_a_instalar_W: Optional[float] = field(default=None, init=False, repr=False)
     corriente_nominal_A: Optional[float] = field(default=None, init=False, repr=False)
-    advertencias: list[Advertencia] = field(
-        default_factory=list, init=False, repr=False
-    )
+    advertencias: list[Advertencia] = field(default_factory=list, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._validar()
@@ -147,12 +138,6 @@ class Motor:
                 f"MOT_FACTOR_SERVICIO_INVALIDO: factor_servicio={self.factor_servicio:.3f} "
                 "< 1.0. El factor de servicio no puede ser menor que 1."
             )
-        if (self.tipo_accionamiento == TipoAccionamiento.EXTRACTOR_EOLICO
-                and self.diametro_extractor_m is None):
-            raise ValueError(
-                "MOT_EXTRACTOR_SIN_DIAMETRO: extractor eólico requiere "
-                "diametro_extractor_m."
-            )
 
     # ------------------------------------------------------------------
     # Cálculo de potencias
@@ -168,32 +153,32 @@ class Motor:
             dP_duc = self.delta_P_ductos_Pa
             if dP_duc is None:
                 dP_duc = _FRACCION_DUCTOS * (dP_col + dP_cam)
-                adv.append(Advertencia(
-                    codigo="MOT_DUCTOS_ESTIMADOS",
-                    severidad=Severidad.INFO,
-                    mensaje=(
-                        f"ΔP ductos no especificada. Estimada como "
-                        f"{_FRACCION_DUCTOS:.0%} de (ΔP_col + ΔP_cam) = {dP_duc:.1f} Pa."
-                    ),
-                    campo="delta_P_ductos_Pa",
-                    sugerencia=(
-                        "Especificar delta_P_ductos_Pa para un resultado más preciso, "
-                        "o aceptar la estimación del 20%."
-                    ),
-                    contexto={"dP_ductos_estimado_Pa": round(dP_duc, 2)},
-                ))
+                adv.append(
+                    Advertencia(
+                        codigo="MOT_DUCTOS_ESTIMADOS",
+                        severidad=Severidad.INFO,
+                        mensaje=(
+                            f"ΔP ductos no especificada. Estimada como "
+                            f"{_FRACCION_DUCTOS:.0%} de (ΔP_col + ΔP_cam) = {dP_duc:.1f} Pa."
+                        ),
+                        campo="delta_P_ductos_Pa",
+                        sugerencia=(
+                            "Especificar delta_P_ductos_Pa para un resultado más preciso, "
+                            "o aceptar la estimación del 20%."
+                        ),
+                        contexto={"dP_ductos_estimado_Pa": round(dP_duc, 2)},
+                    )
+                )
             dP_sing = self.delta_P_singulares_Pa or 0.0
             # Presión dinámica de salida: ρ·v_descarga²/2.
             # Si v_descarga no se proveyó, asumimos cero (modelo histórico
             # conservador a la baja). Densidad del aire a ~50 °C / 1 atm.
             if self.v_descarga_m_s is not None and self.v_descarga_m_s > 0:
                 rho_descarga = 101325.0 / (287.058 * 323.15)  # ~1.092 kg/m³
-                dP_dinamica = rho_descarga * self.v_descarga_m_s ** 2 / 2.0
+                dP_dinamica = rho_descarga * self.v_descarga_m_s**2 / 2.0
             else:
                 dP_dinamica = 0.0
-            self.perdida_carga_total_Pa = (
-                dP_col + dP_cam + dP_duc + dP_sing + dP_dinamica
-            )
+            self.perdida_carga_total_Pa = dP_col + dP_cam + dP_duc + dP_sing + dP_dinamica
 
         dP = self.perdida_carga_total_Pa
         Q = self.caudal_volumetrico_m3_s
@@ -216,63 +201,52 @@ class Motor:
         # --- Advertencias de diseño ---
         P_inst = self.potencia_a_instalar_W
         if P_inst is not None and P_inst < _POTENCIA_BAJA_W:
-            adv.append(Advertencia(
-                codigo="MOT_POTENCIA_BAJA",
-                severidad=Severidad.INFO,
-                mensaje=(
-                    f"Potencia a instalar {P_inst:.0f} W muy baja. "
-                    "Un extractor eólico o convección natural podría ser suficiente, "
-                    "evitando el costo de instalación eléctrica."
-                ),
-                campo="potencia_a_instalar_W",
-                sugerencia="Evaluar tipo EXTRACTOR_EOLICO o convección natural.",
-                contexto={"potencia_W": round(P_inst, 1)},
-            ))
+            adv.append(
+                Advertencia(
+                    codigo="MOT_POTENCIA_BAJA",
+                    severidad=Severidad.INFO,
+                    mensaje=(
+                        f"Potencia a instalar {P_inst:.0f} W muy baja. "
+                        "Convección natural (chimenea solar, eventualmente con extractor "
+                        "eólico) podría ser suficiente, evitando el costo de instalación "
+                        "eléctrica."
+                    ),
+                    campo="potencia_a_instalar_W",
+                    sugerencia=(
+                        "Evaluar convección natural con chimenea solar (proyecto.motor = None)."
+                    ),
+                    contexto={"potencia_W": round(P_inst, 1)},
+                )
+            )
         elif P_inst is not None and P_inst > _POTENCIA_ALTA_W:
-            adv.append(Advertencia(
-                codigo="MOT_POTENCIA_ALTA",
-                severidad=Severidad.WARNING,
-                mensaje=(
-                    f"Potencia a instalar {P_inst:.0f} W elevada para un secador solar. "
-                    "Revisar las pérdidas de carga — posiblemente la geometría del "
-                    "colector o la cámara sea subóptima."
-                ),
-                campo="potencia_a_instalar_W",
-                sugerencia=(
-                    "Reducir la velocidad de diseño, aumentar la sección del canal "
-                    "o dividir el banco en más ramas paralelas."
-                ),
-                contexto={"potencia_W": round(P_inst, 1)},
-            ))
+            adv.append(
+                Advertencia(
+                    codigo="MOT_POTENCIA_ALTA",
+                    severidad=Severidad.WARNING,
+                    mensaje=(
+                        f"Potencia a instalar {P_inst:.0f} W elevada para un secador solar. "
+                        "Revisar las pérdidas de carga — posiblemente la geometría del "
+                        "colector o la cámara sea subóptima."
+                    ),
+                    campo="potencia_a_instalar_W",
+                    sugerencia=(
+                        "Reducir la velocidad de diseño, aumentar la sección del canal "
+                        "o dividir el banco en más ramas paralelas."
+                    ),
+                    contexto={"potencia_W": round(P_inst, 1)},
+                )
+            )
 
-        if (self.tipo_accionamiento == TipoAccionamiento.MOTOR_ELECTRICO
-                and self.tension_V is None):
-            adv.append(Advertencia(
-                codigo="MOT_SIN_TENSION",
-                severidad=Severidad.INFO,
-                mensaje="Tensión de alimentación no especificada. No se calculará corriente nominal.",
-                campo="tension_V",
-                sugerencia="Especificar tension_V (220 o 380 V) para calcular corriente.",
-                contexto={},
-            ))
-
-        if (self.tipo_accionamiento == TipoAccionamiento.EXTRACTOR_EOLICO
-                and self.velocidad_viento_diseno_m_s is not None
-                and self.velocidad_viento_diseno_m_s < _V_VIENTO_BAJA_MS):
-            adv.append(Advertencia(
-                codigo="MOT_EXTRACTOR_VIENTO_BAJO",
-                severidad=Severidad.WARNING,
-                mensaje=(
-                    f"Velocidad de viento de diseño "
-                    f"{self.velocidad_viento_diseno_m_s:.1f} m/s baja para extractor eólico. "
-                    "El caudal generado puede ser insuficiente para el secado."
-                ),
-                campo="velocidad_viento_diseno_m_s",
-                sugerencia=(
-                    "Considerar motor eléctrico si la velocidad media del sitio "
-                    f"es < {_V_VIENTO_BAJA_MS} m/s."
-                ),
-                contexto={"v_viento_ms": self.velocidad_viento_diseno_m_s},
-            ))
+        if self.tipo_accionamiento == TipoAccionamiento.MOTOR_ELECTRICO and self.tension_V is None:
+            adv.append(
+                Advertencia(
+                    codigo="MOT_SIN_TENSION",
+                    severidad=Severidad.INFO,
+                    mensaje="Tensión de alimentación no especificada. No se calculará corriente nominal.",
+                    campo="tension_V",
+                    sugerencia="Especificar tension_V (220 o 380 V) para calcular corriente.",
+                    contexto={},
+                )
+            )
 
         self.advertencias = adv

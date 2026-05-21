@@ -18,10 +18,10 @@ from core.camara import Camara
 from core.colector import Colector
 from core.motor import Motor, TipoAccionamiento
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def motor_minimo():
@@ -55,6 +55,7 @@ def motor_con_componentes():
 # ---------------------------------------------------------------------------
 # Motor — errores duros
 # ---------------------------------------------------------------------------
+
 
 class TestMotorErroresDuros:
 
@@ -112,27 +113,11 @@ class TestMotorErroresDuros:
                 factor_servicio=0.9,
             )
 
-    def test_extractor_sin_diametro(self):
-        with pytest.raises(ValueError, match="MOT_EXTRACTOR_SIN_DIAMETRO"):
-            Motor(
-                tipo_accionamiento=TipoAccionamiento.EXTRACTOR_EOLICO,
-                caudal_volumetrico_m3_s=0.020,
-                perdida_carga_total_Pa=30.0,
-            )
-
-    def test_extractor_con_diametro_valido(self):
-        motor = Motor(
-            tipo_accionamiento=TipoAccionamiento.EXTRACTOR_EOLICO,
-            caudal_volumetrico_m3_s=0.020,
-            perdida_carga_total_Pa=30.0,
-            diametro_extractor_m=0.45,
-        )
-        assert motor.diametro_extractor_m == 0.45
-
 
 # ---------------------------------------------------------------------------
 # Motor — cálculo de potencias
 # ---------------------------------------------------------------------------
+
 
 class TestMotorCalculoPotencias:
 
@@ -160,21 +145,25 @@ class TestMotorCalculoPotencias:
 
     def test_corriente_calculada_con_tension(self, motor_con_componentes):
         from core.motor import _COS_PHI
+
         P_elec = motor_con_componentes.potencia_electrica_W
         I_esperada = P_elec / (220.0 * _COS_PHI)
         assert motor_con_componentes.corriente_nominal_A == pytest.approx(I_esperada)
 
     def test_potencias_crecientes(self, motor_minimo):
         """P_hid < P_eje < P_elec < P_inst."""
-        assert (motor_minimo.potencia_hidraulica_W
-                < motor_minimo.potencia_eje_W
-                < motor_minimo.potencia_electrica_W
-                < motor_minimo.potencia_a_instalar_W)
+        assert (
+            motor_minimo.potencia_hidraulica_W
+            < motor_minimo.potencia_eje_W
+            < motor_minimo.potencia_electrica_W
+            < motor_minimo.potencia_a_instalar_W
+        )
 
 
 # ---------------------------------------------------------------------------
 # Motor — ΔP desde componentes
 # ---------------------------------------------------------------------------
+
 
 class TestMotorDeltaP:
 
@@ -221,13 +210,14 @@ class TestMotorDeltaP:
 # Motor — advertencias de diseño
 # ---------------------------------------------------------------------------
 
+
 class TestMotorAdvertencias:
 
     def test_advertencia_potencia_baja(self):
         """Potencia a instalar < 30 W → MOT_POTENCIA_BAJA."""
         motor = Motor(
             tipo_accionamiento=TipoAccionamiento.MOTOR_ELECTRICO,
-            caudal_volumetrico_m3_s=0.001,   # caudal muy bajo
+            caudal_volumetrico_m3_s=0.001,  # caudal muy bajo
             perdida_carga_total_Pa=5.0,
         )
         codigos = [a.codigo for a in motor.advertencias]
@@ -254,32 +244,11 @@ class TestMotorAdvertencias:
         codigos = [a.codigo for a in motor_con_componentes.advertencias]
         assert "MOT_SIN_TENSION" not in codigos
 
-    def test_advertencia_extractor_viento_bajo(self):
-        motor = Motor(
-            tipo_accionamiento=TipoAccionamiento.EXTRACTOR_EOLICO,
-            caudal_volumetrico_m3_s=0.010,
-            perdida_carga_total_Pa=20.0,
-            diametro_extractor_m=0.45,
-            velocidad_viento_diseno_m_s=1.5,  # < 2.0 m/s
-        )
-        codigos = [a.codigo for a in motor.advertencias]
-        assert "MOT_EXTRACTOR_VIENTO_BAJO" in codigos
-
-    def test_sin_advertencia_extractor_viento_ok(self):
-        motor = Motor(
-            tipo_accionamiento=TipoAccionamiento.EXTRACTOR_EOLICO,
-            caudal_volumetrico_m3_s=0.010,
-            perdida_carga_total_Pa=20.0,
-            diametro_extractor_m=0.45,
-            velocidad_viento_diseno_m_s=3.0,  # ≥ 2.0 m/s
-        )
-        codigos = [a.codigo for a in motor.advertencias]
-        assert "MOT_EXTRACTOR_VIENTO_BAJO" not in codigos
-
 
 # ---------------------------------------------------------------------------
 # estimar_delta_P_colector
 # ---------------------------------------------------------------------------
+
 
 class TestEstimarDeltaPColector:
 
@@ -290,6 +259,7 @@ class TestEstimarDeltaPColector:
 
     def test_dP_crece_con_velocidad(self):
         from core.colector import ColectorUnidad, BancoColectores
+
         col_lento = Colector(
             unidad=ColectorUnidad(velocidad_diseno_ms=0.3),
         )
@@ -300,12 +270,14 @@ class TestEstimarDeltaPColector:
 
     def test_dP_crece_con_largo(self):
         from core.colector import ColectorUnidad
+
         col_corto = Colector(unidad=ColectorUnidad(largo_m=1.0))
         col_largo = Colector(unidad=ColectorUnidad(largo_m=4.0))
         assert estimar_delta_P_colector(col_largo) > estimar_delta_P_colector(col_corto)
 
     def test_dP_crece_con_n_serie(self):
         from core.colector import BancoColectores
+
         col_1 = Colector(banco=BancoColectores(n_serie=1))
         col_3 = Colector(banco=BancoColectores(n_serie=3))
         assert estimar_delta_P_colector(col_3) > estimar_delta_P_colector(col_1)
@@ -313,6 +285,7 @@ class TestEstimarDeltaPColector:
     def test_regimen_turbulento_friccion_menor(self):
         """Para Re turbulento, f_Blasius < f_laminar → ΔP escala diferente."""
         from core.colector import ColectorUnidad
+
         # v=0.1 m/s → Re ≈ 300 (laminar), v=3.0 m/s → Re ≈ 9000 (turbulento)
         col_lam = Colector(unidad=ColectorUnidad(velocidad_diseno_ms=0.1))
         col_turb = Colector(unidad=ColectorUnidad(velocidad_diseno_ms=3.0))
@@ -325,6 +298,7 @@ class TestEstimarDeltaPColector:
 # estimar_delta_P_camara
 # ---------------------------------------------------------------------------
 
+
 class TestEstimarDeltaPCamara:
 
     def test_dP_positivo(self):
@@ -334,19 +308,29 @@ class TestEstimarDeltaPCamara:
 
     def test_dP_crece_con_n_bandejas(self):
         from core.camara import ConfiguracionBandejas
-        cam_5 = Camara(bandejas=ConfiguracionBandejas(
-            n_bandejas=5, area_bandeja_m2=0.5,
-            espesor_capa_m=0.02, separacion_entre_bandejas_m=0.15,
-        ))
-        cam_10 = Camara(bandejas=ConfiguracionBandejas(
-            n_bandejas=10, area_bandeja_m2=0.5,
-            espesor_capa_m=0.02, separacion_entre_bandejas_m=0.08,
-        ))
+
+        cam_5 = Camara(
+            bandejas=ConfiguracionBandejas(
+                n_bandejas=5,
+                area_bandeja_m2=0.5,
+                espesor_capa_m=0.02,
+                separacion_entre_bandejas_m=0.15,
+            )
+        )
+        cam_10 = Camara(
+            bandejas=ConfiguracionBandejas(
+                n_bandejas=10,
+                area_bandeja_m2=0.5,
+                espesor_capa_m=0.02,
+                separacion_entre_bandejas_m=0.08,
+            )
+        )
         assert estimar_delta_P_camara(cam_10) > estimar_delta_P_camara(cam_5)
 
     def test_dP_escala_con_caudal(self):
         """ΔP ∝ v_sup² ∝ Q²."""
         from core.camara import ConfiguracionFlujo
+
         cam_bajo = Camara(flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.02))
         cam_alto = Camara(flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.10))
         dP_bajo = estimar_delta_P_camara(cam_bajo)
@@ -357,6 +341,7 @@ class TestEstimarDeltaPCamara:
 # ---------------------------------------------------------------------------
 # caudal_masico_a_volumetrico
 # ---------------------------------------------------------------------------
+
 
 class TestCaudalMasicoAVolumetrico:
 
@@ -378,6 +363,7 @@ class TestCaudalMasicoAVolumetrico:
 # ---------------------------------------------------------------------------
 # presion_atmosferica
 # ---------------------------------------------------------------------------
+
 
 class TestPresionAtmosferica:
 
@@ -401,6 +387,7 @@ class TestPresionAtmosferica:
 # ---------------------------------------------------------------------------
 # densidad_aire
 # ---------------------------------------------------------------------------
+
 
 class TestDensidadAire:
 
@@ -433,6 +420,7 @@ class TestDensidadAire:
 # viscosidad_aire
 # ---------------------------------------------------------------------------
 
+
 class TestViscosidadAire:
 
     def test_valor_0C(self):
@@ -458,6 +446,7 @@ class TestViscosidadAire:
 # estimar_delta_P_colector — variable density
 # ---------------------------------------------------------------------------
 
+
 class TestDeltaPColectorDensidadVariable:
 
     def test_mayor_dP_en_altura(self):
@@ -466,8 +455,7 @@ class TestDeltaPColectorDensidadVariable:
         Verificamos que la función corre sin error con altitud."""
         colector = Colector()
         dP_mar = estimar_delta_P_colector(colector, T_K=323.15, P_Pa=101325.0)
-        dP_salta = estimar_delta_P_colector(colector, T_K=323.15,
-                                            P_Pa=presion_atmosferica(1187.0))
+        dP_salta = estimar_delta_P_colector(colector, T_K=323.15, P_Pa=presion_atmosferica(1187.0))
         assert dP_mar > 0 and dP_salta > 0
 
     def test_mayor_T_cambia_dP(self):
@@ -484,14 +472,14 @@ class TestDeltaPColectorDensidadVariable:
 # estimar_delta_P_camara — VERTICAL con Ergun
 # ---------------------------------------------------------------------------
 
+
 class TestDeltaPCamaraVerticalErgun:
 
     @pytest.fixture
     def camara_vertical_con_particulas(self):
         """Cámara VERTICAL_ASCENDENTE con d_p definido → aplica Ergun."""
-        from core.camara import (
-            Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
-        )
+        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
+
         return Camara(
             bandejas=ConfiguracionBandejas(
                 n_bandejas=5,
@@ -512,9 +500,8 @@ class TestDeltaPCamaraVerticalErgun:
     def camara_vertical_sin_d_p_explicito(self):
         """Cámara VERTICAL sin d_p explícito → motor_calc usa defaults del
         catálogo/conservadores (Ergun activo de todos modos)."""
-        from core.camara import (
-            Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
-        )
+        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
+
         return Camara(
             bandejas=ConfiguracionBandejas(
                 n_bandejas=5,
@@ -539,12 +526,11 @@ class TestDeltaPCamaraVerticalErgun:
         # default = 8 mm → más Ergun que 10 mm
         assert dP_default > dP_10mm
 
-    def test_vertical_sin_d_p_usa_default_ergun(
-        self, camara_vertical_sin_d_p_explicito
-    ):
+    def test_vertical_sin_d_p_usa_default_ergun(self, camara_vertical_sin_d_p_explicito):
         """Sin d_p explícito ni producto, motor_calc usa defaults (d_p=8 mm,
         ε=0.45, Φ=0.6) → Ergun activo, ΔP > solo malla."""
         from core.camara import DireccionFlujo
+
         cam = camara_vertical_sin_d_p_explicito
         f = cam.flujo
         b = cam.bandejas
@@ -561,41 +547,46 @@ class TestDeltaPCamaraVerticalErgun:
 
     def test_ergun_crece_con_caudal(self):
         """Mayor caudal → mayor v₀ → mayor ΔP Ergun."""
-        from core.camara import (
-            Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
-        )
+        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
+
         def make_cam(q):
             return Camara(
                 bandejas=ConfiguracionBandejas(
-                    n_bandejas=3, area_bandeja_m2=0.5,
-                    espesor_capa_m=0.02, separacion_entre_bandejas_m=0.15,
-                    diametro_eq_particula_m=0.008, esfericidad=0.60,
+                    n_bandejas=3,
+                    area_bandeja_m2=0.5,
+                    espesor_capa_m=0.02,
+                    separacion_entre_bandejas_m=0.15,
+                    diametro_eq_particula_m=0.008,
+                    esfericidad=0.60,
                 ),
                 flujo=ConfiguracionFlujo(
                     caudal_masico_kg_s=q,
                     direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
                 ),
             )
+
         assert estimar_delta_P_camara(make_cam(0.10)) > estimar_delta_P_camara(make_cam(0.03))
 
     def test_ergun_crece_con_espesor_capa(self):
         """Mayor L → mayor ΔP_lecho (ΔP/L × L)."""
-        from core.camara import (
-            Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
-        )
+        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
+
         def make_cam(L):
             return Camara(
                 bandejas=ConfiguracionBandejas(
-                    n_bandejas=3, area_bandeja_m2=0.5,
+                    n_bandejas=3,
+                    area_bandeja_m2=0.5,
                     espesor_capa_m=L,
                     separacion_entre_bandejas_m=max(0.10, L + 0.015),
-                    diametro_eq_particula_m=0.008, esfericidad=0.60,
+                    diametro_eq_particula_m=0.008,
+                    esfericidad=0.60,
                 ),
                 flujo=ConfiguracionFlujo(
                     caudal_masico_kg_s=0.03,
                     direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
                 ),
             )
+
         assert estimar_delta_P_camara(make_cam(0.04)) > estimar_delta_P_camara(make_cam(0.02))
 
 
@@ -603,55 +594,66 @@ class TestDeltaPCamaraVerticalErgun:
 # ConfiguracionBandejas — nuevos campos Ergun
 # ---------------------------------------------------------------------------
 
+
 class TestConfiguracionBandejasErgun:
 
     def test_porosidad_cero_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_POROSIDAD_INVALIDA"):
             ConfiguracionBandejas(porosidad_lecho=0.0)
 
     def test_porosidad_uno_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_POROSIDAD_INVALIDA"):
             ConfiguracionBandejas(porosidad_lecho=1.0)
 
     def test_porosidad_valida(self):
         from core.camara import ConfiguracionBandejas
+
         b = ConfiguracionBandejas(porosidad_lecho=0.40)
         assert b.porosidad_lecho == pytest.approx(0.40)
 
     def test_diametro_no_positivo_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_DIAMETRO_PARTICULA_NO_POSITIVO"):
             ConfiguracionBandejas(diametro_eq_particula_m=0.0)
 
     def test_diametro_negativo_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_DIAMETRO_PARTICULA_NO_POSITIVO"):
             ConfiguracionBandejas(diametro_eq_particula_m=-0.005)
 
     def test_diametro_none_valido(self):
         from core.camara import ConfiguracionBandejas
+
         b = ConfiguracionBandejas(diametro_eq_particula_m=None)
         assert b.diametro_eq_particula_m is None
 
     def test_diametro_positivo_valido(self):
         from core.camara import ConfiguracionBandejas
+
         b = ConfiguracionBandejas(diametro_eq_particula_m=0.010)
         assert b.diametro_eq_particula_m == pytest.approx(0.010)
 
     def test_esfericidad_cero_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_ESFERICIDAD_INVALIDA"):
             ConfiguracionBandejas(esfericidad=0.0)
 
     def test_esfericidad_mayor_uno_lanza(self):
         from core.camara import ConfiguracionBandejas
+
         with pytest.raises(ValueError, match="BAND_ESFERICIDAD_INVALIDA"):
             ConfiguracionBandejas(esfericidad=1.1)
 
     def test_esfericidad_uno_valido(self):
         """Esfericidad = 1.0 (esfera perfecta) es válida."""
         from core.camara import ConfiguracionBandejas
+
         b = ConfiguracionBandejas(esfericidad=1.0)
         assert b.esfericidad == pytest.approx(1.0)

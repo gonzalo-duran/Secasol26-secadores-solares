@@ -5,6 +5,7 @@ Cubre:
 - Pérdida de carga del ducto: ceros, monotonía, dependencia con D y altura.
 - Caudal de equilibrio: balance, sin tiro, sensibilidades, robustez.
 """
+
 from __future__ import annotations
 
 import math
@@ -13,12 +14,14 @@ import pytest
 
 from calculos.chimenea_calc import (
     _G_MS2,
+    _v_viento_a_altura,
     caudal_natural_kgs,
     delta_P_chimenea_Pa,
     delta_P_tiro_Pa,
+    delta_P_turbina_motriz_Pa,
 )
 from calculos.motor_calc import densidad_aire
-
+from core.chimenea import Chimenea
 
 # ---------------------------------------------------------------------------
 # Tiro térmico
@@ -91,15 +94,19 @@ class TestDeltaPChimenea:
 
     def test_perdida_nula_caudal_cero(self):
         dP = delta_P_chimenea_Pa(
-            m_punto_kgs=0.0, T_chim_K=323.15,
-            diametro_m=0.2, altura_m=3.0,
+            m_punto_kgs=0.0,
+            T_chim_K=323.15,
+            diametro_m=0.2,
+            altura_m=3.0,
         )
         assert dP == 0.0
 
     def test_perdida_positiva_con_flujo(self):
         dP = delta_P_chimenea_Pa(
-            m_punto_kgs=0.05, T_chim_K=323.15,
-            diametro_m=0.2, altura_m=3.0,
+            m_punto_kgs=0.05,
+            T_chim_K=323.15,
+            diametro_m=0.2,
+            altura_m=3.0,
         )
         assert dP > 0.0
 
@@ -146,8 +153,11 @@ class TestCaudalNatural:
     def test_sin_tiro_si_T_chim_igual_a_T_amb(self):
         """T_chim = T_amb → ṁ = 0 y advertencia CHIM_SIN_TIRO."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=293.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=293.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(1000.0),
         )
         assert res["m_punto_kgs"] == 0.0
@@ -156,8 +166,11 @@ class TestCaudalNatural:
     def test_sin_tiro_si_chim_mas_fria(self):
         """T_chim < T_amb → ṁ = 0."""
         res = caudal_natural_kgs(
-            T_amb_K=303.15, T_chim_K=293.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=303.15,
+            T_chim_K=293.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(1000.0),
         )
         assert res["m_punto_kgs"] == 0.0
@@ -165,8 +178,11 @@ class TestCaudalNatural:
     def test_caudal_positivo_caso_tipico(self):
         """Caso operativo típico: T_amb=20°C, T_chim=50°C, chimenea 3m."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         assert res["m_punto_kgs"] > 0.0
@@ -176,8 +192,11 @@ class TestCaudalNatural:
     def test_balance_energia_se_cierra(self):
         """En el equilibrio: ΔP_tiro = ΔP_chim + ΔP_resto."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         dPT = res["delta_P_tiro_Pa"]
@@ -188,8 +207,10 @@ class TestCaudalNatural:
     def test_caudal_crece_con_altura_chimenea(self):
         """Chimenea más alta → más tiro → más caudal."""
         base = dict(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         m_baja = caudal_natural_kgs(altura_chim_m=1.0, **base)["m_punto_kgs"]
@@ -201,7 +222,9 @@ class TestCaudalNatural:
         """T_chim más caliente → más tiro → más caudal."""
         base = dict(
             T_amb_K=293.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         m_dT10 = caudal_natural_kgs(T_chim_K=303.15, **base)["m_punto_kgs"]
@@ -212,25 +235,34 @@ class TestCaudalNatural:
     def test_caudal_decrece_con_resistencia_externa(self):
         """A mayor ΔP_resto, menor caudal de equilibrio."""
         base = dict(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
         )
         m_libre = caudal_natural_kgs(
-            delta_P_resto_fn=_resto_lineal(0.0), **base,
+            delta_P_resto_fn=_resto_lineal(0.0),
+            **base,
         )["m_punto_kgs"]
         m_poco = caudal_natural_kgs(
-            delta_P_resto_fn=_resto_lineal(100.0), **base,
+            delta_P_resto_fn=_resto_lineal(100.0),
+            **base,
         )["m_punto_kgs"]
         m_mucho = caudal_natural_kgs(
-            delta_P_resto_fn=_resto_lineal(10_000.0), **base,
+            delta_P_resto_fn=_resto_lineal(10_000.0),
+            **base,
         )["m_punto_kgs"]
         assert m_libre > m_poco > m_mucho
 
     def test_velocidad_consistente_con_caudal(self):
         """v_chim debe ser coherente con ṁ / (ρ · A)."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         rho = densidad_aire(323.15)
@@ -243,33 +275,256 @@ class TestCaudalNatural:
         el caudal debe caer en el orden 0.005-0.1 kg/s (típico secadores
         chicos a medianos de prediseño)."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),  # lazo de resistencia media
         )
-        assert 0.001 < res["m_punto_kgs"] < 0.2, (
-            f"Caudal fuera de rango razonable: {res['m_punto_kgs']:.4f} kg/s"
-        )
+        assert (
+            0.001 < res["m_punto_kgs"] < 0.2
+        ), f"Caudal fuera de rango razonable: {res['m_punto_kgs']:.4f} kg/s"
 
     def test_dict_completo(self):
         """El dict de salida tiene todas las claves documentadas."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         claves = {
-            "m_punto_kgs", "v_chim_ms", "delta_P_tiro_Pa",
-            "delta_P_chimenea_Pa", "delta_P_resto_Pa", "Re_chimenea",
-            "H_eff_m", "advertencias",
+            "m_punto_kgs",
+            "v_chim_ms",
+            "delta_P_tiro_Pa",
+            "delta_P_chimenea_Pa",
+            "delta_P_resto_Pa",
+            "Re_chimenea",
+            "H_eff_m",
+            "advertencias",
         }
         assert claves <= res.keys()
 
     def test_H_eff_es_suma(self):
         """H_eff devuelto debe ser altura_chim + H_camara."""
         res = caudal_natural_kgs(
-            T_amb_K=293.15, T_chim_K=323.15,
-            diametro_chim_m=0.2, altura_chim_m=3.0, H_camara_m=1.5,
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.2,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
             delta_P_resto_fn=_resto_lineal(500.0),
         )
         assert res["H_eff_m"] == pytest.approx(4.5, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Perfil logarítmico de viento
+# ---------------------------------------------------------------------------
+
+
+class TestPerfilVientoLog:
+    """v(z) = v(10) · ln(z/z0) / ln(10/z0)."""
+
+    def test_a_10m_devuelve_v_referencia(self):
+        # v(10 m) debe coincidir con la velocidad de referencia.
+        assert _v_viento_a_altura(5.0, z_m=10.0, z0_m=0.05) == pytest.approx(5.0, rel=1e-9)
+
+    def test_altura_menor_da_menos_viento(self):
+        # Para z < 10 m con terreno rugoso, v(z) < v(10).
+        v_2m = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.05)
+        assert 0.0 < v_2m < 5.0
+
+    def test_z_menor_a_z0_devuelve_cero(self):
+        # Dentro de la capa de rugosidad no hay viento útil.
+        assert _v_viento_a_altura(5.0, z_m=0.01, z0_m=0.05) == 0.0
+
+    def test_v_negativo_o_cero_devuelve_cero(self):
+        assert _v_viento_a_altura(0.0, z_m=2.0, z0_m=0.05) == 0.0
+        assert _v_viento_a_altura(-1.0, z_m=2.0, z0_m=0.05) == 0.0
+
+    def test_terreno_liso_da_mas_viento_a_altura_baja(self):
+        # Terreno liso (z0 chico) → la capa límite es más fina → más viento a baja altura.
+        v_rural = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.05)
+        v_mar = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.001)
+        assert v_mar > v_rural
+
+    def test_formula_analitica(self):
+        # Para z=2, z0=0.05: factor esperado = ln(40)/ln(200) ≈ 0.6961
+        v_calc = _v_viento_a_altura(10.0, z_m=2.0, z0_m=0.05)
+        factor_esperado = math.log(2.0 / 0.05) / math.log(10.0 / 0.05)
+        assert v_calc == pytest.approx(10.0 * factor_esperado, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Término motriz de la turbina
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaPTurbinaMotriz:
+
+    def test_v_viento_cero_da_cero(self):
+        assert delta_P_turbina_motriz_Pa(0.0, Cp_turbina=0.4, T_amb_K=293.15) == 0.0
+
+    def test_Cp_cero_da_cero(self):
+        assert delta_P_turbina_motriz_Pa(5.0, Cp_turbina=0.0, T_amb_K=293.15) == 0.0
+
+    def test_escala_cuadraticamente_con_v(self):
+        dP1 = delta_P_turbina_motriz_Pa(2.0, Cp_turbina=0.4, T_amb_K=293.15)
+        dP2 = delta_P_turbina_motriz_Pa(4.0, Cp_turbina=0.4, T_amb_K=293.15)
+        # v_2 = 2·v_1 → ΔP_2 = 4·ΔP_1
+        assert dP2 == pytest.approx(4.0 * dP1, rel=1e-9)
+
+    def test_formula_analitica(self):
+        # Cp=0.5, v=4 m/s, T=20°C → ρ ≈ 1.204 kg/m³ → ΔP = 0.5·1.204·16/2 ≈ 4.82 Pa
+        dP = delta_P_turbina_motriz_Pa(4.0, Cp_turbina=0.5, T_amb_K=293.15)
+        rho = densidad_aire(293.15)
+        assert dP == pytest.approx(0.5 * rho * 16.0 / 2.0, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Caudal natural con extractor eólico
+# ---------------------------------------------------------------------------
+
+
+class TestCaudalNaturalConExtractor:
+    """Combinaciones de tiro térmico y motriz turbina en el balance."""
+
+    def _llamar(self, **overrides):
+        defaults = dict(
+            T_amb_K=293.15,
+            T_chim_K=323.15,
+            diametro_chim_m=0.20,
+            altura_chim_m=3.0,
+            H_camara_m=1.5,
+            delta_P_resto_fn=_resto_lineal(500.0),
+        )
+        defaults.update(overrides)
+        return caudal_natural_kgs(**defaults)
+
+    def test_sin_extractor_resultados_iguales_a_baseline(self):
+        # Sin extractor: el campo motriz turbina debe ser 0.
+        res = self._llamar()
+        assert res["delta_P_turbina_motriz_Pa"] == 0.0
+        assert res["v_viento_local_ms"] == 0.0
+
+    def test_viento_alto_sin_sol_genera_caudal(self):
+        # T_chim = T_amb (sin tiro térmico) pero hay viento → la turbina sola
+        # debe inducir caudal positivo.
+        res = self._llamar(
+            T_chim_K=293.15,
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=1.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=8.0,
+        )
+        assert res["m_punto_kgs"] > 0.0
+        assert res["delta_P_turbina_motriz_Pa"] > 0.0
+        assert res["delta_P_tiro_Pa"] <= 0.0
+
+    def test_viento_y_sol_suma_caudal(self):
+        # Mismo sol, con viento debe dar más caudal que sin viento.
+        sin_viento = self._llamar(
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=1.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=0.0,
+        )
+        con_viento = self._llamar(
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=1.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=6.0,
+        )
+        assert con_viento["m_punto_kgs"] > sin_viento["m_punto_kgs"]
+
+    def test_turbina_parada_resta_caudal(self):
+        # Sin viento (v=0) pero con Kt > 0: la turbina parada agrega resistencia
+        # → caudal menor que chimenea desnuda.
+        chim_sola = self._llamar()
+        con_turbina_parada = self._llamar(
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=2.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=0.0,
+        )
+        assert con_turbina_parada["m_punto_kgs"] < chim_sola["m_punto_kgs"]
+
+    def test_sin_tiro_ni_viento_devuelve_cero(self):
+        res = self._llamar(
+            T_chim_K=293.15,  # = T_amb
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=1.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=0.0,
+        )
+        assert res["m_punto_kgs"] == 0.0
+
+    def test_aviso_sin_tiro_si_ambos_nulos(self):
+        res = self._llamar(
+            T_chim_K=293.15,
+            extractor_activo=True,
+            Cp_turbina=0.5,
+            Kt_turbina=1.0,
+            diametro_extractor_m=0.30,
+            v_viento_10m_ms=0.0,
+        )
+        assert any("CHIM_SIN_TIRO" in a for a in res["advertencias"])
+
+
+# ---------------------------------------------------------------------------
+# Validaciones de la dataclass Chimenea con extractor
+# ---------------------------------------------------------------------------
+
+
+class TestValidacionesChimeneaExtractor:
+
+    def test_extractor_sin_diametro_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_EXTRACTOR_SIN_DIAMETRO"):
+            Chimenea(extractor_activo=True)  # falta diametro_extractor_m
+
+    def test_extractor_diametro_cero_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_EXTRACTOR_SIN_DIAMETRO"):
+            Chimenea(extractor_activo=True, diametro_extractor_m=0.0)
+
+    def test_Cp_negativo_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_CP_TURBINA_INVALIDO"):
+            Chimenea(
+                extractor_activo=True,
+                diametro_extractor_m=0.30,
+                Cp_turbina=-0.1,
+            )
+
+    def test_Cp_excesivo_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_CP_TURBINA_INVALIDO"):
+            Chimenea(
+                extractor_activo=True,
+                diametro_extractor_m=0.30,
+                Cp_turbina=2.5,
+            )
+
+    def test_Kt_negativo_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_KT_TURBINA_INVALIDO"):
+            Chimenea(
+                extractor_activo=True,
+                diametro_extractor_m=0.30,
+                Kt_turbina=-0.5,
+            )
+
+    def test_z0_no_positivo_lanza_error(self):
+        with pytest.raises(ValueError, match="CHIM_Z0_INVALIDO"):
+            Chimenea(z0_terreno_m=0.0)
+
+    def test_chimenea_sin_extractor_no_requiere_diametro_ext(self):
+        # extractor_activo=False (default) NO debe pedir diámetro de extractor.
+        ch = Chimenea()
+        assert ch.extractor_activo is False
+        assert ch.diametro_extractor_m is None
