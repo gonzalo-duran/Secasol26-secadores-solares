@@ -1,0 +1,182 @@
+<svg width="100%" viewBox="0 0 730 580" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+<title>Circuito de aire — Secador tipo ARMARIO completo</title>
+<defs>
+<marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+
+<!-- TITULO -->
+<text x="360" y="28" text-anchor="middle" fill="#333">Circuito de aire — Secador tipo ARMARIO (configuración completa)</text>
+
+<!-- ============================== -->
+<!-- 1. AIRE AMBIENTE               -->
+<!-- ============================== -->
+<circle cx="42" cy="210" r="26" fill="#f5f5f5" stroke="#555" stroke-width="1"/>
+<text x="42" y="206" text-anchor="middle" fill="#333">Aire</text>
+<text x="42" y="218" text-anchor="middle" fill="#333">amb.</text>
+<text x="42" y="250" text-anchor="middle" fill="#777">T_amb</text>
+<text x="42" y="263" text-anchor="middle" fill="#777">W_amb</text>
+
+<!-- Flecha 1→2 -->
+<line x1="70" y1="210" x2="100" y2="210" stroke="#E24B4A" stroke-width="2" marker-end="url(#arr)"/>
+
+<!-- ============================== -->
+<!-- 2. COLECTOR SOLAR              -->
+<!-- ============================== -->
+<rect x="105" y="170" width="110" height="80" rx="5" fill="#f5f5f5" stroke="#555" stroke-width="1.2"/>
+
+<!-- Sol -->
+<line x1="135" y1="105" x2="140" y2="158" stroke="#EF9F27" stroke-width="1" marker-end="url(#arr)"/>
+<line x1="160" y1="100" x2="160" y2="158" stroke="#EF9F27" stroke-width="1" marker-end="url(#arr)"/>
+<line x1="185" y1="105" x2="180" y2="158" stroke="#EF9F27" stroke-width="1" marker-end="url(#arr)"/>
+<text x="160" y="92" text-anchor="middle" fill="#EF9F27">☀</text>
+
+<!-- Cubierta -->
+<rect x="105" y="166" width="110" height="8" rx="3" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+<!-- Absorbedor -->
+<rect x="115" y="220" width="90" height="4" rx="0" fill="#2C2C2A" opacity="0.8"/>
+<!-- Aislante -->
+<rect x="105" y="240" width="110" height="10" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.5"/>
+
+<text x="160" y="195" text-anchor="middle" fill="#333">Colector</text>
+<text x="160" y="210" text-anchor="middle" fill="#333">solar</text>
+<text x="160" y="283" text-anchor="middle" fill="#777">Calentam.</text>
+<text x="160" y="296" text-anchor="middle" fill="#777">sensible</text>
+
+<!-- Flecha 2→3 -->
+<line x1="217" y1="210" x2="247" y2="210" stroke="#E24B4A" stroke-width="2" marker-end="url(#arr)"/>
+<text x="232" y="200" text-anchor="middle" fill="#D85A30">T₁</text>
+<text x="232" y="185" text-anchor="middle" fill="#D85A30">W_amb</text>
+
+<!-- ============================== -->
+<!-- 3. CALENTADOR AUXILIAR         -->
+<!-- ============================== -->
+<rect x="252" y="175" width="80" height="70" rx="5" fill="#f5f5f5" stroke="#555" stroke-width="1" stroke-dasharray="5 3"/>
+<text x="292" y="202" text-anchor="middle" fill="#333">Calent.</text>
+<text x="292" y="217" text-anchor="middle" fill="#333">auxiliar</text>
+<text x="292" y="238" text-anchor="middle" fill="#EF9F27">⚡ / 🔥</text>
+<text x="292" y="283" text-anchor="middle" fill="#777">Resistencia</text>
+<text x="292" y="296" text-anchor="middle" fill="#777">o biomasa</text>
+<text x="292" y="309" text-anchor="middle" fill="#777">(opcional)</text>
+
+<!-- Flecha 3→4 -->
+<line x1="334" y1="210" x2="364" y2="210" stroke="#E24B4A" stroke-width="2" marker-end="url(#arr)"/>
+<text x="349" y="200" text-anchor="middle" fill="#D85A30">T₂</text>
+<text x="349" y="185" text-anchor="middle" fill="#D85A30">W_amb</text>
+
+<!-- ============================== -->
+<!-- 4. MOTOR / VENTILADOR          -->
+<!-- ============================== -->
+<circle cx="388" cy="210" r="22" fill="#f5f5f5" stroke="#555" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="375" y1="200" x2="401" y2="220" stroke="#555" stroke-width="1.5" opacity="0.4"/>
+<line x1="401" y1="200" x2="375" y2="220" stroke="#555" stroke-width="1.5" opacity="0.4"/>
+<line x1="388" y1="190" x2="388" y2="230" stroke="#555" stroke-width="1.5" opacity="0.4"/>
+
+<text x="388" y="248" text-anchor="middle" fill="#333">Motor /</text>
+<text x="388" y="261" text-anchor="middle" fill="#333">ventilador</text>
+<text x="388" y="283" text-anchor="middle" fill="#777">Convección</text>
+<text x="388" y="296" text-anchor="middle" fill="#777">forzada</text>
+<text x="388" y="309" text-anchor="middle" fill="#777">(opcional)</text>
+
+<!-- Flecha 4→5 (entrada a cámara, de izq a der a la misma altura) -->
+<line x1="412" y1="210" x2="449" y2="210" stroke="#E24B4A" stroke-width="2" marker-end="url(#arr)"/>
+
+<!-- ============================== -->
+<!-- 5. CAMARA DE SECADO            -->
+<!-- ============================== -->
+<rect x="454" y="150" width="120" height="120" rx="6" fill="#f5f5f5" stroke="#555" stroke-width="1.5"/>
+
+<!-- Bandejas -->
+<rect x="472" y="178" width="84" height="4" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.3" opacity="0.6"/>
+<rect x="472" y="200" width="84" height="4" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.3" opacity="0.5"/>
+<rect x="472" y="222" width="84" height="4" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.3" opacity="0.4"/>
+<rect x="472" y="244" width="84" height="4" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.3" opacity="0.35"/>
+
+<!-- Producto -->
+<circle cx="490" cy="176" r="1.8" fill="#639922" opacity="0.7"/>
+<circle cx="510" cy="175" r="1.5" fill="#639922" opacity="0.7"/>
+<circle cx="530" cy="176" r="1.8" fill="#639922" opacity="0.7"/>
+
+<!-- Etiqueta cámara (orden correcto) -->
+<text x="514" y="164" text-anchor="middle" fill="#333">Cámara de</text>
+<text x="514" y="176" text-anchor="middle" fill="#333">secado</text>
+
+<!-- Enfriamiento evaporativo -->
+<text x="514" y="283" text-anchor="middle" fill="#777">Enfriamiento</text>
+<text x="514" y="296" text-anchor="middle" fill="#777">evaporativo</text>
+
+<!-- Flecha salida cámara → chimenea (arriba a la derecha) -->
+<line x1="576" y1="175" x2="610" y2="175" stroke="#E24B4A" stroke-width="2" marker-end="url(#arr)"/>
+<text x="593" y="165" text-anchor="middle" fill="#D85A30">T₃</text>
+<text x="593" y="152" text-anchor="middle" fill="#D85A30">W₃</text>
+
+<!-- ============================== -->
+<!-- 6. CHIMENEA / EXTRACTOR        -->
+<!-- ============================== -->
+<!-- Etiqueta ARRIBA de la chimenea para que no se tape -->
+<text x="635" y="52" text-anchor="middle" fill="#333">Chimenea /</text>
+<text x="635" y="66" text-anchor="middle" fill="#333">Extractor</text>
+<text x="635" y="80" text-anchor="middle" fill="#777">(opcional)</text>
+
+<!-- Cuerpo chimenea -->
+<rect x="615" y="90" width="40" height="180" rx="4" fill="#f5f5f5" stroke="#555" stroke-width="1" stroke-dasharray="5 3"/>
+
+<!-- Extractor eólico (sombrero) -->
+<ellipse cx="635" cy="88" rx="18" ry="5" fill="#f5f5f5" stroke="#555" stroke-width="0.5" stroke-dasharray="3 2"/>
+
+<!-- Flechas ascendentes -->
+<line x1="635" y1="260" x2="635" y2="225" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arr)"/>
+<line x1="635" y1="210" x2="635" y2="175" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arr)"/>
+<line x1="635" y1="160" x2="635" y2="125" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arr)"/>
+<line x1="635" y1="110" x2="635" y2="95" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arr)"/>
+
+<!-- Salida al ambiente (flecha final arriba) -->
+<text x="654.96" y="88" text-anchor="start" fill="#777">→ Ambiente</text>
+
+<!-- ============================================================ -->
+<!-- TABLA DE ESTADOS TERMODINAMICOS                              -->
+<!-- ============================================================ -->
+<line x1="30" y1="340" x2="690" y2="340" stroke="#ddd" stroke-width="0.5"/>
+
+<text x="360" y="365" text-anchor="middle" fill="#333">Estados termodinámicos del aire a lo largo del circuito</text>
+
+<!-- Headers -->
+<text x="80" y="390" text-anchor="middle" fill="#777">Punto</text>
+<text x="220" y="390" text-anchor="middle" fill="#777">Ubicación</text>
+<text x="410" y="390" text-anchor="middle" fill="#777">Temperatura</text>
+<text x="570" y="390" text-anchor="middle" fill="#777">Humedad abs.</text>
+
+<line x1="40" y1="396" x2="680" y2="396" stroke="#ddd" stroke-width="0.3"/>
+
+<!-- Fila 0 -->
+<text x="80" y="412" text-anchor="middle" fill="#333">Entrada</text>
+<text x="220" y="412" text-anchor="middle" fill="#333">Ambiente → Colector</text>
+<text x="410" y="412" text-anchor="middle" fill="#333">T_amb</text>
+<text x="570" y="412" text-anchor="middle" fill="#333">W_amb</text>
+
+<!-- Fila 1 -->
+<text x="80" y="430" text-anchor="middle" fill="#333">T₁</text>
+<text x="220" y="430" text-anchor="middle" fill="#333">Salida colector</text>
+<text x="410" y="430" text-anchor="middle" fill="#D85A30">T₁ &gt; T_amb</text>
+<text x="570" y="430" text-anchor="middle" fill="#333">W_amb (= W₁)</text>
+
+<!-- Fila 2 -->
+<text x="80" y="448" text-anchor="middle" fill="#333">T₂</text>
+<text x="220" y="448" text-anchor="middle" fill="#333">Salida calent. auxiliar</text>
+<text x="410" y="448" text-anchor="middle" fill="#D85A30">T₂ &gt; T₁</text>
+<text x="570" y="448" text-anchor="middle" fill="#333">W_amb (= W₂)</text>
+
+<!-- Fila 3 -->
+<text x="80" y="466" text-anchor="middle" fill="#333">T₃</text>
+<text x="220" y="466" text-anchor="middle" fill="#333">Salida cámara</text>
+<text x="410" y="466" text-anchor="middle" fill="#185FA5">T₃ &lt; T₂</text>
+<text x="570" y="466" text-anchor="middle" fill="#185FA5">W₃ &gt; W_amb</text>
+
+<!-- Notas -->
+<line x1="40" y1="478" x2="680" y2="478" stroke="#ddd" stroke-width="0.3"/>
+<text x="360" y="498" text-anchor="middle" fill="#777">Colector y calentador: solo calentamiento sensible (W = cte). Cámara: enfriamiento evaporativo (T↓, W↑)</text>
+<text x="360" y="515" text-anchor="middle" fill="#777">Componentes con borde punteado (— —) son opcionales según configuración del proyecto</text>
+<text x="360" y="532" text-anchor="middle" fill="#777">Convección natural (chimenea) o forzada (motor) — no ambas simultáneamente</text>
+
+</svg>

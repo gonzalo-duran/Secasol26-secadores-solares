@@ -25,6 +25,7 @@ from core.proyecto import (
     ModoAnalisis,
     Tipologia,
 )
+from ui.componentes.esquemas import mostrar_esquema
 
 # ---------------------------------------------------------------------------
 # Descripciones de tipología
@@ -136,6 +137,20 @@ def render() -> None:
 
     # Descripción de la tipología seleccionada
     st.info(_DESC_TIPOLOGIA[tipo_sel])
+
+    # Esquema del circuito de aire según tipología (CAJA / ARMARIO)
+    if tipo_sel == Tipologia.CAJA:
+        with st.expander("📐 Circuito de aire", expanded=False):
+            mostrar_esquema(
+                "circuito_caja",
+                caption="Circuito de aire del secador tipo Caja.",
+            )
+    elif tipo_sel == Tipologia.ARMARIO:
+        with st.expander("📐 Circuito de aire", expanded=False):
+            mostrar_esquema(
+                "circuito_armario",
+                caption="Circuito de aire del secador tipo Armario.",
+            )
 
     # Efecto cascada: si la tipología cambia a CAJA, anular colector y motor
     if tipo_sel != cfg.tipologia:

@@ -1,0 +1,226 @@
+<svg width="100%" viewBox="0 0 680 920" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+<title>Sección transversal de los 4 tipos de colector solar de aire</title>
+<desc>Cortes transversales comparativos de los colectores Tipo 1 (canal único), Tipo 2 (ambos canales activos), Tipo 3 (canal inferior activo) y Tipo 4 (canal superior activo).</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<marker id="dim" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+<path d="M1 2L5 5L1 8" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<mask id="imagine-text-gaps-34nmay" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="680" height="920" fill="white"/><rect x="188.9882354736328" y="14.666664123535156" width="302.13983154296875" height="21.5" fill="black" rx="2"/><rect x="475.9999694824219" y="44.333335876464844" width="104.32813262939453" height="19.000000953674316" fill="black" rx="2"/><rect x="241.87237548828125" y="66.33332824707031" width="106.25521087646484" height="19.000000953674316" fill="black" rx="2"/><rect x="34" y="72.33333587646484" width="81.85417938232422" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="111.33332824707031" width="121.17708587646484" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="128.3333282470703" width="127.16667175292969" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="146.3333282470703" width="87.62239837646484" height="19.000000953674316" fill="black" rx="2"/><rect x="260.9869689941406" y="174.66665649414062" width="68.02604293823242" height="21.5" fill="black" rx="2"/><rect x="230.2642822265625" y="224.66665649414062" width="219.70751953125" height="21.5" fill="black" rx="2"/><rect x="475.9999694824219" y="252.3333282470703" width="107.20573425292969" height="19.000000953674316" fill="black" rx="2"/><rect x="235.41404724121094" y="266.33331298828125" width="119.17188262939453" height="19.000000953674316" fill="black" rx="2"/><rect x="34" y="273.3333435058594" width="81.85417938232422" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="304.33331298828125" width="41.0859375" height="19.000000953674316" fill="black" rx="2"/><rect x="236.98306274414062" y="316.33331298828125" width="116.03385925292969" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="326.33331298828125" width="65.40885543823242" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="339.3333435058594" width="71.52864837646484" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="354.3333435058594" width="77.12760925292969" height="19.000000953674316" fill="black" rx="2"/><rect x="180.4270477294922" y="414.6666259765625" width="319.26318359375" height="21.5" fill="black" rx="2"/><rect x="222.8358917236328" y="464.3333435058594" width="144.328125" height="19.000000953674316" fill="black" rx="2"/><rect x="156" y="469.3333435058594" width="18.05208396911621" height="19.000000953674316" fill="black" rx="2"/><rect x="425.9999694824219" y="469.3333435058594" width="18.05208396911621" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="494.3333435058594" width="41.0859375" height="19.000000953674316" fill="black" rx="2"/><rect x="236.98306274414062" y="506.33331298828125" width="116.03385925292969" height="19.000000953674316" fill="black" rx="2"/><rect x="34" y="466.33331298828125" width="81.85417938232422" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="516.3333129882812" width="65.40885543823242" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="529.3333129882812" width="71.52864837646484" height="19.000000953674316" fill="black" rx="2"/><rect x="180.0364227294922" y="604.6666259765625" width="320.04632568359375" height="21.5" fill="black" rx="2"/><rect x="235.41404724121094" y="646.3333129882812" width="119.17188262939453" height="19.000000953674316" fill="black" rx="2"/><rect x="475.9999694824219" y="684.3333740234375" width="41.0859375" height="19.000000953674316" fill="black" rx="2"/><rect x="222.8358917236328" y="704.3333740234375" width="144.328125" height="19.000000953674316" fill="black" rx="2"/><rect x="156" y="709.3333740234375" width="18.05208396911621" height="19.000000953674316" fill="black" rx="2"/><rect x="425.9999694824219" y="709.3333740234375" width="18.05208396911621" height="19.000000953674316" fill="black" rx="2"/><rect x="34" y="656.3333129882812" width="81.85417938232422" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="706.3333129882812" width="65.40885543823242" height="19.000000953674316" fill="black" rx="2"/><rect x="16" y="719.3333740234375" width="71.52864837646484" height="19.000000953674316" fill="black" rx="2"/><rect x="57.999996185302734" y="825.3333129882812" width="58.13187789916992" height="19.000000953674316" fill="black" rx="2"/><rect x="178" y="825.3333129882812" width="76.03624725341797" height="19.000000953674316" fill="black" rx="2"/><rect x="297.9999694824219" y="825.3333129882812" width="54.380210876464844" height="19.000000953674316" fill="black" rx="2"/><rect x="398" y="825.3333129882812" width="43.286460876464844" height="19.000000953674316" fill="black" rx="2"/><rect x="478" y="825.3333129882812" width="77.50521087646484" height="19.000000953674316" fill="black" rx="2"/><rect x="578" y="825.3333129882812" width="53.69010543823242" height="19.000000953674316" fill="black" rx="2"/><rect x="103.70829010009766" y="856.333251953125" width="472.5833435058594" height="19.000000953674316" fill="black" rx="2"/><rect x="19.632762908935547" y="872.3333129882812" width="640.734375" height="19.000000953674316" fill="black" rx="2"/></mask></defs>
+
+<!-- ============================================================ -->
+<!-- TIPO 1 — Canal único, absorbedor en el fondo                  -->
+<!-- ============================================================ -->
+<text x="340" y="30" text-anchor="middle">Tipo 1 — Canal único, absorbedor en el fondo</text>
+
+<!-- Cubierta -->
+<rect x="120" y="50" width="350" height="8" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+<text x="480" y="58">Cubierta (T_cub)</text>
+
+<!-- Canal de flujo -->
+<rect x="120" y="58" width="350" height="60" rx="0" fill="#E6F1FB" stroke="none" opacity="0.25"/>
+<!-- Flechas de flujo -->
+<line x1="145" y1="88" x2="200" y2="88" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="240" y1="88" x2="295" y2="88" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="335" y1="88" x2="390" y2="88" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<text x="295" y="80" text-anchor="middle" fill="#E24B4A">Flujo de aire (T_f)</text>
+
+<!-- Cota espaciado_m -->
+<line x1="105" y1="58" x2="105" y2="118" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="100" y1="58" x2="112" y2="58" stroke="#534AB7" stroke-width="0.5"/>
+<line x1="100" y1="118" x2="112" y2="118" stroke="#534AB7" stroke-width="0.5"/>
+<text x="38" y="86" fill="#534AB7">espaciado_m</text>
+
+<!-- Absorbedor (fondo del canal) -->
+<rect x="120" y="118" width="350" height="5" rx="0" fill="#2C2C2A" stroke="#444441" stroke-width="0.5" opacity="0.9"/>
+<text x="480" y="125">Absorbedor (T_abs)</text>
+
+<!-- Aislante -->
+<rect x="120" y="123" width="350" height="30" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+<text x="480" y="142">Aislante (id_aislante)</text>
+
+<!-- Fondo / carcasa -->
+<rect x="120" y="153" width="350" height="5" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+<text x="480" y="160">Fondo (T_bot)</text>
+
+<!-- Cota ancho_m -->
+<line x1="120" y1="175" x2="470" y2="175" stroke="#185FA5" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-34nmay)"/>
+<text x="295" y="190" text-anchor="middle" fill="#185FA5">ancho_m</text>
+
+<!-- Sol -->
+<line x1="260" y1="23" x2="270" y2="42" stroke="#EF9F27" stroke-width="1" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="295" y1="20" x2="295" y2="42" stroke="#EF9F27" stroke-width="1" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="330" y1="23" x2="320" y2="42" stroke="#EF9F27" stroke-width="1" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-34nmay)"/>
+
+
+<!-- ============================================================ -->
+<!-- TIPO 2 — Absorbedor a media altura, ambos canales activos     -->
+<!-- ============================================================ -->
+<text x="340" y="240" text-anchor="middle">Tipo 2 — Ambos canales activos</text>
+
+<!-- Cubierta -->
+<rect x="120" y="258" width="350" height="8" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+<text x="480" y="266">T_cub_e / T_cub_i</text>
+
+<!-- Canal superior -->
+<rect x="120" y="266" width="350" height="45" rx="0" fill="#E6F1FB" stroke="none" opacity="0.25"/>
+<line x1="145" y1="288" x2="200" y2="288" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="240" y1="288" x2="295" y2="288" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="335" y1="288" x2="390" y2="288" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<text x="295" y="280" text-anchor="middle" fill="#E24B4A">T_f_cs (flujo activo)</text>
+
+<!-- Cota espaciado_m (canal superior) -->
+<line x1="105" y1="266" x2="105" y2="311" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="100" y1="266" x2="112" y2="266" stroke="#534AB7" stroke-width="0.5"/>
+<line x1="100" y1="311" x2="112" y2="311" stroke="#534AB7" stroke-width="0.5"/>
+<text x="38" y="287" fill="#534AB7">espaciado_m</text>
+
+<!-- Absorbedor -->
+<rect x="120" y="311" width="350" height="5" rx="0" fill="#2C2C2A" stroke="#444441" stroke-width="0.5" opacity="0.9"/>
+<text x="480" y="318">T_abs</text>
+
+<!-- Canal inferior -->
+<rect x="120" y="316" width="350" height="45" rx="0" fill="#E6F1FB" stroke="none" opacity="0.25"/>
+<line x1="145" y1="338" x2="200" y2="338" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="240" y1="338" x2="295" y2="338" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="335" y1="338" x2="390" y2="338" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<text x="295" y="330" text-anchor="middle" fill="#E24B4A">T_f_ci (flujo activo)</text>
+
+<!-- Cota espaciado_inferior_m -->
+<line x1="105" y1="316" x2="105" y2="361" stroke="#854F0B" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="100" y1="316" x2="112" y2="316" stroke="#854F0B" stroke-width="0.5"/>
+<line x1="100" y1="361" x2="112" y2="361" stroke="#854F0B" stroke-width="0.5"/>
+<text x="20" y="340" fill="#854F0B">espaciado</text>
+<text x="20" y="353" fill="#854F0B">_inferior_m</text>
+
+<!-- Fondo interior -->
+<rect x="120" y="361" width="350" height="5" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+<text x="480" y="368">T_int / T_bot</text>
+
+<!-- Aislante -->
+<rect x="120" y="366" width="350" height="20" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+
+<!-- Carcasa -->
+<rect x="120" y="386" width="350" height="4" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+
+
+<!-- ============================================================ -->
+<!-- TIPO 3 — Canal inferior activo, superior estanco              -->
+<!-- ============================================================ -->
+<text x="340" y="430" text-anchor="middle">Tipo 3 — Canal inferior activo, superior estanco</text>
+
+<!-- Cubierta -->
+<rect x="120" y="448" width="350" height="8" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+
+<!-- Canal superior ESTANCO -->
+<rect x="120" y="456" width="350" height="45" rx="0" fill="#F1EFE8" stroke="none" opacity="0.3"/>
+<text x="295" y="478" text-anchor="middle" fill="#888780">Canal estanco (sin flujo)</text>
+<!-- X marks para indicar estanco -->
+<text x="160" y="483" fill="#888780" opacity="0.5">✕</text>
+<text x="430" y="483" fill="#888780" opacity="0.5">✕</text>
+
+<!-- Absorbedor -->
+<rect x="120" y="501" width="350" height="5" rx="0" fill="#2C2C2A" stroke="#444441" stroke-width="0.5" opacity="0.9"/>
+<text x="480" y="508">T_abs</text>
+
+<!-- Canal inferior ACTIVO -->
+<rect x="120" y="506" width="350" height="45" rx="0" fill="#E6F1FB" stroke="none" opacity="0.25"/>
+<line x1="145" y1="528" x2="200" y2="528" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="240" y1="528" x2="295" y2="528" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="335" y1="528" x2="390" y2="528" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<text x="295" y="520" text-anchor="middle" fill="#E24B4A">T_f_ci (flujo activo)</text>
+
+<!-- Fondo -->
+<rect x="120" y="551" width="350" height="5" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+<!-- Aislante -->
+<rect x="120" y="556" width="350" height="20" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+<!-- Carcasa -->
+<rect x="120" y="576" width="350" height="4" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+
+<!-- Cotas -->
+<line x1="105" y1="456" x2="105" y2="501" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="100" y1="456" x2="112" y2="456" stroke="#534AB7" stroke-width="0.5"/>
+<line x1="100" y1="501" x2="112" y2="501" stroke="#534AB7" stroke-width="0.5"/>
+<text x="38" y="480" fill="#534AB7">espaciado_m</text>
+
+<line x1="105" y1="506" x2="105" y2="551" stroke="#854F0B" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="100" y1="506" x2="112" y2="506" stroke="#854F0B" stroke-width="0.5"/>
+<line x1="100" y1="551" x2="112" y2="551" stroke="#854F0B" stroke-width="0.5"/>
+<text x="20" y="530" fill="#854F0B">espaciado</text>
+<text x="20" y="543" fill="#854F0B">_inferior_m</text>
+
+
+<!-- ============================================================ -->
+<!-- TIPO 4 — Canal superior activo, inferior estanco              -->
+<!-- ============================================================ -->
+<text x="340" y="620" text-anchor="middle">Tipo 4 — Canal superior activo, inferior estanco</text>
+
+<!-- Cubierta -->
+<rect x="120" y="638" width="350" height="8" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+
+<!-- Canal superior ACTIVO -->
+<rect x="120" y="646" width="350" height="45" rx="0" fill="#E6F1FB" stroke="none" opacity="0.25"/>
+<line x1="145" y1="668" x2="200" y2="668" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="240" y1="668" x2="295" y2="668" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<line x1="335" y1="668" x2="390" y2="668" stroke="#E24B4A" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.7"/>
+<text x="295" y="660" text-anchor="middle" fill="#E24B4A">T_f_cs (flujo activo)</text>
+
+<!-- Absorbedor -->
+<rect x="120" y="691" width="350" height="5" rx="0" fill="#2C2C2A" stroke="#444441" stroke-width="0.5" opacity="0.9"/>
+<text x="480" y="698">T_abs</text>
+
+<!-- Canal inferior ESTANCO -->
+<rect x="120" y="696" width="350" height="45" rx="0" fill="#F1EFE8" stroke="none" opacity="0.3"/>
+<text x="295" y="718" text-anchor="middle" fill="#888780">Canal estanco (sin flujo)</text>
+<text x="160" y="723" fill="#888780" opacity="0.5">✕</text>
+<text x="430" y="723" fill="#888780" opacity="0.5">✕</text>
+
+<!-- Fondo -->
+<rect x="120" y="741" width="350" height="5" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+<!-- Aislante -->
+<rect x="120" y="746" width="350" height="20" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+<!-- Carcasa -->
+<rect x="120" y="766" width="350" height="4" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.6"/>
+
+<!-- Cotas -->
+<line x1="105" y1="646" x2="105" y2="691" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-34nmay)"/>
+<line x1="100" y1="646" x2="112" y2="646" stroke="#534AB7" stroke-width="0.5"/>
+<line x1="100" y1="691" x2="112" y2="691" stroke="#534AB7" stroke-width="0.5"/>
+<text x="38" y="670" fill="#534AB7">espaciado_m</text>
+
+<line x1="105" y1="696" x2="105" y2="741" stroke="#854F0B" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="100" y1="696" x2="112" y2="696" stroke="#854F0B" stroke-width="0.5"/>
+<line x1="100" y1="741" x2="112" y2="741" stroke="#854F0B" stroke-width="0.5"/>
+<text x="20" y="720" fill="#854F0B">espaciado</text>
+<text x="20" y="733" fill="#854F0B">_inferior_m</text>
+
+
+<!-- ============================================================ -->
+<!-- LEYENDA GLOBAL                                                -->
+<!-- ============================================================ -->
+<line x1="40" y1="810" x2="640" y2="810" stroke="#ddd" stroke-width="0.5"/>
+
+<rect x="40" y="830" width="16" height="7" rx="2" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.4"/>
+<text x="62" y="839">Cubierta</text>
+
+<rect x="160" y="830" width="16" height="4" rx="0" fill="#2C2C2A" stroke="#444441" stroke-width="0.5"/>
+<text x="182" y="839">Absorbedor</text>
+
+<rect x="280" y="830" width="16" height="7" rx="0" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+<text x="302" y="839">Aislante</text>
+
+<rect x="380" y="830" width="16" height="5" rx="0" fill="#B4B2A9" stroke="#555" stroke-width="0.5"/>
+<text x="402" y="839">Fondo</text>
+
+<rect x="460" y="830" width="16" height="7" rx="0" fill="#E6F1FB" stroke="none" opacity="0.4"/>
+<text x="482" y="839">Canal activo</text>
+
+<rect x="560" y="830" width="16" height="7" rx="0" fill="#F1EFE8" stroke="none" opacity="0.4"/>
+<text x="582" y="839">Estanco</text>
+
+<text x="340" y="870" text-anchor="middle" fill="#777">Todos los cortes son perpendiculares a la dirección del flujo (a lo largo de ancho_m)</text>
+<text x="340" y="886" text-anchor="middle" fill="#777">En Tipos 2, 3 y 4 el absorbedor divide el cuerpo en canal superior (espaciado_m) e inferior (espaciado_inferior_m)</text>
+
+</svg>

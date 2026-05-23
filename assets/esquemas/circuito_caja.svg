@@ -1,0 +1,97 @@
+<svg width="100%" viewBox="0 0 700 400" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+<title>Circuito de aire — Secador tipo CAJA</title>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<mask id="imagine-text-gaps-z9xoyo" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="700" height="400" fill="white"/><rect x="152.2174072265625" y="12.666666030883789" width="395.56512451171875" height="21.5" fill="black" rx="2"/><rect x="54.183589935302734" y="181.3333282470703" width="31.632814407348633" height="19.000000953674316" fill="black" rx="2"/><rect x="39.3984260559082" y="195.3333282470703" width="61.203128814697266" height="19.000000953674316" fill="black" rx="2"/><rect x="47.315093994140625" y="231.33331298828125" width="45.426185607910156" height="19.000000953674316" fill="black" rx="2"/><rect x="44.7109260559082" y="245.3333282470703" width="50.64273452758789" height="19.000000953674316" fill="black" rx="2"/><rect x="218.12237548828125" y="86.33332824707031" width="123.86016845703125" height="19.000000953674316" fill="black" rx="2"/><rect x="226.82029724121094" y="30.333332061767578" width="106.51964569091797" height="19.000000953674316" fill="black" rx="2"/><rect x="217.08721923828125" y="118.33333587646484" width="125.82552337646484" height="19.000000953674316" fill="black" rx="2"/><rect x="205.22525024414062" y="131.3333282470703" width="149.5494842529297" height="19.000000953674316" fill="black" rx="2"/><rect x="214.86065673828125" y="229.66665649414062" width="130.39019012451172" height="21.5" fill="black" rx="2"/><rect x="168" y="244.3333282470703" width="65.12837600708008" height="19.000000953674316" fill="black" rx="2"/><rect x="397.1770935058594" y="118.33333587646484" width="41.7567138671875" height="19.000000953674316" fill="black" rx="2"/><rect x="409.3788757324219" y="146.3333282470703" width="41.2421875" height="19.000000953674316" fill="black" rx="2"/><rect x="422.2760009765625" y="33.33333206176758" width="95.61927795410156" height="19.000000953674316" fill="black" rx="2"/><rect x="516" y="156.3333282470703" width="65.47396087646484" height="19.000000953674316" fill="black" rx="2"/><rect x="426.01300048828125" y="22.333332061767578" width="87.97396087646484" height="19.000000953674316" fill="black" rx="2"/><rect x="76.82677459716797" y="311.33331298828125" width="546.3463745117188" height="19.000000953674316" fill="black" rx="2"/><rect x="106.26688385009766" y="328.33331298828125" width="487.4661560058594" height="19.000000953674316" fill="black" rx="2"/><rect x="160.8762664794922" y="345.3333435058594" width="378.2474060058594" height="19.000000953674316" fill="black" rx="2"/></mask></defs>
+
+<!-- TITULO -->
+<text x="350" y="28" text-anchor="middle" fill="#333">Circuito de aire — Secador tipo CAJA (convección natural)</text>
+
+<!-- ============================== -->
+<!-- AIRE AMBIENTE                  -->
+<!-- ============================== -->
+<circle cx="70" cy="200" r="30" fill="#f5f5f5" stroke="#555" stroke-width="1"/>
+<text x="70" y="195" text-anchor="middle" fill="#333">Aire</text>
+<text x="70" y="209" text-anchor="middle" fill="#333">ambiente</text>
+<text x="70" y="245" text-anchor="middle" fill="#777">T_amb</text>
+<text x="70" y="259" text-anchor="middle" fill="#777">W_amb</text>
+
+<!-- Flecha ambiente → cámara -->
+<line x1="102" y1="200" x2="165" y2="200" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)"/>
+
+<!-- ============================== -->
+<!-- CAMARA CON CUBIERTA            -->
+<!-- ============================== -->
+<rect x="170" y="110" width="220" height="160" rx="6" fill="#f5f5f5" stroke="#555" stroke-width="1.2"/>
+
+<!-- Cubierta translúcida (techo) -->
+<rect x="170" y="105" width="220" height="12" rx="4" fill="#85B7EB" stroke="#185FA5" stroke-width="0.8" opacity="0.45"/>
+<text x="280" y="100" text-anchor="middle" fill="#185FA5">Cubierta translúcida</text>
+
+<!-- Sol -->
+<line x1="245" y1="55" x2="255" y2="95" stroke="#EF9F27" stroke-width="1.2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-z9xoyo)"/>
+<line x1="280" y1="50" x2="280" y2="95" stroke="#EF9F27" stroke-width="1.2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-z9xoyo)"/>
+<line x1="315" y1="55" x2="305" y2="95" stroke="#EF9F27" stroke-width="1.2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-z9xoyo)"/>
+<text x="280" y="44" text-anchor="middle" fill="#EF9F27">☀ Radiación solar</text>
+
+<!-- Proceso (arriba, con espacio) -->
+<text x="280" y="132" text-anchor="middle" fill="#777">Efecto invernadero +</text>
+<text x="280" y="145" text-anchor="middle" fill="#777">enfriamiento evaporativo</text>
+
+<!-- Bandejas dentro de la cámara -->
+<rect x="195" y="165" width="170" height="5" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.4" opacity="0.6"/>
+<rect x="195" y="190" width="170" height="5" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.4" opacity="0.5"/>
+<rect x="195" y="215" width="170" height="5" rx="1" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.4" opacity="0.4"/>
+
+<!-- Producto -->
+<circle cx="220" cy="162" r="2" fill="#639922" opacity="0.7"/>
+<circle cx="250" cy="161" r="1.8" fill="#639922" opacity="0.7"/>
+<circle cx="280" cy="163" r="2" fill="#639922" opacity="0.7"/>
+<circle cx="310" cy="161" r="1.8" fill="#639922" opacity="0.7"/>
+<circle cx="340" cy="162" r="2" fill="#639922" opacity="0.7"/>
+
+<!-- Etiqueta cámara (tercio inferior) -->
+<text x="280" y="245" text-anchor="middle" fill="#333">Cámara de secado</text>
+
+<!-- Entrada abajo izq -->
+<text x="172" y="258" fill="#777" transform="rotate(-90,172,245)">Entrada ↑</text>
+
+<!-- Salida arriba der (flecha de izq a der) -->
+<line x1="392" y1="140" x2="445" y2="140" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="418" y="132" text-anchor="middle" fill="#777">Salida</text>
+
+<!-- Estado a la salida -->
+<text x="430" y="160" text-anchor="middle" fill="#D85A30">T₂, W₂</text>
+
+<!-- ============================== -->
+<!-- CHIMENEA SOLAR (opcional)      -->
+<!-- ============================== -->
+<rect x="450" y="70" width="40" height="200" rx="4" fill="#f5f5f5" stroke="#555" stroke-width="1" stroke-dasharray="5 3"/>
+<rect x="450" y="70" width="40" height="200" rx="4" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.12"/>
+
+<!-- Flechas ascendentes -->
+<line x1="470" y1="258" x2="470" y2="220" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arrow)"/>
+<line x1="470" y1="205" x2="470" y2="165" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arrow)"/>
+<line x1="470" y1="150" x2="470" y2="110" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arrow)"/>
+<line x1="470" y1="95" x2="470" y2="55" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.5" marker-end="url(#arrow)"/>
+
+<!-- Etiqueta -->
+<text x="470" y="47" text-anchor="middle" fill="#333">Chimenea solar</text>
+<text x="520" y="170" fill="#777">(opcional)</text>
+
+<!-- Salida al ambiente -->
+<line x1="470" y1="68" x2="470" y2="42" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-z9xoyo)"/>
+<text x="470" y="36" text-anchor="middle" fill="#777">↑ Al ambiente</text>
+
+<!-- ============================== -->
+<!-- NOTAS INFERIORES               -->
+<!-- ============================== -->
+<line x1="40" y1="300" x2="660" y2="300" stroke="#ddd" stroke-width="0.5"/>
+
+<text x="350" y="325" text-anchor="middle" fill="#777">Sin colector externo — la cubierta translúcida de la cámara capta la radiación solar directamente</text>
+<text x="350" y="342" text-anchor="middle" fill="#777">Convección natural: el aire asciende por diferencia de temperatura (efecto chimenea)</text>
+<text x="350" y="359" text-anchor="middle" fill="#777">Tipología CAJA: proyecto.colector = None, proyecto.motor = None</text>
+
+</svg>

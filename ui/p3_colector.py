@@ -38,6 +38,7 @@ from core.colector import (
 from core.chimenea import Chimenea
 from core.advertencias import Severidad
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
+from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.unidades import acimut_duffie_a_pvlib, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -1032,6 +1033,17 @@ def render() -> None:
             key="p3_tipo_colector",
         )
         st.info(_TIPOS_HELP[tipo_colector])
+
+        if tipo_colector == 1:
+            mostrar_esquema(
+                "colector_tipo1",
+                caption="Colector Tipo 1: canal único con absorbedor en el fondo.",
+            )
+        mostrar_esquema(
+            "colectores_seccion_transversal",
+            max_ancho_px=600,
+            caption="Sección transversal comparativa de los 4 tipos de colector.",
+        )
 
     # -----------------------------------------------------------------------
     # Sección 1: Colector unitario — materiales

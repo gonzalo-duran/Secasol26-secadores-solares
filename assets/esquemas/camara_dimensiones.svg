@@ -1,0 +1,129 @@
+<svg width="100%" viewBox="0 0 690 540" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+<title>Esquema isométrico de la cámara de secado con cotas de bandejas</title>
+<desc>Vista isométrica de la cámara mostrando largo, ancho, alto, dirección del flujo (entrada abajo, salida arriba en cara opuesta), bandejas con area_bandeja_m2 y separacion_entre_bandejas_m.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<marker id="dim" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+<path d="M1 2L5 5L1 8" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<mask id="imagine-text-gaps-rufztk" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="690" height="540" fill="white"/><rect x="206.00001525878906" y="422.66668701171875" width="60.26560974121094" height="21.5" fill="black" rx="2"/><rect x="424.0000305175781" y="422.66668701171875" width="68.078125" height="21.5" fill="black" rx="2"/><rect x="570" y="242.6666717529297" width="52.765625" height="21.5" fill="black" rx="2"/><rect x="291.3060302734375" y="196.33334350585938" width="107.38801574707031" height="18.99998664855957" fill="black" rx="2"/><rect x="56" y="266.33331298828125" width="106.515625" height="19" fill="black" rx="2"/><rect x="56" y="281.33331298828125" width="81.69791412353516" height="19" fill="black" rx="2"/><rect x="38" y="356.3333435058594" width="52.699058532714844" height="19" fill="black" rx="2"/><rect x="38" y="371.3333435058594" width="48.24739456176758" height="19" fill="black" rx="2"/><rect x="555.0700073242188" y="54.333335876464844" width="41.7567138671875" height="19" fill="black" rx="2"/><rect x="555.0700073242188" y="69.33333587646484" width="128.96353912353516" height="19" fill="black" rx="2"/><rect x="52.000003814697266" y="486.33331298828125" width="137.8177032470703" height="19" fill="black" rx="2"/><rect x="36" y="511.33331298828125" width="368.3953857421875" height="19" fill="black" rx="2"/></mask></defs>
+
+<!-- ===================== -->
+<!-- CAJA ISOMETRICA       -->
+<!-- ===================== -->
+<!-- Back left face -->
+<path d="M180,120 L380,55 L380,310 L180,375 Z" fill="#f5f5f5" stroke="#555" stroke-width="0.5" opacity="0.35"/>
+<!-- Top face -->
+<path d="M180,120 L380,55 L540,125 L340,190 Z" fill="#f5f5f5" stroke="#555" stroke-width="0.5" opacity="0.55"/>
+<!-- Right face -->
+<path d="M380,55 L540,125 L540,380 L380,310 Z" fill="#f5f5f5" stroke="#555" stroke-width="0.5" opacity="0.25"/>
+<!-- Front face -->
+<path d="M180,120 L340,190 L340,445 L180,375 Z" fill="#f5f5f5" stroke="#555" stroke-width="0.5" opacity="0.45"/>
+<!-- Bottom edges -->
+<path d="M180,375 L340,445 L540,380 L380,310" fill="none" stroke="#555" stroke-width="0.5"/>
+
+<!-- Strong edges -->
+<path d="M180,120 L340,190 L540,125" fill="none" stroke="#555" stroke-width="1.2"/>
+<path d="M340,190 L340,445" fill="none" stroke="#555" stroke-width="1.2" mask="url(#imagine-text-gaps-rufztk)"/>
+<path d="M180,120 L180,375" fill="none" stroke="#555" stroke-width="1.2"/>
+<path d="M540,125 L540,380" fill="none" stroke="#555" stroke-width="0.8"/>
+
+<!-- ===================== -->
+<!-- BANDEJAS (3)           -->
+<!-- ===================== -->
+<!-- Bandeja 1 (inferior) -->
+<path d="M200,340 L320,395 L490,340 L370,285 Z" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.5" opacity="0.45"/>
+<!-- Bandeja 2 (media) -->
+<path d="M200,280 L320,335 L490,280 L370,225 Z" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.5" opacity="0.5"/>
+<!-- Bandeja 3 (superior) -->
+<path d="M200,220 L320,275 L490,220 L370,165 Z" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.5" opacity="0.55"/>
+
+<!-- Producto (puntos verdes) -->
+<circle cx="270" cy="245" r="2.5" fill="#639922" opacity="0.7"/>
+<circle cx="310" cy="238" r="2" fill="#639922" opacity="0.7"/>
+<circle cx="350" cy="245" r="2.5" fill="#639922" opacity="0.7"/>
+<circle cx="400" cy="228" r="2" fill="#639922" opacity="0.7"/>
+<circle cx="440" cy="218" r="2.5" fill="#639922" opacity="0.7"/>
+
+<circle cx="280" cy="298" r="2.5" fill="#639922" opacity="0.6"/>
+<circle cx="330" cy="305" r="2" fill="#639922" opacity="0.6"/>
+<circle cx="390" cy="288" r="2.5" fill="#639922" opacity="0.6"/>
+<circle cx="440" cy="278" r="2" fill="#639922" opacity="0.6"/>
+
+<circle cx="290" cy="358" r="2.5" fill="#639922" opacity="0.5"/>
+<circle cx="350" cy="365" r="2" fill="#639922" opacity="0.5"/>
+<circle cx="420" cy="345" r="2.5" fill="#639922" opacity="0.5"/>
+
+<!-- ===================== -->
+<!-- COTAS PRINCIPALES     -->
+<!-- ===================== -->
+<!-- largo_m -->
+<line x1="165" y1="385" x2="325" y2="455" stroke="#D85A30" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-rufztk)"/>
+<text x="210" y="438" fill="#D85A30" transform="rotate(20,210,438)">largo_m</text>
+
+<!-- ancho_m -->
+<line x1="355" y1="455" x2="545" y2="388" stroke="#185FA5" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-rufztk)"/>
+<text x="428" y="438" fill="#185FA5" transform="rotate(-20,428,438)">ancho_m</text>
+
+<!-- alto_m -->
+<line x1="558" y1="130" x2="558" y2="378" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<text x="574" y="258" fill="#534AB7">alto_m</text>
+
+<!-- ===================== -->
+<!-- AREA DE BANDEJA       -->
+<!-- ===================== -->
+<!-- Highlight area de la bandeja superior -->
+<path d="M200,220 L320,275 L490,220 L370,165 Z" fill="#1D9E75" stroke="#0F6E56" stroke-width="1" opacity="0.2" stroke-dasharray="4 2"/>
+<text x="345" y="210" fill="#0F6E56" text-anchor="middle">area_bandeja_m2</text>
+
+<!-- ===================== -->
+<!-- SEPARACION BANDEJAS   -->
+<!-- ===================== -->
+<!-- Cota separacion entre bandeja 3 y bandeja 2 (lado frontal izq) -->
+<line x1="188" y1="222" x2="188" y2="278" stroke="#854F0B" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="183" y1="222" x2="196" y2="222" stroke="#854F0B" stroke-width="0.5"/>
+<line x1="183" y1="278" x2="196" y2="278" stroke="#854F0B" stroke-width="0.5"/>
+
+<!-- Cota separacion entre bandeja 2 y bandeja 1 -->
+<line x1="188" y1="282" x2="188" y2="338" stroke="#854F0B" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="183" y1="282" x2="196" y2="282" stroke="#854F0B" stroke-width="0.5"/>
+<line x1="183" y1="338" x2="196" y2="338" stroke="#854F0B" stroke-width="0.5"/>
+
+<!-- Label separacion -->
+<text x="60" y="280" fill="#854F0B" text-anchor="start">separacion_entre</text>
+<text x="60" y="295" fill="#854F0B" text-anchor="start">_bandejas_m</text>
+<line x1="155" y1="285" x2="186" y2="260" stroke="#854F0B" stroke-width="0.5" stroke-dasharray="3 2" mask="url(#imagine-text-gaps-rufztk)"/>
+
+<!-- ===================== -->
+<!-- FLUJO DE AIRE          -->
+<!-- ===================== -->
+<!-- ENTRADA: abajo en cara frontal -->
+<!-- Abertura de entrada (rectángulo en cara frontal, parte baja) -->
+<rect x="210" y="395" width="35" height="20" rx="2" fill="#E24B4A" opacity="0.15" transform="skewY(30) translate(-50,200)"/>
+<line x1="80" y1="380" x2="175" y2="375" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-rufztk)"/>
+<text x="42" y="370" fill="#E24B4A">Entrada</text>
+<text x="42" y="385" fill="#E24B4A">(abajo)</text>
+
+<!-- Flujo interno: sube a través de bandejas -->
+<path d="M210,370 C220,340 225,310 230,280 C235,250 240,230 250,200 C255,180 260,160 270,145" fill="none" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.5" marker-end="url(#arrow)"/>
+<path d="M250,360 C258,335 262,310 268,280 C272,255 278,235 285,210 C290,190 295,170 305,155" fill="none" stroke="#E24B4A" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.35" marker-end="url(#arrow)"/>
+
+<!-- SALIDA: arriba en cara opuesta (trasera/derecha superior) -->
+<line x1="480" y1="100" x2="560" y2="75" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-rufztk)"/>
+<text x="559.07" y="68" fill="#E24B4A">Salida</text>
+<text x="559.07" y="83" fill="#E24B4A">(arriba, cara opuesta)</text>
+
+<!-- Pequeña abertura en cara trasera/derecha, parte superior -->
+<path d="M460,80 L480,100" fill="none" stroke="#E24B4A" stroke-width="1.5" stroke-dasharray="3 2" opacity="0.5"/>
+
+<!-- ===================== -->
+<!-- LEYENDA               -->
+<!-- ===================== -->
+<rect x="40" y="490" width="10" height="10" rx="2" fill="#5DCAA5" stroke="#0F6E56" stroke-width="0.5" opacity="0.6"/>
+<text x="56" y="500">Bandejas con producto</text>
+
+<text x="40" y="525" fill="#777">Entrada abajo, salida arriba: fuerza al aire a barrer toda la cámara</text>
+
+</svg>

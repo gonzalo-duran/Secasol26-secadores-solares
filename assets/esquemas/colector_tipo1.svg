@@ -1,0 +1,139 @@
+<svg width="100%" viewBox="0 0 690 480" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+<title>Colector solar tipo 1 — vista isométrica</title>
+<desc>Vista isométrica del colector solar de aire tipo 1, con canal único entre cubierta y absorbedor. Muestra largo_m, ancho_m, espaciado_m, y sentido de circulación del flujo.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<marker id="dim" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+<path d="M1 2L5 5L1 8" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+<mask id="imagine-text-gaps-64u08i" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="690" height="480" fill="white"/><rect x="184" y="280.6666564941406" width="60.213531494140625" height="21.5" fill="black" rx="2"/><rect x="425.9999694824219" y="284.6666564941406" width="68.02604293823242" height="21.5" fill="black" rx="2"/><rect x="36" y="172.3333282470703" width="81.85417175292969" height="19.000000953674316" fill="black" rx="2"/><rect x="36" y="186.3333282470703" width="71.60677337646484" height="19.000000953674316" fill="black" rx="2"/><rect x="36" y="208.33334350585938" width="52.69906234741211" height="19.000000953674316" fill="black" rx="2"/><rect x="601" y="169.3333282470703" width="41.75676727294922" height="19.000000953674316" fill="black" rx="2"/><rect x="293.4674377441406" y="6.333332061767578" width="93.22652435302734" height="19.000000953674316" fill="black" rx="2"/><rect x="560.280029296875" y="73.33332824707031" width="123.86019134521484" height="19.000000953674316" fill="black" rx="2"/><rect x="560.280029296875" y="87.33332824707031" width="81.65885925292969" height="19.000000953674316" fill="black" rx="2"/><rect x="560.280029296875" y="113.33333587646484" width="112.44962310791016" height="19.000000953674316" fill="black" rx="2"/><rect x="560.280029296875" y="127.33334350585938" width="64.18489837646484" height="19.000000953674316" fill="black" rx="2"/><rect x="36" y="261.33331298828125" width="100.18750762939453" height="19.000000953674316" fill="black" rx="2"/><rect x="188.9882354736328" y="354.6666564941406" width="302.13983154296875" height="21.5" fill="black" rx="2"/><rect x="55.999996185302734" y="394.3333435058594" width="58.13187026977539" height="19.000000953674316" fill="black" rx="2"/><rect x="55.999996185302734" y="410.33331298828125" width="76.0362548828125" height="18.999975204467773" fill="black" rx="2"/><rect x="55.999996185302734" y="430.3333435058594" width="54.380210876464844" height="19.000000953674316" fill="black" rx="2"/><rect x="215.99998474121094" y="394.3333435058594" width="96.55469512939453" height="19.000000953674316" fill="black" rx="2"/></mask></defs>
+
+<!-- ============================== -->
+<!-- COLECTOR TIPO 1 — ISOMETRICO  -->
+<!-- ============================== -->
+
+<!-- Cuerpo / carcasa (fondo + aislante) -->
+<!-- Cara frontal -->
+<path d="M140,200 L340,280 L340,310 L140,230 Z" fill="#B4B2A9" stroke="#555" stroke-width="0.8" opacity="0.5"/>
+<!-- Cara lateral derecha -->
+<path d="M340,280 L540,210 L540,240 L340,310 Z" fill="#B4B2A9" stroke="#555" stroke-width="0.8" opacity="0.4"/>
+<!-- Cara inferior (fondo) -->
+<path d="M140,230 L340,310 L540,240 L340,160 Z" fill="#888780" stroke="#555" stroke-width="0.5" opacity="0.4"/>
+
+<!-- Aislante (visible en sección frontal como franja) -->
+<path d="M140,218 L340,298 L340,310 L140,230 Z" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.3" opacity="0.6"/>
+
+<!-- Placa absorbedora (sobre el aislante, en el fondo del canal) -->
+<path d="M145,215 L338,293 L535,225 L342,147 Z" fill="#2C2C2A" stroke="#444441" stroke-width="0.8" opacity="0.85"/>
+
+<!-- Canal de aire (espacio entre absorbedor y cubierta) — transparente -->
+<!-- Cara frontal del canal (se ve el aire) -->
+<path d="M140,160 L340,240 L340,280 L140,200 Z" fill="#85B7EB" stroke="none" opacity="0.08"/>
+<!-- Cara lateral del canal -->
+<path d="M340,240 L540,170 L540,210 L340,280 Z" fill="#85B7EB" stroke="none" opacity="0.06"/>
+
+<!-- Cubierta translúcida (arriba) -->
+<!-- Top face -->
+<path d="M135,155 L340,235 L545,165 L340,85 Z" fill="#85B7EB" stroke="#185FA5" stroke-width="0.8" opacity="0.2"/>
+<!-- Cara frontal cubierta (delgada) -->
+<path d="M135,155 L340,235 L340,240 L135,160 Z" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.25"/>
+<!-- Cara lateral cubierta -->
+<path d="M340,235 L545,165 L545,170 L340,240 Z" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.2"/>
+
+<!-- Bordes del cuerpo (laterales) -->
+<path d="M135,160 L135,230" fill="none" stroke="#555" stroke-width="1"/>
+<path d="M340,240 L340,310" fill="none" stroke="#555" stroke-width="1"/>
+<path d="M545,170 L545,240" fill="none" stroke="#555" stroke-width="0.8"/>
+
+<!-- Bordes superiores del cuerpo -->
+<path d="M135,160 L340,240 L545,170" fill="none" stroke="#555" stroke-width="0.8"/>
+<!-- Bordes inferiores -->
+<path d="M135,230 L340,310 L545,240" fill="none" stroke="#555" stroke-width="0.8"/>
+
+<!-- ============================== -->
+<!-- COTAS DE DIMENSIONES           -->
+<!-- ============================== -->
+
+<!-- largo_m (dirección del flujo, borde inferior izquierdo) -->
+<line x1="120" y1="240" x2="325" y2="320" stroke="#D85A30" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-64u08i)"/>
+<text x="188" y="296" fill="#D85A30" transform="rotate(21,188,296)">largo_m</text>
+
+<!-- ancho_m (transversal, borde inferior derecho) -->
+<line x1="355" y1="320" x2="550" y2="248" stroke="#185FA5" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)" mask="url(#imagine-text-gaps-64u08i)"/>
+<text x="430" y="300" fill="#185FA5" transform="rotate(-20,430,300)">ancho_m</text>
+
+<!-- espaciado_m (alto del canal, borde frontal izquierdo) -->
+<line x1="118" y1="163" x2="118" y2="217" stroke="#534AB7" stroke-width="1" marker-start="url(#dim)" marker-end="url(#dim)"/>
+<line x1="113" y1="163" x2="125" y2="163" stroke="#534AB7" stroke-width="0.5"/>
+<line x1="113" y1="217" x2="125" y2="217" stroke="#534AB7" stroke-width="0.5"/>
+<text x="40" y="186" fill="#534AB7">espaciado_m</text>
+<text x="40" y="200" fill="#534AB7">(alto canal)</text>
+
+<!-- ============================== -->
+<!-- FLUJO DE AIRE                  -->
+<!-- ============================== -->
+
+<!-- Entrada de aire -->
+<line x1="60" y1="195" x2="130" y2="192" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-64u08i)"/>
+<text x="40" y="222" fill="#E24B4A">Entrada</text>
+
+<!-- Flechas internas de flujo (a lo largo del canal) -->
+<path d="M165,185 C220,205 280,225 320,235" fill="none" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.5" marker-end="url(#arrow)"/>
+<path d="M340,235 C400,215 460,195 510,180" fill="none" stroke="#E24B4A" stroke-width="1.2" stroke-dasharray="5 3" opacity="0.5" marker-end="url(#arrow)"/>
+
+<!-- Salida de aire -->
+<line x1="540" y1="190" x2="600" y2="178" stroke="#E24B4A" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="605" y="183" fill="#E24B4A">Salida</text>
+
+<!-- ============================== -->
+<!-- RADIACION SOLAR                -->
+<!-- ============================== -->
+<line x1="300" y1="30" x2="320" y2="72" stroke="#EF9F27" stroke-width="1.5" marker-end="url(#arrow)"/>
+<line x1="340" y1="25" x2="350" y2="67" stroke="#EF9F27" stroke-width="1.5" marker-end="url(#arrow)" mask="url(#imagine-text-gaps-64u08i)"/>
+<line x1="380" y1="30" x2="380" y2="72" stroke="#EF9F27" stroke-width="1.5" marker-end="url(#arrow)"/>
+<text x="340" y="20" text-anchor="middle" fill="#EF9F27">Radiación solar</text>
+
+<!-- ============================== -->
+<!-- ETIQUETAS DE COMPONENTES       -->
+<!-- ============================== -->
+
+<!-- Cubierta -->
+<line x1="450" y1="99" x2="570" y2="90" mask="url(#imagine-text-gaps-64u08i)"/>
+<circle cx="450" cy="99" r="2" fill="#777"/>
+<text x="564.28" y="87" fill="#777">Cubierta translúcida</text>
+<text x="564.28" y="101" fill="#777">(id_cubierta)</text>
+
+<!-- Absorbedor -->
+<line x1="440" y1="185" x2="570" y2="130" mask="url(#imagine-text-gaps-64u08i)"/>
+<circle cx="440" cy="185" r="2" fill="#777"/>
+<text x="564.28" y="127" fill="#777">Placa absorbedora</text>
+<text x="564.28" y="141" fill="#777">(id_placa)</text>
+
+<!-- Aislante -->
+<line x1="140" y1="230" x2="50" y2="260"/>
+<circle cx="140" cy="230" r="2" fill="#777"/>
+<text x="40" y="275" fill="#777">Aislante + fondo</text>
+
+<!-- ============================== -->
+<!-- TITULO DEL TIPO                -->
+<!-- ============================== -->
+<text x="340" y="370" text-anchor="middle" fill="#333">Tipo 1 — Canal único, absorbedor en el fondo</text>
+
+<!-- ============================== -->
+<!-- LEYENDA                        -->
+<!-- ============================== -->
+<rect x="40" y="400" width="14" height="6" rx="1" fill="#85B7EB" stroke="#185FA5" stroke-width="0.5" opacity="0.5"/>
+<text x="60" y="408">Cubierta</text>
+
+<rect x="40" y="418" width="14" height="4" rx="1" fill="#2C2C2A" stroke="#444441" stroke-width="0.5" opacity="0.85"/>
+<text x="60" y="424">Absorbedor</text>
+
+<rect x="40" y="436" width="14" height="6" rx="1" fill="#FAEEDA" stroke="#854F0B" stroke-width="0.5" opacity="0.6"/>
+<text x="60" y="444">Aislante</text>
+
+<rect x="200" y="400" width="14" height="6" rx="1" fill="#B4B2A9" stroke="#555" stroke-width="0.5" opacity="0.5"/>
+<text x="220" y="408">Carcasa / fondo</text>
+
+</svg>

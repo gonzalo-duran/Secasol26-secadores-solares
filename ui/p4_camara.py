@@ -48,6 +48,7 @@ from core.camara import (
     advertencias_camara,
 )
 from core.proyecto import ModoAnalisis
+from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.graficas import grafica_termodinamica_camara
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
@@ -1276,6 +1277,11 @@ def render() -> None:
     # Sección B: Geometría y construcción
     # -----------------------------------------------------------------------
     with st.expander("Geometría de la cámara", expanded=True):
+        with st.expander("📐 Esquema de la cámara", expanded=False):
+            mostrar_esquema(
+                "camara_dimensiones",
+                caption="Esquema de la cámara de secado con sus dimensiones principales.",
+            )
         c1, c2, c3 = st.columns(3)
         geo_prev = proyecto.camara.geometria if proyecto.camara is not None else GeometriaCamara()
         largo = c1.number_input(
