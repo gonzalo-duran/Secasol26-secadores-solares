@@ -64,7 +64,8 @@ _ETIQUETAS_TIPOLOGIA = {
 _ETIQUETAS_DIA = {
     DiaAnalisis.SOLSTICIO_VERANO: "Solsticio de verano (21 dic) — día más largo",
     DiaAnalisis.SOLSTICIO_INVIERNO: "Solsticio de invierno (21 jun) — día más corto",
-    DiaAnalisis.EQUINOCCIO: "Equinoccio (21 mar / 21 sep)",
+    DiaAnalisis.EQUINOCCIO_MARZO: "Equinoccio de otoño — 21 mar (hem. sur)",
+    DiaAnalisis.EQUINOCCIO_SEPTIEMBRE: "Equinoccio de primavera — 21 sep (hem. sur)",
     DiaAnalisis.MAS_CALUROSO: "Día más caluroso del año (T_amb máxima)",
     DiaAnalisis.MAS_FRIO: "Día más frío del año (T_amb mínima)",
     DiaAnalisis.ESPECIFICO: "Día específico definido por el usuario",

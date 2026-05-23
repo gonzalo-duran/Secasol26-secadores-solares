@@ -159,6 +159,66 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Presión atmosférica representativa del emplazamiento
+# ---------------------------------------------------------------------------
+
+_P_REF_NIVEL_MAR_PA: float = 101325.0
+
+
+def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
+    """Presión atmosférica constante a usar en cámara, colector y psicrométricas.
+
+    Política híbrida (ver bitácora S32):
+        1. Si ``proyecto.clima`` tiene la columna ``presion_Pa`` con datos
+           válidos, se usa su **media anual** como valor único para toda la
+           simulación. Captura el sesgo local sin meter variabilidad horaria.
+        2. Si no hay clima cargado pero ``proyecto.emplazamiento.altitud_m``
+           está definido, se calcula con la atmósfera estándar ISA
+           troposférica (``motor_calc.presion_atmosferica``).
+        3. Fallback: 101 325 Pa (nivel del mar).
+
+    En altitud > 0 (p.ej. Salta ≈ 1187 m, P_ISA ≈ 88 kPa), la diferencia con
+    101 325 Pa impacta significativamente la humedad absoluta de saturación
+    (ω_sat ∝ P_sat/(P − P_sat)).
+
+    Args:
+        proyecto: Proyecto raíz.
+
+    Returns:
+        ``(P_Pa, origen)`` — origen es un string corto descriptivo apto para
+        loguear en la UI o las advertencias del balance.
+    """
+    from calculos.motor_calc import presion_atmosferica
+
+    clima = getattr(proyecto, "clima", None)
+    if clima is not None:
+        datos = getattr(clima, "datos", None)
+        if datos is not None and "presion_Pa" in datos.columns:
+            try:
+                P_arr = np.asarray(datos["presion_Pa"], dtype=float)
+                P_arr = P_arr[np.isfinite(P_arr)]
+                if P_arr.size > 0:
+                    P = float(np.mean(P_arr))
+                    if P > 0:
+                        return P, f"media anual NASA POWER = {P / 1000.0:.2f} kPa"
+            except Exception:
+                # Si por algún motivo la columna existe pero no es numérica,
+                # caemos al siguiente nivel sin abortar el cálculo.
+                pass
+
+    empl = getattr(proyecto, "emplazamiento", None)
+    if empl is not None and getattr(empl, "altitud_m", None) is not None:
+        try:
+            P = float(presion_atmosferica(float(empl.altitud_m)))
+            if P > 0:
+                return P, f"ISA(altitud={empl.altitud_m:.0f} m) = {P / 1000.0:.2f} kPa"
+        except Exception:
+            pass
+
+    return _P_REF_NIVEL_MAR_PA, "nivel del mar (fallback)"
+
+
+# ---------------------------------------------------------------------------
 # Verificación de caudal consistente entre motor y cámara
 # ---------------------------------------------------------------------------
 
@@ -201,6 +261,7 @@ def _resolver_aux_cam_const(
     caudal_kg_s: float,
     HR_camara: float,
     T_amb_K: float,
+    P_Pa: float = _P_REF_NIVEL_MAR_PA,
 ) -> tuple:
     """Corre auxiliar + cámara en modo constantes con un caudal dado.
 
@@ -241,6 +302,7 @@ def _resolver_aux_cam_const(
                 T_operacion_K=T_sal_aux_K,
                 HR_operacion=HR_camara,
                 T_amb_K=T_amb_K,
+                P_Pa=P_Pa,
             )
             T_sal_cam_K = _T_salida_camara(solver_cam, T_sal_aux_K)
             advertencias.extend(solver_cam.advertencias)
@@ -257,6 +319,7 @@ def _correr_colector(
     I_g_W_m2: float,
     v_viento_ms: float,
     T_entrada_K: float,
+    P_amb_Pa: float = _P_REF_NIVEL_MAR_PA,
 ) -> tuple[Any, float]:
     """Corre el solver de colector que corresponda al tipo del proyecto.
 
@@ -286,7 +349,7 @@ def _correr_colector(
         T_amb_K=T_amb_K,
         I_g_W_m2=I_g_W_m2,
         v_viento_ms=v_viento_ms,
-        P_amb_Pa=101325.0,
+        P_amb_Pa=P_amb_Pa,
         T_entrada_K=T_entrada_K,
     )
     if tipo == 1:
@@ -505,6 +568,7 @@ def _correr_colector_horizonte(
                     I_g_W_m2=float(I_g_POA_W_m2_serie[i]),
                     v_viento_ms=float(v_viento_ms_serie[i]),
                     T_entrada_K=T_amb_i,
+                    P_amb_Pa=P_amb_Pa,
                 )
                 T_sal_col_arr[i] = T_sal_K
             except Exception:
@@ -959,6 +1023,11 @@ def calcular_todo(
     if adv_caudal:
         res.advertencias.append(adv_caudal)
 
+    # --- Presión atmosférica representativa del emplazamiento ---
+    # Se computa UNA vez y se propaga a colector, cámara y auxiliar.
+    P_proyecto_Pa, _P_origen = presion_representativa_proyecto(proyecto)
+    res.advertencias.append(f"ADV_PRESION_PROYECTO: {_P_origen}.")
+
     # --- Solver colector (pase inicial; puede re-correrse abajo si
     # el lazo natural por chimenea cambia el caudal y, por tanto, la
     # velocidad efectiva del aire en el colector).
@@ -971,6 +1040,7 @@ def calcular_todo(
                 I_g_W_m2=I_g_W_m2,
                 v_viento_ms=v_viento_ms,
                 T_entrada_K=T_entrada_K,
+                P_amb_Pa=P_proyecto_Pa,
             )
             res.colector = solver_col
             res.advertencias.extend(solver_col.advertencias)
@@ -1005,6 +1075,7 @@ def calcular_todo(
                     caudal_kg_s=caudal_design_kg_s,
                     HR_camara=HR_camara,
                     T_amb_K=T_amb_K,
+                    P_Pa=P_proyecto_Pa,
                 )
             )
             res.auxiliar = solver_aux
@@ -1053,6 +1124,7 @@ def calcular_todo(
                         T_amb_K,
                         T_chim_K_iter,
                         proyecto.camara.flujo.caudal_masico_kg_s,
+                        P_amb_Pa=P_proyecto_Pa,
                         v_viento_ms=v_viento_ms,
                     )
                 except Exception as exc:
@@ -1089,6 +1161,7 @@ def calcular_todo(
                             I_g_W_m2=I_g_W_m2,
                             v_viento_ms=v_viento_ms,
                             T_entrada_K=T_entrada_K,
+                            P_amb_Pa=P_proyecto_Pa,
                         )
                         res.colector = solver_col_iter
                     except Exception as exc:
@@ -1114,6 +1187,7 @@ def calcular_todo(
                     caudal_kg_s=m_nat_final,
                     HR_camara=HR_camara,
                     T_amb_K=T_amb_K,
+                    P_Pa=P_proyecto_Pa,
                 )
             )
             if errs:
@@ -1317,6 +1391,10 @@ def calcular_todo_transitorio(
         )
         return res
 
+    # --- Presión atmosférica representativa del emplazamiento ---
+    P_proyecto_Pa, _P_origen = presion_representativa_proyecto(proyecto)
+    res.advertencias.append(f"ADV_PRESION_PROYECTO: {_P_origen}.")
+
     caudal_kg_s = proyecto.camara.flujo.caudal_masico_kg_s
     chimenea_activa = proyecto.motor is None and proyecto.chimenea is not None
 
@@ -1380,6 +1458,7 @@ def calcular_todo_transitorio(
             T_operacion_K=T_ent_media_K,
             HR_operacion=HR_op,
             T_amb_K=T_amb_media_K,
+            P_Pa=P_proyecto_Pa,
             t_max_s=t_max_s_local,
             forzantes_aire=forzantes,
         )
@@ -1433,6 +1512,7 @@ def calcular_todo_transitorio(
                 forzantes_base.T_amb_K,
                 T_chim_serie,
                 m_ref_kgs,
+                P_amb_Pa=P_proyecto_Pa,
                 v_viento_ms_serie=forzantes_base.v_viento_ms,
             )
             m_nat_serie = np.maximum(chim_dict["m_punto_kgs"], M_DOT_PISO_KGS)
@@ -1466,6 +1546,7 @@ def calcular_todo_transitorio(
                     I_g_POA_W_m2_serie=I_para_colector,
                     m_nat_kgs_serie=m_nat_serie,
                     T_chim_K_serie=T_chim_serie,
+                    P_amb_Pa=P_proyecto_Pa,
                 )
 
             # 3) Auxiliar (con ṁ medio del horizonte) + forzantes con ṁ(t).

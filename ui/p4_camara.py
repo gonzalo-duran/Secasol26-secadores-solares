@@ -204,6 +204,18 @@ def _construir_forzantes_termodinamico(
             n_dias=n_dias,
         )
     if tipo_forzantes == "real":
+        from core.proyecto import Tipologia
+
+        tipologia = getattr(
+            getattr(proyecto, "configuracion", None), "tipologia", None
+        )
+        if tipologia == Tipologia.CAJA:
+            return _construir_forzantes_reales_caja(
+                proyecto=proyecto,
+                caudal_kg_s=caudal_kg_s,
+                n_dias=n_dias,
+                P_Pa=P_Pa,
+            )
         return _construir_forzantes_reales(
             p3_eval=p3_eval,
             proyecto=proyecto,
@@ -322,12 +334,127 @@ def _construir_forzantes_reales(
     )
 
 
+def _construir_forzantes_reales_caja(
+    *,
+    proyecto,
+    caudal_kg_s: float,
+    n_dias: int,
+    P_Pa: float = 101325.0,
+) -> ForzantesAire:
+    """Construye ForzantesAire para tipología CAJA desde un día real del clima.
+
+    En CAJA la cámara actúa como colector: no hay colector externo y el aire
+    entrante es directamente ambiente, por lo que T_salida_colector(t) = T_amb(t).
+    El resto de la serie horaria (T_amb, HR→ω, viento, GHI, POA) sale del
+    clima NASA POWER de P2 seleccionando 24 h según ``cfg.dia_analisis``.
+
+    Raises:
+        RuntimeError: Si el clima no está cargado o no hay datos para el día
+            resuelto.
+    """
+    from datetime import date as _date
+
+    from core.proyecto import DiaAnalisis
+
+    if proyecto is None or proyecto.clima is None or proyecto.clima.datos is None:
+        raise RuntimeError(
+            "Para usar forzantes reales en CAJA necesitas tener el clima cargado "
+            "en P2 (descarga NASA POWER)."
+        )
+
+    empl = proyecto.emplazamiento
+    cfg = proyecto.configuracion
+    anio = proyecto.clima.anio
+    datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
+    datos_local = datos_local[datos_local.index.year == anio]
+
+    if cfg.dia_analisis == DiaAnalisis.ESPECIFICO and cfg.fecha_especifica:
+        fecha_dia = cfg.fecha_especifica
+    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_VERANO:
+        fecha_dia = _date(anio, 12, 21)
+    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
+        fecha_dia = _date(anio, 6, 21)
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_MARZO:
+        fecha_dia = _date(anio, 3, 21)
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
+        fecha_dia = _date(anio, 9, 21)
+    elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
+        fecha_dia = (
+            (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
+        )
+    else:  # MAS_FRIO
+        fecha_dia = (
+            (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
+        )
+
+    mask_dia = datos_local.index.date == fecha_dia
+    datos_dia = datos_local[mask_dia]
+    if len(datos_dia) == 0:
+        raise RuntimeError(
+            f"Sin datos climáticos para {fecha_dia} en el año {anio}. "
+            "Revisá la cobertura del clima en P2."
+        )
+
+    T_amb_K_arr = np.asarray(datos_dia["T_amb_K"], dtype=float)
+    HR_arr = np.asarray(datos_dia["HR"], dtype=float)
+    v_viento_arr = np.asarray(datos_dia["WS_ms"], dtype=float)
+    I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+    try:
+        from calculos.clima_calc import calcular_POA_horizonte
+
+        I_g_POA_arr = np.asarray(
+            calcular_POA_horizonte(datos_dia, empl),
+            dtype=float,
+        )
+    except Exception:
+        I_g_POA_arr = None
+
+    # CAJA: sin colector externo → T_sal_col(t) = T_amb(t).
+    T_sal_col_K = T_amb_K_arr.copy()
+
+    omega_amb_arr = np.array(
+        [humedad_absoluta(float(hr), float(T), P_Pa) for hr, T in zip(HR_arr, T_amb_K_arr)],
+        dtype=float,
+    )
+
+    modo = "multi_dia" if n_dias > 1 else "diario"
+    return armar_forzantes_aire(
+        modo=modo,
+        n_dias=n_dias,
+        T_salida_colector_K=T_sal_col_K,
+        omega_ambiente=omega_amb_arr,
+        m_dot_aire_seco_kg_s=caudal_kg_s,
+        v_viento_ms=v_viento_arr,
+        T_amb_K=T_amb_K_arr,
+        I_g_W_m2=I_g_arr,
+        I_g_POA_W_m2=I_g_POA_arr,
+        dt_s=3600.0,
+    )
+
+
 def _disponibilidad_forzantes_reales(p3_eval, proyecto) -> tuple[bool, str]:
-    """Verifica si hay datos de P2+P3 suficientes para forzantes reales."""
-    if not p3_eval or p3_eval.get("modo") != "diario":
-        return False, "P3 sin calcular (ejecutá 'Calcular desempeño del colector' en modo diario)."
+    """Verifica si hay datos suficientes para construir forzantes reales.
+
+    Reglas según tipología:
+        - CAJA: el aire entrante es ambiente (sin colector externo), así que
+          solo se exige clima NASA POWER cargado en P2.
+        - ARMARIO / GRAN_ESCALA: se exige además que P3 esté calculado en
+          modo diario, porque T_sal_col(t) proviene del solver del colector.
+    """
+    from core.proyecto import Tipologia
+
+    tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
+    es_caja = tipologia == Tipologia.CAJA
+
     if proyecto is None or proyecto.clima is None or proyecto.clima.datos is None:
         return False, "P2 sin clima descargado (datos NASA POWER no disponibles)."
+
+    if es_caja:
+        # En CAJA no hay colector; basta con clima.
+        return True, "OK"
+
+    if not p3_eval or p3_eval.get("modo") != "diario":
+        return False, "P3 sin calcular (ejecutá 'Calcular desempeño del colector' en modo diario)."
     return True, "OK"
 
 
@@ -1810,12 +1937,25 @@ def render() -> None:
                 proyecto,
             )
 
+            _label_real = (
+                "Día real (clima ambiente)"
+                if es_caja
+                else "Día real (clima + colector)"
+            )
             _opciones_forz = [
                 "Constantes (rápido)",
                 "Día sintético (senoidal)",
-                "Día real (clima + colector)",
+                _label_real,
             ]
             _forz_idx_prev = st.session_state.get("cam_forz_idx", 0)
+            _help_real = (
+                "**Día real:** serie horaria de T_amb, ω, viento e I_g del "
+                "clima NASA POWER de P2 para el día seleccionado en P1. "
+                "T_entrada al lecho = T_amb (la cámara actúa como colector)."
+                if es_caja
+                else "**Día real:** serie horaria del colector calculada en P3 + "
+                "clima NASA POWER de P2."
+            )
             forz_sel = st.radio(
                 "Forzantes del aire de entrada",
                 options=_opciones_forz,
@@ -1826,8 +1966,7 @@ def render() -> None:
                     "Equivale a una corrida puntual.\n\n"
                     "**Día sintético:** curva senoidal día/noche (pico al mediodía, "
                     "±15 K en T_sal_col, ±5 K en T_amb). Captura ciclo diurno.\n\n"
-                    "**Día real:** serie horaria del colector calculada en P3 + "
-                    "clima NASA POWER de P2."
+                    + _help_real
                 ),
             )
             st.session_state["cam_forz_idx"] = _opciones_forz.index(forz_sel)
@@ -1869,10 +2008,17 @@ def render() -> None:
                 st.session_state["cam_n_dias"] = n_dias
 
             if tipo_forzantes == "real":
-                st.info(
-                    f"📅 Forzantes reales: T_sal_col(t) del cálculo P3, "
-                    "ω_amb(t), T_amb(t), v_viento(t) e I_g(t) del clima NASA POWER de P2."
-                )
+                if es_caja:
+                    st.info(
+                        "📅 Forzantes reales (CAJA): T_entrada(t) = T_amb(t) y "
+                        "ω(t), v_viento(t) e I_g(t) del clima NASA POWER de P2 "
+                        "para el día de análisis seleccionado en P1."
+                    )
+                else:
+                    st.info(
+                        "📅 Forzantes reales: T_sal_col(t) del cálculo P3, "
+                        "ω_amb(t), T_amb(t), v_viento(t) e I_g(t) del clima NASA POWER de P2."
+                    )
 
             # I_g_max del día sintético: sólo relevante si hay techo translúcido
             if tipo_forzantes == "sintetico" and cubierta_id_sel is not None:
@@ -2074,6 +2220,14 @@ def render() -> None:
         HR_op = HR_op_pct / 100.0
         T_amb_calc_K, _ = _T_amb_representativa_K(proyecto)
 
+        # Presión atmosférica representativa del emplazamiento (corregida por
+        # altitud o NASA POWER). Sin esta corrección, las psicrométricas usan
+        # 101 325 Pa y sobrestiman ω_sat en sitios elevados.
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P_proyecto_Pa, P_origen = presion_representativa_proyecto(proyecto)
+        st.caption(f"Presión atmosférica usada: {P_origen}.")
+
         try:
             if modo_calculo == "termodinamico":
                 fz_aire = _construir_forzantes_termodinamico(
@@ -2086,6 +2240,7 @@ def render() -> None:
                     proyecto=proyecto,
                     p3_eval=st.session_state.get("p3_eval"),
                     I_g_max_W_m2=I_g_max_W_m2,
+                    P_Pa=P_proyecto_Pa,
                 )
                 t_max_efectivo = (
                     float(fz_aire.t_s[-1]) if fz_aire is not None else float(n_dias) * 24.0 * 3600.0
@@ -2096,6 +2251,7 @@ def render() -> None:
                         T_op_K,
                         HR_op,
                         T_amb_K=T_amb_calc_K,
+                        P_Pa=P_proyecto_Pa,
                         t_max_s=t_max_efectivo,
                         forzantes_aire=fz_aire,
                     )
@@ -2119,6 +2275,7 @@ def render() -> None:
                     T_op_K,
                     HR_op,
                     T_amb_K=T_amb_calc_K,
+                    P_Pa=P_proyecto_Pa,
                 )
                 # Modo capa fina: no se propaga horizonte a P7.
                 st.session_state.pop("p4_forzantes_horizonte", None)

@@ -418,6 +418,18 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
 def _seccion_config(proyecto) -> None:
     """Muestra el estado de configuración de cada sección."""
     st.subheader("Estado de configuración")
+
+    motor_o_chim_ok = (proyecto.motor is not None) or (
+        proyecto.chimenea is not None
+        and st.session_state.get("p6_chimenea_eval") is not None
+    )
+    if proyecto.motor is not None:
+        label_p6 = "P6 · Motor"
+    elif proyecto.chimenea is not None:
+        label_p6 = "P6 · Chimenea"
+    else:
+        label_p6 = "P6 · Motor / Chimenea"
+
     items = [
         ("P2 · Emplazamiento", proyecto.emplazamiento is not None),
         (
@@ -427,7 +439,7 @@ def _seccion_config(proyecto) -> None:
         ("P3 · Colector", proyecto.colector is not None),
         ("P4 · Cámara de Secado", proyecto.camara is not None),
         ("P5 · Auxiliar", proyecto.auxiliar is not None),
-        ("P6 · Motor", proyecto.motor is not None),
+        (label_p6, motor_o_chim_ok),
     ]
     cols = st.columns(len(items))
     for col, (label, ok) in zip(cols, items):

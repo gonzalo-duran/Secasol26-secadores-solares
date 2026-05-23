@@ -579,16 +579,6 @@ def _seccion_colector(styles, snap_col: dict | None,
     ]
     elems.append(_tabla_kv(rows_geo))
 
-    if snap_col.get("chimenea"):
-        ch = snap_col["chimenea"]
-        elems.append(Spacer(1, 6))
-        elems.append(Paragraph("Chimenea solar", styles["h2"]))
-        elems.append(_tabla_kv([
-            ["Diámetro", f"{_fmt(ch.get('diametro_m'))} m"],
-            ["Altura", f"{_fmt(ch.get('altura_m'))} m"],
-            ["Material", ch.get("id_material", "—")],
-        ]))
-
     # Resultados
     elems.append(Spacer(1, 8))
     elems.append(Paragraph("Resultados de simulación", styles["h2"]))
@@ -868,6 +858,175 @@ def _seccion_motor(styles, snap_mot: dict | None) -> list:
     return elems
 
 
+def _seccion_chimenea(
+    styles,
+    snap_chim: dict | None,
+    res_chim: dict | None,
+) -> list:
+    """Sección de chimenea solar + extractor eólico en el reporte PDF.
+
+    Args:
+        snap_chim: Snapshot reconstruible producido por
+            ``ui.p6_motor._json_config_chimenea`` (geometría + extractor +
+            advertencias estáticas), o None si el proyecto no tiene chimenea.
+        res_chim: Dict de resultados del lazo natural producido por
+            ``balance_global.calcular_todo`` (escalares en modo Constantes)
+            o ``calcular_todo_transitorio`` (mix de escalares + arrays),
+            o None si el balance no se ejecutó o motor está activo.
+    """
+    elems: list = [Paragraph("Chimenea solar (P6)", styles["h1"])]
+    if snap_chim is None:
+        elems += _seccion_pendiente(
+            styles,
+            "Sin chimenea configurada. Si el secador opera por convección "
+            "forzada, ver sección Motor; si es difusión libre, no aplica.",
+        )
+        return elems
+
+    ch = snap_chim.get("chimenea", {})
+    ext = ch.get("extractor", {}) or {}
+
+    # --- Geometría y material ---
+    elems.append(Paragraph("Geometría y material", styles["h2"]))
+    rows_geo = [
+        ["Diámetro interno", f"{_fmt(ch.get('diametro_m'))} m"],
+        ["Altura", f"{_fmt(ch.get('altura_m'))} m"],
+        ["Material", ch.get("id_material", "—")],
+    ]
+    props = ch.get("props_catalogo") or {}
+    if props.get("descripcion"):
+        rows_geo.append(["Descripción", props["descripcion"]])
+    elems.append(_tabla_kv(rows_geo))
+
+    # --- Extractor eólico (si está activo) ---
+    if ext.get("activo"):
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph("Extractor eólico (turbina sombrero chino)", styles["h2"]))
+        rows_ext = [
+            ["Diámetro del extractor",
+             f"{_fmt(ext.get('diametro_extractor_m'))} m"],
+            ["Cp motriz (turbina)", _fmt(ext.get("Cp_turbina"))],
+            ["Kt resistivo (turbina)", _fmt(ext.get("Kt_turbina"))],
+            ["z₀ rugosidad terreno", f"{_fmt(ext.get('z0_terreno_m'))} m"],
+        ]
+        elems.append(_tabla_kv(rows_ext))
+    else:
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(
+            "<i>Sin extractor eólico — convección natural sólo por tiro térmico.</i>",
+            styles["p"],
+        ))
+
+    # --- Resultados del lazo natural resuelto en P7 (Picard completo) ---
+    elems.append(Spacer(1, 8))
+    elems.append(Paragraph("Resultados del lazo natural (balance Picard)", styles["h2"]))
+    if res_chim is None:
+        elems += _seccion_pendiente(
+            styles,
+            "Cálculo del lazo natural no ejecutado (motor activo, o balance "
+            "global no corrido en P7).",
+        )
+    else:
+        # Detectar si es transitorio (arrays) o constantes (escalares):
+        # en transitorio existen las claves m_promedio_kgs / m_max_kgs y
+        # los valores de m_punto_kgs / v_chim_ms son arrays.
+        es_transitorio = "m_promedio_kgs" in res_chim
+        if es_transitorio:
+            m_prom = float(res_chim.get("m_promedio_kgs", 0.0))
+            m_max = float(res_chim.get("m_max_kgs", 0.0))
+            H_eff = float(res_chim.get("H_eff_m", 0.0))
+            iter_picard = res_chim.get("iteraciones", "—")
+            convergio = res_chim.get("convergio", False)
+            delta_T_final = res_chim.get("delta_T_chim_final_K", None)
+            horas_sin_tiro = res_chim.get("horas_sin_tiro", None)
+            rows_res = [
+                ["Modo de cálculo", "Transitorio (horizonte horario)"],
+                ["Caudal natural promedio",
+                 f"{m_prom * 1000:.2f} g/s ({_fmt(m_prom)} kg/s)"],
+                ["Caudal natural máximo",
+                 f"{m_max * 1000:.2f} g/s ({_fmt(m_max)} kg/s)"],
+                ["H efectiva", f"{_fmt(H_eff)} m"],
+                ["Iteraciones Picard", _fmt(iter_picard)],
+                ["¿Convergió?", "Sí" if convergio else "No"],
+            ]
+            if delta_T_final is not None:
+                rows_res.append([
+                    "ΔT_chim final entre iteraciones",
+                    f"{_fmt(delta_T_final)} K",
+                ])
+            if horas_sin_tiro is not None:
+                rows_res.append([
+                    "Horas sin tiro (ṁ = 0)",
+                    _fmt(horas_sin_tiro),
+                ])
+        else:
+            m_punto = float(res_chim.get("m_punto_kgs", 0.0))
+            v_chim = float(res_chim.get("v_chim_ms", 0.0))
+            Re_chim = float(res_chim.get("Re_chimenea", 0.0))
+            dP_tiro = float(res_chim.get("delta_P_tiro_Pa", 0.0))
+            dP_ducto = float(res_chim.get("delta_P_chimenea_Pa", 0.0))
+            dP_resto = float(res_chim.get("delta_P_resto_Pa", 0.0))
+            dP_turb = float(res_chim.get("delta_P_turbina_motriz_Pa", 0.0))
+            H_eff = float(res_chim.get("H_eff_m", 0.0))
+            v_loc = float(res_chim.get("v_viento_local_ms", 0.0))
+            iter_picard = res_chim.get("iteraciones", "—")
+            convergio = res_chim.get("convergio", False)
+            delta_T_final = res_chim.get("delta_T_chim_final_K", None)
+            T_chim_K = res_chim.get("T_chim_K", None)
+            rows_res = [
+                ["Modo de cálculo", "Constantes (régimen estacionario)"],
+                ["Caudal natural",
+                 f"{m_punto * 1000:.2f} g/s ({_fmt(m_punto)} kg/s)"],
+                ["Velocidad en chimenea", f"{_fmt(v_chim)} m/s"],
+                ["Re en chimenea", f"{Re_chim:.0f}"],
+                ["ΔP tiro térmico", f"{_fmt(dP_tiro)} Pa"],
+                ["ΔP ducto chimenea", f"{_fmt(dP_ducto)} Pa"],
+                ["ΔP resto (col + cám)", f"{_fmt(dP_resto)} Pa"],
+                ["H efectiva", f"{_fmt(H_eff)} m"],
+                ["Iteraciones Picard", _fmt(iter_picard)],
+                ["¿Convergió?", "Sí" if convergio else "No"],
+            ]
+            if dP_turb > 0.0 or ext.get("activo"):
+                rows_res.append([
+                    "ΔP motriz del extractor",
+                    f"{_fmt(dP_turb)} Pa",
+                ])
+                rows_res.append([
+                    "Viento a la altura del tope",
+                    f"{_fmt(v_loc)} m/s",
+                ])
+            if T_chim_K is not None:
+                try:
+                    rows_res.append([
+                        "T en chimenea (Picard final)",
+                        f"{float(T_chim_K) - 273.15:.1f} °C",
+                    ])
+                except (TypeError, ValueError):
+                    pass
+            if delta_T_final is not None:
+                rows_res.append([
+                    "ΔT_chim final entre iteraciones",
+                    f"{_fmt(delta_T_final)} K",
+                ])
+        elems.append(_tabla_kv(rows_res))
+
+        # Advertencias del solver (deduplicadas por código)
+        advs_solver = res_chim.get("advertencias") or []
+        if advs_solver:
+            elems.append(Spacer(1, 4))
+            elems.append(Paragraph(
+                "<i>Avisos del solver del lazo natural:</i>",
+                styles["p"],
+            ))
+            for a in advs_solver:
+                if a:
+                    elems.append(Paragraph(f"• {a}", styles["p"]))
+
+    # --- Advertencias estáticas del diseño de chimenea ---
+    elems += _bloque_advertencias(styles, snap_chim.get("advertencias_diseno"))
+    return elems
+
+
 def _seccion_resultados_globales(styles, snap_global: dict,
                                   condiciones: dict,
                                   figuras: list[tuple[str, bytes]]) -> list:
@@ -1018,7 +1177,7 @@ def generar_reporte_pdf(
     from ui.p3_colector import _json_config_colector
     from ui.p4_camara import _json_config_camara
     from ui.p5_auxiliar import _json_config_auxiliar
-    from ui.p6_motor import _json_config_motor
+    from ui.p6_motor import _json_config_chimenea, _json_config_motor
     from ui.p7_resultados import (
         _bloque_meta_emplazamiento_clima,
         _json_resultados_completo,
@@ -1042,6 +1201,14 @@ def generar_reporte_pdf(
         _json_config_motor(proyecto.motor)
         if proyecto.motor is not None else None
     )
+    snap_chim = (
+        _json_config_chimenea(proyecto.chimenea)
+        if getattr(proyecto, "chimenea", None) is not None else None
+    )
+    # Resultados del lazo natural ya resueltos por el balance global (P7).
+    # Mismo dict que res.chimenea, tanto para modo Constantes (escalares)
+    # como Transitorio (arrays + agregados).
+    res_chim = getattr(res, "chimenea", None) if res is not None else None
 
     # Snapshot completo (para sección global)
     snap_full = _json_resultados_completo(
@@ -1107,6 +1274,12 @@ def generar_reporte_pdf(
     # 6. Motor
     story += [Spacer(1, 12)]
     story += _seccion_motor(styles, snap_mot)
+
+    # 6.b Chimenea solar (sólo si está configurada — convección natural o
+    # accesorio paralelo al motor en armarios con ambos definidos).
+    if snap_chim is not None:
+        story.append(PageBreak())
+        story += _seccion_chimenea(styles, snap_chim, res_chim)
 
     # 7. Resultados globales (incluye gráfica balance)
     story.append(PageBreak())

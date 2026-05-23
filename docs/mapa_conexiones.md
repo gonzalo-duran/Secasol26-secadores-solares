@@ -1,6 +1,6 @@
 # Mapa de conexiones — Secasol
 
-> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida, 2026-05-20).
+> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22).
 > Objetivo: detectar **widgets UI sin consumidor en `calculos/`** y **campos consumidos sin widget UI** (toggles/inputs huérfanos).
 
 ---
@@ -264,13 +264,15 @@ graph LR
   class POAH,ARM,FZA new
 ```
 
-**Hallazgos P4 (estado al cierre de S30 extendida)**:
+**Hallazgos P4 (estado al cierre de S32)**:
 
 - Todas las conexiones de cámara (dataclasses → solvers) cableadas correctamente. La pared compuesta se consume vía métodos agregados (`U_conduccion_W_m2K`, `R_conduccion_m2K_W`, `espesor_total_m`) en `camara_calc.py:735`.
 - **Modo transitorio**: P4 arma `ForzantesAire` desde el clima horario real. Ahora la forzante incluye **dos series de irradiancia separadas**:
   - `I_g_W_m2`: GHI sobre el techo de la cámara (input al motor termodinámico de cámara para Q_rad por techo translúcido).
   - `I_g_POA_W_m2`: POA sobre el plano del colector (input a `_correr_colector_horizonte` cuando el lazo natural por chimenea está activo). Calculada con `calculos.clima_calc.calcular_POA_horizonte` (transposición Liu-Jordan con pvlib, mismo modelo que P3).
 - Si DNI/DHI no están disponibles (clima incompleto, modo sintético), POA queda en `None` y el balance global cae a GHI con aviso explícito `ADV_PICARD_POA_NO_DISPONIBLE`.
+- **"Día real" habilitado en CAJA (S32b)**: nuevo helper `_construir_forzantes_reales_caja` arma `ForzantesAire` desde clima NASA + `cfg.dia_analisis` directamente, con `T_salida_colector_K = T_amb_K` (la cámara *es* el colector). `_disponibilidad_forzantes_reales` ahora hace branch por tipología (CAJA exige sólo clima; ARMARIO/GRAN_ESCALA siguen exigiendo P3). El radio "Forzantes del aire de entrada" muestra label dinámico ("Día real (clima ambiente)" en CAJA / "Día real (clima + colector)" en el resto).
+- **Presión atmosférica corregida por altitud (S32c)**: el botón "Calcular" computa `P_proyecto_Pa` vía `presion_representativa_proyecto` y lo propaga a `_construir_forzantes_termodinamico` (ω desde HR y T_amb) y a `calcular_camara` (modos capa fina y termodinámico). Caption visible con el origen del valor.
 
 ---
 
@@ -283,10 +285,13 @@ graph LR
     W5[tipo/modo/P_nom/T_max/setpoint/nocturno]
     T6["toggle Incorporar motor"]
     W6[accionamiento/caudal/ΔP/η/tensión]
+    BTNM["botón Calcular motor"]
     T6C["toggle Incorporar chimenea (solo si motor OFF)"]
     W6C[diámetro/altura/material chimenea]
     T6E["toggle Agregar extractor eólico (solo si chimenea ON)"]
     W6E[Cp / Kt / D_ext / z0_terreno]
+    BTNC["botón Calcular chimenea (S32d)"]
+    SS_CHIM["st.session_state['p6_chimenea_eval']"]
   end
 
   subgraph CORE56["core/"]
@@ -301,9 +306,11 @@ graph LR
     MOTC[motor_calc.py]
     CHIMC["chimenea_calc.py — delta_P_tiro, caudal_natural_kgs"]
     NATH["_caudal_natural_horizonte (por hora)"]
+    NATL["_caudal_natural_loop (preliminar + balance const)"]
     CORH["_correr_colector_horizonte (re-corre colector con v efectiva)"]
     BG_C["balance_global.calcular_todo — Picard cerrado por colector"]
     BG_T["balance_global.calcular_todo_transitorio — Picard sobre horizonte + motor TD"]
+    PRP["presion_representativa_proyecto (S32c) → P_Pa híbrido"]
   end
 
   T5 -->|OFF| NULL_A[auxiliar = None]
@@ -315,6 +322,7 @@ graph LR
   T6 -->|OFF| NULL_M[motor = None]
   T6 -->|ON| W6
   W6 --> MOT_DC
+  BTNM --> MOT_DC
   MOT_DC --> MOTC
 
   NULL_M --> T6C
@@ -325,12 +333,21 @@ graph LR
   W6E --> CHIM_DC
   CHIM_DC --> CHIMC
 
+  %% Botón Calcular chimenea (preliminar S32d): T_chim heurística + condiciones
+  %% representativas del clima, llama al lazo natural local y persiste el dict.
+  BTNC -->|heurística T_chim| NATL
+  PRP --> NATL
+  NATL --> SS_CHIM
+  SS_CHIM -.lee.-> P7C["P7 checklist · Chimenea ✅"]
+
   %% Modo constantes
+  PRP --> BG_C
   CHIMC --> BG_C
   BG_C -->|muta v_diseño| CORH_C[_correr_colector estacionario re-llamado]
   BG_C -->|caudal natural| AUXC
 
   %% Modo transitorio
+  PRP --> BG_T
   CHIMC --> NATH
   NATH --> BG_T
   BG_T --> CORH
@@ -339,17 +356,21 @@ graph LR
   TD -->|"T_flujo(t) = T_chim"| BG_T
 
   classDef pic fill:#d4edda,stroke:#155724
+  classDef s32 fill:#cfe2ff,stroke:#084298
   class BG_C,BG_T,NATH,CORH pic
+  class BTNC,SS_CHIM,PRP,NATL s32
 ```
 
-**Hallazgos P5/P6 (estado al cierre de S30 extendida)**:
+**Hallazgos P5/P6 (estado al cierre de S32)**:
 
 - Toggle `disponible_nocturno` del auxiliar solo afecta al modo transitorio (`calcular_auxiliar_transitorio`); en modo cuasi-estacionario es ignorado — comportamiento esperado.
 - Chimenea en P6 (sólo si motor OFF): estructuralmente coexisten en el dataclass, son mutuamente excluyentes desde la UI.
-- **Lazo natural cerrado en ambos modos** (S30 extendida):
+- **Lazo natural cerrado en ambos modos** (desde S30 extendida):
   - *Constantes*: Picard `T_chim ↔ ṁ_nat ↔ T_sal_col` en `calcular_todo`. Re-corre el colector estacionario mutando `velocidad_diseno_ms`. 10 iter máx, tol 0.5 K. Try/finally restaura.
   - *Transitorio*: Picard sobre todo el horizonte en `calcular_todo_transitorio`. Por iteración: `_caudal_natural_horizonte` calcula ṁ(t) hora a hora; `_correr_colector_horizonte` re-corre el colector cada hora con v efectiva; motor TD consume las nuevas forzantes; `T_flujo(t)` realimenta T_chim(t). 5 iter máx, tol 0.5 K.
 - **POA correcta en el solver del colector**: en ambos pipelines la radiación que entra al solver del colector es POA (no GHI). Ver §101 de la bitácora y diagrama 4 abajo.
+- **Botón "Calcular chimenea" en P6 (S32d)**: resuelve `_caudal_natural_loop` con T_chim heurística (Tamb+25 K CAJA / +30 K ARMARIO) + condiciones representativas del clima. Persiste en `st.session_state["p6_chimenea_eval"]` para que P7 marque el checklist como ✅. **Los números son preliminares**: P7 vuelve a resolver con Picard completo.
+- **Presión atmosférica corregida por altitud (S32c)**: `presion_representativa_proyecto` (helper público en `balance_global.py`) propagada a `_resolver_aux_cam_const`, `_correr_colector(_horizonte)`, `_caudal_natural_loop`/`_horizonte`. También consumida directamente desde `ui/p4_camara.py` (botón Calcular) y `ui/p6_motor.py` (estimar_delta_P_*, delta_P_tiro_Pa, delta_P_turbina_motriz_Pa).
 
 ---
 
@@ -359,9 +380,9 @@ graph LR
 | ------- | --------- | ------------------- | --------- |
 | P1 | tipología (radio) | `configuracion.tipologia` | `balance_global` |
 | P1 | modo_analisis | `configuracion.modo_analisis` | `balance_global` |
-| P1 | dia_analisis | `configuracion.dia_analisis` | UI únicamente (P2 selección de fecha) |
+| P1 | dia_analisis (7 valores: `SOLSTICIO_VERANO/INVIERNO`, `EQUINOCCIO_MARZO/SEPTIEMBRE` ← S32a, `MAS_CALUROSO`, `MAS_FRIO`, `ESPECIFICO`) | `configuracion.dia_analisis` | `ui/p2_emplazamiento._fecha_dia_analisis`, `ui/p3_colector._seleccionar_dia`, `ui/p4_camara._construir_forzantes_reales_caja` (S32b) |
 | P2 | latitud/longitud | `emplazamiento.lat/lon_deg` | `clima_calc.obtener_clima` |
-| P2 | altitud | `emplazamiento.altitud_m` | UI (display) |
+| P2 | altitud (display NASA + override usuario) | `emplazamiento.altitud_m` | `calculos.balance_global.presion_representativa_proyecto` (S32c → ISA cuando no hay clima) |
 | P2 | acimut/pendiente | `emplazamiento.acimut/pendiente` | `solar_geometria` (vía emplazamiento) |
 | P2 | zona_horaria | `emplazamiento.zona_horaria` | `solar_geometria` |
 | P3 | N° cubiertas ⚑ | `colector.unidad.n_cubiertas` + `espaciado_entre_cubiertas_m` | `colector_calc`, `tipos234_calc` (vía `_U_cubierta_efectiva`) |
@@ -387,6 +408,8 @@ graph LR
 | P6 | accionamiento/caudal/ΔP/η/factor | `motor.*` | `motor_calc`, `Motor.__post_init__` |
 | P6 | chimenea (D, H, material) | `proyecto.chimenea.*` (top-level) | `chimenea_calc.{delta_P_tiro_Pa, caudal_natural_kgs}`, `balance_global._caudal_natural_loop` (constantes) y `_caudal_natural_horizonte` + `_correr_colector_horizonte` (transitorio, dentro de Picard) |
 | P6 | extractor eólico en chimenea (`extractor_activo`, `diametro_extractor_m`, `Cp_turbina`, `Kt_turbina`, `z0_terreno_m`) | `proyecto.chimenea.{extractor_activo, ...}` | `chimenea_calc.{delta_P_turbina_motriz_Pa, _v_viento_a_altura, caudal_natural_kgs}` (motriz + Kt + perfil log de viento). Propagado a `_caudal_natural_loop`/`_caudal_natural_horizonte` con `v_viento_10m_ms` desde forzantes |
+| P6 → P7 (S32d) | botón "Calcular chimenea" — resultado preliminar del lazo natural | `st.session_state["p6_chimenea_eval"]` (dict de `_caudal_natural_loop` con T_chim heurística) | `ui/p7_resultados._render_estado` (lee para marcar `P6 · Chimenea ✅` en checklist). El balance global de P7 **no lee este dict** — vuelve a resolver con Picard completo. |
+| (interno, S32c) | presión atmosférica corregida por altitud | — (calculada de `clima.datos["presion_Pa"]` o `emplazamiento.altitud_m`) | `presion_representativa_proyecto` → `_resolver_aux_cam_const`, `_correr_colector(_horizonte)`, `_caudal_natural_loop`/`_horizonte`, `operacion_anual_camara._calcular_punto_mensual`, `ui/p4_camara` (botón Calcular), `ui/p6_motor` (estimar_delta_P_*, delta_P_tiro_Pa, delta_P_turbina_motriz_Pa) |
 | P4→core | I_g_POA(t) sobre plano colector | `forzantes_base.I_g_POA_W_m2` (transitorio) | `balance_global._correr_colector_horizonte` → `_correr_colector` → `colector_calc`/`tipos234_calc` |
 | P4→core | GHI(t) sobre techo cámara | `forzantes_base.I_g_W_m2` (transitorio) | `camara_termodinamica.simular_secado` (Q_rad por techo translúcido) |
 | (interno) | POA representativa anual (sugerido P7) | — | `ui/p7_resultados._sugerir_condiciones` → `calcular_POA_horizonte` (quantile 90) |
@@ -417,6 +440,23 @@ Pendientes:
 - **POA precomputada en `ForzantesAire`**: nuevo campo `I_g_POA_W_m2` opcional + helper compartido `calculos.clima_calc.calcular_POA_horizonte` (transposición Liu-Jordan con pvlib). P4 puebla la POA desde clima real. P3 deduplicado (su `_poa_serie` ahora es wrapper del helper). Sugerido de I_g en P7 modo constantes ahora sale de quantile 90 de POA. Fix del bug físico: los 4 solvers de colector reciben POA en todos los caminos (P3 horario/diario, P3/P7 constantes, P7 transitorio con clima). Fallback a GHI con aviso `ADV_PICARD_POA_NO_DISPONIBLE` sólo en forzantes sintéticas o clima sin DNI/DHI.
 
 Ver `docs/bitacora/bitacora_sesion30.md` (§84-§101) y `validacion/{validacion_hwb,comparar_f4}.py`. Suite al cierre: **774 + 2 xfailed** (era 717 + 2 al cierre de S29; +57 tests netos en la sesión extendida).
+
+✓ **Resueltos en S31 (2026-05-20/21)** — cierra dos tópicos de la hoja de ruta a 1.0:
+
+- **K_rugosidad por bandeja con producto** (S31a, cierra "ΔP en bandejas"): nuevo campo `ConfiguracionBandejas.K_rugosidad_producto` (default auto desde tabla `d_p/espacio_libre`). En HORIZONTAL suma `K_rug · ρ·v_canal²/2 · n_bandejas`; en VERTICAL suma `K_TRANSICION_LECHO=1.5 · ρ·v₀²/2 · n_bandejas` (Ergun ya cubría la rugosidad del producto vía Φ_s, d_p). Tabla anclada en Idelchik / Crane TP-410.
+- **Extractor eólico migrado a accesorio de chimenea** (S31b): eliminado `TipoAccionamiento.EXTRACTOR_EOLICO`; agregados `extractor_activo`/`Cp_turbina`/`Kt_turbina`/`z0_terreno_m`/`diametro_extractor_m` en `Chimenea`. Balance del lazo natural ampliado con término motriz `Cp·ρ·v_viento²/2` (corregido a la altura del tope por perfil log) + resistivo `Kt·ρ·v_extractor²/2`. Migración automática de `.json` viejos con `st.warning`.
+- **Operación anual de cámara cascada A+B** (S31c, cierra "modo ANUAL de cámara"): módulo `calculos/operacion_anual_camara.py` con orquestador que corre motor TD sobre el día típico de cada mes (de `clima_calc.dia_tipo_mensual`). Las 4 eficiencias de Augustus Leon (RSER 2002) en `calculos/eficiencias_camara.py`. UI: en P4 sección "📅 Operación anual" **arriba** cuando `modo_analisis==ANUAL`, con batch puntual de día sintético como test secundario debajo. En P7 panel mensual al principio cuando hay resultado anual calculado.
+
+Ver `docs/bitacora/bitacora_sesion31.md` (§121-§125). Suite al cierre de S31: **833 + 2 xfailed** (+59 tests netos desde S30).
+
+✓ **Resueltos en S32 (2026-05-22)** — mejoras del modo CAJA + propagación física global:
+
+- **Equinoccios separados** (S32a): el enum `DiaAnalisis` ahora tiene dos valores distintos `EQUINOCCIO_MARZO` (21/3) y `EQUINOCCIO_SEPTIEMBRE` (21/9), con labels que explicitan la estación en hem. sur. Antes el valor único `EQUINOCCIO` mapeaba siempre al 21 de marzo aunque el label decía "21 mar / 21 sep" — bug latente corregido. Rama nueva agregada en `_fecha_dia_analisis` (P2), `_seleccionar_dia` (P3) y `_construir_forzantes_reales_caja` (P4).
+- **"Día real" habilitado en tipología CAJA** (S32b): nuevo helper `_construir_forzantes_reales_caja` en `ui/p4_camara.py` arma `ForzantesAire` desde clima NASA + `cfg.dia_analisis` sin requerir P3, con `T_salida_colector_K = T_amb_K` (la cámara *es* el colector). `_disponibilidad_forzantes_reales` ahora hace branch por tipología.
+- **Presión atmosférica corregida por altitud** (S32c, propagada a cámara + colector + chimenea + motor): nuevo helper `presion_representativa_proyecto(proyecto) -> (P_Pa, origen)` en `calculos/balance_global.py` con política híbrida (media anual NASA POWER → ISA con `altitud_m` → 101 325 Pa). Propagado a `_resolver_aux_cam_const`, `_correr_colector(_horizonte)`, `_caudal_natural_loop`/`_horizonte`, `operacion_anual_camara._calcular_punto_mensual`, `ui/p4_camara.py` (botón Calcular) y `ui/p6_motor.py` (estimar_delta_P_*, delta_P_tiro_Pa, delta_P_turbina_motriz_Pa). Para Salta (~1187 m) P ≈ 88 kPa (no 101 kPa); ω_sat ~15 % más alta a igual T/HR. Pendiente: `core/motor.py:177` (ρ_descarga hardcoded a 101325).
+- **Botón "Calcular chimenea" en P6** (S32d): nuevo helper `_render_calcular_chimenea` con dos auxiliares (`_condiciones_representativas_chimenea` y heurística T_chim = Tamb + 25 K CAJA / +30 K ARMARIO). Resuelve `_caudal_natural_loop` y persiste resultado en `st.session_state["p6_chimenea_eval"]`. P7 checklist actualizado: marca `P6 · Chimenea ✅` cuando hay chimenea + eval. Los números son **preliminares**; P7 vuelve a resolver con Picard completo (divergencia aceptada por el usuario).
+
+Ver `docs/bitacora/bitacora_sesion32.md` (§126-§130). Suite al cierre de S32: **833 + 2 xfailed** (sin cambio — todo wire-up + helpers UI sin tests nuevos; deuda explícita en la bitácora).
 
 ---
 

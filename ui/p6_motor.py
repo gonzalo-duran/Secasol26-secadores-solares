@@ -44,7 +44,6 @@ _ICONOS_SEVERIDAD = {
 }
 
 _T_MEDIA_DEFAULT_K: float = 323.15  # 50 °C — temperatura media del sistema
-_P_ATM_DEFAULT_PA: float = 101325.0
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +399,162 @@ def _texto_config_chimenea(chimenea: Chimenea) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _condiciones_representativas_chimenea(
+    proyecto,
+) -> tuple[float, float, str]:
+    """Devuelve (T_amb_K, v_viento_ms, origen) para la evaluación de chimenea.
+
+    Si hay clima cargado, usa la media anual; en caso contrario cae a un
+    20 °C / 2 m/s estándar. El string de origen va al caption de resultados.
+    """
+    clima = getattr(proyecto, "clima", None)
+    if clima is not None and getattr(clima, "datos", None) is not None:
+        try:
+            datos = clima.datos
+            T_arr = datos["T_amb_K"].to_numpy()
+            v_arr = datos["WS_ms"].to_numpy()
+            T_amb_K = float(T_arr.mean())
+            v_viento = float(v_arr.mean())
+            return T_amb_K, v_viento, "media anual NASA POWER (P2)"
+        except Exception:
+            pass
+    return 293.15, 2.0, "fallback (T=20 °C, v=2 m/s)"
+
+
+def _render_calcular_chimenea(proyecto, chimenea) -> None:
+    """Botón 'Calcular chimenea' + display de resultados del lazo natural.
+
+    Resuelve ``_caudal_natural_loop`` con condiciones representativas
+    (T_amb / v_viento del clima, T_chim heurística según tipología) y los
+    ΔP del colector y cámara reales del proyecto. Persiste el resultado en
+    ``st.session_state['p6_chimenea_eval']`` para que P7 cuente la chimenea
+    como evaluada en el checklist.
+    """
+    from core.proyecto import Tipologia
+
+    requisitos_ok = proyecto.camara is not None
+    if not requisitos_ok:
+        st.warning(
+            "⚠️ Configurá la cámara (P4) antes de evaluar la chimenea — su "
+            "caudal de diseño y ΔP son inputs del lazo natural."
+        )
+        return
+
+    es_caja = (
+        getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
+        == Tipologia.CAJA
+    )
+    delta_T_chim_K = 25.0 if es_caja else 30.0
+
+    if st.button("🌪️ Calcular chimenea", type="primary", key="p6_btn_calc_chimenea"):
+        from calculos.balance_global import (
+            _caudal_natural_loop,
+            presion_representativa_proyecto,
+        )
+
+        T_amb_K, v_viento_ms, origen_clima = _condiciones_representativas_chimenea(proyecto)
+        T_chim_K = T_amb_K + delta_T_chim_K
+        P_proyecto_Pa, P_origen = presion_representativa_proyecto(proyecto)
+
+        try:
+            with st.spinner("Resolviendo lazo natural por chimenea..."):
+                res_chim = _caudal_natural_loop(
+                    proyecto=proyecto,
+                    T_amb_K=T_amb_K,
+                    T_chim_K=T_chim_K,
+                    m_design_kgs=proyecto.camara.flujo.caudal_masico_kg_s,
+                    P_amb_Pa=P_proyecto_Pa,
+                    v_viento_ms=v_viento_ms,
+                )
+        except Exception as exc:
+            st.error(f"❌ Error en el cálculo: {exc}")
+            return
+
+        st.session_state["p6_chimenea_eval"] = {
+            "T_amb_K": T_amb_K,
+            "T_chim_K": T_chim_K,
+            "delta_T_chim_K": delta_T_chim_K,
+            "v_viento_ms": v_viento_ms,
+            "P_amb_Pa": P_proyecto_Pa,
+            "P_origen": P_origen,
+            "origen_clima": origen_clima,
+            "es_caja": es_caja,
+            "resultado": res_chim,
+        }
+
+    ev = st.session_state.get("p6_chimenea_eval")
+    if ev is None:
+        st.caption(
+            "Presioná **Calcular chimenea** para resolver el lazo natural con "
+            "condiciones representativas. El resultado queda persistido y se "
+            "muestra en P7 como sección evaluada."
+        )
+        return
+
+    res = ev["resultado"]
+    st.subheader("Resultados del lazo natural")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "Caudal natural",
+        f"{res['m_punto_kgs'] * 1000:.2f} g/s",
+        help="ṁ de equilibrio del lazo (cámara + colector + chimenea).",
+    )
+    c2.metric(
+        "v en chimenea",
+        f"{res['v_chim_ms']:.2f} m/s",
+        help="Velocidad media en la sección de la chimenea.",
+    )
+    c3.metric(
+        "Re chimenea",
+        f"{res['Re_chimenea']:.0f}",
+        help="Re > 4000: turbulento. Re < 2300: laminar.",
+    )
+    c4.metric(
+        "ΔP tiro térmico",
+        f"{res['delta_P_tiro_Pa']:.2f} Pa",
+        help="Empuje hidrostático = g·H_eff·(ρ_amb − ρ_chim).",
+    )
+
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric(
+        "ΔP ducto chimenea",
+        f"{res['delta_P_chimenea_Pa']:.2f} Pa",
+        help="Fricción + singulares del ducto de chimenea.",
+    )
+    c6.metric(
+        "ΔP resto (col+cam)",
+        f"{res['delta_P_resto_Pa']:.2f} Pa",
+        help="ΔP de colector + cámara escalado cuadrático al caudal de equilibrio.",
+    )
+    dP_turb = float(res.get("delta_P_turbina_motriz_Pa", 0.0))
+    if dP_turb > 0.0:
+        c7.metric(
+            "ΔP motriz turbina",
+            f"{dP_turb:.2f} Pa",
+            help=f"Extractor eólico a v_local={res.get('v_viento_local_ms', 0.0):.2f} m/s.",
+        )
+    c8.metric("H efectiva", f"{res['H_eff_m']:.2f} m")
+
+    advs = res.get("advertencias", []) or []
+    if advs:
+        with st.expander(f"⚠️ {len(advs)} advertencia(s) del lazo natural"):
+            for a in advs:
+                st.warning(a)
+
+    st.caption(
+        f"Inputs: T_amb={ev['T_amb_K'] - 273.15:.1f} °C, "
+        f"T_chim={ev['T_chim_K'] - 273.15:.1f} °C "
+        f"(heurística ΔT={ev['delta_T_chim_K']:.0f} K para "
+        f"{'CAJA' if ev['es_caja'] else 'ARMARIO/GRAN_ESCALA'}), "
+        f"v_viento={ev['v_viento_ms']:.1f} m/s, "
+        f"P={ev['P_amb_Pa'] / 1000:.2f} kPa. "
+        f"Clima: {ev['origen_clima']}. Presión: {ev['P_origen']}. "
+        "En P7 se vuelve a resolver con el lazo Picard completo (T_chim de la "
+        "cámara realimenta el cálculo)."
+    )
+
+
 def _render_chimenea_section(proyecto) -> None:
     """Renderiza la configuración de chimenea solar.
 
@@ -407,6 +562,13 @@ def _render_chimenea_section(proyecto) -> None:
     como componente top-level en ``proyecto.chimenea``, independiente del
     colector (utilizable también en tipología CAJA).
     """
+    from calculos.balance_global import presion_representativa_proyecto
+
+    # Presión atmosférica representativa para los previews de tiro térmico
+    # y del extractor eólico. Se recomputa aquí porque la sección puede ser
+    # llamada en contextos donde la variable de ``render()`` no está en scope.
+    P_proyecto_Pa, _ = presion_representativa_proyecto(proyecto)
+
     st.divider()
     st.subheader("Chimenea solar")
 
@@ -453,6 +615,7 @@ def _render_chimenea_section(proyecto) -> None:
 
     if not usar_chimenea:
         proyecto.chimenea = None
+        st.session_state.pop("p6_chimenea_eval", None)
         st.caption("Sin chimenea. El aire se moverá solo por difusión libre.")
         return
 
@@ -628,7 +791,9 @@ def _render_chimenea_section(proyecto) -> None:
             z_tope = H_cam_default + alt
             if v_viento_10m is not None:
                 v_loc = _v_viento_a_altura(v_viento_10m, z_tope, z0_val)
-                dP_turb = delta_P_turbina_motriz_Pa(v_loc, Cp_val, T_amb_K=293.15)
+                dP_turb = delta_P_turbina_motriz_Pa(
+                    v_loc, Cp_val, T_amb_K=293.15, P_amb_Pa=P_proyecto_Pa
+                )
                 st.caption(
                     f"Viento medio del sitio (P2, a 10 m): "
                     f"**{v_viento_10m:.1f} m/s** → corregido a {z_tope:.1f} m del "
@@ -680,6 +845,7 @@ def _render_chimenea_section(proyecto) -> None:
             T_amb_K=273.15 + T_amb_C,
             T_chim_K=273.15 + T_amb_C + dT,
             H_eff_m=H_eff,
+            P_amb_Pa=P_proyecto_Pa,
         )
         col_w.metric(f"ΔT = +{dT:.0f} K", f"{dP:.2f} Pa")
     st.caption(
@@ -687,6 +853,10 @@ def _render_chimenea_section(proyecto) -> None:
         f"+ alto_cámara ({H_camara_default:.2f} m) = {H_eff:.2f} m. El caudal de equilibrio "
         f"se resuelve en `balance_global` con T_chim del lazo y pérdidas reales."
     )
+
+    # --- Botón: calcular chimenea (lazo natural con condiciones representativas) ---
+    st.divider()
+    _render_calcular_chimenea(proyecto, nueva)
 
     # --- Guardar configuración ---
     st.divider()
@@ -721,6 +891,12 @@ def render() -> None:
     st.header("6 · Motor / Ventilador")
 
     proyecto = st.session_state.proyecto
+
+    # Presión atmosférica representativa del emplazamiento (corregida por
+    # altitud). Se propaga a estimar_delta_P_* y al preview de chimenea.
+    from calculos.balance_global import presion_representativa_proyecto
+
+    P_proyecto_Pa, _P_origen = presion_representativa_proyecto(proyecto)
 
     # -----------------------------------------------------------------------
     # Cargar configuración guardada (.json)
@@ -814,7 +990,7 @@ def render() -> None:
             Q_vol_cam = caudal_masico_a_volumetrico(
                 proyecto.camara.flujo.caudal_masico_kg_s,
                 _T_MEDIA_DEFAULT_K,
-                _P_ATM_DEFAULT_PA,
+                P_proyecto_Pa,
             )
             Q_vol_sugerido = Q_vol_cam
             hint_caudal = (
@@ -883,7 +1059,9 @@ def render() -> None:
             dP_col_auto: float | None = None
             if proyecto.colector is not None:
                 try:
-                    dP_col_auto = estimar_delta_P_colector(proyecto.colector)
+                    dP_col_auto = estimar_delta_P_colector(
+                        proyecto.colector, P_Pa=P_proyecto_Pa
+                    )
                 except Exception:
                     pass
 
@@ -917,7 +1095,9 @@ def render() -> None:
             dP_cam_auto: float | None = None
             if proyecto.camara is not None:
                 try:
-                    dP_cam_auto = estimar_delta_P_camara(proyecto.camara)
+                    dP_cam_auto = estimar_delta_P_camara(
+                        proyecto.camara, P_Pa=P_proyecto_Pa
+                    )
                 except Exception:
                     pass
 
@@ -987,6 +1167,7 @@ def render() -> None:
                 v_ducto_m_s=v_ducto,
                 n_paralelo=n_paralelo,
                 n_codos=2,
+                P_Pa=P_proyecto_Pa,
             )
             dP_singulares_val = sing["total"]
             with st.expander(
@@ -1015,6 +1196,7 @@ def render() -> None:
                         v_ducto_m_s=v_ducto_input,
                         n_paralelo=n_paralelo,
                         n_codos=2,
+                        P_Pa=P_proyecto_Pa,
                     )
                     dP_singulares_val = sing["total"]
                     v_ducto = v_ducto_input

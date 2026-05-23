@@ -280,8 +280,10 @@ def _fecha_dia_analisis(datos_local: pd.DataFrame, cfg, anio: int):
         return date(anio, 12, 21)
     elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
         return date(anio, 6, 21)
-    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO:
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_MARZO:
         return date(anio, 3, 21)
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
+        return date(anio, 9, 21)
     elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
         return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
     else:  # MAS_FRIO
@@ -753,7 +755,8 @@ def render() -> None:
                 DiaAnalisis.ESPECIFICO: "día específico",
                 DiaAnalisis.SOLSTICIO_VERANO: "solsticio de verano",
                 DiaAnalisis.SOLSTICIO_INVIERNO: "solsticio de invierno",
-                DiaAnalisis.EQUINOCCIO: "equinoccio",
+                DiaAnalisis.EQUINOCCIO_MARZO: "equinoccio de otoño (hem. sur)",
+                DiaAnalisis.EQUINOCCIO_SEPTIEMBRE: "equinoccio de primavera (hem. sur)",
                 DiaAnalisis.MAS_CALUROSO: "día más caluroso",
                 DiaAnalisis.MAS_FRIO: "día más frío",
             }

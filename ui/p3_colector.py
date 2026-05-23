@@ -635,8 +635,10 @@ def _seleccionar_dia(datos_local, cfg, anio):
         target = _date_type(anio, 12, 21)
     elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
         target = _date_type(anio, 6, 21)
-    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO:
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_MARZO:
         target = _date_type(anio, 3, 21)
+    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
+        target = _date_type(anio, 9, 21)
     elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
         target = ((datos_local["T_amb_K"] - 273.15)
                   .resample("D").mean().idxmax().date())

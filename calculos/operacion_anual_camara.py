@@ -151,7 +151,7 @@ def _calcular_punto_mensual(
     eta_colector: float,
 ) -> PuntoMensualCamara:
     """Para un mes: arma forzantes mensuales y corre el motor TD vía dispatcher."""
-    from calculos.balance_global import armar_forzantes_aire
+    from calculos.balance_global import armar_forzantes_aire, presion_representativa_proyecto
     from calculos.camara_calc import calcular_camara
 
     cfg = proyecto.camara.operacion_anual
@@ -184,8 +184,9 @@ def _calcular_punto_mensual(
         m_dot,
     )
 
-    # 4. ω ambiente desde HR y T_amb
-    P_amb = 101325.0
+    # 4. ω ambiente desde HR y T_amb. La presión corregida por altitud se
+    #    obtiene del helper híbrido (media NASA anual o ISA del emplazamiento).
+    P_amb, _ = presion_representativa_proyecto(proyecto)
     omega_amb_dia = np.array([humedad_absoluta(HR_dia[h], T_amb_dia[h], P_amb) for h in range(24)])
 
     # 5. Replicar el día N veces para llenar el horizonte del batch
@@ -217,6 +218,7 @@ def _calcular_punto_mensual(
         T_op_K,
         HR_op,
         T_amb_K=T_amb_ref_K,
+        P_Pa=P_amb,
         t_max_s=t_max_s,
         forzantes_aire=forzantes,
     )
