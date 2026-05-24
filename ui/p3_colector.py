@@ -1036,16 +1036,12 @@ def render() -> None:
         )
         st.info(_TIPOS_HELP[tipo_colector])
 
-        if tipo_colector == 1:
+        with st.expander("📐 Sección transversal de los 4 tipos", expanded=False):
             mostrar_esquema(
-                "colector_tipo1",
-                caption="Colector Tipo 1: canal único con absorbedor en el fondo.",
+                "colectores_seccion_transversal",
+                max_ancho_px=600,
+                caption="Sección transversal comparativa de los 4 tipos de colector.",
             )
-        mostrar_esquema(
-            "colectores_seccion_transversal",
-            max_ancho_px=600,
-            caption="Sección transversal comparativa de los 4 tipos de colector.",
-        )
 
     # -----------------------------------------------------------------------
     # Sección 1: Colector unitario — materiales
