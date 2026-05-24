@@ -28,3 +28,6 @@ htmlcov/
 # Papers académicos (no se distribuyen — ver docs/notas/papers/indice.md para referencias)
 docs/notas/papers/*.pdf
 docs/notas/Saravia2007.pdf
+
+# Clon local del Hugging Face Space (deploy automatizado vía GitHub Action — ver S33)
+Secasol26/

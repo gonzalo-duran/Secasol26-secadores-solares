@@ -7,6 +7,16 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Infrastructure
+
+- **Migración de deploy a Hugging Face Spaces** (S33, 2026-05-23). Repo de GitHub cambiado a privado. La app ahora corre en `https://huggingface.co/spaces/gonzalojduran/Secasol26` vía Docker + template Streamlit. Deploy automático en cada push a `main` mediante GitHub Action (`.github/workflows/deploy_hf.yml`) que sincroniza el código al Space y dispara rebuild. Git LFS configurado en el Space para fonts `.ttf` y logos `.png`. Caché de NASA POWER excluido del deploy — se regenera en runtime.
+
+### Changed
+
+- **`st.components.v1.html` → `st.iframe`** en `ui/componentes/esquemas.py`. La API anterior está deprecada y se elimina después del 2026-06-01. `st.iframe` (Streamlit ≥1.57) acepta HTML crudo como `src` y mantiene el aislamiento del CSS de Streamlit que necesitamos para que el tema oscuro no repinte los textos de los SVG.
+
+- **Esquema de tipo de colector en P3 reorganizado**: se ocultó la vista isométrica `colector_tipo1.svg` (no aportaba contenido nuevo) y la sección transversal comparativa de los 4 tipos se movió a un `st.expander` colapsado por defecto, siguiendo el patrón de P1 (circuito de aire) y P4 (esquema de cámara). El SVG queda en `assets/esquemas/` por si se quiere reactivar.
+
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Pérdida de carga en bandejas de producto (correlación tipo Ergun para esferas / lecho poroso).

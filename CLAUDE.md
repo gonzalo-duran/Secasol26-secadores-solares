@@ -31,6 +31,12 @@ El entorno virtual está en `.venv/`. Siempre prefijá los comandos de Python co
 
 **Control de versiones:** se trabaja en el repo local (working tree) por defecto, sin commits ni push, salvo que el usuario indique explícitamente que quiere commitear o subir a GitHub. Los cambios quedan visibles vía `git diff` y pueden descartarse con `git restore` si hace falta. Solo cuando el usuario lo pida explícitamente se arman commits (y solo cuando lo pida explícitamente se hace `git push`).
 
+## Deploy (desde S33)
+
+El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada y sin ver el código.
+
+Implicancia operativa: **un push a `main` actualiza la app en producción**. Si hay que pushear cambios que no deberían llegar a producción todavía, usar rama distinta de `main`. El secreto `HF_TOKEN` está en GitHub → Settings → Secrets and variables → Actions. La carpeta `Secasol26/` en raíz es el clon local del Space (gitignoreada) — históricamente se usaba para deploy manual; el Action volvió obsoleto el push manual.
+
 ## Arquitectura
 
 La aplicación es un **prediseñador de secadores solares** (Streamlit). El usuario configura el sistema pestaña a pestaña; cada pestaña escribe en un objeto `Proyecto` central guardado en `st.session_state.proyecto`.
