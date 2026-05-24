@@ -1,0 +1,65 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install Git LFS
+        run: git lfs install
+
+      - name: Push to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # Clonar el Space actual
+          git clone https://gonzalojduran:$HF_TOKEN@huggingface.co/spaces/gonzalojduran/Secasol26 hf_space
+          cd hf_space
+
+          # Preservar archivos propios del Space
+          cp Dockerfile /tmp/Dockerfile_hf
+          cp README.md /tmp/README_hf.md
+          cp .gitattributes /tmp/gitattributes_hf
+
+          # Limpiar contenido anterior del src/
+          rm -rf src/*
+
+          # Copiar código actualizado
+          cp ../Secasol.py src/
+          cp -r ../ui/ src/ui/
+          cp -r ../calculos/ src/calculos/
+          cp -r ../core/ src/core/
+          cp -r ../assets/ src/assets/
+          cp -r ../catalogo/ src/catalogo/
+          mkdir -p src/data
+          cp ../requirements.txt requirements.txt
+
+          # Restaurar archivos del Space
+          cp /tmp/Dockerfile_hf Dockerfile
+          cp /tmp/README_hf.md README.md
+          cp /tmp/gitattributes_hf .gitattributes
+
+          # Limpiar __pycache__
+          find src/ -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+
+          # Configurar git
+          git config user.email "gonzalojduran@users.noreply.github.com"
+          git config user.name "gonzalojduran"
+
+          # Commit y push si hay cambios
+          git add .
+          if git diff --cached --quiet; then
+            echo "No hay cambios para deployar"
+          else
+            git commit -m "Auto-deploy desde GitHub - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            git push https://gonzalojduran:$HF_TOKEN@huggingface.co/spaces/gonzalojduran/Secasol26
+          fi
