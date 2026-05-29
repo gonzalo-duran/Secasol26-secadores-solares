@@ -948,7 +948,7 @@ def _from_json_camara(data: dict) -> "Camara":
         bandejas=bandejas,
         flujo=flujo,
         carga_producto=carga,
-        modo_calculo=data.get("modo_calculo", "capa_fina"),
+        modo_calculo=data.get("modo_calculo", "termodinamico"),
     )
 
 
@@ -1902,7 +1902,7 @@ def render() -> None:
 
         # Reconstruir índice previo
         _modo_prev_raw = (
-            proyecto.camara.modo_calculo if proyecto.camara is not None else "capa_fina"
+            proyecto.camara.modo_calculo if proyecto.camara is not None else "termodinamico"
         )
         _idx_prev = 1 if _modo_prev_raw == "termodinamico" else 0
 

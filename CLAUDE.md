@@ -123,8 +123,8 @@ El solver de colector recibe **POA** (radiación en plano del colector, transpos
 
 | Modo | Módulo | Modelo físico | Estado de resultado |
 |------|--------|---------------|---------------------|
-| `capa_fina` (default) | `camara_calc.py::calcular_tiempo_secado_estatico` | Lewis/Page/Henderson-Pabis/Midilli/Logarítmico con k constante; X_eq por GAB con HR_media | `ResultadosCamara`, `t_secado_s: float`, `masa_agua_extraida_kg` |
-| `termodinamico` | `camara_termodinamica.py::simular_secado` | Balance acoplado calor-masa, EDOs `[T_prod, X_prod]` + 4 algebraicas, evaporación difusiva `ṁ_w = h_m·A·(ω_sat(T_prod)·a_w − ω_flujo)`, CSTR | `ResultadoMotorTermodinamico`, `t_secado_s: float | None` (None si no convergió), `masa_evaporada_total_kg` |
+| `capa_fina` | `camara_calc.py::calcular_tiempo_secado_estatico` | Lewis/Page/Henderson-Pabis/Midilli/Logarítmico con k constante; X_eq por GAB con HR_media | `ResultadosCamara`, `t_secado_s: float`, `masa_agua_extraida_kg` |
+| `termodinamico` (default desde S34) | `camara_termodinamica.py::simular_secado` | Balance acoplado calor-masa, EDOs `[T_prod, X_prod]` + 4 algebraicas, evaporación difusiva `ṁ_w = h_m·A·(ω_sat(T_prod)·a_w − ω_flujo)`, CSTR | `ResultadoMotorTermodinamico`, `t_secado_s: float | None` (None si no convergió), `masa_evaporada_total_kg` |
 
 **Operación anual de cámara** (cascada A + B, solo con `modo_calculo == "termodinamico"` y `modo_analisis == ANUAL`): el módulo `calculos/operacion_anual_camara.py` corre `simular_secado` sobre el día típico de cada mes (promedio horario desde NASA POWER vía `clima_calc.dia_tipo_mensual`), estima `T_salida_colector` con modelo lineal `T_amb + η_col·POA·A / (ṁ·c_p)` (Opción A), y calcula las 4 eficiencias de Augustus Leon (`calculos/eficiencias_camara.py`: η_drying, η_pickup, η_térmica, η_total). El usuario configura `batches_por_mes` en P4 vía `Camara.operacion_anual: OperacionAnualConfig`. Resumen anual en P4 + tabla mensual + barras en P7.
 

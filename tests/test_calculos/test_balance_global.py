@@ -54,6 +54,7 @@ def proyecto_armario_completo():
             humedad_objetivo_X=0.15,
             modelo_capa_fina="logaritmico",
         ),
+        modo_calculo="capa_fina",
     )
     p.motor = Motor(
         tipo_accionamiento=TipoAccionamiento.MOTOR_ELECTRICO,

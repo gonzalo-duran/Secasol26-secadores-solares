@@ -36,7 +36,7 @@ from core.camara import (
 
 @pytest.fixture
 def camara_manzana_capa_fina():
-    """Cámara con manzana, modo capa_fina (default)."""
+    """Cámara con manzana, modo capa_fina."""
     return Camara(
         carga_producto=CargaProducto(
             producto_id="manzana",
@@ -45,6 +45,7 @@ def camara_manzana_capa_fina():
             humedad_objetivo_X=0.20,
             modelo_capa_fina="logaritmico",
         ),
+        modo_calculo="capa_fina",
     )
 
 

@@ -442,9 +442,9 @@ class TestAdvertenciasCamara:
 class TestCamaraModoCalculo:
     """Validación del nuevo campo `modo_calculo` en Camara."""
 
-    def test_default_es_capa_fina(self):
+    def test_default_es_termodinamico(self):
         cam = Camara()
-        assert cam.modo_calculo == "capa_fina"
+        assert cam.modo_calculo == "termodinamico"
 
     def test_termodinamico_valido(self):
         cam = Camara(modo_calculo="termodinamico")

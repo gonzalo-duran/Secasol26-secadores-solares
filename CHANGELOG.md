@@ -13,6 +13,8 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Changed
 
+- **Default de `Camara.modo_calculo` cambiado a `"termodinamico"`** (S34, 2026-05-29). Hasta la S33 el default era `"capa_fina"` "para preservar comportamiento histórico"; ahora es el motor termodinámico (balance acoplado calor-masa con `solve_ivp`, único soportado por la operación anual). Snapshots `.json` antiguos sin el campo cargan con el nuevo default; los que tienen el campo explícito lo respetan. Suite: 833 passed.
+
 - **`st.components.v1.html` → `st.iframe`** en `ui/componentes/esquemas.py`. La API anterior está deprecada y se elimina después del 2026-06-01. `st.iframe` (Streamlit ≥1.57) acepta HTML crudo como `src` y mantiene el aislamiento del CSS de Streamlit que necesitamos para que el tema oscuro no repinte los textos de los SVG.
 
 - **Esquema de tipo de colector en P3 reorganizado**: se ocultó la vista isométrica `colector_tipo1.svg` (no aportaba contenido nuevo) y la sección transversal comparativa de los 4 tipos se movió a un `st.expander` colapsado por defecto, siguiendo el patrón de P1 (circuito de aire) y P4 (esquema de cámara). El SVG queda en `assets/esquemas/` por si se quiere reactivar.

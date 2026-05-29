@@ -515,7 +515,7 @@ class Camara:
         modo_calculo: Selector del motor numérico:
             'capa_fina'    → modelo cinético empírico (Lewis/Page/...).
             'termodinamico' → balance acoplado calor-masa con `solve_ivp`.
-            Default: 'capa_fina' para preservar comportamiento histórico.
+            Default: 'termodinamico' (motor físicamente más completo).
     """
 
     geometria: GeometriaCamara = field(default_factory=GeometriaCamara)
@@ -523,7 +523,7 @@ class Camara:
     bandejas: ConfiguracionBandejas = field(default_factory=ConfiguracionBandejas)
     flujo: ConfiguracionFlujo = field(default_factory=ConfiguracionFlujo)
     carga_producto: CargaProducto = field(default_factory=CargaProducto)
-    modo_calculo: Literal["capa_fina", "termodinamico"] = "capa_fina"
+    modo_calculo: Literal["capa_fina", "termodinamico"] = "termodinamico"
     operacion_anual: Optional[OperacionAnualConfig] = None
 
     def __post_init__(self) -> None:
