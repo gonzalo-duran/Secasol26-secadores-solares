@@ -23,6 +23,7 @@ from calculos.clima_calc import obtener_clima
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
 from core.proyecto import DiaAnalisis, ModoAnalisis
+from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
@@ -848,11 +849,11 @@ def render() -> None:
 
         with tab_t:
             fig_t = _fig_temperatura(datos_local)
-            st.plotly_chart(fig_t, width="stretch")
+            mostrar_plotly(fig_t, nombre="temperatura")
 
         with tab_rad:
             fig_rad = _fig_irradiancia_comparativa(datos_local, poa_horaria)
-            st.plotly_chart(fig_rad, width="stretch")
+            mostrar_plotly(fig_rad, nombre="irradiancia")
 
             poa_anual = poa_horaria.sum() / 1000.0
             ghi_anual = datos_local["GHI_Wm2"].sum() / 1000.0
@@ -875,7 +876,7 @@ def render() -> None:
 
         with tab_vhr:
             fig_vhr = _fig_viento_hr(datos_local)
-            st.plotly_chart(fig_vhr, width="stretch")
+            mostrar_plotly(fig_vhr, nombre="viento_hr")
 
         with tab_tabla:
             df_mens = _resumen_mensual(datos_local)
@@ -932,11 +933,11 @@ def render() -> None:
 
                 with tab_dt:
                     fig_dt = _fig_temperatura_diaria(datos_dia)
-                    st.plotly_chart(fig_dt, width="stretch")
+                    mostrar_plotly(fig_dt, nombre="temperatura_dia")
 
                 with tab_drad:
                     fig_drad = _fig_irradiancia_diaria(datos_dia, poa_dia)
-                    st.plotly_chart(fig_drad, width="stretch")
+                    mostrar_plotly(fig_drad, nombre="irradiancia_dia")
                     st.caption(
                         "Plano horizontal: datos directos de NASA POWER. "
                         "Plano del colector: modelo Hay-Davies (pvlib), "
@@ -945,7 +946,7 @@ def render() -> None:
 
                 with tab_dvhr:
                     fig_dvhr = _fig_viento_hr_diaria(datos_dia)
-                    st.plotly_chart(fig_dvhr, width="stretch")
+                    mostrar_plotly(fig_dvhr, nombre="viento_hr_dia")
 
                 # Botón CSV del día
                 csv_dia = _generar_csv(datos_dia, empl.zona_horaria)

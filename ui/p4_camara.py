@@ -49,7 +49,7 @@ from core.camara import (
 )
 from core.proyecto import ModoAnalisis
 from ui.componentes.esquemas import mostrar_esquema
-from ui.componentes.graficas import grafica_termodinamica_camara
+from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -2519,7 +2519,7 @@ def render() -> None:
                 )
 
             fig = _grafica_secado_termodinamico(res, X_obj, prod_id)
-            st.plotly_chart(fig, width="stretch")
+            mostrar_plotly(fig, nombre="camara_secado_td")
 
             with st.expander(
                 "ℹ️ Sobre la forma de la curva de ṁ_w (modelo difusivo)",
@@ -2586,7 +2586,7 @@ def render() -> None:
                 st.warning(f"⚠️ {res.mensaje_convergencia}")
 
             fig = _grafica_curva_secado(res, X_ini, X_obj, prod_id)
-            st.plotly_chart(fig, width="stretch")
+            mostrar_plotly(fig, nombre="camara_curva_secado")
 
         # Resumen compacto
         with st.expander("Resumen de la configuración"):

@@ -40,6 +40,7 @@ from core.chimenea import Chimenea
 from core.advertencias import Severidad
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.esquemas import mostrar_esquema
+from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.unidades import acimut_duffie_a_pvlib, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -1731,12 +1732,12 @@ def render() -> None:
 
             with tab_a:
                 _fig_a = _fig_T_salida_dia(_r, _lbl)
-                st.plotly_chart(_fig_a, width="stretch")
+                mostrar_plotly(_fig_a, nombre="colector_Tsalida_dia")
 
             with tab_b:
                 _fig_b = _fig_T_fluido_dia(_r, _lbl)
                 if _fig_b is not None:
-                    st.plotly_chart(_fig_b, width="stretch")
+                    mostrar_plotly(_fig_b, nombre="colector_Tfluido_dia")
                 else:
                     st.info("No hay radiación solar suficiente a mediodía para calcular el perfil.")
 
@@ -1760,13 +1761,13 @@ def render() -> None:
 
                 with tab_a:
                     _fig_a = _fig_T_salida_anual(_r)
-                    st.plotly_chart(_fig_a, width="stretch")
+                    mostrar_plotly(_fig_a, nombre="colector_Tsalida_anual")
                     st.caption("Evaluación en el mediodía solar del día 15 de cada mes.")
 
                 with tab_b:
                     _fig_b = _fig_T_fluido_anual(_r)
                     if _fig_b is not None:
-                        st.plotly_chart(_fig_b, width="stretch")
+                        mostrar_plotly(_fig_b, nombre="colector_Tfluido_anual")
             else:
                 st.warning(
                     "No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente."

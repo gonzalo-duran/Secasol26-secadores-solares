@@ -25,7 +25,7 @@ from calculos.balance_global import (
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.advertencias import Severidad
 from core.proyecto import ModoAnalisis
-from ui.componentes.graficas import grafica_termodinamica_camara
+from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -244,7 +244,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         height=320,
         hovermode="x unified",
     )
-    st.plotly_chart(fig1, width="stretch")
+    mostrar_plotly(fig1, nombre="transitorio_forzantes")
 
     # --- Panel 2: T_sal_col, ΔT_aux, T_ent_cam ---
     fig2 = go.Figure()
@@ -280,7 +280,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         height=320,
         hovermode="x unified",
     )
-    st.plotly_chart(fig2, width="stretch")
+    mostrar_plotly(fig2, nombre="transitorio_acoplamiento")
 
     # --- Panel 3: producto T_prod, X_prod ---
     fig3 = make_subplots(specs=[[{"secondary_y": True}]])
@@ -317,7 +317,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
             annotation_text="X_obj alcanzado",
             annotation_position="top",
         )
-    st.plotly_chart(fig3, width="stretch")
+    mostrar_plotly(fig3, nombre="transitorio_Tprod_X")
 
     # --- Panel 4: tasa de evaporación ---
     fig4 = go.Figure()
@@ -336,7 +336,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         height=280,
         hovermode="x unified",
     )
-    st.plotly_chart(fig4, width="stretch")
+    mostrar_plotly(fig4, nombre="transitorio_evaporacion")
 
     # --- Panel 5: Chimenea solar (lazo natural) ---
     res_ch = getattr(res_tr, "chimenea", None)
@@ -397,7 +397,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
             height=320,
             hovermode="x unified",
         )
-        st.plotly_chart(fig_ch, width="stretch")
+        mostrar_plotly(fig_ch, nombre="chimenea")
 
     # ---- Diagnósticos extra ----
     with st.expander("Diagnósticos del horizonte"):
@@ -1425,7 +1425,7 @@ def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> N
             yaxis_title=f"{kpi.label} [{kpi.unidad}]",
             height=360,
         )
-        st.plotly_chart(fig, width="stretch")
+        mostrar_plotly(fig, nombre=f"barrido_kpi_{kid}")
 
 
 # ---------------------------------------------------------------------------
@@ -1761,7 +1761,7 @@ def render() -> None:
             X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
             prod_id = proyecto.camara.carga_producto.producto_id
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
-            st.plotly_chart(fig_td, width="stretch")
+            mostrar_plotly(fig_td, nombre="camara_trayectorias")
             st.caption(
                 "ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el "
                 "caudal de aire es el término dominante en el balance energético — "
@@ -1791,7 +1791,7 @@ def render() -> None:
                 )
 
             fig_dry = _fig_drying_curve(cam)
-            st.plotly_chart(fig_dry, width="stretch")
+            mostrar_plotly(fig_dry, nombre="camara_secado")
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
@@ -1837,7 +1837,7 @@ def render() -> None:
 
         fig_bal = _fig_sankey_simplificado(res)
         if fig_bal:
-            st.plotly_chart(fig_bal, width="stretch")
+            mostrar_plotly(fig_bal, nombre="balance_energetico")
 
     # --- Resumen del ciclo ---
     st.subheader("Resumen del ciclo de secado")
@@ -2057,7 +2057,7 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     )
     fig.update_yaxes(title_text="Producto secado [kg/mes]", secondary_y=False)
     fig.update_yaxes(title_text="η_total [%]", secondary_y=True)
-    st.plotly_chart(fig, width="stretch")
+    mostrar_plotly(fig, nombre="operacion_anual")
 
 
 def _render_botones_guardado(
