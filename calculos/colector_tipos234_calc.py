@@ -71,7 +71,8 @@ from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
 from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
-from calculos.colector_calc import _U_cubierta_efectiva
+from calculos.colector_calc import _U_cubierta_efectiva, coef_conveccion_interna_local
+from calculos.propiedades_aire import cp_aire, rho_aire
 
 if TYPE_CHECKING:
     from core.colector import Colector
@@ -91,7 +92,7 @@ RHO_AIRE_REF: float = 1.093  # kg/m³ a 323 K, 101325 Pa
 
 V_VIENTO_LIMITE_MCADAMS: float = 5.0  # m/s
 
-G_ACELERACION: float = 9.81        # m/s²
+G_ACELERACION: float = 9.81  # m/s²
 NU_AIRE: float = MU_AIRE / RHO_AIRE_REF  # m²/s — viscosidad cinemática a 323 K
 
 N_NODOS_MIN: int = 50
@@ -445,9 +446,13 @@ def _sistema_nodo_tipo2(
     # Conductancia cubierta: simple (n=1) o serie cubierta-cavidad-cubierta (n=2).
     U_cub = _U_cubierta_efectiva(
         n_cubiertas=n_cubiertas,
-        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
-        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
-        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        T_cub_e_K=T_cub_e,
+        T_cub_i_K=T_cub_i,
+        k_cub=k_cub,
+        esp_cub_m=esp_cub,
+        em_cub=em_cub,
+        esp_cav_m=esp_cav_m,
+        pendiente_deg=pendiente_deg,
         P_amb_Pa=P_amb_Pa,
     )
     T_bot = _T_bot_desde_T_int(T_int, T_amb_K, k_ais, esp_ais, h_wind)
@@ -556,9 +561,13 @@ def _sistema_nodo_tipos34(
     # Conductancia cubierta: simple (n=1) o serie cubierta-cavidad-cubierta (n=2).
     U_cub = _U_cubierta_efectiva(
         n_cubiertas=n_cubiertas,
-        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
-        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
-        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        T_cub_e_K=T_cub_e,
+        T_cub_i_K=T_cub_i,
+        k_cub=k_cub,
+        esp_cub_m=esp_cub,
+        em_cub=em_cub,
+        esp_cav_m=esp_cav_m,
+        pendiente_deg=pendiente_deg,
         P_amb_Pa=P_amb_Pa,
     )
     U_ais = k_ais / esp_ais
@@ -615,6 +624,27 @@ def _sistema_nodo_tipos34(
 # =============================================================================
 
 
+def _h_local_canal(params: dict, canal: str, T_f_K: float, T_pared_K: float, x_m: float) -> float:
+    """h convectivo LOCAL del canal activo ``canal`` ('cs' o 'ci') en x.
+
+    Toma la geometría y el flujo másico del canal desde ``params`` y delega en
+    ``coef_conveccion_interna_local`` (propiedades a T_f(x), Re y Nu(x) locales,
+    flotación con la T_abs del warm-start).
+    """
+    h, _ = coef_conveccion_interna_local(
+        T_f_K=T_f_K,
+        T_pared_K=T_pared_K,
+        Dh_m=params[f"Dh_{canal}"],
+        x_m=x_m,
+        A_seccion_m2=params[f"A_{canal}_m2"],
+        m_punto_kgs=params[f"m_punto_{canal}_kgs"],
+        pared=params[f"pared_{canal}"],
+        pendiente_deg=params.get("pendiente_deg", 30.0),
+        P_amb_Pa=params.get("P_amb_Pa", 101325.0),
+    )
+    return h
+
+
 def _construir_rhs_tipo2(params: dict) -> tuple:
     """RHS para solve_ivp Tipo 2: integra [T_f_cs, T_f_ci] simultáneamente.
 
@@ -641,6 +671,12 @@ def _construir_rhs_tipo2(params: dict) -> tuple:
             T_g_cub = T_amb + 5.0
             estado["guess"] = np.array([T_g_cub, T_g_cub + 5.0, T_g_abs, T_g_cub + 5.0])
 
+        # Coeficientes LOCALES de ambos canales activos (pared caliente = absorbedor
+        # del warm-start).
+        T_abs_ws = float(estado["guess"][2])
+        h_cs = _h_local_canal(params, "cs", T_f_cs, T_abs_ws, x)
+        h_ci = _h_local_canal(params, "ci", T_f_ci, T_abs_ws, x)
+
         sol, _, ier, msg = fsolve(
             _sistema_nodo_tipo2,
             estado["guess"],
@@ -651,8 +687,8 @@ def _construir_rhs_tipo2(params: dict) -> tuple:
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int_cs"],
-                params["h_int_ci"],
+                h_cs,
+                h_ci,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -677,8 +713,6 @@ def _construir_rhs_tipo2(params: dict) -> tuple:
         estado["guess"] = sol.copy()
 
         T_cub_i, T_abs = sol[1], sol[2]
-        h_cs = params["h_int_cs"]
-        h_ci = params["h_int_ci"]
         W_m = params["W_m"]
         W_abs_m = params["W_abs_m"]
         m_cs = params["m_punto_cs_kgs"]
@@ -686,13 +720,13 @@ def _construir_rhs_tipo2(params: dict) -> tuple:
 
         # dT_f_cs/dx: calor desde cubierta (W_m) y absorbedor (W_abs_m)
         dTcs_dx = (h_cs * (T_cub_i - T_f_cs) * W_m + h_cs * (T_abs - T_f_cs) * W_abs_m) / (
-            m_cs * CP_AIRE
+            m_cs * cp_aire(T_f_cs)
         )
 
         # dT_f_ci/dx: calor desde absorbedor y cara interna fondo (ambos W_abs_m)
         T_int = sol[3]
         dTci_dx = (h_ci * (T_abs - T_f_ci) * W_abs_m + h_ci * (T_int - T_f_ci) * W_abs_m) / (
-            m_ci * CP_AIRE
+            m_ci * cp_aire(T_f_ci)
         )
 
         return np.array([dTcs_dx, dTci_dx])
@@ -738,7 +772,12 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
         dT_cs = max(T_abs_guess - T_cub_i_guess, 0.1)
         T_film_cs = 0.5 * (T_abs_guess + T_cub_i_guess)
         Ra_cs = _Ra_canal_estanco(dT_cs, params["alto_cs_m"], T_film_cs)
-        h_int_cs = nusselt_hollands_inclinada(Ra_cs, params["theta_deg"]) * K_AIRE / params["alto_cs_m"]
+        h_int_cs = (
+            nusselt_hollands_inclinada(Ra_cs, params["theta_deg"]) * K_AIRE / params["alto_cs_m"]
+        )
+
+        # Canal inferior activo: coeficiente LOCAL (pared caliente = absorbedor).
+        h_ci_local = _h_local_canal(params, "ci", T_f_ci, float(T_abs_guess), x)
 
         sol, _, ier, msg = fsolve(
             _sistema_nodo_tipos34,
@@ -750,7 +789,7 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int_ci"],
+                h_ci_local,
                 h_int_cs,
                 params["k_cub"],
                 params["esp_cub_m"],
@@ -778,13 +817,12 @@ def _construir_rhs_tipo3(params: dict) -> tuple:
 
         _, T_abs, T_int = sol[1], sol[2], sol[3]
 
-        h_ci = params["h_int_ci"]
         W_abs_m = params["W_abs_m"]
         m_ci = params["m_punto_ci_kgs"]
 
-        dTci_dx = (h_ci * (T_abs - T_f_ci) * W_abs_m + h_ci * (T_int - T_f_ci) * W_abs_m) / (
-            m_ci * CP_AIRE
-        )
+        dTci_dx = (
+            h_ci_local * (T_abs - T_f_ci) * W_abs_m + h_ci_local * (T_int - T_f_ci) * W_abs_m
+        ) / (m_ci * cp_aire(T_f_ci))
 
         return np.array([dTci_dx])
 
@@ -820,6 +858,9 @@ def _construir_rhs_tipo4(params: dict) -> tuple:
         T_int_guess = estado["guess"][3]
         T_f_ci = 0.5 * (T_abs_guess + T_int_guess)
 
+        # Canal superior activo: coeficiente LOCAL (pared caliente = absorbedor).
+        h_cs_local = _h_local_canal(params, "cs", T_f_cs, float(T_abs_guess), x)
+
         sol, _, ier, msg = fsolve(
             _sistema_nodo_tipos34,
             estado["guess"],
@@ -830,7 +871,7 @@ def _construir_rhs_tipo4(params: dict) -> tuple:
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int_cs"],
+                h_cs_local,
                 params["h_int_ci"],
                 params["k_cub"],
                 params["esp_cub_m"],
@@ -858,14 +899,13 @@ def _construir_rhs_tipo4(params: dict) -> tuple:
 
         T_cub_i, T_abs, _ = sol[1], sol[2], sol[3]
 
-        h_cs = params["h_int_cs"]
         W_m = params["W_m"]
         W_abs_m = params["W_abs_m"]
         m_cs = params["m_punto_cs_kgs"]
 
-        dTcs_dx = (h_cs * (T_cub_i - T_f_cs) * W_m + h_cs * (T_abs - T_f_cs) * W_abs_m) / (
-            m_cs * CP_AIRE
-        )
+        dTcs_dx = (
+            h_cs_local * (T_cub_i - T_f_cs) * W_m + h_cs_local * (T_abs - T_f_cs) * W_abs_m
+        ) / (m_cs * cp_aire(T_f_cs))
 
         return np.array([dTcs_dx])
 
@@ -899,6 +939,9 @@ def _reconstruir_perfiles_tipo2(
             T_g_abs = T_f_max + 20.0
             T_g_cub = T_amb + 5.0
             guess = np.array([T_g_cub, T_g_cub + 5.0, T_g_abs, T_g_cub + 5.0])
+        T_abs_ws = float(guess[2])
+        h_cs_loc = _h_local_canal(params, "cs", float(T_f_cs_arr[i]), T_abs_ws, float(x_arr[i]))
+        h_ci_loc = _h_local_canal(params, "ci", float(T_f_ci_arr[i]), T_abs_ws, float(x_arr[i]))
         sol = fsolve(
             _sistema_nodo_tipo2,
             guess,
@@ -909,8 +952,8 @@ def _reconstruir_perfiles_tipo2(
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int_cs"],
-                params["h_int_ci"],
+                h_cs_loc,
+                h_ci_loc,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -969,19 +1012,29 @@ def _reconstruir_perfiles_tipos34(
             guess = np.array([T_g_cub, T_g_cub + 5.0, T_g_abs, T_g_cub + 5.0])
 
         # T_f_estanco y h_int_estanco desde el warm-start del nodo anterior.
+        # El canal ACTIVO usa coeficiente local; el estanco mantiene su tratamiento.
+        T_abs_ws = float(guess[2])
         if canal_activo == "inferior":
             # Tipo 3: canal superior estanco, absorbedor (caliente) abajo → Hollands
             T_f_est = 0.5 * (guess[1] + guess[2])  # (T_cub_i + T_abs)/2
             dT_est = max(guess[2] - guess[1], 0.1)
             T_film_est = 0.5 * (guess[2] + guess[1])
             Ra_est = _Ra_canal_estanco(dT_est, params["alto_cs_m"], T_film_est)
-            h_int_estanco = nusselt_hollands_inclinada(Ra_est, params["theta_deg"]) * K_AIRE / params["alto_cs_m"]
-            h_int_activo = params["h_int_ci"]
+            h_int_estanco = (
+                nusselt_hollands_inclinada(Ra_est, params["theta_deg"])
+                * K_AIRE
+                / params["alto_cs_m"]
+            )
+            h_int_activo = _h_local_canal(
+                params, "ci", float(T_f_activo_arr[i]), T_abs_ws, float(x_arr[i])
+            )
         else:
             # Tipo 4: canal inferior estanco, absorbedor (caliente) arriba → Nu=1
             T_f_est = 0.5 * (guess[2] + guess[3])  # (T_abs + T_int)/2
             h_int_estanco = params["h_int_ci"]  # K_AIRE / alto_ci_m, precomputado
-            h_int_activo = params["h_int_cs"]
+            h_int_activo = _h_local_canal(
+                params, "cs", float(T_f_activo_arr[i]), T_abs_ws, float(x_arr[i])
+            )
 
         sol = fsolve(
             _sistema_nodo_tipos34,
@@ -1178,9 +1231,10 @@ def calcular_colector_tipo2(
             "estrecho para el modelo de canal rectangular."
         )
 
-    # Flujos másicos por rama paralela en cada canal
-    m_cs_rama = RHO_AIRE_REF * v_diseno_cs_ms * W_m * alto_cs_m
-    m_ci_rama = RHO_AIRE_REF * v_diseno_ci_ms * W_m * alto_ci_m
+    # Flujos másicos por rama paralela en cada canal (densidad a la entrada).
+    rho_ent = rho_aire(T_entrada_K, P_amb_Pa)
+    m_cs_rama = rho_ent * v_diseno_cs_ms * W_m * alto_cs_m
+    m_ci_rama = rho_ent * v_diseno_ci_ms * W_m * alto_ci_m
     m_cs_total = m_cs_rama * banco.n_paralelo
     m_ci_total = m_ci_rama * banco.n_paralelo
 
@@ -1239,6 +1293,12 @@ def calcular_colector_tipo2(
         "W_abs_m": W_abs_m,
         "m_punto_cs_kgs": m_cs_rama,
         "m_punto_ci_kgs": m_ci_rama,
+        "Dh_cs": Dh_cs,
+        "Dh_ci": Dh_ci,
+        "A_cs_m2": W_m * alto_cs_m,
+        "A_ci_m2": W_m * alto_ci_m,
+        "pared_cs": "una_pared",
+        "pared_ci": "dos_paredes",
         "n_cubiertas": colector.unidad.n_cubiertas,
         "esp_cav_m": colector.unidad.espaciado_entre_cubiertas_m,
         "pendiente_deg": pendiente_deg,
@@ -1264,8 +1324,12 @@ def calcular_colector_tipo2(
         m_cs_total + m_ci_total
     )
 
-    Q_util_cs = m_cs_total * CP_AIRE * (T_salida_cs - T_entrada_K)
-    Q_util_ci = m_ci_total * CP_AIRE * (T_salida_ci - T_entrada_K)
+    Q_util_cs = (
+        m_cs_total * cp_aire(0.5 * (T_entrada_K + T_salida_cs)) * (T_salida_cs - T_entrada_K)
+    )
+    Q_util_ci = (
+        m_ci_total * cp_aire(0.5 * (T_entrada_K + T_salida_ci)) * (T_salida_ci - T_entrada_K)
+    )
     Q_util_W = Q_util_cs + Q_util_ci
     Q_incidente_W = I_g_W_m2 * mat["tau_cub"] * W_m * L_total_m * banco.n_paralelo
     eta_termica = Q_util_W / Q_incidente_W if Q_incidente_W > 0.0 else 0.0
@@ -1378,7 +1442,7 @@ def calcular_colector_tipo3(
         )
 
     v_diseno = unidad.velocidad_diseno_ms
-    m_ci_rama = RHO_AIRE_REF * v_diseno * W_m * alto_ci_m
+    m_ci_rama = rho_aire(T_entrada_K, P_amb_Pa) * v_diseno * W_m * alto_ci_m
     m_ci_total = m_ci_rama * banco.n_paralelo
 
     T_cie_K = _T_cielo_K(T_amb_K)
@@ -1420,6 +1484,9 @@ def calcular_colector_tipo3(
         "W_m": W_m,
         "W_abs_m": W_abs_m,
         "m_punto_ci_kgs": m_ci_rama,
+        "Dh_ci": Dh_ci,
+        "A_ci_m2": W_m * alto_ci_m,
+        "pared_ci": "una_pared",
         "alto_cs_m": alto_cs_m,
         "theta_deg": theta_deg,
         "n_cubiertas": colector.unidad.n_cubiertas,
@@ -1439,7 +1506,7 @@ def calcular_colector_tipo3(
     )
 
     T_salida = float(T_f_ci_arr[-1])
-    Q_util_W = m_ci_total * CP_AIRE * (T_salida - T_entrada_K)
+    Q_util_W = m_ci_total * cp_aire(0.5 * (T_entrada_K + T_salida)) * (T_salida - T_entrada_K)
     Q_incidente_W = I_g_W_m2 * mat["tau_cub"] * W_m * L_total_m * banco.n_paralelo
     eta_termica = Q_util_W / Q_incidente_W if Q_incidente_W > 0.0 else 0.0
 
@@ -1543,7 +1610,7 @@ def calcular_colector_tipo4(
         )
 
     v_diseno = unidad.velocidad_diseno_ms
-    m_cs_rama = RHO_AIRE_REF * v_diseno * W_m * alto_cs_m
+    m_cs_rama = rho_aire(T_entrada_K, P_amb_Pa) * v_diseno * W_m * alto_cs_m
     m_cs_total = m_cs_rama * banco.n_paralelo
 
     T_cie_K = _T_cielo_K(T_amb_K)
@@ -1589,6 +1656,9 @@ def calcular_colector_tipo4(
         "W_m": W_m,
         "W_abs_m": W_abs_m,
         "m_punto_cs_kgs": m_cs_rama,
+        "Dh_cs": Dh_cs,
+        "A_cs_m2": W_m * alto_cs_m,
+        "pared_cs": "una_pared",
         "n_cubiertas": colector.unidad.n_cubiertas,
         "esp_cav_m": colector.unidad.espaciado_entre_cubiertas_m,
         "pendiente_deg": pendiente_deg,
@@ -1606,7 +1676,7 @@ def calcular_colector_tipo4(
     )
 
     T_salida = float(T_f_cs_arr[-1])
-    Q_util_W = m_cs_total * CP_AIRE * (T_salida - T_entrada_K)
+    Q_util_W = m_cs_total * cp_aire(0.5 * (T_entrada_K + T_salida)) * (T_salida - T_entrada_K)
     Q_incidente_W = I_g_W_m2 * mat["tau_cub"] * W_m * L_total_m * banco.n_paralelo
     eta_termica = Q_util_W / Q_incidente_W if Q_incidente_W > 0.0 else 0.0
 

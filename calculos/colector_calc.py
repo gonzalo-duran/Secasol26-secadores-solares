@@ -18,8 +18,10 @@ Hipótesis principales
   infinitas).
 - Absortividad de la cubierta despreciable.
 - Pérdidas laterales contabilizadas en U_bottom (despreciadas explícitamente).
-- Propiedades del aire (cp, k, mu, Pr) constantes evaluadas a 323 K (50 °C).
-- En convección natural: densidad calculada como gas ideal rho(T, P).
+- Propiedades del aire (cp, k, mu, Pr, rho) dependientes de la temperatura local
+  T_f(x) vía ``calculos.propiedades_aire`` (desde S36; antes constantes a 323 K).
+  Las constantes ``*_AIRE`` que quedan se usan solo para cálculos asesores
+  (Re_medio informativo) y para la cavidad de doble cubierta.
 
 Correlaciones
 -------------
@@ -47,7 +49,12 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
-from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
+from calculos.correlaciones_nusselt import (
+    calcular_h_int,
+    nusselt_hollands_inclinada,
+    nusselt_mixto_local,
+)
+from calculos.propiedades_aire import cp_aire, propiedades_aire
 
 if TYPE_CHECKING:
     from core.colector import Colector
@@ -57,27 +64,28 @@ if TYPE_CHECKING:
 # =============================================================================
 
 SIGMA_SB: float = 5.670374419e-8  # W/m²·K⁴ — constante de Stefan-Boltzmann
-R_AIRE: float = 287.058           # J/kg·K  — constante específica del aire seco
-G_GRAVEDAD: float = 9.81          # m/s² — aceleración gravitatoria
+R_AIRE: float = 287.058  # J/kg·K  — constante específica del aire seco
+G_GRAVEDAD: float = 9.81  # m/s² — aceleración gravitatoria
 
 # Propiedades del aire a 323 K (50 °C), presión estándar
-CP_AIRE: float = 1007.0      # J/kg·K
-K_AIRE: float = 0.02814      # W/m·K
-MU_AIRE: float = 1.963e-5    # Pa·s
-PR_AIRE: float = 0.703       # adimensional
+CP_AIRE: float = 1007.0  # J/kg·K
+K_AIRE: float = 0.02814  # W/m·K
+MU_AIRE: float = 1.963e-5  # Pa·s
+PR_AIRE: float = 0.703  # adimensional
 RHO_AIRE_REF: float = 1.093  # kg/m³ a 323 K, 101325 Pa
 
 # Límites de validez
 V_VIENTO_LIMITE_MCADAMS: float = 5.0  # m/s — por encima se emite advertencia
 
 # Parámetros del solver
-N_NODOS_MIN: int = 50    # número mínimo de nodos de integración
+N_NODOS_MIN: int = 50  # número mínimo de nodos de integración
 TOL_FSOLVE: float = 1e-8
 
 
 # =============================================================================
 # Dataclass de resultados
 # =============================================================================
+
 
 @dataclass
 class ResultadosColectorTipo1:
@@ -131,6 +139,7 @@ class ResultadosColectorTipo1:
 # Funciones auxiliares — correlaciones y propiedades
 # =============================================================================
 
+
 def _T_cielo_K(T_amb_K: float) -> float:
     """Temperatura de cielo según correlación de Swinbank (1963).
 
@@ -143,7 +152,7 @@ def _T_cielo_K(T_amb_K: float) -> float:
     References:
         Swinbank, W.C. (1963). Q. J. R. Meteorol. Soc. 89, 339-348.
     """
-    return 0.0552 * T_amb_K ** 1.5
+    return 0.0552 * T_amb_K**1.5
 
 
 def _h_viento_W_m2K(v_viento_ms: float) -> tuple[float, list[str]]:
@@ -184,9 +193,6 @@ def _diametro_hidraulico_m(alto_canal_m: float, ancho_m: float) -> float:
         Diámetro hidráulico [m].
     """
     return 2.0 * alto_canal_m * ancho_m / (alto_canal_m + ancho_m)
-
-
-
 
 
 def _T_bot_K(
@@ -325,9 +331,11 @@ def _U_cubierta_efectiva(
         return k_cub / esp_cub_m
 
     h_cav = _h_cavidad_aire(
-        T_sup_K=T_cub_e_K, T_inf_K=T_cub_i_K,
+        T_sup_K=T_cub_e_K,
+        T_inf_K=T_cub_i_K,
         esp_cav_m=esp_cav_m,
-        em_sup=em_cub, em_inf=em_cub,
+        em_sup=em_cub,
+        em_inf=em_cub,
         pendiente_deg=pendiente_deg,
         P_amb_Pa=P_amb_Pa,
     )
@@ -336,8 +344,69 @@ def _U_cubierta_efectiva(
 
 
 # =============================================================================
+# Coeficiente convectivo interno LOCAL (compartido con tipos234)
+# =============================================================================
+
+
+def coef_conveccion_interna_local(
+    T_f_K: float,
+    T_pared_K: float,
+    Dh_m: float,
+    x_m: float,
+    A_seccion_m2: float,
+    m_punto_kgs: float,
+    pared: str,
+    pendiente_deg: float,
+    P_amb_Pa: float,
+) -> tuple[float, float]:
+    """Coeficiente convectivo interno local h(x) [W/m²·K] y Reynolds local.
+
+    Evalúa las propiedades del aire a la temperatura de película
+    (T_f + T_pared)/2, calcula el Reynolds local con el flujo másico por unidad
+    de área (constante) y la viscosidad local, y el Nusselt local de convección
+    mixta (forzado con entrada + flotación). La temperatura de pared proviene
+    del warm-start del nodo previo (igual criterio que el canal estanco con
+    Hollands).
+
+    Args:
+        T_f_K: Temperatura local del fluido [K].
+        T_pared_K: Temperatura de la pared caliente (absorbedor) [K], del warm-start.
+        Dh_m: Diámetro hidráulico del canal [m].
+        x_m: Posición axial desde la entrada [m].
+        A_seccion_m2: Área de la sección transversal del canal [m²].
+        m_punto_kgs: Flujo másico por rama [kg/s].
+        pared: ``"una_pared"`` o ``"dos_paredes"``.
+        pendiente_deg: Inclinación del colector [°] (proyección de gravedad).
+        P_amb_Pa: Presión ambiente [Pa].
+
+    Returns:
+        Tupla (h_int_local [W/m²·K], Re_local [adim]).
+    """
+    T_film = 0.5 * (T_f_K + T_pared_K)
+    p = propiedades_aire(T_film, P_amb_Pa)
+    flujo_masico_area = m_punto_kgs / A_seccion_m2  # G [kg/m²·s]
+    Re = flujo_masico_area * Dh_m / p["mu"]
+
+    # Rayleigh local para flotación (componente de gravedad a lo largo del canal)
+    dT = abs(T_pared_K - T_f_K)
+    sin_beta = np.sin(np.radians(pendiente_deg))
+    if dT > 0.0 and sin_beta > 0.0:
+        nu_cin = p["mu"] / p["rho"]
+        alpha = p["k"] / (p["rho"] * p["cp"])
+        beta_exp = 1.0 / T_film
+        Ra = G_GRAVEDAD * sin_beta * beta_exp * dT * Dh_m**3 / (nu_cin * alpha)
+    else:
+        Ra = 0.0
+
+    Nu = nusselt_mixto_local(Re, p["pr"], Dh_m, x_m, pared, Ra)
+    h = Nu * p["k"] / Dh_m
+    return h, Re
+
+
+# =============================================================================
 # Sistema no lineal en cada nodo
 # =============================================================================
+
 
 def _sistema_nodo(
     vars_: np.ndarray,
@@ -405,12 +474,16 @@ def _sistema_nodo(
     # Conductancia cubierta: simple (n=1) o efectiva con cavidad de aire (n=2).
     U_cub = _U_cubierta_efectiva(
         n_cubiertas=n_cubiertas,
-        T_cub_e_K=T_cub_e, T_cub_i_K=T_cub_i,
-        k_cub=k_cub, esp_cub_m=esp_cub, em_cub=em_cub,
-        esp_cav_m=esp_cav_m, pendiente_deg=pendiente_deg,
+        T_cub_e_K=T_cub_e,
+        T_cub_i_K=T_cub_i,
+        k_cub=k_cub,
+        esp_cub_m=esp_cub,
+        em_cub=em_cub,
+        esp_cav_m=esp_cav_m,
+        pendiente_deg=pendiente_deg,
         P_amb_Pa=P_amb_Pa,
     )
-    U_ais = k_ais / esp_ais   # conductancia aislante [W/m²·K]
+    U_ais = k_ais / esp_ais  # conductancia aislante [W/m²·K]
     T_bot = _T_bot_K(T_abs, T_amb_K, k_ais, esp_ais, h_wind)
 
     # --- F1: balance cara externa de cubierta ---
@@ -421,15 +494,15 @@ def _sistema_nodo(
     # Balance: ganancia − pérdidas = 0  →  −conduccion_cub − (conv + rad) = 0
     # equivalente a:  conv + rad + conduccion_cub = 0.
     conv_viento = h_wind * (T_cub_e - T_amb_K)
-    rad_cielo = em_cub * SIGMA_SB * (T_cub_e ** 4 - T_cie_K ** 4)
+    rad_cielo = em_cub * SIGMA_SB * (T_cub_e**4 - T_cie_K**4)
     conduccion_cub = U_cub * (T_cub_e - T_cub_i)
     F1 = conv_viento + rad_cielo + conduccion_cub
 
     # --- F2: balance cara interna de cubierta ---
     # Ganancia: conducción desde cara externa.
     # Pérdidas: convección al fluido + radiación al absorbedor.
-    conv_fluido_cub = h_int * (T_cub_i - T_f_K)          # pérdida → fluido
-    rad_abs_cub = em_eff * SIGMA_SB * (T_cub_i ** 4 - T_abs ** 4)  # pérdida → abs
+    conv_fluido_cub = h_int * (T_cub_i - T_f_K)  # pérdida → fluido
+    rad_abs_cub = em_eff * SIGMA_SB * (T_cub_i**4 - T_abs**4)  # pérdida → abs
     F2 = conduccion_cub - conv_fluido_cub - rad_abs_cub
 
     # --- F3: balance absorbedor ---
@@ -444,7 +517,7 @@ def _sistema_nodo(
     # Por unidad de longitud dx (se cancela en el cociente):
     rad_solar_abs = I_g_W_m2 * tau_cub * alfa_abs * W_abs_m
     conv_fluido_abs = h_int * (T_abs - T_f_K) * W_abs_m
-    rad_cub_abs = em_eff * SIGMA_SB * (T_abs ** 4 - T_cub_i ** 4) * W_m
+    rad_cub_abs = em_eff * SIGMA_SB * (T_abs**4 - T_cub_i**4) * W_m
     cond_fondo = U_ais * (T_abs - T_bot) * W_abs_m
 
     F3 = rad_solar_abs - conv_fluido_abs - rad_cub_abs - cond_fondo
@@ -455,6 +528,7 @@ def _sistema_nodo(
 # =============================================================================
 # RHS de la EDO del fluido
 # =============================================================================
+
 
 def _construir_rhs(params: dict):
     """Construye la función RHS para solve_ivp dado el diccionario de parámetros.
@@ -486,6 +560,20 @@ def _construir_rhs(params: dict):
             T_g = T_amb + 0.5 * params["I_g_W_m2"] / 10.0  # estimación grosera
             estado["guess"] = np.array([T_g, T_g + 5.0, T_g + 20.0])
 
+        # Coeficiente convectivo LOCAL: propiedades a T_f(x), Re y Nu(x) locales,
+        # flotación con la T_abs del warm-start (pared caliente del nodo previo).
+        h_local, Re_local = coef_conveccion_interna_local(
+            T_f_K=T_f_K,
+            T_pared_K=float(estado["guess"][2]),
+            Dh_m=params["Dh_m"],
+            x_m=x,
+            A_seccion_m2=params["A_seccion_m2"],
+            m_punto_kgs=params["m_punto_kgs"],
+            pared=params["pared"],
+            pendiente_deg=params.get("pendiente_deg", 30.0),
+            P_amb_Pa=params.get("P_amb_Pa", 101325.0),
+        )
+
         sol, info, ier, msg = fsolve(
             _sistema_nodo,
             estado["guess"],
@@ -495,7 +583,7 @@ def _construir_rhs(params: dict):
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int"],
+                h_local,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -526,13 +614,12 @@ def _construir_rhs(params: dict):
         T_abs = sol[2]
         W_m = params["W_m"]
         W_abs_m = params["W_abs_m"]
-        h_int = params["h_int"]
         m_punto = params["m_punto_kgs"]
+        cp_local = cp_aire(T_f_K)
 
-        dTf_dx = (
-            h_int * (T_cub_i - T_f_K) * W_m
-            + h_int * (T_abs - T_f_K) * W_abs_m
-        ) / (m_punto * CP_AIRE)
+        dTf_dx = (h_local * (T_cub_i - T_f_K) * W_m + h_local * (T_abs - T_f_K) * W_abs_m) / (
+            m_punto * cp_local
+        )
 
         return np.array([dTf_dx])
 
@@ -542,6 +629,7 @@ def _construir_rhs(params: dict):
 # =============================================================================
 # Función principal
 # =============================================================================
+
 
 def calcular_colector_tipo1(
     colector: "Colector",
@@ -586,12 +674,12 @@ def calcular_colector_tipo1(
     advertencias: list[str] = []
 
     # --- Extraer geometría y materiales del colector ---
-    unidad = colector.unidad           # ColectorUnidad
-    banco = colector.banco             # BancoColectores
+    unidad = colector.unidad  # ColectorUnidad
+    banco = colector.banco  # BancoColectores
 
     W_m: float = unidad.ancho_m
     L_unidad_m: float = unidad.largo_m
-    esp_canal_m: float = unidad.espaciado_m   # alto del canal de flujo
+    esp_canal_m: float = unidad.espaciado_m  # alto del canal de flujo
 
     # Largo total del camino del aire (n_serie unidades en serie)
     L_total_m: float = L_unidad_m * banco.n_serie
@@ -604,7 +692,10 @@ def calcular_colector_tipo1(
     # Q_total = n_paralelo * v_diseno * ancho * espaciado
     v_diseno = unidad.velocidad_diseno_ms
     Q_total_m3s = banco.n_paralelo * v_diseno * W_m * esp_canal_m
-    m_punto_total_kgs = RHO_AIRE_REF * Q_total_m3s
+    # Flujo másico evaluado con la densidad a la temperatura de ENTRADA (el
+    # caudal volumétrico de diseño se fija a la entrada del colector).
+    rho_entrada = propiedades_aire(T_entrada_K, P_amb_Pa)["rho"]
+    m_punto_total_kgs = rho_entrada * Q_total_m3s
     # Cada rama paralela ve el mismo flujo másico
     m_punto_rama_kgs = m_punto_total_kgs / banco.n_paralelo
 
@@ -643,13 +734,15 @@ def calcular_colector_tipo1(
     v_media_ms = m_punto_rama_kgs / (RHO_AIRE_REF * A_seccion_m2)
     Re_medio = RHO_AIRE_REF * v_media_ms * Dh_m / MU_AIRE
 
-    h_int, _, nombre_correlacion, regimen, adv_nusselt = calcular_h_int(
+    # Cálculo asesor (promediado) solo para el régimen/advertencias informativas;
+    # el h efectivo se calcula localmente por nodo en el solver.
+    _, _, _, regimen, adv_nusselt = calcular_h_int(
         Re=Re_medio,
         Pr=PR_AIRE,
         Dh_m=Dh_m,
         L_m=L_total_m,
         k_fluido_W_mK=K_AIRE,
-        pared="una_pared",   # Tipo 1: absorbedor caliente, cubierta fría
+        pared="una_pared",  # Tipo 1: absorbedor caliente, cubierta fría
         modo="forzado",
         correlacion=correlacion_nusselt,
     )
@@ -661,7 +754,9 @@ def calcular_colector_tipo1(
         "T_cie_K": T_cie_K,
         "I_g_W_m2": I_g_W_m2,
         "h_wind": h_wind,
-        "h_int": h_int,
+        "Dh_m": Dh_m,
+        "A_seccion_m2": A_seccion_m2,
+        "pared": "una_pared",
         "k_cub": k_cub,
         "esp_cub_m": esp_cub_m,
         "em_cub": em_cub,
@@ -699,9 +794,7 @@ def calcular_colector_tipo1(
     mensaje_convergencia = resultado_ivp.message if not convergencia_ok else "OK"
 
     if not convergencia_ok:
-        raise RuntimeError(
-            f"solve_ivp no convergió: {mensaje_convergencia}"
-        )
+        raise RuntimeError(f"solve_ivp no convergió: {mensaje_convergencia}")
 
     if log_no_conv:
         advertencias.append(
@@ -720,10 +813,27 @@ def calcular_colector_tipo1(
     T_bot_arr = np.empty(n_puntos)
 
     guess = None
+    h_local_arr = np.empty(n_puntos)
+    Re_local_arr = np.empty(n_puntos)
     for i, (T_f_i) in enumerate(T_f_arr):
         if guess is None:
             T_g = T_amb_K + 0.5 * I_g_W_m2 / 10.0
             guess = np.array([T_g, T_g + 5.0, T_g + 20.0])
+
+        # Coeficiente convectivo local (mismo criterio que en el RHS).
+        h_local, Re_local = coef_conveccion_interna_local(
+            T_f_K=float(T_f_i),
+            T_pared_K=float(guess[2]),
+            Dh_m=params["Dh_m"],
+            x_m=float(x_arr[i]),
+            A_seccion_m2=params["A_seccion_m2"],
+            m_punto_kgs=params["m_punto_kgs"],
+            pared=params["pared"],
+            pendiente_deg=params.get("pendiente_deg", 30.0),
+            P_amb_Pa=params.get("P_amb_Pa", 101325.0),
+        )
+        h_local_arr[i] = h_local
+        Re_local_arr[i] = Re_local
 
         sol = fsolve(
             _sistema_nodo,
@@ -734,7 +844,7 @@ def calcular_colector_tipo1(
                 params["T_cie_K"],
                 params["I_g_W_m2"],
                 params["h_wind"],
-                params["h_int"],
+                h_local,
                 params["k_cub"],
                 params["esp_cub_m"],
                 params["em_cub"],
@@ -760,11 +870,17 @@ def calcular_colector_tipo1(
 
     # --- Métricas globales ---
     T_salida_K = float(T_f_arr[-1])
-    Q_util_W = m_punto_total_kgs * CP_AIRE * (T_salida_K - T_entrada_K)
+    # cp evaluado a la temperatura media del fluido (propiedades variables).
+    cp_medio = cp_aire(0.5 * (T_entrada_K + T_salida_K))
+    Q_util_W = m_punto_total_kgs * cp_medio * (T_salida_K - T_entrada_K)
     A_colector_total_m2 = W_m * L_total_m * banco.n_paralelo
     Q_incidente_W = I_g_W_m2 * tau_cub * A_colector_total_m2
 
     eta_termica = Q_util_W / Q_incidente_W if Q_incidente_W > 0.0 else 0.0
+
+    # h_int y Re reportados: promedios locales sobre el colector.
+    h_int_medio = float(np.mean(h_local_arr))
+    Re_medio = float(np.mean(Re_local_arr))
 
     return ResultadosColectorTipo1(
         x_m=x_arr,
@@ -778,7 +894,7 @@ def calcular_colector_tipo1(
         Q_util_W=Q_util_W,
         Q_incidente_W=Q_incidente_W,
         eta_termica=eta_termica,
-        h_int_medio=h_int,
+        h_int_medio=h_int_medio,
         h_viento=h_wind,
         Re_medio=Re_medio,
         regimen_flujo=regimen,

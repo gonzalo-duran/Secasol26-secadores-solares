@@ -460,6 +460,15 @@ class TestRHSTipo2:
             "W_abs_m": p["W_abs_m"],
             "m_punto_cs_kgs": p["m_punto_cs_kgs"],
             "m_punto_ci_kgs": p["m_punto_ci_kgs"],
+            # geometría por canal para el h local (entrada/propiedades/mixta)
+            "Dh_cs": 0.0487805,
+            "Dh_ci": 0.0487805,
+            "A_cs_m2": 0.025,
+            "A_ci_m2": 0.025,
+            "pared_cs": "una_pared",
+            "pared_ci": "dos_paredes",
+            "pendiente_deg": 45.0,
+            "P_amb_Pa": 101325.0,
         }
 
     def test_derivadas_positivas_entrada(self):
@@ -517,6 +526,14 @@ class TestRHSTipos34:
             "W_abs_m": p["W_abs_m"],
             "m_punto_ci_kgs": p["m_punto_ci_kgs"],
             "m_punto_cs_kgs": p["m_punto_cs_kgs"],
+            # geometría por canal para el h local (entrada/propiedades/mixta)
+            "Dh_cs": 0.0487805,
+            "Dh_ci": 0.0487805,
+            "A_cs_m2": 0.025,
+            "A_ci_m2": 0.025,
+            "pared_cs": "una_pared",
+            "pared_ci": "una_pared",
+            "P_amb_Pa": 101325.0,
             # requeridos por _construir_rhs_tipo3 (convección natural estanco)
             "alto_cs_m": 0.025,
             "theta_deg": 45.0,
@@ -593,6 +610,14 @@ class TestIntegracionLiviana:
             "W_abs_m": p["W_abs_m"],
             "m_punto_cs_kgs": p["m_punto_cs_kgs"],
             "m_punto_ci_kgs": p["m_punto_ci_kgs"],
+            # geometría por canal para el h local (entrada/propiedades/mixta)
+            "Dh_cs": 0.0487805,
+            "Dh_ci": 0.0487805,
+            "A_cs_m2": 0.025,
+            "A_ci_m2": 0.025,
+            "pared_cs": "una_pared",
+            "pared_ci": "dos_paredes",
+            "P_amb_Pa": 101325.0,
             # requeridos por _construir_rhs_tipo3 (convección natural estanco)
             "alto_cs_m": 0.025,
             "theta_deg": 45.0,

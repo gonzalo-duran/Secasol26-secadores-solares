@@ -47,10 +47,10 @@ from calculos.colector_calc import (
 )
 from calculos.correlaciones_nusselt import calcular_h_int
 
-
 # ---------------------------------------------------------------------------
 # Wrappers de test — interfaz legada de funciones refactorizadas en Sesión 12
 # ---------------------------------------------------------------------------
+
 
 def _h_int_forzado_W_m2K(m_kgs: float, alto_m: float, W_m: float, L_m: float):
     """Wrapper de test: calcula h_int para flujo forzado a partir de caudal másico."""
@@ -58,8 +58,13 @@ def _h_int_forzado_W_m2K(m_kgs: float, alto_m: float, W_m: float, L_m: float):
     v = m_kgs / (RHO_AIRE_REF * alto_m * W_m)
     Re = RHO_AIRE_REF * v * Dh / MU_AIRE
     h, _, _, regimen, _ = calcular_h_int(
-        Re=Re, Pr=PR_AIRE, Dh_m=Dh, L_m=L_m,
-        k_fluido_W_mK=K_AIRE, pared="una_pared", modo="forzado",
+        Re=Re,
+        Pr=PR_AIRE,
+        Dh_m=Dh,
+        L_m=L_m,
+        k_fluido_W_mK=K_AIRE,
+        pared="una_pared",
+        modo="forzado",
     )
     return h, Re, regimen
 
@@ -75,11 +80,17 @@ def _h_int_natural_W_m2K(
     dT = max(T_hot_K - T_cold_K, 0.0)
     rho = P_Pa / (R_AIRE * T_mean)
     g = 9.80665
-    Ra = g / T_mean * (rho ** 2 * CP_AIRE / (MU_AIRE * K_AIRE)) * dT * alto_m ** 3
+    Ra = g / T_mean * (rho**2 * CP_AIRE / (MU_AIRE * K_AIRE)) * dT * alto_m**3
     h, _, _, _, _ = calcular_h_int(
-        Re=0.0, Pr=PR_AIRE, Dh_m=alto_m, L_m=alto_m,
-        k_fluido_W_mK=K_AIRE, pared="una_pared", modo="natural",
-        Ra=Ra, theta_deg=theta_deg,
+        Re=0.0,
+        Pr=PR_AIRE,
+        Dh_m=alto_m,
+        L_m=alto_m,
+        k_fluido_W_mK=K_AIRE,
+        pared="una_pared",
+        modo="natural",
+        Ra=Ra,
+        theta_deg=theta_deg,
     )
     return h
 
@@ -87,6 +98,7 @@ def _h_int_natural_W_m2K(
 # =============================================================================
 # Helpers
 # =============================================================================
+
 
 def casi_igual(a, b, rtol=1e-4, atol=0.0):
     """Verificación de igualdad aproximada con mensaje informativo."""
@@ -97,12 +109,13 @@ def casi_igual(a, b, rtol=1e-4, atol=0.0):
 # 1. _T_cielo_K — correlación de Swinbank
 # =============================================================================
 
+
 class TestTCieloSwinbank:
     """Temperatura de cielo — Swinbank (1963)."""
 
     def test_formula_exacta_300K(self):
         """T_cie = 0.0552 * 300^1.5 = 287.06 K."""
-        esperado = 0.0552 * 300.0 ** 1.5
+        esperado = 0.0552 * 300.0**1.5
         assert casi_igual(_T_cielo_K(300.0), esperado)
 
     def test_T_cie_menor_que_T_amb_rango_habitual(self):
@@ -119,7 +132,7 @@ class TestTCieloSwinbank:
         """A mayor T_amb, mayor T_cie."""
         T_vals = [270.0, 280.0, 290.0, 300.0, 310.0]
         T_cie_vals = [_T_cielo_K(T) for T in T_vals]
-        assert all(T_cie_vals[i] < T_cie_vals[i+1] for i in range(len(T_cie_vals)-1))
+        assert all(T_cie_vals[i] < T_cie_vals[i + 1] for i in range(len(T_cie_vals) - 1))
 
     def test_rango_tipico_salta(self):
         """Para T_amb entre 15°C y 35°C (288–308 K), T_cie entre 260–300 K."""
@@ -131,6 +144,7 @@ class TestTCieloSwinbank:
 # =============================================================================
 # 2. _h_viento_W_m2K — correlación de McAdams
 # =============================================================================
+
 
 class TestHVientoMcAdams:
     """Coeficiente convectivo de viento — McAdams (1954)."""
@@ -172,12 +186,13 @@ class TestHVientoMcAdams:
         """h crece con v."""
         v_vals = [0.0, 1.0, 2.0, 3.0, 4.0]
         h_vals = [_h_viento_W_m2K(v)[0] for v in v_vals]
-        assert all(h_vals[i] < h_vals[i+1] for i in range(len(h_vals)-1))
+        assert all(h_vals[i] < h_vals[i + 1] for i in range(len(h_vals) - 1))
 
 
 # =============================================================================
 # 3. _diametro_hidraulico_m
 # =============================================================================
+
 
 class TestDiametroHidraulico:
     """Diámetro hidráulico de canal rectangular."""
@@ -197,7 +212,7 @@ class TestDiametroHidraulico:
     def test_formula_exacta(self):
         """Caso: alto=0.05, W=1.0: Dh = 2*0.05*1.0/(0.05+1.0) = 0.09524."""
         Dh = _diametro_hidraulico_m(0.05, 1.0)
-        assert casi_igual(Dh, 2*0.05*1.0/(0.05+1.0))
+        assert casi_igual(Dh, 2 * 0.05 * 1.0 / (0.05 + 1.0))
 
     def test_positivo(self):
         """Dh > 0 siempre."""
@@ -208,13 +223,14 @@ class TestDiametroHidraulico:
 # 4. _h_int_forzado_W_m2K — regímenes de flujo
 # =============================================================================
 
+
 class TestHIntForzado:
     """Coeficiente convectivo interno para flujo forzado."""
 
     # Parámetros de referencia: canal típico de colector solar de aire
-    ALTO = 0.05    # m
-    W = 1.0        # m
-    L = 2.0        # m
+    ALTO = 0.05  # m
+    W = 1.0  # m
+    L = 2.0  # m
 
     def _m_para_Re(self, Re_objetivo: float) -> float:
         """Devuelve m_punto [kg/s] para alcanzar Re_objetivo en el canal."""
@@ -263,12 +279,15 @@ class TestHIntForzado:
         h_despues, _, _ = _h_int_forzado_W_m2K(m_despues, self.ALTO, self.W, self.L)
         # El salto no debe ser mayor al 50% (Gnielinski vs Nu=5.385 en frontera)
         salto_relativo = abs(h_despues - h_antes) / h_antes
-        assert salto_relativo < 0.5, f"Salto de h en frontera laminar/transición: {salto_relativo:.1%}"
+        assert (
+            salto_relativo < 0.5
+        ), f"Salto de h en frontera laminar/transición: {salto_relativo:.1%}"
 
 
 # =============================================================================
 # 5. _h_int_natural_W_m2K — convección natural
 # =============================================================================
+
 
 class TestHIntNatural:
     """Coeficiente convectivo interno para convección natural — Hollands (1976)."""
@@ -308,6 +327,7 @@ class TestHIntNatural:
 # 6. _T_bot_K — temperatura de fondo
 # =============================================================================
 
+
 class TestTBot:
     """Temperatura cara externa del fondo del colector."""
 
@@ -343,13 +363,14 @@ class TestTBot:
 # 7. _em_efectiva_paralelas
 # =============================================================================
 
+
 class TestEmEfectiva:
     """Emisividad efectiva para superficies paralelas (F=1)."""
 
     def test_formula_exacta(self):
         """1/em_eff = 1/0.9 + 1/0.95 - 1."""
         em_cub, em_abs = 0.9, 0.95
-        esperado = 1.0 / (1/em_cub + 1/em_abs - 1)
+        esperado = 1.0 / (1 / em_cub + 1 / em_abs - 1)
         assert casi_igual(_em_efectiva_paralelas(em_cub, em_abs), esperado)
 
     def test_menor_que_minimo(self):
@@ -375,6 +396,7 @@ class TestEmEfectiva:
 # 8. _sistema_nodo — balances algebraicos
 # =============================================================================
 
+
 class TestSistemaNodo:
     """Sistema algebraico de balance por nodo."""
 
@@ -386,10 +408,10 @@ class TestSistemaNodo:
         I_g_W_m2=800.0,
         h_wind=15.0,
         h_int=10.0,
-        k_cub=0.9,        # vidrio
+        k_cub=0.9,  # vidrio
         esp_cub=0.004,
         em_cub=0.88,
-        k_ais=0.04,       # lana de vidrio
+        k_ais=0.04,  # lana de vidrio
         esp_ais=0.05,
         em_abs=0.95,
         tau_cub=0.85,
@@ -403,24 +425,52 @@ class TestSistemaNodo:
         p = {**self.PARAMS_REF, **kwargs}
         return _sistema_nodo(
             np.array([T_cub_e, T_cub_i, T_abs]),
-            p["T_f_K"], p["T_amb_K"], p["T_cie_K"], p["I_g_W_m2"],
-            p["h_wind"], p["h_int"], p["k_cub"], p["esp_cub"],
-            p["em_cub"], p["k_ais"], p["esp_ais"], p["em_abs"],
-            p["tau_cub"], p["alfa_abs"], p["W_m"], p["W_abs_m"],
+            p["T_f_K"],
+            p["T_amb_K"],
+            p["T_cie_K"],
+            p["I_g_W_m2"],
+            p["h_wind"],
+            p["h_int"],
+            p["k_cub"],
+            p["esp_cub"],
+            p["em_cub"],
+            p["k_ais"],
+            p["esp_ais"],
+            p["em_abs"],
+            p["tau_cub"],
+            p["alfa_abs"],
+            p["W_m"],
+            p["W_abs_m"],
         )
 
     def test_solucion_satisface_balances(self):
         """La solución de fsolve debe hacer residuos ≈ 0."""
         from scipy.optimize import fsolve
+
         p = self.PARAMS_REF
         T_g = p["T_amb_K"] + 20.0
         guess = np.array([T_g, T_g + 5.0, T_g + 30.0])
         sol = fsolve(
-            _sistema_nodo, guess,
-            args=(p["T_f_K"], p["T_amb_K"], p["T_cie_K"], p["I_g_W_m2"],
-                  p["h_wind"], p["h_int"], p["k_cub"], p["esp_cub"],
-                  p["em_cub"], p["k_ais"], p["esp_ais"], p["em_abs"],
-                  p["tau_cub"], p["alfa_abs"], p["W_m"], p["W_abs_m"]),
+            _sistema_nodo,
+            guess,
+            args=(
+                p["T_f_K"],
+                p["T_amb_K"],
+                p["T_cie_K"],
+                p["I_g_W_m2"],
+                p["h_wind"],
+                p["h_int"],
+                p["k_cub"],
+                p["esp_cub"],
+                p["em_cub"],
+                p["k_ais"],
+                p["esp_ais"],
+                p["em_abs"],
+                p["tau_cub"],
+                p["alfa_abs"],
+                p["W_m"],
+                p["W_abs_m"],
+            ),
             xtol=1e-10,
         )
         residuos = self._residuos(*sol)
@@ -429,14 +479,30 @@ class TestSistemaNodo:
     def test_T_abs_mayor_que_T_fluido(self):
         """El absorbedor debe estar más caliente que el fluido."""
         from scipy.optimize import fsolve
+
         p = self.PARAMS_REF
         T_g = p["T_amb_K"] + 20.0
         sol = fsolve(
-            _sistema_nodo, np.array([T_g, T_g + 5.0, T_g + 30.0]),
-            args=(p["T_f_K"], p["T_amb_K"], p["T_cie_K"], p["I_g_W_m2"],
-                  p["h_wind"], p["h_int"], p["k_cub"], p["esp_cub"],
-                  p["em_cub"], p["k_ais"], p["esp_ais"], p["em_abs"],
-                  p["tau_cub"], p["alfa_abs"], p["W_m"], p["W_abs_m"]),
+            _sistema_nodo,
+            np.array([T_g, T_g + 5.0, T_g + 30.0]),
+            args=(
+                p["T_f_K"],
+                p["T_amb_K"],
+                p["T_cie_K"],
+                p["I_g_W_m2"],
+                p["h_wind"],
+                p["h_int"],
+                p["k_cub"],
+                p["esp_cub"],
+                p["em_cub"],
+                p["k_ais"],
+                p["esp_ais"],
+                p["em_abs"],
+                p["tau_cub"],
+                p["alfa_abs"],
+                p["W_m"],
+                p["W_abs_m"],
+            ),
         )
         T_cub_e, T_cub_i, T_abs = sol
         assert T_abs > p["T_f_K"], "Absorbedor debe estar más caliente que el fluido"
@@ -458,18 +524,31 @@ class TestSistemaNodo:
             """Usa múltiples guesses y devuelve la solución con menor residuo."""
             p = {**self.PARAMS_REF, "I_g_W_m2": I_g, "T_f_K": T_f}
             args = (
-                p["T_f_K"], p["T_amb_K"], p["T_cie_K"], p["I_g_W_m2"],
-                p["h_wind"], p["h_int"], p["k_cub"], p["esp_cub"],
-                p["em_cub"], p["k_ais"], p["esp_ais"], p["em_abs"],
-                p["tau_cub"], p["alfa_abs"], p["W_m"], p["W_abs_m"],
+                p["T_f_K"],
+                p["T_amb_K"],
+                p["T_cie_K"],
+                p["I_g_W_m2"],
+                p["h_wind"],
+                p["h_int"],
+                p["k_cub"],
+                p["esp_cub"],
+                p["em_cub"],
+                p["k_ais"],
+                p["esp_ais"],
+                p["em_abs"],
+                p["tau_cub"],
+                p["alfa_abs"],
+                p["W_m"],
+                p["W_abs_m"],
             )
             mejor_sol = None
             menor_residuo = np.inf
             T_amb = p["T_amb_K"]
             for delta in [5.0, 15.0, 30.0, 50.0]:
-                guess = np.array([T_amb + delta*0.3, T_amb + delta*0.5, T_amb + delta])
-                sol, _, ier, _ = fsolve(_sistema_nodo, guess, args=args,
-                                        full_output=True, xtol=1e-10)
+                guess = np.array([T_amb + delta * 0.3, T_amb + delta * 0.5, T_amb + delta])
+                sol, _, ier, _ = fsolve(
+                    _sistema_nodo, guess, args=args, full_output=True, xtol=1e-10
+                )
                 res = np.linalg.norm(_sistema_nodo(sol, *args))
                 if ier == 1 and res < menor_residuo:
                     menor_residuo = res
@@ -490,21 +569,37 @@ class TestSistemaNodo:
             "diferencia insuficiente para calentar el fluido"
         )
         # Sin sol: absorbedor mucho más frío que con sol
-        assert T_abs_sin < T_abs_con - 30.0, (
-            f"I_g=0: T_abs={T_abs_sin:.1f} K; I_g=800: T_abs={T_abs_con:.1f} K"
-        )
+        assert (
+            T_abs_sin < T_abs_con - 30.0
+        ), f"I_g=0: T_abs={T_abs_sin:.1f} K; I_g=800: T_abs={T_abs_con:.1f} K"
 
     def test_T_cub_e_menor_que_T_abs(self):
         """La cara externa de la cubierta debe ser más fría que el absorbedor."""
         from scipy.optimize import fsolve
+
         p = self.PARAMS_REF
         T_g = p["T_amb_K"] + 20.0
         sol = fsolve(
-            _sistema_nodo, np.array([T_g, T_g + 5.0, T_g + 30.0]),
-            args=(p["T_f_K"], p["T_amb_K"], p["T_cie_K"], p["I_g_W_m2"],
-                  p["h_wind"], p["h_int"], p["k_cub"], p["esp_cub"],
-                  p["em_cub"], p["k_ais"], p["esp_ais"], p["em_abs"],
-                  p["tau_cub"], p["alfa_abs"], p["W_m"], p["W_abs_m"]),
+            _sistema_nodo,
+            np.array([T_g, T_g + 5.0, T_g + 30.0]),
+            args=(
+                p["T_f_K"],
+                p["T_amb_K"],
+                p["T_cie_K"],
+                p["I_g_W_m2"],
+                p["h_wind"],
+                p["h_int"],
+                p["k_cub"],
+                p["esp_cub"],
+                p["em_cub"],
+                p["k_ais"],
+                p["esp_ais"],
+                p["em_abs"],
+                p["tau_cub"],
+                p["alfa_abs"],
+                p["W_m"],
+                p["W_abs_m"],
+            ),
         )
         T_cub_e, T_cub_i, T_abs = sol
         assert T_cub_e < T_abs, "Cubierta externa debe ser más fría que absorbedor"
@@ -514,20 +609,27 @@ class TestSistemaNodo:
 # 9. Doble cubierta (n_cubiertas = 2)
 # =============================================================================
 
+
 class TestDobleCubierta:
     """Verifica que n_cubiertas=2 mejore el desempeño en línea con la física."""
 
     @staticmethod
-    def _col(n_cubiertas: int, gap_m: float = 0.025,
-              id_cub: str = "vidrio_comun",
-              id_pla: str = "aluminio_tinox"):
+    def _col(
+        n_cubiertas: int,
+        gap_m: float = 0.025,
+        id_cub: str = "vidrio_comun",
+        id_pla: str = "aluminio_tinox",
+    ):
         from core.colector import Colector, ColectorUnidad, BancoColectores
+
         return Colector(
             unidad=ColectorUnidad(
-                ancho_m=1.0, largo_m=2.0,
+                ancho_m=1.0,
+                largo_m=2.0,
                 n_cubiertas=n_cubiertas,
                 espaciado_entre_cubiertas_m=gap_m,
-                id_cubierta=id_cub, id_placa=id_pla,
+                id_cubierta=id_cub,
+                id_placa=id_pla,
             ),
             banco=BancoColectores(),
         )
@@ -535,19 +637,25 @@ class TestDobleCubierta:
     @staticmethod
     def _correr(col, dT_in_K: float = 0.0):
         from calculos.colector_calc import calcular_colector_tipo1
+
         T_amb = 293.15
         return calcular_colector_tipo1(
-            colector=col, T_amb_K=T_amb, I_g_W_m2=800.0, v_viento_ms=2.0,
-            P_amb_Pa=101325.0, T_entrada_K=T_amb + dT_in_K, pendiente_deg=30.0,
+            colector=col,
+            T_amb_K=T_amb,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            P_amb_Pa=101325.0,
+            T_entrada_K=T_amb + dT_in_K,
+            pendiente_deg=30.0,
         )
 
     def test_eta_n2_mayor_que_n1(self):
         """Doble cubierta reduce pérdidas → η debe aumentar."""
         r1 = self._correr(self._col(1))
         r2 = self._correr(self._col(2))
-        assert r2.eta_termica > r1.eta_termica, (
-            f"η(n=2)={r2.eta_termica:.3f} no es mayor que η(n=1)={r1.eta_termica:.3f}"
-        )
+        assert (
+            r2.eta_termica > r1.eta_termica
+        ), f"η(n=2)={r2.eta_termica:.3f} no es mayor que η(n=1)={r1.eta_termica:.3f}"
 
     def test_T_cub_e_n2_menor_que_n1(self):
         """Con doble cubierta la cara externa queda más fría (mejor aislada)."""
@@ -555,7 +663,9 @@ class TestDobleCubierta:
         r2 = self._correr(self._col(2))
         Te1 = float(np.mean(r1.T_cub_e_K))
         Te2 = float(np.mean(r2.T_cub_e_K))
-        assert Te2 < Te1, f"T_cub_e(n=2)={Te2-273.15:.1f}°C debe ser menor que T_cub_e(n=1)={Te1-273.15:.1f}°C"
+        assert (
+            Te2 < Te1
+        ), f"T_cub_e(n=2)={Te2-273.15:.1f}°C debe ser menor que T_cub_e(n=1)={Te1-273.15:.1f}°C"
 
     def test_T_cub_i_n2_mayor_que_n1(self):
         """Con doble cubierta la cara interna queda más caliente (atrapada)."""
@@ -563,7 +673,9 @@ class TestDobleCubierta:
         r2 = self._correr(self._col(2))
         Ti1 = float(np.mean(r1.T_cub_i_K))
         Ti2 = float(np.mean(r2.T_cub_i_K))
-        assert Ti2 > Ti1, f"T_cub_i(n=2)={Ti2-273.15:.1f}°C debe ser mayor que T_cub_i(n=1)={Ti1-273.15:.1f}°C"
+        assert (
+            Ti2 > Ti1
+        ), f"T_cub_i(n=2)={Ti2-273.15:.1f}°C debe ser mayor que T_cub_i(n=1)={Ti1-273.15:.1f}°C"
 
     def test_ganancia_mayor_a_alta_delta_T(self):
         """La ventaja de la doble cubierta crece con (T_in − T_amb)."""
@@ -594,6 +706,52 @@ class TestDobleCubierta:
         )
         # T_abs en rango razonable bajo 800 W/m² y aire de paso
         assert 50 + 273.15 < Ta < 200 + 273.15, f"T_abs absurdo: {Ta-273.15:.1f}°C"
+
+
+class TestCoefConveccionLocal:
+    """h_int local (S36): realce de entrada + convección mixta, y continuidad."""
+
+    def _col(self, v, largo):
+        from core.colector import Colector, ColectorUnidad, BancoColectores
+
+        u = ColectorUnidad(ancho_m=1.0, largo_m=largo, espaciado_m=0.025, velocidad_diseno_ms=v)
+        return Colector(unidad=u, banco=BancoColectores())
+
+    def _correr(self, v, largo):
+        from calculos.colector_calc import calcular_colector_tipo1
+
+        return calcular_colector_tipo1(
+            self._col(v, largo),
+            T_amb_K=300.0,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            P_amb_Pa=101325.0,
+            T_entrada_K=300.0,
+            pendiente_deg=30.0,
+        )
+
+    def test_laminar_largo_supera_desarrollado_constante(self):
+        """En colector largo laminar, h_int_medio supera el valor desarrollado
+        de propiedades constantes (~Nu=5.385·k/Dh ≈ 3.1), por entrada + mixta."""
+        r = self._correr(v=0.54, largo=10.0)  # ṁ≈0.016 kg/s, Re~1500 laminar
+        Dh = _diametro_hidraulico_m(0.025, 1.0)
+        h_desarrollado_const = 5.385 * K_AIRE / Dh
+        assert r.regimen_flujo == "laminar"
+        assert r.h_int_medio > h_desarrollado_const
+
+    def test_perfil_fluido_monotono_y_continuo(self):
+        """El perfil T_fluido(x) crece monótonamente y sin saltos espurios."""
+        for v, largo in [(10.0, 10.0), (0.54, 10.0)]:
+            r = self._correr(v, largo)
+            dTf = np.diff(r.T_fluido_K)
+            assert np.all(dTf >= -1e-6), f"perfil no monótono (v={v})"
+            # salto entre nodos contiguos acotado (continuidad del h local)
+            assert float(np.max(np.abs(dTf))) < 5.0
+
+    def test_convergencia_ambos_regimenes(self):
+        """Converge tanto en turbulento (10 m/s) como en laminar (bajo caudal)."""
+        assert self._correr(10.0, 2.5).convergencia_ok
+        assert self._correr(0.54, 2.5).convergencia_ok
 
 
 # =============================================================================

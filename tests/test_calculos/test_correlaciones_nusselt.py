@@ -31,6 +31,9 @@ from calculos.correlaciones_nusselt import (
     nusselt_cengel,
     nusselt_hollands_inclinada,
     calcular_h_int,
+    nusselt_forzado_local,
+    nusselt_natural_canal,
+    nusselt_mixto_local,
     CORRELACIONES_FORZADO,
     CORRELACIONES_NATURAL,
     RE_LAMINAR_MAX,
@@ -50,6 +53,7 @@ def casi_igual(a, b, rtol=RTOL):
 # =============================================================================
 # 1. Shah & London — laminar, una pared caliente
 # =============================================================================
+
 
 class TestShahLondon:
 
@@ -93,6 +97,7 @@ class TestShahLondonSimetrico:
 # 2. Heaton — laminar, entrada térmica
 # =============================================================================
 
+
 class TestHeaton:
 
     def test_converge_hacia_shah_london_al_aumentar_L(self):
@@ -105,8 +110,8 @@ class TestHeaton:
         2. Nu(L grande) se acerca a 5.385 (límite inferior es 5.385).
         """
         Dh = 0.05
-        Nu_L1   = nusselt_heaton(1000.0, PR_AIRE, 1.0,   Dh)
-        Nu_L10  = nusselt_heaton(1000.0, PR_AIRE, 10.0,  Dh)
+        Nu_L1 = nusselt_heaton(1000.0, PR_AIRE, 1.0, Dh)
+        Nu_L10 = nusselt_heaton(1000.0, PR_AIRE, 10.0, Dh)
         Nu_L100 = nusselt_heaton(1000.0, PR_AIRE, 100.0, Dh)
         assert Nu_L1 > Nu_L10 > Nu_L100 > 5.385, (
             f"Monotonicidad rota: Nu(1)={Nu_L1:.3f}, Nu(10)={Nu_L10:.3f}, "
@@ -116,7 +121,7 @@ class TestHeaton:
     def test_mayor_que_shah_london_canal_corto(self):
         """Para L/Dh < 50, Heaton > Shah & London (efectos de entrada)."""
         Dh = 0.05
-        L = 1.0   # L/Dh = 20 < 50
+        L = 1.0  # L/Dh = 20 < 50
         Nu_heaton = nusselt_heaton(1000.0, PR_AIRE, L, Dh)
         Nu_sl = nusselt_shah_london(1000.0, PR_AIRE)
         assert Nu_heaton > Nu_sl
@@ -148,14 +153,18 @@ class TestHeaton:
 # 3. Gnielinski — transición
 # =============================================================================
 
+
 class TestGnielinski:
 
     def test_valor_referencia_Re5000(self):
         """Nu a Re=5000, Pr=0.703: calculado con la fórmula explícita."""
         Re, Pr = 5000.0, 0.703
         f = (0.790 * math.log(Re) - 1.64) ** (-2)
-        Nu_esp = (f / 8.0) * (Re - 1000.0) * Pr / (
-            1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0)
+        Nu_esp = (
+            (f / 8.0)
+            * (Re - 1000.0)
+            * Pr
+            / (1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0))
         )
         assert casi_igual(nusselt_gnielinski(Re, Pr), Nu_esp)
 
@@ -177,21 +186,20 @@ class TestGnielinski:
         Nu_g = nusselt_gnielinski(10000.0, PR_AIRE)
         Nu_db = nusselt_dittus_boelter(10000.0, PR_AIRE)
         diferencia = abs(Nu_g - Nu_db) / Nu_db
-        assert diferencia < 0.20, (
-            f"Salto Gnielinski→Dittus-Boelter en Re=10000: {diferencia:.1%}"
-        )
+        assert diferencia < 0.20, f"Salto Gnielinski→Dittus-Boelter en Re=10000: {diferencia:.1%}"
 
 
 # =============================================================================
 # 4. Dittus-Boelter — turbulento clásico
 # =============================================================================
 
+
 class TestDittusBoelter:
 
     def test_valor_referencia_Re20000(self):
         """Nu = 0.023 * 20000^0.8 * 0.703^0.4."""
         Re, Pr = 20000.0, 0.703
-        Nu_esp = 0.023 * Re ** 0.8 * Pr ** 0.4
+        Nu_esp = 0.023 * Re**0.8 * Pr**0.4
         assert casi_igual(nusselt_dittus_boelter(Re, Pr), Nu_esp)
 
     def test_crece_con_Re(self):
@@ -211,12 +219,13 @@ class TestDittusBoelter:
 # 5. Sparrow & Liu — turbulento, una pared caliente
 # =============================================================================
 
+
 class TestSparrowLiu:
 
     def test_valor_referencia_Re20000(self):
         """Nu = 0.0158 * 20000^0.8."""
         Re = 20000.0
-        Nu_esp = 0.0158 * Re ** 0.8
+        Nu_esp = 0.0158 * Re**0.8
         assert casi_igual(nusselt_sparrow_liu(Re, PR_AIRE), Nu_esp)
 
     def test_menor_que_dittus_boelter(self):
@@ -240,12 +249,13 @@ class TestSparrowLiu:
 # 6. Cengel — turbulento con corrección de entrada
 # =============================================================================
 
+
 class TestCengel:
 
     def test_valor_referencia(self):
         """Nu = 0.023*Re^0.8*Pr^0.4*(1+(Dh/L)^0.7)."""
         Re, Pr, L, Dh = 20000.0, 0.703, 0.5, 0.05
-        Nu_esp = 0.023 * Re**0.8 * Pr**0.4 * (1.0 + (Dh/L)**0.7)
+        Nu_esp = 0.023 * Re**0.8 * Pr**0.4 * (1.0 + (Dh / L) ** 0.7)
         assert casi_igual(nusselt_cengel(Re, Pr, L, Dh), Nu_esp)
 
     def test_converge_a_dittus_boelter_largo_largo(self):
@@ -260,7 +270,7 @@ class TestCengel:
     def test_mayor_que_dittus_boelter_canal_corto(self):
         """Para L/Dh pequeño, Cengel > Dittus-Boelter."""
         Re, Pr, Dh = 20000.0, PR_AIRE, 0.05
-        L = 0.3   # L/Dh = 6
+        L = 0.3  # L/Dh = 6
         Nu_c = nusselt_cengel(Re, Pr, L, Dh)
         Nu_db = nusselt_dittus_boelter(Re, Pr)
         assert Nu_c > Nu_db
@@ -277,6 +287,7 @@ class TestCengel:
 # =============================================================================
 # 7. Hollands — convección natural
 # =============================================================================
+
 
 class TestHollandsInclinada:
 
@@ -326,6 +337,7 @@ class TestHollandsInclinada:
 # 8. Catálogos — integridad
 # =============================================================================
 
+
 class TestCatalogos:
 
     def test_correlaciones_forzado_tienen_metadatos_completos(self):
@@ -345,8 +357,13 @@ class TestCatalogos:
 
     def test_correlaciones_forzado_esperadas_presentes(self):
         esperadas = {
-            "shah_london", "shah_london_simetrico", "heaton",
-            "gnielinski", "dittus_boelter", "sparrow_liu", "cengel",
+            "shah_london",
+            "shah_london_simetrico",
+            "heaton",
+            "gnielinski",
+            "dittus_boelter",
+            "sparrow_liu",
+            "cengel",
         }
         assert esperadas.issubset(set(CORRELACIONES_FORZADO.keys()))
 
@@ -357,6 +374,7 @@ class TestCatalogos:
 # =============================================================================
 # 9. calcular_h_int — selección automática
 # =============================================================================
+
 
 class TestCalcularHInt:
     """Tests de la función principal calcular_h_int()."""
@@ -444,9 +462,15 @@ class TestCalcularHInt:
     def test_natural_hollands_default(self):
         """Modo natural sin especificar → hollands."""
         h, Nu, nombre, regimen, adv = calcular_h_int(
-            Re=0.0, Pr=self.PR, Dh_m=self.DH, L_m=self.L,
-            k_fluido_W_mK=self.K, pared="una_pared",
-            modo="natural", Ra=1e5, theta_deg=45.0,
+            Re=0.0,
+            Pr=self.PR,
+            Dh_m=self.DH,
+            L_m=self.L,
+            k_fluido_W_mK=self.K,
+            pared="una_pared",
+            modo="natural",
+            Ra=1e5,
+            theta_deg=45.0,
         )
         assert nombre == "hollands"
         assert regimen == "natural"
@@ -455,9 +479,15 @@ class TestCalcularHInt:
     def test_natural_advertencia_theta_alto(self):
         """θ > 75° → advertencia COL_NUSSELT_THETA_FUERA_RANGO."""
         h, Nu, nombre, regimen, adv = calcular_h_int(
-            Re=0.0, Pr=self.PR, Dh_m=self.DH, L_m=self.L,
-            k_fluido_W_mK=self.K, pared="una_pared",
-            modo="natural", Ra=1e5, theta_deg=80.0,
+            Re=0.0,
+            Pr=self.PR,
+            Dh_m=self.DH,
+            L_m=self.L,
+            k_fluido_W_mK=self.K,
+            pared="una_pared",
+            modo="natural",
+            Ra=1e5,
+            theta_deg=80.0,
         )
         assert any("COL_NUSSELT_THETA_FUERA_RANGO" in a for a in adv)
 
@@ -467,8 +497,14 @@ class TestCalcularHInt:
         """Usuario elige dittus_boelter en turbulento → se usa sin advertencia de rango."""
         Re = 20000.0
         h, Nu, nombre, regimen, adv = calcular_h_int(
-            Re, self.PR, self.DH, self.L, self.K,
-            "una_pared", "forzado", correlacion="dittus_boelter"
+            Re,
+            self.PR,
+            self.DH,
+            self.L,
+            self.K,
+            "una_pared",
+            "forzado",
+            correlacion="dittus_boelter",
         )
         assert nombre == "dittus_boelter"
         # No debe haber advertencia de rango (Re está dentro de rango válido)
@@ -478,8 +514,7 @@ class TestCalcularHInt:
         """Usuario elige gnielinski en turbulento → advertencia Re fuera de rango."""
         Re = 30000.0
         h, Nu, nombre, regimen, adv = calcular_h_int(
-            Re, self.PR, self.DH, self.L, self.K,
-            "una_pared", "forzado", correlacion="gnielinski"
+            Re, self.PR, self.DH, self.L, self.K, "una_pared", "forzado", correlacion="gnielinski"
         )
         assert nombre == "gnielinski"
         assert any("COL_NUSSELT_FUERA_RANGO" in a for a in adv)
@@ -488,8 +523,14 @@ class TestCalcularHInt:
         """Usuario elige sparrow_liu (una pared) en colector Tipo 2 → advertencia."""
         Re = 20000.0
         h, Nu, nombre, regimen, adv = calcular_h_int(
-            Re, self.PR, self.DH, self.L, self.K,
-            "dos_paredes", "forzado", correlacion="sparrow_liu"
+            Re,
+            self.PR,
+            self.DH,
+            self.L,
+            self.K,
+            "dos_paredes",
+            "forzado",
+            correlacion="sparrow_liu",
         )
         assert any("COL_NUSSELT_PARED_INCOMPATIBLE" in a for a in adv)
 
@@ -497,16 +538,29 @@ class TestCalcularHInt:
         """Nombre de correlación inexistente → ValueError."""
         with pytest.raises(ValueError, match="no disponible"):
             calcular_h_int(
-                20000.0, self.PR, self.DH, self.L, self.K,
-                "una_pared", "forzado", correlacion="inexistente"
+                20000.0,
+                self.PR,
+                self.DH,
+                self.L,
+                self.K,
+                "una_pared",
+                "forzado",
+                correlacion="inexistente",
             )
 
     def test_natural_correlacion_invalida_lanza_error(self):
         with pytest.raises(ValueError, match="no disponible"):
             calcular_h_int(
-                0.0, self.PR, self.DH, self.L, self.K,
-                "una_pared", "natural", Ra=1e5, theta_deg=45.0,
-                correlacion="inexistente"
+                0.0,
+                self.PR,
+                self.DH,
+                self.L,
+                self.K,
+                "una_pared",
+                "natural",
+                Ra=1e5,
+                theta_deg=45.0,
+                correlacion="inexistente",
             )
 
     # --- Invariantes físicas de h_int ---
@@ -514,17 +568,15 @@ class TestCalcularHInt:
     def test_h_positivo_todos_los_regimenes(self):
         """h_int > 0 en todos los regímenes y configuraciones."""
         casos = [
-            (500.0, "una_pared", 2.0),    # laminar desarrollado
-            (1000.0, "una_pared", 0.3),   # laminar en desarrollo
-            (5000.0, "una_pared", 2.0),   # transición
+            (500.0, "una_pared", 2.0),  # laminar desarrollado
+            (1000.0, "una_pared", 0.3),  # laminar en desarrollo
+            (5000.0, "una_pared", 2.0),  # transición
             (20000.0, "una_pared", 2.0),  # turbulento una pared
-            (20000.0, "dos_paredes", 2.0),# turbulento dos paredes
+            (20000.0, "dos_paredes", 2.0),  # turbulento dos paredes
             (20000.0, "una_pared", 0.3),  # turbulento entrada pronunciada
         ]
         for Re, pared, L in casos:
-            h, *_ = calcular_h_int(
-                Re, self.PR, self.DH, L, self.K, pared, "forzado"
-            )
+            h, *_ = calcular_h_int(Re, self.PR, self.DH, L, self.K, pared, "forzado")
             assert h > 0.0, f"h ≤ 0 para Re={Re}, pared={pared}, L={L}"
 
     def test_h_crece_con_Re_forzado(self):
@@ -532,18 +584,79 @@ class TestCalcularHInt:
         Re_vals = [500.0, 5000.0, 20000.0]
         h_vals = []
         for Re in Re_vals:
-            h, *_ = calcular_h_int(
-                Re, self.PR, self.DH, self.L, self.K, "una_pared", "forzado"
-            )
+            h, *_ = calcular_h_int(Re, self.PR, self.DH, self.L, self.K, "una_pared", "forzado")
             h_vals.append(h)
-        assert all(h_vals[i] < h_vals[i+1] for i in range(len(h_vals)-1)), (
-            f"h no monotónico: {h_vals}"
-        )
+        assert all(
+            h_vals[i] < h_vals[i + 1] for i in range(len(h_vals) - 1)
+        ), f"h no monotónico: {h_vals}"
 
 
 # =============================================================================
 # Punto de entrada
 # =============================================================================
+
+
+class TestNusseltLocal:
+    """Nusselt local: entrada térmica, blending de régimen y convección mixta."""
+
+    def test_decae_a_desarrollado_aguas_abajo(self):
+        """Laminar: Nu(x) alto cerca de la entrada, decae al valor desarrollado."""
+        Re, Pr, Dh = 1500.0, 0.7, 0.05
+        nu_entrada = nusselt_forzado_local(Re, Pr, Dh, x_m=0.05, pared="una_pared")
+        nu_lejos = nusselt_forzado_local(Re, Pr, Dh, x_m=1000.0, pared="una_pared")
+        assert nu_entrada > nu_lejos
+        assert nu_lejos == pytest.approx(5.385, rel=0.02)  # → desarrollado una pared
+
+    def test_desarrollado_dos_paredes(self):
+        """Dos paredes: el límite desarrollado es 8.235."""
+        nu = nusselt_forzado_local(1500.0, 0.7, 0.05, x_m=1000.0, pared="dos_paredes")
+        assert nu == pytest.approx(8.235, rel=0.02)
+
+    def test_promedio_laminar_reproduce_heaton(self):
+        """El promedio de Nu_x laminar sobre 0..L reproduce Heaton (consistencia)."""
+        Re, Pr, Dh, L = 1500.0, 0.7, 0.05, 3.0
+        xs = [L * (i + 0.5) / 400 for i in range(400)]  # punto medio, evita x=0
+        nu_avg = sum(nusselt_forzado_local(Re, Pr, Dh, x, "una_pared") for x in xs) / len(xs)
+        nu_heaton = nusselt_heaton(Re, Pr, L, Dh)
+        assert nu_avg == pytest.approx(nu_heaton, rel=0.05)
+
+    def test_blending_continuo_en_Re_2300(self):
+        """No hay salto en Nu al cruzar Re=2300 (blending suave)."""
+        kw = dict(Pr=0.7, Dh_m=0.05, x_m=1.0, pared="una_pared")
+        nu_lo = nusselt_forzado_local(Re=RE_LAMINAR_MAX - 1.0, **kw)
+        nu_hi = nusselt_forzado_local(Re=RE_LAMINAR_MAX + 1.0, **kw)
+        assert nu_hi == pytest.approx(nu_lo, rel=0.05)
+
+    def test_blending_continuo_en_Re_10000(self):
+        """No hay salto en Nu al cruzar Re=10000 (blending suave)."""
+        kw = dict(Pr=0.7, Dh_m=0.05, x_m=1.0, pared="una_pared")
+        nu_lo = nusselt_forzado_local(Re=RE_TURBULENTO_MIN - 1.0, **kw)
+        nu_hi = nusselt_forzado_local(Re=RE_TURBULENTO_MIN + 1.0, **kw)
+        assert nu_hi == pytest.approx(nu_lo, rel=0.05)
+
+    def test_natural_canal_cero_sin_flotacion(self):
+        """Sin flotación (Ra ≤ 0) la componente natural es 0."""
+        assert nusselt_natural_canal(0.0, 0.7) == 0.0
+        assert nusselt_natural_canal(-10.0, 0.7) == 0.0
+
+    def test_natural_canal_crece_con_Ra(self):
+        """La componente natural crece con Ra."""
+        assert nusselt_natural_canal(1e5, 0.7) < nusselt_natural_canal(1e7, 0.7)
+
+    def test_mixta_reduce_a_forzado_sin_flotacion(self):
+        """Con Ra=0, el Nu mixto coincide con el forzado local."""
+        kw = dict(Re=1500.0, Pr=0.7, Dh_m=0.05, x_m=1.0, pared="una_pared")
+        assert nusselt_mixto_local(Ra=0.0, **kw) == pytest.approx(
+            nusselt_forzado_local(1500.0, 0.7, 0.05, 1.0, "una_pared")
+        )
+
+    def test_mixta_supera_forzado_con_flotacion(self):
+        """A baja velocidad con flotación fuerte, el mixto supera al forzado puro."""
+        kw = dict(Re=400.0, Pr=0.7, Dh_m=0.05, x_m=1.0, pared="una_pared")
+        nu_forzado = nusselt_forzado_local(400.0, 0.7, 0.05, 1.0, "una_pared")
+        nu_mixto = nusselt_mixto_local(Ra=1e6, **kw)
+        assert nu_mixto > nu_forzado
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

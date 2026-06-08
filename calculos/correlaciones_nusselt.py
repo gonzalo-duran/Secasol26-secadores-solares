@@ -67,15 +67,15 @@ from typing import Literal
 # Constantes físicas del módulo
 # ---------------------------------------------------------------------------
 
-K_AIRE: float = 0.02814    # W/m·K  — conductividad a 323 K
-PR_AIRE: float = 0.703     # —       — número de Prandtl a 323 K
+K_AIRE: float = 0.02814  # W/m·K  — conductividad a 323 K
+PR_AIRE: float = 0.703  # —       — número de Prandtl a 323 K
 
 # Límites de régimen
 RE_LAMINAR_MAX: float = 2300.0
 RE_TURBULENTO_MIN: float = 10000.0
 
 # Umbral de relación L/Dh para considerar efectos de entrada
-L_DH_DESARROLLADO: float = 50.0   # L/Dh ≥ 50 → flujo térmicamente desarrollado
+L_DH_DESARROLLADO: float = 50.0  # L/Dh ≥ 50 → flujo térmicamente desarrollado
 L_DH_ENTRADA_PRONUNCIADA: float = 10.0  # L/Dh < 10 → Cengel gana a Dittus-Boelter
 
 # Tipo de pared caliente
@@ -85,6 +85,7 @@ TipoPared = Literal["una_pared", "dos_paredes"]
 # ---------------------------------------------------------------------------
 # Metadatos de correlaciones (para UI)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class CorrelacionNusselt:
@@ -124,6 +125,7 @@ class CorrelacionNusselt:
 # Implementaciones de correlaciones — flujo forzado
 # ---------------------------------------------------------------------------
 
+
 def nusselt_shah_london(Re: float, Pr: float) -> float:
     """Nu para flujo laminar desarrollado en canal plano — Shah & London (1978).
 
@@ -149,9 +151,7 @@ def nusselt_shah_london(Re: float, Pr: float) -> float:
         in Ducts. Academic Press, New York. Tabla 42, caso H2.
     """
     if Re >= RE_LAMINAR_MAX:
-        raise ValueError(
-            f"Shah & London requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}."
-        )
+        raise ValueError(f"Shah & London requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}.")
     # Nu asimétrico (una pared caliente): 5.385
     # Nu simétrico (ambas paredes calientes): 8.235 — ver nusselt_shah_london_simetrico
     return 5.385
@@ -179,9 +179,7 @@ def nusselt_shah_london_simetrico(Re: float, Pr: float) -> float:
         Shah & London (1978). Tabla 42, caso H1.
     """
     if Re >= RE_LAMINAR_MAX:
-        raise ValueError(
-            f"Shah & London requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}."
-        )
+        raise ValueError(f"Shah & London requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}.")
     return 8.235
 
 
@@ -216,14 +214,12 @@ def nusselt_heaton(Re: float, Pr: float, L_m: float, Dh_m: float) -> float:
         annular passages. Int. J. Heat Mass Transfer 7, 763-781.
     """
     if Re >= RE_LAMINAR_MAX:
-        raise ValueError(
-            f"Heaton requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}."
-        )
+        raise ValueError(f"Heaton requiere Re < {RE_LAMINAR_MAX}. Re={Re:.0f}.")
     if L_m <= 0 or Dh_m <= 0:
         raise ValueError("L_m y Dh_m deben ser positivos.")
 
     Gz = Re * Pr * Dh_m / L_m  # número de Graetz
-    Nu_inf = 5.385              # límite desarrollado (una pared caliente)
+    Nu_inf = 5.385  # límite desarrollado (una pared caliente)
     Nu = Nu_inf * (1.0 + 0.0668 * Gz ** (2.0 / 3.0))
     return Nu
 
@@ -257,12 +253,13 @@ def nusselt_gnielinski(Re: float, Pr: float) -> float:
         turbulent pipe and channel flow. Int. Chem. Eng. 16, 359-368.
     """
     if Re < RE_LAMINAR_MAX:
-        raise ValueError(
-            f"Gnielinski requiere Re ≥ {RE_LAMINAR_MAX}. Re={Re:.0f}."
-        )
+        raise ValueError(f"Gnielinski requiere Re ≥ {RE_LAMINAR_MAX}. Re={Re:.0f}.")
     f = (0.790 * math.log(Re) - 1.64) ** (-2)
-    Nu = (f / 8.0) * (Re - 1000.0) * Pr / (
-        1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0)
+    Nu = (
+        (f / 8.0)
+        * (Re - 1000.0)
+        * Pr
+        / (1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0))
     )
     return max(Nu, 0.0)
 
@@ -292,10 +289,8 @@ def nusselt_dittus_boelter(Re: float, Pr: float) -> float:
         radiators of the tubular type. Univ. Calif. Publ. Eng. 2, 443.
     """
     if Re < RE_TURBULENTO_MIN:
-        raise ValueError(
-            f"Dittus-Boelter requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}."
-        )
-    return 0.023 * Re ** 0.8 * Pr ** 0.4
+        raise ValueError(f"Dittus-Boelter requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}.")
+    return 0.023 * Re**0.8 * Pr**0.4
 
 
 def nusselt_sparrow_liu(Re: float, Pr: float) -> float:
@@ -333,10 +328,8 @@ def nusselt_sparrow_liu(Re: float, Pr: float) -> float:
         heat exchangers. Int. J. Heat Mass Transfer 22, 1433-1440.
     """
     if Re < RE_TURBULENTO_MIN:
-        raise ValueError(
-            f"Sparrow & Liu requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}."
-        )
-    return 0.0158 * Re ** 0.8
+        raise ValueError(f"Sparrow & Liu requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}.")
+    return 0.0158 * Re**0.8
 
 
 def nusselt_cengel(Re: float, Pr: float, L_m: float, Dh_m: float) -> float:
@@ -369,13 +362,11 @@ def nusselt_cengel(Re: float, Pr: float, L_m: float, Dh_m: float) -> float:
         McGraw-Hill. Ec. 8-70.
     """
     if Re < RE_TURBULENTO_MIN:
-        raise ValueError(
-            f"Cengel requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}."
-        )
+        raise ValueError(f"Cengel requiere Re ≥ {RE_TURBULENTO_MIN}. Re={Re:.0f}.")
     if L_m <= 0 or Dh_m <= 0:
         raise ValueError("L_m y Dh_m deben ser positivos.")
 
-    Nu_db = 0.023 * Re ** 0.8 * Pr ** 0.4
+    Nu_db = 0.023 * Re**0.8 * Pr**0.4
     factor_entrada = 1.0 + (Dh_m / L_m) ** 0.7
     return Nu_db * factor_entrada
 
@@ -383,6 +374,7 @@ def nusselt_cengel(Re: float, Pr: float, L_m: float, Dh_m: float) -> float:
 # ---------------------------------------------------------------------------
 # Implementaciones de correlaciones — convección natural
 # ---------------------------------------------------------------------------
+
 
 def nusselt_hollands_inclinada(Ra: float, theta_deg: float) -> float:
     """Nu para convección natural en cavidad inclinada — Hollands et al. (1976).
@@ -413,9 +405,7 @@ def nusselt_hollands_inclinada(Ra: float, theta_deg: float) -> float:
         Energy 18, 183-193.
     """
     if theta_deg < 0.0 or theta_deg > 90.0:
-        raise ValueError(
-            f"theta_deg debe estar en [0°, 90°]. Recibido: {theta_deg:.1f}°."
-        )
+        raise ValueError(f"theta_deg debe estar en [0°, 90°]. Recibido: {theta_deg:.1f}°.")
 
     theta_rad = math.radians(theta_deg)
     cos_theta = math.cos(theta_rad)
@@ -456,10 +446,10 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_max=None,
         pared="una_pared",
         referencia="Shah, R.K. & London, A.L. (1978). Laminar Flow Forced "
-                   "Convection in Ducts. Academic Press.",
+        "Convection in Ducts. Academic Press.",
         notas="Nu = 5.385. Válida para flujo térmicamente desarrollado "
-              "(L/Dh ≥ 50). Una pared isoterma, otra adiabática. "
-              "Para efectos de entrada usar Heaton.",
+        "(L/Dh ≥ 50). Una pared isoterma, otra adiabática. "
+        "Para efectos de entrada usar Heaton.",
     ),
     "shah_london_simetrico": CorrelacionNusselt(
         nombre="shah_london_simetrico",
@@ -472,10 +462,10 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_max=None,
         pared="dos_paredes",
         referencia="Shah, R.K. & London, A.L. (1978). Laminar Flow Forced "
-                   "Convection in Ducts. Academic Press.",
+        "Convection in Ducts. Academic Press.",
         notas="Nu = 8.235. Aplicable al Tipo 2 donde ambas caras del "
-              "absorbedor calientan el fluido. Flujo de calor uniforme "
-              "en ambas paredes (condición H1).",
+        "absorbedor calientan el fluido. Flujo de calor uniforme "
+        "en ambas paredes (condición H1).",
     ),
     "heaton": CorrelacionNusselt(
         nombre="heaton",
@@ -488,9 +478,9 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_max=None,
         pared="una_pared",
         referencia="Heaton, H.S., Reynolds, W.C. & Kays, W.M. (1964). "
-                   "Int. J. Heat Mass Transfer 7, 763-781.",
+        "Int. J. Heat Mass Transfer 7, 763-781.",
         notas="Nu = 5.385·(1 + 0.0668·Gz^{2/3}). Recomendada cuando L/Dh < 50. "
-              "Nu siempre mayor o igual que Shah & London. Válida Pr > 0.5.",
+        "Nu siempre mayor o igual que Shah & London. Válida Pr > 0.5.",
     ),
     "gnielinski": CorrelacionNusselt(
         nombre="gnielinski",
@@ -504,7 +494,7 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         pared=None,
         referencia="Gnielinski, V. (1976). Int. Chem. Eng. 16, 359-368.",
         notas="La más precisa para Re 2300–10000. Error < 10% en rango de "
-              "validez. Pr debe estar entre 0.5 y 2000.",
+        "validez. Pr debe estar entre 0.5 y 2000.",
     ),
     "dittus_boelter": CorrelacionNusselt(
         nombre="dittus_boelter",
@@ -516,10 +506,9 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_min=None,
         Ra_max=None,
         pared="dos_paredes",
-        referencia="Dittus, F.W. & Boelter, L.M.K. (1930). "
-                   "Univ. Calif. Publ. Eng. 2, 443.",
+        referencia="Dittus, F.W. & Boelter, L.M.K. (1930). " "Univ. Calif. Publ. Eng. 2, 443.",
         notas="Nu = 0.023·Re^0.8·Pr^0.4. Clásica, error ~25% cerca de Re=10000. "
-              "Usar Gnielinski en transición. Requiere L/Dh > 10.",
+        "Usar Gnielinski en transición. Requiere L/Dh > 10.",
     ),
     "sparrow_liu": CorrelacionNusselt(
         nombre="sparrow_liu",
@@ -531,11 +520,10 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_min=None,
         Ra_max=None,
         pared="una_pared",
-        referencia="Sparrow, E.M. & Liu, C.H. (1979). "
-                   "Int. J. Heat Mass Transfer 22, 1433-1440.",
+        referencia="Sparrow, E.M. & Liu, C.H. (1979). " "Int. J. Heat Mass Transfer 22, 1433-1440.",
         notas="Nu = 0.0158·Re^0.8. Desarrollada para colectores solares de "
-              "aire con una pared caliente (absorbedor) y otra fría o adiabática. "
-              "Default turbulento para Tipos 1, 3 y 4.",
+        "aire con una pared caliente (absorbedor) y otra fría o adiabática. "
+        "Default turbulento para Tipos 1, 3 y 4.",
     ),
     "cengel": CorrelacionNusselt(
         nombre="cengel",
@@ -548,9 +536,9 @@ CORRELACIONES_FORZADO: dict[str, CorrelacionNusselt] = {
         Ra_max=None,
         pared=None,
         referencia="Cengel, Y.A. & Ghajar, A.J. (2014). Heat and Mass Transfer, "
-                   "5ª ed. McGraw-Hill. Ec. 8-70.",
+        "5ª ed. McGraw-Hill. Ec. 8-70.",
         notas="Nu = 0.023·Re^0.8·Pr^0.4·[1+(Dh/L)^0.7]. Recomendada cuando "
-              "L/Dh < 10. Para L/Dh > 60 converge a Dittus-Boelter (error < 3%).",
+        "L/Dh < 10. Para L/Dh > 60 converge a Dittus-Boelter (error < 3%).",
     ),
 }
 
@@ -566,10 +554,10 @@ CORRELACIONES_NATURAL: dict[str, CorrelacionNusselt] = {
         Ra_max=1e8,
         pared=None,
         referencia="Hollands, K.G.T., Unny, T.E., Raithby, G.D. & Konicek, L. "
-                   "(1976). Solar Energy 18, 183-193.",
+        "(1976). Solar Energy 18, 183-193.",
         notas="Desarrollada específicamente para colectores solares. "
-              "Válida para θ ∈ [0°, 75°]. Para θ > 75° la correlación "
-              "sobreestima Nu. Incluye supresión de convección para Ra < 1708/cosθ.",
+        "Válida para θ ∈ [0°, 75°]. Para θ > 75° la correlación "
+        "sobreestima Nu. Incluye supresión de convección para Ra < 1708/cosθ.",
     ),
 }
 
@@ -577,6 +565,7 @@ CORRELACIONES_NATURAL: dict[str, CorrelacionNusselt] = {
 # ---------------------------------------------------------------------------
 # Función principal — selección y cálculo
 # ---------------------------------------------------------------------------
+
 
 def calcular_h_int(
     Re: float,
@@ -653,9 +642,7 @@ def calcular_h_int(
         nombre, Nu = _seleccion_automatica(Re, Pr, Dh_m, L_m, L_Dh, pared, advertencias)
     else:
         # Usuario eligió correlación específica — validar y advertir si está fuera de rango
-        nombre, Nu = _correlacion_usuario(
-            correlacion, Re, Pr, Dh_m, L_m, L_Dh, pared, advertencias
-        )
+        nombre, Nu = _correlacion_usuario(correlacion, Re, Pr, Dh_m, L_m, L_Dh, pared, advertencias)
 
     meta = CORRELACIONES_FORZADO[nombre]
     regimen = meta.regimen
@@ -782,8 +769,144 @@ def _correlacion_usuario(
     except ValueError as exc:
         # La función interna ya lanzó ValueError por Re fuera de rango;
         # capturamos y relanzamos solo si no habíamos advertido ya
-        raise ValueError(
-            f"Error al evaluar '{correlacion}' con Re={Re:.0f}: {exc}"
-        ) from exc
+        raise ValueError(f"Error al evaluar '{correlacion}' con Re={Re:.0f}: {exc}") from exc
 
     return correlacion, Nu
+
+
+# ---------------------------------------------------------------------------
+# Nusselt LOCAL (nodo a nodo): entrada térmica + blending de régimen + mixta
+# ---------------------------------------------------------------------------
+#
+# Estas funciones dan el Nusselt en una posición axial x (no promediado sobre
+# L), para el cálculo local del coeficiente convectivo cuando las propiedades
+# del aire varían a lo largo del canal. Se usan dentro de los solvers de
+# colector. Son puras (Nu = f(Re, Pr, geometría, Ra)); el solver convierte
+# Nu → h = Nu·k(T)/Dh con la conductividad local.
+#
+# Consistencia con las correlaciones promediadas (ya validadas):
+#   - Laminar local  Nu_x = Nu_∞·(1 + 0.02227·Gz_x^(2/3)),  Gz_x = Re·Pr·Dh/x.
+#     Su promedio sobre 0..L reproduce EXACTAMENTE Heaton:
+#     Nu_avg = Nu_∞·(1 + 0.0668·Gz_L^(2/3))  (∫x^(−2/3) → factor 3·0.02227=0.0668).
+#   - Turbulento local  factor de entrada (1 + 0.3·(Dh/x)^0.7), cuyo promedio
+#     reproduce Cengel: Nu_avg = Nu_∞·(1 + (Dh/L)^0.7)  (∫x^(−0.7) → 0.3·3.333=1).
+
+_BLEND_BAND: float = 400.0  # semiancho de mezcla en torno a Re=2300 y 10000
+_ENTRADA_X_MIN_FACTOR: float = 0.5  # piso de x en unidades de Dh (acota entrada)
+_COEF_ENTRADA_LAMINAR: float = 0.02227  # consistente con Heaton (3·c = 0.0668)
+_COEF_ENTRADA_TURB: float = 0.3  # consistente con Cengel (3.333·c = 1.0)
+
+
+def _smoothstep(t: float) -> float:
+    """Interpolador suave (C1) en [0,1]: 3t²−2t³, con clamp."""
+    if t <= 0.0:
+        return 0.0
+    if t >= 1.0:
+        return 1.0
+    return t * t * (3.0 - 2.0 * t)
+
+
+def nusselt_forzado_local(Re: float, Pr: float, Dh_m: float, x_m: float, pared: TipoPared) -> float:
+    """Nusselt forzado LOCAL en la posición x, con realce de entrada y blending.
+
+    Mezcla continuamente laminar ↔ transición (Gnielinski) ↔ turbulento
+    (Sparrow-Liu una pared / Dittus-Boelter dos paredes) en torno a Re=2300 y
+    10000, de modo que Nu(x) no salte si el Re local cruza un umbral a lo largo
+    del colector (al variar μ(T)). Cada rama incluye su realce de entrada local.
+
+    Args:
+        Re: Reynolds local [adim].
+        Pr: Prandtl local [adim].
+        Dh_m: Diámetro hidráulico [m].
+        x_m: Posición axial desde la entrada [m] (se acota a ≥ 0.5·Dh).
+        pared: ``"una_pared"`` o ``"dos_paredes"``.
+
+    Returns:
+        Nusselt local [adim].
+    """
+    x_eff = max(x_m, _ENTRADA_X_MIN_FACTOR * Dh_m)
+
+    # --- Laminar local (consistente con Heaton al promediar) ---
+    Nu_dev = 8.235 if pared == "dos_paredes" else 5.385
+    Gz_x = Re * Pr * Dh_m / x_eff if x_eff > 0 else 0.0
+    Nu_lam = Nu_dev * (1.0 + _COEF_ENTRADA_LAMINAR * Gz_x ** (2.0 / 3.0))
+
+    # Factor de entrada turbulento (consistente con Cengel al promediar)
+    factor_turb = 1.0 + _COEF_ENTRADA_TURB * (Dh_m / x_eff) ** 0.7
+
+    # --- Transición: Gnielinski (inline, sin guardas de rango) ---
+    if Re > 10.0:
+        f = (0.790 * math.log(Re) - 1.64) ** (-2)
+        Nu_gn = (
+            (f / 8.0)
+            * (Re - 1000.0)
+            * Pr
+            / (1.0 + 12.7 * math.sqrt(f / 8.0) * (Pr ** (2.0 / 3.0) - 1.0))
+        )
+        Nu_trans = max(Nu_gn, 0.0) * factor_turb
+    else:
+        Nu_trans = 0.0
+
+    # --- Turbulento desarrollado ---
+    if pared == "dos_paredes":
+        Nu_turb = 0.023 * Re**0.8 * Pr**0.4 * factor_turb
+    else:
+        Nu_turb = 0.0158 * Re**0.8 * factor_turb
+
+    # --- Blending continuo por régimen ---
+    if Re <= RE_LAMINAR_MAX - _BLEND_BAND:
+        return Nu_lam
+    if Re < RE_LAMINAR_MAX + _BLEND_BAND:
+        g = _smoothstep((Re - (RE_LAMINAR_MAX - _BLEND_BAND)) / (2.0 * _BLEND_BAND))
+        return (1.0 - g) * Nu_lam + g * Nu_trans
+    if Re <= RE_TURBULENTO_MIN - _BLEND_BAND:
+        return Nu_trans
+    if Re < RE_TURBULENTO_MIN + _BLEND_BAND:
+        g = _smoothstep((Re - (RE_TURBULENTO_MIN - _BLEND_BAND)) / (2.0 * _BLEND_BAND))
+        return (1.0 - g) * Nu_trans + g * Nu_turb
+    return Nu_turb
+
+
+def nusselt_natural_canal(Ra: float, Pr: float) -> float:
+    """Componente natural del Nusselt en el canal — Churchill-Chu (placa, laminar).
+
+    Solo la parte convectiva (sin el término conductivo 0.68), de modo que
+    ``Nu → 0`` cuando ``Ra → 0`` y la combinación mixta se reduzca al forzado.
+
+    Args:
+        Ra: Rayleigh local basado en Dh y la componente de gravedad a lo largo
+            del canal (g·sin β) [adim].
+        Pr: Prandtl local [adim].
+
+    Returns:
+        Nusselt natural [adim] (0 si Ra ≤ 0).
+    """
+    if Ra <= 0.0:
+        return 0.0
+    return 0.670 * Ra**0.25 / (1.0 + (0.492 / Pr) ** (9.0 / 16.0)) ** (4.0 / 9.0)
+
+
+def nusselt_mixto_local(
+    Re: float, Pr: float, Dh_m: float, x_m: float, pared: TipoPared, Ra: float
+) -> float:
+    """Nusselt LOCAL de convección mixta = (Nu_forzado³ + Nu_natural³)^(1/3).
+
+    Combinación de Churchill para flotación **asistida** (supuesto estándar en
+    air heaters: flujo ascendente sobre absorbedor caliente). Cuando la
+    flotación es despreciable (Ra→0) se reduce al forzado local; cuando domina
+    (baja velocidad / vertical, Gr/Re²≫1) gana el término natural.
+
+    Args:
+        Re: Reynolds local [adim].
+        Pr: Prandtl local [adim].
+        Dh_m: Diámetro hidráulico [m].
+        x_m: Posición axial [m].
+        pared: ``"una_pared"`` o ``"dos_paredes"``.
+        Ra: Rayleigh local (g·sin β) [adim].
+
+    Returns:
+        Nusselt local de convección mixta [adim].
+    """
+    Nu_f = nusselt_forzado_local(Re, Pr, Dh_m, x_m, pared)
+    Nu_n = nusselt_natural_canal(Ra, Pr)
+    return (Nu_f**3 + Nu_n**3) ** (1.0 / 3.0)
