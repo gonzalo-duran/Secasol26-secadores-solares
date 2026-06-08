@@ -94,10 +94,7 @@ def _opciones_material(catalogo_dict: dict) -> dict[str, str]:
     Returns:
         Diccionario ordenado {id_material: descripcion_corta}.
     """
-    return {
-        id_mat: datos.get("descripcion", id_mat)
-        for id_mat, datos in catalogo_dict.items()
-    }
+    return {id_mat: datos.get("descripcion", id_mat) for id_mat, datos in catalogo_dict.items()}
 
 
 def _tabla_propiedades_cubierta(id_mat: str) -> None:
@@ -142,73 +139,158 @@ def _tabla_propiedades_fondo(id_mat: str) -> None:
 # Inputs para materiales definidos por el usuario
 # ---------------------------------------------------------------------------
 
+
 def _inputs_cubierta_usuario(key_prefix: str) -> dict:
     st.caption("Propiedades de la cubierta definida por el usuario:")
     cols = st.columns(4)
-    tau = cols[0].number_input("τ solar", min_value=0.0, max_value=1.0, value=0.85,
-                                step=0.01, format="%.2f", key=f"{key_prefix}_tau")
-    eps = cols[1].number_input("ε IR", min_value=0.0, max_value=1.0, value=0.90,
-                                step=0.01, format="%.2f", key=f"{key_prefix}_eps")
-    k = cols[2].number_input("k [W/m·K]", min_value=0.01, max_value=5.0, value=0.76,
-                              step=0.01, format="%.3f", key=f"{key_prefix}_k")
-    Tmax_C = cols[3].number_input("T_max [°C]", min_value=50, max_value=500,
-                                   value=150, step=10, key=f"{key_prefix}_Tmax_C")
+    tau = cols[0].number_input(
+        "τ solar",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.85,
+        step=0.01,
+        format="%.2f",
+        key=f"{key_prefix}_tau",
+    )
+    eps = cols[1].number_input(
+        "ε IR",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.90,
+        step=0.01,
+        format="%.2f",
+        key=f"{key_prefix}_eps",
+    )
+    k = cols[2].number_input(
+        "k [W/m·K]",
+        min_value=0.01,
+        max_value=5.0,
+        value=0.76,
+        step=0.01,
+        format="%.3f",
+        key=f"{key_prefix}_k",
+    )
+    Tmax_C = cols[3].number_input(
+        "T_max [°C]", min_value=50, max_value=500, value=150, step=10, key=f"{key_prefix}_Tmax_C"
+    )
     return {
         "descripcion": "Definido por el usuario",
-        "transmitancia_solar": tau, "emisividad_ir": eps,
-        "conductividad_termica": k, "densidad": 2500.0,
-        "calor_especifico": 840.0, "T_max_servicio": float(Tmax_C) + 273.15,
+        "transmitancia_solar": tau,
+        "emisividad_ir": eps,
+        "conductividad_termica": k,
+        "densidad": 2500.0,
+        "calor_especifico": 840.0,
+        "T_max_servicio": float(Tmax_C) + 273.15,
     }
 
 
 def _inputs_placa_usuario(key_prefix: str) -> dict:
     st.caption("Propiedades de la placa absorbedora definida por el usuario:")
     cols = st.columns(4)
-    alfa = cols[0].number_input("α solar", min_value=0.0, max_value=1.0, value=0.95,
-                                 step=0.01, format="%.2f", key=f"{key_prefix}_alfa")
-    eps = cols[1].number_input("ε IR", min_value=0.0, max_value=1.0, value=0.15,
-                                step=0.01, format="%.2f", key=f"{key_prefix}_eps")
-    k = cols[2].number_input("k [W/m·K]", min_value=0.1, max_value=500.0, value=50.0,
-                              step=1.0, format="%.1f", key=f"{key_prefix}_k")
-    Tmax_C = cols[3].number_input("T_max [°C]", min_value=50, max_value=800,
-                                   value=200, step=10, key=f"{key_prefix}_Tmax_C")
+    alfa = cols[0].number_input(
+        "α solar",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.95,
+        step=0.01,
+        format="%.2f",
+        key=f"{key_prefix}_alfa",
+    )
+    eps = cols[1].number_input(
+        "ε IR",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.15,
+        step=0.01,
+        format="%.2f",
+        key=f"{key_prefix}_eps",
+    )
+    k = cols[2].number_input(
+        "k [W/m·K]",
+        min_value=0.1,
+        max_value=500.0,
+        value=50.0,
+        step=1.0,
+        format="%.1f",
+        key=f"{key_prefix}_k",
+    )
+    Tmax_C = cols[3].number_input(
+        "T_max [°C]", min_value=50, max_value=800, value=200, step=10, key=f"{key_prefix}_Tmax_C"
+    )
     return {
         "descripcion": "Definido por el usuario",
-        "absortancia_solar": alfa, "emisividad_ir": eps,
-        "conductividad_termica": k, "densidad": 7850.0,
-        "calor_especifico": 480.0, "T_max_servicio": float(Tmax_C) + 273.15,
+        "absortancia_solar": alfa,
+        "emisividad_ir": eps,
+        "conductividad_termica": k,
+        "densidad": 7850.0,
+        "calor_especifico": 480.0,
+        "T_max_servicio": float(Tmax_C) + 273.15,
     }
 
 
 def _inputs_aislante_usuario(key_prefix: str) -> dict:
     st.caption("Propiedades del aislante definido por el usuario:")
     cols = st.columns(3)
-    k = cols[0].number_input("k [W/m·K]", min_value=0.01, max_value=1.0, value=0.04,
-                              step=0.005, format="%.3f", key=f"{key_prefix}_k")
-    rho = cols[1].number_input("ρ [kg/m³]", min_value=5.0, max_value=500.0, value=30.0,
-                                step=5.0, format="%.0f", key=f"{key_prefix}_rho")
-    Tmax_C = cols[2].number_input("T_max [°C]", min_value=50, max_value=500,
-                                   value=200, step=10, key=f"{key_prefix}_Tmax_C")
+    k = cols[0].number_input(
+        "k [W/m·K]",
+        min_value=0.01,
+        max_value=1.0,
+        value=0.04,
+        step=0.005,
+        format="%.3f",
+        key=f"{key_prefix}_k",
+    )
+    rho = cols[1].number_input(
+        "ρ [kg/m³]",
+        min_value=5.0,
+        max_value=500.0,
+        value=30.0,
+        step=5.0,
+        format="%.0f",
+        key=f"{key_prefix}_rho",
+    )
+    Tmax_C = cols[2].number_input(
+        "T_max [°C]", min_value=50, max_value=500, value=200, step=10, key=f"{key_prefix}_Tmax_C"
+    )
     return {
         "descripcion": "Definido por el usuario",
-        "conductividad_termica": k, "densidad": rho,
-        "calor_especifico": 1000.0, "T_max_servicio": float(Tmax_C) + 273.15,
+        "conductividad_termica": k,
+        "densidad": rho,
+        "calor_especifico": 1000.0,
+        "T_max_servicio": float(Tmax_C) + 273.15,
     }
 
 
 def _inputs_fondo_usuario(key_prefix: str) -> dict:
     st.caption("Propiedades del fondo/carcasa definido por el usuario:")
     cols = st.columns(3)
-    eps = cols[0].number_input("ε IR", min_value=0.0, max_value=1.0, value=0.90,
-                                step=0.01, format="%.2f", key=f"{key_prefix}_eps")
-    k = cols[1].number_input("k [W/m·K]", min_value=0.05, max_value=500.0, value=50.0,
-                              step=1.0, format="%.1f", key=f"{key_prefix}_k")
-    Tmax_C = cols[2].number_input("T_max [°C]", min_value=50, max_value=800,
-                                   value=200, step=10, key=f"{key_prefix}_Tmax_C")
+    eps = cols[0].number_input(
+        "ε IR",
+        min_value=0.0,
+        max_value=1.0,
+        value=0.90,
+        step=0.01,
+        format="%.2f",
+        key=f"{key_prefix}_eps",
+    )
+    k = cols[1].number_input(
+        "k [W/m·K]",
+        min_value=0.05,
+        max_value=500.0,
+        value=50.0,
+        step=1.0,
+        format="%.1f",
+        key=f"{key_prefix}_k",
+    )
+    Tmax_C = cols[2].number_input(
+        "T_max [°C]", min_value=50, max_value=800, value=200, step=10, key=f"{key_prefix}_Tmax_C"
+    )
     return {
         "descripcion": "Definido por el usuario",
-        "emisividad_ir": eps, "conductividad_termica": k,
-        "densidad": 7850.0, "calor_especifico": 480.0,
+        "emisividad_ir": eps,
+        "conductividad_termica": k,
+        "densidad": 7850.0,
+        "calor_especifico": 480.0,
         "T_max_servicio": float(Tmax_C) + 273.15,
     }
 
@@ -216,6 +298,7 @@ def _inputs_fondo_usuario(key_prefix: str) -> dict:
 # ---------------------------------------------------------------------------
 # Generador de texto de configuración (mejora 4)
 # ---------------------------------------------------------------------------
+
 
 def _mat_props(cat_dict: dict, id_mat: str) -> dict:
     """Devuelve todas las propiedades del material para snapshot reconstruible."""
@@ -280,13 +363,15 @@ def _texto_config_colector(
         eval_dict: ``st.session_state["p3_eval"]`` (o ``None`` si no se corrió).
     """
     from datetime import date
+
     u = col.unidad
 
     def desc(cat_dict: dict, id_mat: str) -> str:
         return cat_dict.get(id_mat, {}).get("descripcion", id_mat)
 
-    def material_block(label: str, cat: dict, mat_id: str, espesor_m: float,
-                         espesor_unit: str = "mm") -> list[str]:
+    def material_block(
+        label: str, cat: dict, mat_id: str, espesor_m: float, espesor_unit: str = "mm"
+    ) -> list[str]:
         props = _mat_props(cat, mat_id)
         if espesor_unit == "mm":
             e_str = f"{espesor_m * 1000:.1f} mm"
@@ -321,12 +406,10 @@ def _texto_config_colector(
         f"Fecha de exportación: {date.today()}",
         "",
         "MATERIALES",
-        *material_block("Cubierta", catalogo.CUBIERTAS, u.id_cubierta,
-                          u.espesor_cubierta_m, "mm"),
+        *material_block("Cubierta", catalogo.CUBIERTAS, u.id_cubierta, u.espesor_cubierta_m, "mm"),
         f"             N° cubiertas = {u.n_cubiertas}",
         *material_block("Placa", catalogo.PLACAS, u.id_placa, u.espesor_placa_m, "mm"),
-        *material_block("Aislante", catalogo.AISLANTES, u.id_aislante,
-                          u.espesor_aislante_m, "cm"),
+        *material_block("Aislante", catalogo.AISLANTES, u.id_aislante, u.espesor_aislante_m, "cm"),
         *material_block("Fondo", catalogo.FONDOS, u.id_fondo, u.espesor_fondo_m, "mm"),
         "",
         "TIPO DE COLECTOR",
@@ -335,12 +418,15 @@ def _texto_config_colector(
         "GEOMETRÍA Y CONDICIÓN DE DISEÑO",
         f"  Ancho           : {u.ancho_m:.3f} m",
         f"  Largo           : {u.largo_m:.3f} m",
-        f"  Canal superior  : {u.espaciado_m * 1000:.1f} mm"
-        if u.tipo_colector in (2, 3, 4)
-        else f"  Espaciado canal : {u.espaciado_m * 1000:.1f} mm",
+        (
+            f"  Canal superior  : {u.espaciado_m * 1000:.1f} mm"
+            if u.tipo_colector in (2, 3, 4)
+            else f"  Espaciado canal : {u.espaciado_m * 1000:.1f} mm"
+        ),
         *(
             [f"  Canal inferior  : {u.espaciado_inferior_m * 1000:.1f} mm"]
-            if u.tipo_colector in (2, 3, 4) else []
+            if u.tipo_colector in (2, 3, 4)
+            else []
         ),
         f"  Vel. diseño     : {u.velocidad_diseno_ms:.3f} m/s",
         f"  Sección canal   : {u.seccion_canal_m2() * 1e4:.2f} cm²",
@@ -385,9 +471,11 @@ def _texto_config_colector(
                     f"  T salida máx     : {res['T_salida_max_C']:.1f} °C",
                     f"  T salida mediodía: {res['T_salida_mediodia_C']:.1f} °C",
                     f"  T salida mín     : {res['T_salida_min_C']:.1f} °C",
-                    f"  ΔT máx           : "
-                    f"{res['delta_T_max_C']:.1f} °C"
-                    if res['delta_T_max_C'] is not None else "  ΔT máx           : —",
+                    (
+                        f"  ΔT máx           : " f"{res['delta_T_max_C']:.1f} °C"
+                        if res["delta_T_max_C"] is not None
+                        else "  ΔT máx           : —"
+                    ),
                     f"  Hora tránsito    : {res['hora_transit'] or '—'}",
                     f"  Horas con sol    : {res['n_horas_con_radiacion']}",
                 ]
@@ -474,6 +562,7 @@ def _json_config_colector(
 ) -> dict:
     """Genera el snapshot reconstruible (dict serializable) del colector."""
     from datetime import date
+
     u = col.unidad
 
     snapshot: dict = {
@@ -561,12 +650,20 @@ def _json_config_colector(
 # Evaluación del colector — cálculo y figuras
 # ---------------------------------------------------------------------------
 
-_MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-              "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+_MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 _COLORES_MESES = [
-    "#e6194b", "#3cb44b", "#4363d8", "#f58231",
-    "#911eb4", "#42d4f4", "#f032e6", "#bfef45",
-    "#fabed4", "#469990", "#dcbeff", "#9a6324",
+    "#e6194b",
+    "#3cb44b",
+    "#4363d8",
+    "#f58231",
+    "#911eb4",
+    "#42d4f4",
+    "#f032e6",
+    "#bfef45",
+    "#fabed4",
+    "#469990",
+    "#dcbeff",
+    "#9a6324",
 ]
 
 
@@ -575,6 +672,7 @@ def _poa_serie(datos, empl):
     mantener firma estable en este módulo. POA horaria sobre el plano del
     colector, derivada de DNI/GHI/DHI + tilt/azimut del emplazamiento."""
     from calculos.clima_calc import calcular_POA_horizonte
+
     return calcular_POA_horizonte(datos, empl)
 
 
@@ -634,9 +732,12 @@ def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms, pendiente_deg=30.
     u = colector.unidad
     tipo = u.tipo_colector
     kw = dict(
-        colector=colector, T_amb_K=T_amb_K,
-        I_g_W_m2=I_g_W_m2, v_viento_ms=max(v_viento_ms, 0.5),
-        P_amb_Pa=101325.0, T_entrada_K=T_amb_K,
+        colector=colector,
+        T_amb_K=T_amb_K,
+        I_g_W_m2=I_g_W_m2,
+        v_viento_ms=max(v_viento_ms, 0.5),
+        P_amb_Pa=101325.0,
+        T_entrada_K=T_amb_K,
         pendiente_deg=pendiente_deg,
     )
     try:
@@ -644,19 +745,26 @@ def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms, pendiente_deg=30.
             return calcular_colector_tipo1(**kw, correlacion_nusselt=None)
         elif tipo == 2:
             return calcular_colector_tipo2(
-                **kw, v_diseno_cs_ms=u.velocidad_diseno_ms,
+                **kw,
+                v_diseno_cs_ms=u.velocidad_diseno_ms,
                 v_diseno_ci_ms=u.velocidad_diseno_ms,
-                alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m,
+                alto_cs_m=u.espaciado_m,
+                alto_ci_m=u.espaciado_inferior_m,
             )
         elif tipo == 3:
             # Tipo 3 usa theta_deg para Hollands del canal estanco; lo unificamos
             # con la pendiente del colector (ya se reutiliza para la cavidad de cubiertas).
             kw_t3 = {k: v for k, v in kw.items() if k != "pendiente_deg"}
-            return calcular_colector_tipo3(**kw_t3, alto_cs_m=u.espaciado_m,
-                                            alto_ci_m=u.espaciado_inferior_m,
-                                            theta_deg=pendiente_deg)
+            return calcular_colector_tipo3(
+                **kw_t3,
+                alto_cs_m=u.espaciado_m,
+                alto_ci_m=u.espaciado_inferior_m,
+                theta_deg=pendiente_deg,
+            )
         elif tipo == 4:
-            return calcular_colector_tipo4(**kw, alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m)
+            return calcular_colector_tipo4(
+                **kw, alto_cs_m=u.espaciado_m, alto_ci_m=u.espaciado_inferior_m
+            )
     except Exception:
         return None
 
@@ -691,11 +799,9 @@ def _seleccionar_dia(datos_local, cfg, anio):
     elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
         target = _date_type(anio, 9, 21)
     elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
-        target = ((datos_local["T_amb_K"] - 273.15)
-                  .resample("D").mean().idxmax().date())
+        target = (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
     else:
-        target = ((datos_local["T_amb_K"] - 273.15)
-                  .resample("D").mean().idxmin().date())
+        target = (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
     mask = datos_local.index.date == target
     return datos_local[mask], target
 
@@ -723,7 +829,10 @@ def _evaluar_diario(colector, datos_dia, empl):
         # Mediodía solar verdadero (tránsito SPA, resolución continua).
         target = datos_dia.index.date[0]
         hora_transit = mediodia_solar_transit(
-            target, empl.latitud_deg, empl.longitud_deg, empl.zona_horaria,
+            target,
+            empl.latitud_deg,
+            empl.longitud_deg,
+            empl.zona_horaria,
         )
         hora_poa_max = poa.idxmax()
         # Evaluamos el perfil en el bin que contiene el tránsito SPA.
@@ -735,8 +844,7 @@ def _evaluar_diario(colector, datos_dia, empl):
         I_g = float(poa.get(ts, 0.0))
         T_amb = float(row["T_amb_K"])
         v_w = float(row["WS_ms"])
-        res = _correr_colector(colector, T_amb, I_g, v_w,
-                                pendiente_deg=empl.pendiente_colector_deg)
+        res = _correr_colector(colector, T_amb, I_g, v_w, pendiente_deg=empl.pendiente_colector_deg)
 
         horas.append(ts)
         T_amb_C.append(T_amb - 273.15)
@@ -751,9 +859,14 @@ def _evaluar_diario(colector, datos_dia, empl):
             T_sal_C.append(None)
 
     return {
-        "horas": horas, "T_salida_C": T_sal_C, "T_amb_C": T_amb_C, "poa": poa_list,
-        "x_noon": x_noon, "T_perfil_noon_C": T_perfil_noon_C,
-        "hora_transit": hora_transit, "hora_poa_max": hora_poa_max,
+        "horas": horas,
+        "T_salida_C": T_sal_C,
+        "T_amb_C": T_amb_C,
+        "poa": poa_list,
+        "x_noon": x_noon,
+        "T_perfil_noon_C": T_perfil_noon_C,
+        "hora_transit": hora_transit,
+        "hora_poa_max": hora_poa_max,
         "tipo": tipo,
     }
 
@@ -795,7 +908,10 @@ def _evaluar_anual(colector, datos_local, empl, anio):
 
         # Bin que contiene el mediodía solar verdadero (no idxmax(POA)).
         transit = mediodia_solar_transit(
-            target_dia, empl.latitud_deg, empl.longitud_deg, empl.zona_horaria,
+            target_dia,
+            empl.latitud_deg,
+            empl.longitud_deg,
+            empl.zona_horaria,
         )
         idx_noon = bin_horario_que_contiene(transit, datos_dia.index)
         row = datos_dia.loc[idx_noon]
@@ -803,8 +919,7 @@ def _evaluar_anual(colector, datos_local, empl, anio):
         T_amb = float(row["T_amb_K"])
         v_w = float(row["WS_ms"])
 
-        res = _correr_colector(colector, T_amb, I_g, v_w,
-                                pendiente_deg=empl.pendiente_colector_deg)
+        res = _correr_colector(colector, T_amb, I_g, v_w, pendiente_deg=empl.pendiente_colector_deg)
         if res is None:
             continue
 
@@ -819,12 +934,18 @@ def _evaluar_anual(colector, datos_local, empl, anio):
         perfiles_C.append(T_arr - 273.15)
 
     return {
-        "meses": meses, "T_salida_noon_C": T_sal_C, "T_amb_noon_C": T_amb_C,
-        "poa_noon": poa_noon_list, "x_m": x_m, "perfiles_C": perfiles_C, "tipo": tipo,
+        "meses": meses,
+        "T_salida_noon_C": T_sal_C,
+        "T_amb_noon_C": T_amb_C,
+        "poa_noon": poa_noon_list,
+        "x_m": x_m,
+        "perfiles_C": perfiles_C,
+        "tipo": tipo,
     }
 
 
 # --- Figuras ---
+
 
 def _add_vline_datetime(fig, *, x, text, color, dash, width, xanchor):
     """Línea vertical + anotación en eje X de tipo datetime.
@@ -834,14 +955,24 @@ def _add_vline_datetime(fig, *, x, text, color, dash, width, xanchor):
     sum([x, x]) para posicionar la anotación. Separamos shape y annotation.
     """
     fig.add_shape(
-        type="line", xref="x", yref="paper",
-        x0=x, x1=x, y0=0, y1=1,
+        type="line",
+        xref="x",
+        yref="paper",
+        x0=x,
+        x1=x,
+        y0=0,
+        y1=1,
         line=dict(color=color, dash=dash, width=width),
     )
     fig.add_annotation(
-        x=x, y=1.0, xref="x", yref="paper",
-        text=text, showarrow=False,
-        xanchor=xanchor, yanchor="bottom",
+        x=x,
+        y=1.0,
+        xref="x",
+        yref="paper",
+        text=text,
+        showarrow=False,
+        xanchor=xanchor,
+        yanchor="bottom",
         font=dict(color=color, size=11),
     )
 
@@ -857,47 +988,74 @@ def _fig_T_salida_dia(r, fecha_label):
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    fig.add_trace(go.Scatter(
-        x=list(horas), y=poa, mode="lines",
-        fill="tozeroy", fillcolor="rgba(245,166,35,0.15)",
-        line=dict(color="rgba(245,166,35,0.5)", width=1),
-        name="POA [W/m²]",
-    ), secondary_y=True)
+    fig.add_trace(
+        go.Scatter(
+            x=list(horas),
+            y=poa,
+            mode="lines",
+            fill="tozeroy",
+            fillcolor="rgba(245,166,35,0.15)",
+            line=dict(color="rgba(245,166,35,0.5)", width=1),
+            name="POA [W/m²]",
+        ),
+        secondary_y=True,
+    )
 
-    fig.add_trace(go.Scatter(
-        x=h_sol, y=t_sol, mode="lines+markers",
-        line=dict(color="#e05c2a", width=2), marker=dict(size=4),
-        name="T salida colector [°C]",
-    ), secondary_y=False)
+    fig.add_trace(
+        go.Scatter(
+            x=h_sol,
+            y=t_sol,
+            mode="lines+markers",
+            line=dict(color="#e05c2a", width=2),
+            marker=dict(size=4),
+            name="T salida colector [°C]",
+        ),
+        secondary_y=False,
+    )
 
-    fig.add_trace(go.Scatter(
-        x=list(horas), y=T_amb, mode="lines",
-        line=dict(color="#1f77b4", width=1.5, dash="dash"),
-        name="T ambiente [°C]",
-    ), secondary_y=False)
+    fig.add_trace(
+        go.Scatter(
+            x=list(horas),
+            y=T_amb,
+            mode="lines",
+            line=dict(color="#1f77b4", width=1.5, dash="dash"),
+            name="T ambiente [°C]",
+        ),
+        secondary_y=False,
+    )
 
     if r["hora_transit"] is not None:
         _add_vline_datetime(
-            fig, x=r["hora_transit"],
+            fig,
+            x=r["hora_transit"],
             text=f"Mediodía ({r['hora_transit'].strftime('%H:%M')})",
-            color="#9c27b0", dash="dot", width=1.8, xanchor="left",
+            color="#9c27b0",
+            dash="dot",
+            width=1.8,
+            xanchor="left",
         )
     if r["hora_poa_max"] is not None:
-        if (r["hora_transit"] is None
-                or abs((r["hora_poa_max"] - r["hora_transit"]).total_seconds()) > 15 * 60):
+        if (
+            r["hora_transit"] is None
+            or abs((r["hora_poa_max"] - r["hora_transit"]).total_seconds()) > 15 * 60
+        ):
             _add_vline_datetime(
-                fig, x=r["hora_poa_max"],
+                fig,
+                x=r["hora_poa_max"],
                 text=f"POA máx ({r['hora_poa_max'].strftime('%H:%M')})",
-                color="#ff7f0e", dash="dash", width=1.3, xanchor="right",
+                color="#ff7f0e",
+                dash="dash",
+                width=1.3,
+                xanchor="right",
             )
 
     fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
-    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623",
-                     secondary_y=True, rangemode="tozero")
+    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
     fig.update_xaxes(tickformat="%H:%M")
     fig.update_layout(
         title_text=f"Temperatura de salida del colector — {fecha_label}",
-        height=400, showlegend=True,
+        height=400,
+        showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -910,10 +1068,15 @@ def _fig_T_fluido_dia(r, fecha_label):
         return None
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=list(x), y=list(T), mode="lines",
-        line=dict(color="#e05c2a", width=2), name="T fluido [°C]",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=list(x),
+            y=list(T),
+            mode="lines",
+            line=dict(color="#e05c2a", width=2),
+            name="T fluido [°C]",
+        )
+    )
     fig.add_hline(
         y=float(T[0]),
         line=dict(color="#1f77b4", dash="dash", width=1),
@@ -923,7 +1086,8 @@ def _fig_T_fluido_dia(r, fecha_label):
     fig.update_yaxes(title_text="Temperatura del fluido [°C]")
     fig.update_layout(
         title_text=f"Perfil de temperatura del fluido — mediodía solar — {fecha_label}",
-        height=350, showlegend=True,
+        height=350,
+        showlegend=True,
     )
     return fig
 
@@ -936,31 +1100,48 @@ def _fig_T_salida_anual(r):
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-    fig.add_trace(go.Bar(
-        x=meses, y=poa, name="POA mediodía [W/m²]",
-        marker=dict(color="rgba(245,166,35,0.2)",
-                    line=dict(color="rgba(245,166,35,0.5)", width=1)),
-    ), secondary_y=True)
+    fig.add_trace(
+        go.Bar(
+            x=meses,
+            y=poa,
+            name="POA mediodía [W/m²]",
+            marker=dict(
+                color="rgba(245,166,35,0.2)", line=dict(color="rgba(245,166,35,0.5)", width=1)
+            ),
+        ),
+        secondary_y=True,
+    )
 
-    fig.add_trace(go.Scatter(
-        x=meses, y=T_sal, mode="lines+markers",
-        line=dict(color="#e05c2a", width=2), marker=dict(symbol="circle", size=6),
-        name="T salida colector — mediodía [°C]",
-    ), secondary_y=False)
+    fig.add_trace(
+        go.Scatter(
+            x=meses,
+            y=T_sal,
+            mode="lines+markers",
+            line=dict(color="#e05c2a", width=2),
+            marker=dict(symbol="circle", size=6),
+            name="T salida colector — mediodía [°C]",
+        ),
+        secondary_y=False,
+    )
 
-    fig.add_trace(go.Scatter(
-        x=meses, y=T_amb, mode="lines+markers",
-        line=dict(color="#1f77b4", width=1.5, dash="dash"),
-        marker=dict(symbol="square", size=4),
-        name="T ambiente — mediodía [°C]",
-    ), secondary_y=False)
+    fig.add_trace(
+        go.Scatter(
+            x=meses,
+            y=T_amb,
+            mode="lines+markers",
+            line=dict(color="#1f77b4", width=1.5, dash="dash"),
+            marker=dict(symbol="square", size=4),
+            name="T ambiente — mediodía [°C]",
+        ),
+        secondary_y=False,
+    )
 
     fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
-    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623",
-                     secondary_y=True, rangemode="tozero")
+    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
     fig.update_layout(
         title_text="Temperatura de salida del colector — mediodía solar por mes (día 15)",
-        height=400, showlegend=True,
+        height=400,
+        showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -976,16 +1157,22 @@ def _fig_T_fluido_anual(r):
     fig = go.Figure()
     for i, (mes, T) in enumerate(zip(meses, perfiles)):
         color = _COLORES_MESES[i % len(_COLORES_MESES)]
-        fig.add_trace(go.Scatter(
-            x=list(x_m), y=list(T), mode="lines",
-            line=dict(color=color, width=1.8), name=mes,
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=list(x_m),
+                y=list(T),
+                mode="lines",
+                line=dict(color=color, width=1.8),
+                name=mes,
+            )
+        )
 
     fig.update_xaxes(title_text="Posición x a lo largo del colector [m]")
     fig.update_yaxes(title_text="Temperatura del fluido [°C]")
     fig.update_layout(
         title_text="Perfil de temperatura del fluido — mediodía solar por mes",
-        height=400, showlegend=True,
+        height=400,
+        showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -1024,9 +1211,11 @@ def render() -> None:
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
+
         archivo = st.file_uploader(
             "Subí un archivo .json del colector previamente guardado",
-            type=["json"], key="p3_cargar_json",
+            type=["json"],
+            key="p3_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "colector")
@@ -1056,9 +1245,7 @@ def render() -> None:
                     # Limpiar widgets cacheados y resultados viejos de P3.
                     # Preservamos la clave del file_uploader para no entrar
                     # en bucle de "archivo todavía está cargado".
-                    n_borr = limpiar_session_state_prefijo(
-                        st.session_state, "p3_"
-                    )
+                    n_borr = limpiar_session_state_prefijo(st.session_state, "p3_")
                     # Volvemos a poner el archivo (sin él, file_uploader
                     # quedaría en estado "no hay archivo" y al hacer
                     # rerun la siguiente render trataría de cargar de nuevo).
@@ -1075,9 +1262,13 @@ def render() -> None:
     # Sección 0: Tipo de colector
     # -----------------------------------------------------------------------
 
-    with st.expander("Tipo de colector", expanded=True):
+    with st.expander("Tipo de colector", expanded=False):
         ids_tipo = list(_TIPOS_COLECTOR.keys())
-        idx_tipo = ids_tipo.index(colector.unidad.tipo_colector) if colector.unidad.tipo_colector in ids_tipo else 0
+        idx_tipo = (
+            ids_tipo.index(colector.unidad.tipo_colector)
+            if colector.unidad.tipo_colector in ids_tipo
+            else 0
+        )
         tipo_colector = st.selectbox(
             "Configuración del canal de flujo",
             options=ids_tipo,
@@ -1098,16 +1289,21 @@ def render() -> None:
     # Sección 1: Colector unitario — materiales
     # -----------------------------------------------------------------------
 
-    with st.expander("Materiales del colector unitario", expanded=True):
+    with st.expander("Materiales del colector unitario", expanded=False):
 
         st.subheader("Cubierta transparente")
         c1, c2 = st.columns([3, 1])
         with c1:
-            opciones_cub = {k: v for k, v in _opciones_material(catalogo.CUBIERTAS).items()
-                            if k != _ID_USUARIO}
+            opciones_cub = {
+                k: v for k, v in _opciones_material(catalogo.CUBIERTAS).items() if k != _ID_USUARIO
+            }
             opciones_cub[_ID_USUARIO] = "Definido por el usuario"
             ids_cub = list(opciones_cub.keys())
-            idx_cub = ids_cub.index(colector.unidad.id_cubierta) if colector.unidad.id_cubierta in ids_cub else 0
+            idx_cub = (
+                ids_cub.index(colector.unidad.id_cubierta)
+                if colector.unidad.id_cubierta in ids_cub
+                else 0
+            )
             id_cubierta = st.selectbox(
                 "Material de cubierta",
                 options=ids_cub,
@@ -1118,7 +1314,8 @@ def render() -> None:
         with c2:
             espesor_cubierta_mm = st.number_input(
                 "Espesor [mm]",
-                min_value=1.0, max_value=20.0,
+                min_value=1.0,
+                max_value=20.0,
                 value=colector.unidad.espesor_cubierta_m * 1000,
                 step=0.5,
                 key="p3_esp_cubierta",
@@ -1129,19 +1326,20 @@ def render() -> None:
                 index=colector.unidad.n_cubiertas - 1,
                 key="p3_n_cubiertas",
                 help="1 cubierta es lo estándar. 2 cubiertas reduce pérdidas "
-                     "superiores (mejor en climas fríos o ventosos) pero baja la "
-                     "transmitancia solar.",
+                "superiores (mejor en climas fríos o ventosos) pero baja la "
+                "transmitancia solar.",
             )
             if n_cubiertas == 2:
                 esp_cub_cub_mm = st.number_input(
                     "Espaciado entre cubiertas [mm]",
-                    min_value=10.0, max_value=50.0,
+                    min_value=10.0,
+                    max_value=50.0,
                     value=colector.unidad.espaciado_entre_cubiertas_m * 1000,
                     step=1.0,
                     key="p3_esp_cub_cub",
                     help="Cavidad de aire entre las dos cubiertas. Rango "
-                         "óptimo 20–40 mm (Duffie & Beckman): minimiza convección "
-                         "natural manteniendo la resistencia conductiva.",
+                    "óptimo 20–40 mm (Duffie & Beckman): minimiza convección "
+                    "natural manteniendo la resistencia conductiva.",
                 )
             else:
                 esp_cub_cub_mm = colector.unidad.espaciado_entre_cubiertas_m * 1000
@@ -1153,11 +1351,16 @@ def render() -> None:
         st.subheader("Placa absorbedora")
         c1, c2 = st.columns([3, 1])
         with c1:
-            opciones_pla = {k: v for k, v in _opciones_material(catalogo.PLACAS).items()
-                            if k != _ID_USUARIO}
+            opciones_pla = {
+                k: v for k, v in _opciones_material(catalogo.PLACAS).items() if k != _ID_USUARIO
+            }
             opciones_pla[_ID_USUARIO] = "Definido por el usuario"
             ids_pla = list(opciones_pla.keys())
-            idx_pla = ids_pla.index(colector.unidad.id_placa) if colector.unidad.id_placa in ids_pla else 0
+            idx_pla = (
+                ids_pla.index(colector.unidad.id_placa)
+                if colector.unidad.id_placa in ids_pla
+                else 0
+            )
             id_placa = st.selectbox(
                 "Material de placa",
                 options=ids_pla,
@@ -1168,7 +1371,8 @@ def render() -> None:
         with c2:
             espesor_placa_mm = st.number_input(
                 "Espesor [mm]",
-                min_value=0.3, max_value=5.0,
+                min_value=0.3,
+                max_value=5.0,
                 value=colector.unidad.espesor_placa_m * 1000,
                 step=0.1,
                 key="p3_esp_placa",
@@ -1181,11 +1385,16 @@ def render() -> None:
         st.subheader("Aislante térmico")
         c1, c2 = st.columns([3, 1])
         with c1:
-            opciones_ais = {k: v for k, v in _opciones_material(catalogo.AISLANTES).items()
-                            if k != _ID_USUARIO}
+            opciones_ais = {
+                k: v for k, v in _opciones_material(catalogo.AISLANTES).items() if k != _ID_USUARIO
+            }
             opciones_ais[_ID_USUARIO] = "Definido por el usuario"
             ids_ais = list(opciones_ais.keys())
-            idx_ais = ids_ais.index(colector.unidad.id_aislante) if colector.unidad.id_aislante in ids_ais else 0
+            idx_ais = (
+                ids_ais.index(colector.unidad.id_aislante)
+                if colector.unidad.id_aislante in ids_ais
+                else 0
+            )
             id_aislante = st.selectbox(
                 "Material aislante",
                 options=ids_ais,
@@ -1196,7 +1405,8 @@ def render() -> None:
         with c2:
             espesor_aislante_cm = st.number_input(
                 "Espesor [cm]",
-                min_value=1.0, max_value=20.0,
+                min_value=1.0,
+                max_value=20.0,
                 value=colector.unidad.espesor_aislante_m * 100,
                 step=0.5,
                 key="p3_esp_aislante",
@@ -1209,11 +1419,16 @@ def render() -> None:
         st.subheader("Fondo / Carcasa")
         c1, c2 = st.columns([3, 1])
         with c1:
-            opciones_fon = {k: v for k, v in _opciones_material(catalogo.FONDOS).items()
-                            if k != _ID_USUARIO}
+            opciones_fon = {
+                k: v for k, v in _opciones_material(catalogo.FONDOS).items() if k != _ID_USUARIO
+            }
             opciones_fon[_ID_USUARIO] = "Definido por el usuario"
             ids_fon = list(opciones_fon.keys())
-            idx_fon = ids_fon.index(colector.unidad.id_fondo) if colector.unidad.id_fondo in ids_fon else 0
+            idx_fon = (
+                ids_fon.index(colector.unidad.id_fondo)
+                if colector.unidad.id_fondo in ids_fon
+                else 0
+            )
             id_fondo = st.selectbox(
                 "Material de fondo",
                 options=ids_fon,
@@ -1224,7 +1439,8 @@ def render() -> None:
         with c2:
             espesor_fondo_mm = st.number_input(
                 "Espesor [mm]",
-                min_value=0.3, max_value=5.0,
+                min_value=0.3,
+                max_value=5.0,
                 value=colector.unidad.espesor_fondo_m * 1000,
                 step=0.1,
                 key="p3_esp_fondo",
@@ -1237,12 +1453,13 @@ def render() -> None:
     # Sección 2: Colector unitario — geometría y velocidad
     # -----------------------------------------------------------------------
 
-    with st.expander("Geometría y condición de diseño", expanded=True):
+    with st.expander("Geometría y condición de diseño", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             ancho_m = st.number_input(
                 "Ancho del canal [m]",
-                min_value=0.1, max_value=5.0,
+                min_value=0.1,
+                max_value=5.0,
                 value=float(colector.unidad.ancho_m),
                 step=0.05,
                 format="%.2f",
@@ -1251,7 +1468,8 @@ def render() -> None:
             )
             largo_m = st.number_input(
                 "Largo del colector [m]",
-                min_value=0.1, max_value=20.0,
+                min_value=0.1,
+                max_value=20.0,
                 value=float(colector.unidad.largo_m),
                 step=0.1,
                 format="%.2f",
@@ -1260,7 +1478,8 @@ def render() -> None:
             )
         with c2:
             _label_esp = (
-                "Espaciado cubierta–placa [mm]" if tipo_colector == 1
+                "Espaciado cubierta–placa [mm]"
+                if tipo_colector == 1
                 else "Canal superior cubierta–absorbedor [mm]"
             )
             _help_esp = (
@@ -1270,7 +1489,8 @@ def render() -> None:
             )
             espaciado_mm = st.number_input(
                 _label_esp,
-                min_value=5.0, max_value=200.0,
+                min_value=5.0,
+                max_value=200.0,
                 value=colector.unidad.espaciado_m * 1000,
                 step=1.0,
                 format="%.1f",
@@ -1280,7 +1500,8 @@ def render() -> None:
             if tipo_colector in (2, 3, 4):
                 espaciado_inferior_mm = st.number_input(
                     "Canal inferior absorbedor–fondo [mm]",
-                    min_value=5.0, max_value=200.0,
+                    min_value=5.0,
+                    max_value=200.0,
                     value=colector.unidad.espaciado_inferior_m * 1000,
                     step=1.0,
                     format="%.1f",
@@ -1292,7 +1513,8 @@ def render() -> None:
         with c3:
             velocidad_ms = st.number_input(
                 "Velocidad de diseño [m/s]",
-                min_value=0.01, max_value=10.0,
+                min_value=0.01,
+                max_value=10.0,
                 value=float(colector.unidad.velocidad_diseno_ms),
                 step=0.05,
                 format="%.2f",
@@ -1321,12 +1543,13 @@ def render() -> None:
     # Sección 3: Banco de colectores
     # -----------------------------------------------------------------------
 
-    with st.expander("Banco de colectores", expanded=True):
+    with st.expander("Banco de colectores", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             n_serie = st.number_input(
                 "Colectores en serie por rama",
-                min_value=1, max_value=10,
+                min_value=1,
+                max_value=10,
                 value=colector.banco.n_serie,
                 step=1,
                 key="p3_n_serie",
@@ -1335,7 +1558,8 @@ def render() -> None:
         with c2:
             n_paralelo = st.number_input(
                 "Ramas en paralelo",
-                min_value=1, max_value=20,
+                min_value=1,
+                max_value=20,
                 value=colector.banco.n_paralelo,
                 step=1,
                 key="p3_n_paralelo",
@@ -1347,11 +1571,17 @@ def render() -> None:
         largo_camino = n_serie * largo_m
 
         col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("Caudal total al motor", f"{caudal_total*1000:.1f} L/s",
-                      help="n_paralelo × caudal por unidad. Caudal volumétrico a condiciones de diseño.")
+        col_m1.metric(
+            "Caudal total al motor",
+            f"{caudal_total*1000:.1f} L/s",
+            help="n_paralelo × caudal por unidad. Caudal volumétrico a condiciones de diseño.",
+        )
         col_m2.metric("Área de captación total", f"{area_total:.2f} m²")
-        col_m3.metric("Camino del aire", f"{largo_camino:.1f} m",
-                      help="n_serie × largo de unidad. Longitud total que recorre el aire.")
+        col_m3.metric(
+            "Camino del aire",
+            f"{largo_camino:.1f} m",
+            help="n_serie × largo de unidad. Longitud total que recorre el aire.",
+        )
 
     # -----------------------------------------------------------------------
     # Nota: la chimenea solar se configura en P6 (pestaña Motor / Convección
@@ -1484,10 +1714,18 @@ def render() -> None:
             if _T_sal_vals:
                 c1, c2, c3 = st.columns(3)
                 c1.metric("T salida máx (día)", f"{max(_T_sal_vals):.1f} °C")
-                c2.metric("T salida en mediodía", f"{_T_sal_vals[len(_T_sal_vals)//2]:.1f} °C"
-                           if _r['hora_transit'] is not None else "—")
-                c3.metric("ΔT máx (salida − ambiente)",
-                           f"{max(ts - ta for ts, ta in zip(_T_sal_vals, [_r['T_amb_C'][i] for i, t in enumerate(_r['T_salida_C']) if t is not None])):.1f} °C")
+                c2.metric(
+                    "T salida en mediodía",
+                    (
+                        f"{_T_sal_vals[len(_T_sal_vals)//2]:.1f} °C"
+                        if _r["hora_transit"] is not None
+                        else "—"
+                    ),
+                )
+                c3.metric(
+                    "ΔT máx (salida − ambiente)",
+                    f"{max(ts - ta for ts, ta in zip(_T_sal_vals, [_r['T_amb_C'][i] for i, t in enumerate(_r['T_salida_C']) if t is not None])):.1f} °C",
+                )
 
             tab_a, tab_b = st.tabs(["9a · T salida vs hora", "9b · Perfil T fluido en mediodía"])
 
@@ -1505,12 +1743,18 @@ def render() -> None:
         else:  # anual
             if _r["meses"]:
                 c1, c2, c3 = st.columns(3)
-                c1.metric("T salida máx (mejor mes)",
-                           f"{max(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(max(_r['T_salida_noon_C']))]}")
-                c2.metric("T salida mín (peor mes)",
-                           f"{min(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(min(_r['T_salida_noon_C']))]}")
-                c3.metric("ΔT mín colector",
-                           f"{min(ts - ta for ts, ta in zip(_r['T_salida_noon_C'], _r['T_amb_noon_C'])):.1f} °C")
+                c1.metric(
+                    "T salida máx (mejor mes)",
+                    f"{max(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(max(_r['T_salida_noon_C']))]}",
+                )
+                c2.metric(
+                    "T salida mín (peor mes)",
+                    f"{min(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(min(_r['T_salida_noon_C']))]}",
+                )
+                c3.metric(
+                    "ΔT mín colector",
+                    f"{min(ts - ta for ts, ta in zip(_r['T_salida_noon_C'], _r['T_amb_noon_C'])):.1f} °C",
+                )
 
                 tab_a, tab_b = st.tabs(["9a · T salida vs mes", "9b · Perfil T fluido por mes"])
 
@@ -1524,11 +1768,14 @@ def render() -> None:
                     if _fig_b is not None:
                         st.plotly_chart(_fig_b, width="stretch")
             else:
-                st.warning("No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente.")
+                st.warning(
+                    "No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente."
+                )
 
     # --- Guardar configuración (mejora 4) ---
     st.divider()
     from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+
     _eval_p3 = st.session_state.get("p3_eval")
     col_txt, col_json = st.columns(2)
     with col_txt:

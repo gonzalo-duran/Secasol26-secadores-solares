@@ -89,8 +89,7 @@ def _resumen_mensual(datos_local: pd.DataFrame) -> pd.DataFrame:
     hr_mes = HR_pct.resample("ME").mean()
     p_mes = pres_hPa.resample("ME").mean()
 
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                 "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     nombres_mes = [_MES_ABBR[ts.month - 1] for ts in t_mes.index]
 
     df = pd.DataFrame(
@@ -117,17 +116,25 @@ def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
     T_mensual = T_C.resample("ME").mean()
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=T_diaria.index, y=T_diaria.values,
-        mode="lines", name="Media diaria",
-        line=dict(color="#aec6e8", width=0.8),
-    ))
-    fig.add_trace(go.Scatter(
-        x=T_mensual.index, y=T_mensual.values,
-        mode="lines+markers", name="Media mensual",
-        line=dict(color="#1f77b4", width=2.5),
-        marker=dict(size=6),
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=T_diaria.index,
+            y=T_diaria.values,
+            mode="lines",
+            name="Media diaria",
+            line=dict(color="#aec6e8", width=0.8),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=T_mensual.index,
+            y=T_mensual.values,
+            mode="lines+markers",
+            name="Media mensual",
+            line=dict(color="#1f77b4", width=2.5),
+            marker=dict(size=6),
+        )
+    )
     fig.update_layout(
         yaxis_title="Temperatura [°C]",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -142,8 +149,7 @@ def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
 
 def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
     """Irradiación mensual GHI/DNI/DHI — figura interactiva Plotly."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                 "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     ghi_s = datos_local["GHI_Wm2"].resample("ME").sum() / 1000.0
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
@@ -151,12 +157,15 @@ def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ghi_s.index]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(name="GHI", x=etiquetas, y=ghi_s.values,
-                         marker_color="#f5a623", opacity=0.85))
-    fig.add_trace(go.Bar(name="DHI", x=etiquetas, y=dhi_s.values,
-                         marker_color="#7ec8e3", opacity=0.85))
-    fig.add_trace(go.Bar(name="DNI", x=etiquetas, y=dni_s.values,
-                         marker_color="#e05c2a", opacity=0.85))
+    fig.add_trace(
+        go.Bar(name="GHI", x=etiquetas, y=ghi_s.values, marker_color="#f5a623", opacity=0.85)
+    )
+    fig.add_trace(
+        go.Bar(name="DHI", x=etiquetas, y=dhi_s.values, marker_color="#7ec8e3", opacity=0.85)
+    )
+    fig.add_trace(
+        go.Bar(name="DNI", x=etiquetas, y=dni_s.values, marker_color="#e05c2a", opacity=0.85)
+    )
     fig.update_layout(
         barmode="stack",
         yaxis_title="Irradiación mensual [kWh/m²]",
@@ -171,24 +180,41 @@ def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
 
 def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
     """Velocidad del viento y HR mensuales — eje Y secundario nativo Plotly."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                 "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     ws_s = datos_local["WS_ms"].resample("ME").mean()
     hr_s = (datos_local["HR"] * 100.0).resample("ME").mean()
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ws_s.index]
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(go.Bar(name="Viento [m/s]", x=etiquetas, y=ws_s.values,
-                         marker_color="#4caf50", opacity=0.7), secondary_y=False)
-    fig.add_trace(go.Scatter(name="HR [%]", x=etiquetas, y=hr_s.values,
-                             mode="lines+markers", line=dict(color="#9c27b0", width=2.5),
-                             marker=dict(size=6)), secondary_y=True)
-    fig.update_yaxes(title_text="Velocidad del viento [m/s]",
-                     title_font_color="#4caf50", secondary_y=False, showgrid=True,
-                     gridwidth=0.5, gridcolor="lightgray")
-    fig.update_yaxes(title_text="Humedad relativa [%]",
-                     title_font_color="#9c27b0", secondary_y=True)
+    fig.add_trace(
+        go.Bar(
+            name="Viento [m/s]", x=etiquetas, y=ws_s.values, marker_color="#4caf50", opacity=0.7
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            name="HR [%]",
+            x=etiquetas,
+            y=hr_s.values,
+            mode="lines+markers",
+            line=dict(color="#9c27b0", width=2.5),
+            marker=dict(size=6),
+        ),
+        secondary_y=True,
+    )
+    fig.update_yaxes(
+        title_text="Velocidad del viento [m/s]",
+        title_font_color="#4caf50",
+        secondary_y=False,
+        showgrid=True,
+        gridwidth=0.5,
+        gridcolor="lightgray",
+    )
+    fig.update_yaxes(
+        title_text="Humedad relativa [%]", title_font_color="#9c27b0", secondary_y=True
+    )
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
@@ -209,7 +235,7 @@ def _calcular_poa_horaria(
 ) -> pd.Series:
     """Calcula la irradiancia global sobre el plano del colector (POA) hora a hora.
 
-    Usa pvlib para la posición solar y el modelo de transposición Hay-Davies. La componente reflejada
+    Usa pvlib para la posición solar y la transposición. La componente reflejada
     del suelo usa ``albedo`` (debe pasarse ``emplazamiento.albedo_suelo`` para que
     la figura sea coherente con el solver del colector, que usa ese mismo albedo).
 
@@ -246,8 +272,7 @@ def _fig_irradiancia_comparativa(
     poa_horaria: pd.Series,
 ) -> go.Figure:
     """Dos subgráficos: plano horizontal (GHI/DNI/DHI) y plano del colector (POA)."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun",
-                 "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
     ghi_s = datos_local["GHI_Wm2"].resample("ME").sum() / 1000.0
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
@@ -255,17 +280,40 @@ def _fig_irradiancia_comparativa(
     poa_s = poa_horaria.resample("ME").sum() / 1000.0
     etiquetas = [_MES_ABBR[ts.month - 1] for ts in ghi_s.index]
 
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
-                        subplot_titles=["Plano horizontal (GHI / DNI / DHI)",
-                                        "Plano del colector (POA global)"])
-    fig.add_trace(go.Bar(name="GHI", x=etiquetas, y=ghi_s.values,
-                         marker_color="#f5a623", opacity=0.85), row=1, col=1)
-    fig.add_trace(go.Bar(name="DHI", x=etiquetas, y=dhi_s.values,
-                         marker_color="#7ec8e3", opacity=0.85), row=1, col=1)
-    fig.add_trace(go.Bar(name="DNI", x=etiquetas, y=dni_s.values,
-                         marker_color="#e05c2a", opacity=0.85), row=1, col=1)
-    fig.add_trace(go.Bar(name="POA global", x=etiquetas, y=poa_s.values,
-                         marker_color="#4caf50", opacity=0.85, showlegend=True), row=2, col=1)
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.10,
+        subplot_titles=["Plano horizontal (GHI / DNI / DHI)", "Plano del colector (POA global)"],
+    )
+    fig.add_trace(
+        go.Bar(name="GHI", x=etiquetas, y=ghi_s.values, marker_color="#f5a623", opacity=0.85),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(name="DHI", x=etiquetas, y=dhi_s.values, marker_color="#7ec8e3", opacity=0.85),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(name="DNI", x=etiquetas, y=dni_s.values, marker_color="#e05c2a", opacity=0.85),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Bar(
+            name="POA global",
+            x=etiquetas,
+            y=poa_s.values,
+            marker_color="#4caf50",
+            opacity=0.85,
+            showlegend=True,
+        ),
+        row=2,
+        col=1,
+    )
     fig.update_layout(
         barmode="stack",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -280,6 +328,7 @@ def _fig_irradiancia_comparativa(
 def _fecha_dia_analisis(datos_local: pd.DataFrame, cfg, anio: int):
     """Resuelve la fecha concreta del día de diseño según cfg.dia_analisis."""
     from datetime import date
+
     if cfg.dia_analisis == DiaAnalisis.ESPECIFICO and cfg.fecha_especifica:
         return cfg.fecha_especifica
     elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_VERANO:
@@ -302,15 +351,21 @@ def _fig_temperatura_diaria(datos_dia: pd.DataFrame) -> go.Figure:
     horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=horas_str, y=T_C.values, mode="lines+markers",
-        name="T amb [°C]", line=dict(color="#1f77b4", width=2.0),
-        marker=dict(size=5),
-        hovertemplate="%{x} — %{y:.1f} °C<extra></extra>",
-    ))
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=T_C.values,
+            mode="lines+markers",
+            name="T amb [°C]",
+            line=dict(color="#1f77b4", width=2.0),
+            marker=dict(size=5),
+            hovertemplate="%{x} — %{y:.1f} °C<extra></extra>",
+        )
+    )
     fig.update_layout(
         yaxis_title="Temperatura [°C]",
-        hovermode="x unified", height=300,
+        hovermode="x unified",
+        height=300,
         margin=dict(l=50, r=20, t=20, b=40),
     )
     fig.update_xaxes(showgrid=True, gridwidth=0.5, gridcolor="lightgray")
@@ -323,27 +378,66 @@ def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.F
     horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
     horas_poa = [t.strftime("%H:%M") for t in poa_dia.index]
 
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
-                        subplot_titles=["Plano horizontal (GHI / DNI / DHI)",
-                                        "Plano del colector (POA global)"])
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.10,
+        subplot_titles=["Plano horizontal (GHI / DNI / DHI)", "Plano del colector (POA global)"],
+    )
 
-    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["GHI_Wm2"].values,
-                             fill="tozeroy", fillcolor="rgba(245,166,35,0.35)",
-                             line=dict(color="#f5a623"), name="GHI"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["DNI_Wm2"].values,
-                             mode="lines", line=dict(color="#e05c2a", width=1.6),
-                             name="DNI"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=horas_str, y=datos_dia["DHI_Wm2"].values,
-                             mode="lines", line=dict(color="#7ec8e3", width=1.6),
-                             name="DHI"), row=1, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=datos_dia["GHI_Wm2"].values,
+            fill="tozeroy",
+            fillcolor="rgba(245,166,35,0.35)",
+            line=dict(color="#f5a623"),
+            name="GHI",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=datos_dia["DNI_Wm2"].values,
+            mode="lines",
+            line=dict(color="#e05c2a", width=1.6),
+            name="DNI",
+        ),
+        row=1,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=datos_dia["DHI_Wm2"].values,
+            mode="lines",
+            line=dict(color="#7ec8e3", width=1.6),
+            name="DHI",
+        ),
+        row=1,
+        col=1,
+    )
 
-    fig.add_trace(go.Scatter(x=horas_poa, y=poa_dia.values,
-                             fill="tozeroy", fillcolor="rgba(76,175,80,0.35)",
-                             line=dict(color="#4caf50"), name="POA"), row=2, col=1)
+    fig.add_trace(
+        go.Scatter(
+            x=horas_poa,
+            y=poa_dia.values,
+            fill="tozeroy",
+            fillcolor="rgba(76,175,80,0.35)",
+            line=dict(color="#4caf50"),
+            name="POA",
+        ),
+        row=2,
+        col=1,
+    )
 
     fig.update_yaxes(title_text="W/m²", showgrid=True, gridwidth=0.5, gridcolor="lightgray")
     fig.update_layout(
-        hovermode="x unified", height=520,
+        hovermode="x unified",
+        height=520,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=60, r=20, t=60, b=40),
     )
@@ -357,19 +451,42 @@ def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
     hr_pct = datos_dia["HR"].values * 100.0
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(go.Scatter(x=horas_str, y=ws, mode="lines+markers",
-                             name="Viento [m/s]", line=dict(color="#4caf50", width=2.0),
-                             marker=dict(size=5)), secondary_y=False)
-    fig.add_trace(go.Scatter(x=horas_str, y=hr_pct, mode="lines+markers",
-                             name="HR [%]", line=dict(color="#9c27b0", width=2.0),
-                             marker=dict(size=5, symbol="square")), secondary_y=True)
-    fig.update_yaxes(title_text="Velocidad del viento [m/s]",
-                     title_font_color="#4caf50", showgrid=True,
-                     gridwidth=0.5, gridcolor="lightgray", secondary_y=False)
-    fig.update_yaxes(title_text="Humedad relativa [%]",
-                     title_font_color="#9c27b0", secondary_y=True)
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=ws,
+            mode="lines+markers",
+            name="Viento [m/s]",
+            line=dict(color="#4caf50", width=2.0),
+            marker=dict(size=5),
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=horas_str,
+            y=hr_pct,
+            mode="lines+markers",
+            name="HR [%]",
+            line=dict(color="#9c27b0", width=2.0),
+            marker=dict(size=5, symbol="square"),
+        ),
+        secondary_y=True,
+    )
+    fig.update_yaxes(
+        title_text="Velocidad del viento [m/s]",
+        title_font_color="#4caf50",
+        showgrid=True,
+        gridwidth=0.5,
+        gridcolor="lightgray",
+        secondary_y=False,
+    )
+    fig.update_yaxes(
+        title_text="Humedad relativa [%]", title_font_color="#9c27b0", secondary_y=True
+    )
     fig.update_layout(
-        hovermode="x unified", height=300,
+        hovermode="x unified",
+        height=300,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         margin=dict(l=60, r=60, t=30, b=40),
     )
@@ -429,7 +546,7 @@ def render() -> None:
     # Sección 1: Ubicación geográfica
     # -----------------------------------------------------------------------
 
-    with st.expander("Ubicación geográfica", expanded=True):
+    with st.expander("Ubicación geográfica", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             lat = st.number_input(
@@ -460,7 +577,11 @@ def render() -> None:
                 format="%.0f",
                 help="Altitud del sitio. NASA POWER reporta la altitud de su punto de grilla.",
             )
-            tz_idx = _ZONAS_HORARIAS.index(empl.zona_horaria) if empl.zona_horaria in _ZONAS_HORARIAS else 0
+            tz_idx = (
+                _ZONAS_HORARIAS.index(empl.zona_horaria)
+                if empl.zona_horaria in _ZONAS_HORARIAS
+                else 0
+            )
             zona = st.selectbox(
                 "Zona horaria",
                 options=_ZONAS_HORARIAS,
@@ -479,6 +600,8 @@ def render() -> None:
 
         # Aplicar cambios al emplazamiento
         try:
+            # replace() preserva los campos no mencionados (orientación, albedo,
+            # y cualquier campo futuro de Emplazamiento) — evita resetearlos.
             nuevo_empl = dataclasses.replace(
                 empl,
                 latitud_deg=lat,
@@ -503,7 +626,7 @@ def render() -> None:
     # Sección 2: Orientación del colector
     # -----------------------------------------------------------------------
 
-    with st.expander("Orientación del colector", expanded=True):
+    with st.expander("Orientación del colector", expanded=False):
         c1, c2 = st.columns([2, 1])
         with c1:
             # Mostrar en convención UI360 (0=S, 90=E, 180=N, 270=O)
@@ -531,9 +654,15 @@ def render() -> None:
         with c2:
             st.caption("Orientación del colector")
             _puntos_ui360 = {
-                0.0: "Sur", 45.0: "SE", 90.0: "Este",
-                135.0: "NE", 180.0: "Norte", 225.0: "NO",
-                270.0: "Oeste", 315.0: "SO", 360.0: "Sur",
+                0.0: "Sur",
+                45.0: "SE",
+                90.0: "Este",
+                135.0: "NE",
+                180.0: "Norte",
+                225.0: "NO",
+                270.0: "Oeste",
+                315.0: "SO",
+                360.0: "Sur",
             }
             referencia = min(_puntos_ui360.keys(), key=lambda k: abs(k - acimut_ui360))
             acimut_duffie = acimut_ui360_a_duffie(acimut_ui360)
@@ -544,6 +673,7 @@ def render() -> None:
 
         # Actualizar emplazamiento con orientación (almacenamiento en Duffie)
         try:
+            # replace() preserva lat/lon/alt/zona/albedo y cualquier campo futuro.
             nuevo_empl = dataclasses.replace(
                 empl,
                 acimut_colector_deg=acimut_duffie,
@@ -568,8 +698,7 @@ def render() -> None:
     # puede sobrescribir el año manualmente — su elección persiste hasta que
     # vuelva a cambiar la fecha en P1.
     fecha_p1 = (
-        proyecto.configuracion.fecha_especifica
-        if proyecto.configuracion is not None else None
+        proyecto.configuracion.fecha_especifica if proyecto.configuracion is not None else None
     )
     anio_p1 = fecha_p1.year if fecha_p1 else None
     ultimo_anio_p1_visto = st.session_state.get("_p2_anio_p1_visto")
@@ -590,11 +719,13 @@ def render() -> None:
             help=(
                 f"Año calendar de los datos horarios. "
                 f"Rango disponible en NASA POWER: {_ANIO_MIN}–{_ANIO_MAX}. "
-                + (f"Sincronizado con la fecha del día específico en P1 "
-                   f"({fecha_p1.isoformat()}). Podés sobreescribirlo."
-                   if fecha_p1 else
-                   "Cuando elijas un día específico en P1, este año se "
-                   "ajusta automáticamente.")
+                + (
+                    f"Sincronizado con la fecha del día específico en P1 "
+                    f"({fecha_p1.isoformat()}). Podés sobreescribirlo."
+                    if fecha_p1
+                    else "Cuando elijas un día específico en P1, este año se "
+                    "ajusta automáticamente."
+                )
             ),
         )
     with c2:
@@ -611,7 +742,9 @@ def render() -> None:
     clima: Clima | None = proyecto.clima
 
     if boton_descarga:
-        with st.spinner(f"Descargando datos NASA POWER para ({empl.latitud_deg:.4f}, {empl.longitud_deg:.4f}), año {anio}..."):
+        with st.spinner(
+            f"Descargando datos NASA POWER para ({empl.latitud_deg:.4f}, {empl.longitud_deg:.4f}), año {anio}..."
+        ):
             try:
                 clima = obtener_clima(empl, int(anio), forzar_descarga=forzar)
                 proyecto.clima = clima
@@ -725,10 +858,15 @@ def render() -> None:
             ghi_anual = datos_local["GHI_Wm2"].sum() / 1000.0
             col_a, col_b, col_c = st.columns(3)
             col_a.metric("GHI anual", f"{ghi_anual:.0f} kWh/m²")
-            col_b.metric("POA anual (plano colector)", f"{poa_anual:.0f} kWh/m²",
-                         delta=f"{poa_anual - ghi_anual:+.0f} vs GHI")
-            col_c.metric("Pendiente / Acimut",
-                         f"{empl.pendiente_colector_deg:.0f}° / {acimut_duffie_a_ui360(empl.acimut_colector_deg):.0f}°")
+            col_b.metric(
+                "POA anual (plano colector)",
+                f"{poa_anual:.0f} kWh/m²",
+                delta=f"{poa_anual - ghi_anual:+.0f} vs GHI",
+            )
+            col_c.metric(
+                "Pendiente / Acimut",
+                f"{empl.pendiente_colector_deg:.0f}° / {acimut_duffie_a_ui360(empl.acimut_colector_deg):.0f}°",
+            )
             st.caption(
                 "Plano horizontal: datos directos de NASA POWER (GHI, DNI, DHI). "
                 "Plano del colector: irradiancia transpuesta con modelo Hay-Davies (pvlib), "

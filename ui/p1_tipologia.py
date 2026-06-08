@@ -88,7 +88,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección A: Metadatos del proyecto
     # -----------------------------------------------------------------------
-    with st.expander("Metadatos del proyecto", expanded=True):
+    with st.expander("Metadatos del proyecto", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             nombre = st.text_input(
@@ -174,12 +174,10 @@ def render() -> None:
     # -----------------------------------------------------------------------
     st.subheader("Modo de análisis")
 
-    anual_deshabilitado = (tipo_sel == Tipologia.CAJA)
+    anual_deshabilitado = tipo_sel == Tipologia.CAJA
 
     if anual_deshabilitado:
-        st.caption(
-            "ℹ️ El análisis **Anual** no está disponible para la tipología Caja en v0."
-        )
+        st.caption("ℹ️ El análisis **Anual** no está disponible para la tipología Caja en v0.")
         modo_sel = ModoAnalisis.DIARIO
     else:
         modo_opciones = {
@@ -214,10 +212,7 @@ def render() -> None:
         dia_labels = [_ETIQUETAS_DIA[d] for d in dia_lista]
 
         # Mantener selección previa si es compatible
-        idx_dia = (
-            dia_lista.index(cfg.dia_analisis)
-            if cfg.dia_analisis in dia_lista else 0
-        )
+        idx_dia = dia_lista.index(cfg.dia_analisis) if cfg.dia_analisis in dia_lista else 0
 
         dia_label_sel = st.selectbox(
             "Criterio de selección del día de análisis",
@@ -292,8 +287,7 @@ def render() -> None:
     c2.metric("Modo", modo_sel.value)
     if modo_sel == ModoAnalisis.DIARIO:
         dia_str = (
-            str(fecha_sel) if dia_sel == DiaAnalisis.ESPECIFICO and fecha_sel
-            else dia_sel.value
+            str(fecha_sel) if dia_sel == DiaAnalisis.ESPECIFICO and fecha_sel else dia_sel.value
         )
         c3.metric("Día de análisis", dia_str)
     else:

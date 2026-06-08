@@ -440,10 +440,7 @@ def _render_calcular_chimenea(proyecto, chimenea) -> None:
         )
         return
 
-    es_caja = (
-        getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
-        == Tipologia.CAJA
-    )
+    es_caja = getattr(getattr(proyecto, "configuracion", None), "tipologia", None) == Tipologia.CAJA
     delta_T_chim_K = 25.0 if es_caja else 30.0
 
     if st.button("🌪️ Calcular chimenea", type="primary", key="p6_btn_calc_chimenea"):
@@ -690,7 +687,7 @@ def _render_chimenea_section(proyecto) -> None:
     z0_val: float = 0.05
 
     if extractor_activo:
-        with st.expander("Parámetros del extractor eólico", expanded=True):
+        with st.expander("Parámetros del extractor eólico", expanded=False):
             ec1, ec2 = st.columns(2)
             with ec1:
                 diam_ext_default = (
@@ -977,7 +974,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección B: Caudal volumétrico
     # -----------------------------------------------------------------------
-    with st.expander("Caudal de diseño", expanded=True):
+    with st.expander("Caudal de diseño", expanded=False):
         Q_vol_sugerido = mot_prev.caudal_volumetrico_m3_s if mot_prev is not None else 0.020
         hint_caudal = ""
 
@@ -1018,7 +1015,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección C: Pérdidas de carga
     # -----------------------------------------------------------------------
-    with st.expander("Pérdidas de carga del sistema", expanded=True):
+    with st.expander("Pérdidas de carga del sistema", expanded=False):
 
         modo_dP = st.radio(
             "Ingreso de pérdidas de carga",
@@ -1059,9 +1056,7 @@ def render() -> None:
             dP_col_auto: float | None = None
             if proyecto.colector is not None:
                 try:
-                    dP_col_auto = estimar_delta_P_colector(
-                        proyecto.colector, P_Pa=P_proyecto_Pa
-                    )
+                    dP_col_auto = estimar_delta_P_colector(proyecto.colector, P_Pa=P_proyecto_Pa)
                 except Exception:
                     pass
 
@@ -1095,9 +1090,7 @@ def render() -> None:
             dP_cam_auto: float | None = None
             if proyecto.camara is not None:
                 try:
-                    dP_cam_auto = estimar_delta_P_camara(
-                        proyecto.camara, P_Pa=P_proyecto_Pa
-                    )
+                    dP_cam_auto = estimar_delta_P_camara(proyecto.camara, P_Pa=P_proyecto_Pa)
                 except Exception:
                     pass
 
@@ -1221,7 +1214,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección D: Parámetros del ventilador / motor
     # -----------------------------------------------------------------------
-    with st.expander("Parámetros del ventilador y motor", expanded=True):
+    with st.expander("Parámetros del ventilador y motor", expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             eta_vent = (

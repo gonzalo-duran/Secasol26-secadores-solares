@@ -68,6 +68,7 @@ def _T_entrada_sugerida() -> float:
 # Generador de texto de configuración
 # ---------------------------------------------------------------------------
 
+
 def _texto_config_auxiliar(aux: "Auxiliar") -> str:
     """Snapshot .txt del auxiliar (config + cálculos derivados del dataclass)."""
     from datetime import date
@@ -94,9 +95,11 @@ def _texto_config_auxiliar(aux: "Auxiliar") -> str:
         f"  T_max salida       : {aux.temperatura_maxima_salida_K - 273.15:.1f} °C "
         f"({aux.temperatura_maxima_salida_K:.2f} K)",
         "  Set-point T        : "
-        + (f"{aux.set_point_T_K - 273.15:.1f} °C ({aux.set_point_T_K:.2f} K)"
-           if aux.set_point_T_K is not None
-           else "(libre, sin control de T)"),
+        + (
+            f"{aux.set_point_T_K - 273.15:.1f} °C ({aux.set_point_T_K:.2f} K)"
+            if aux.set_point_T_K is not None
+            else "(libre, sin control de T)"
+        ),
     ]
     if aux.tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
         consumo = aux.consumo_biomasa_efectivo_kg_h()
@@ -104,15 +107,16 @@ def _texto_config_auxiliar(aux: "Auxiliar") -> str:
             "",
             "QUEMADOR DE BIOMASA",
             f"  Combustible        : {aux.tipo_biomasa or '—'}",
-            f"  PCI                : "
-            + (f"{aux.PCI_MJ_kg:.2f} MJ/kg" if aux.PCI_MJ_kg else "—"),
+            f"  PCI                : " + (f"{aux.PCI_MJ_kg:.2f} MJ/kg" if aux.PCI_MJ_kg else "—"),
             f"  η quemador         : "
             + (f"{aux.eficiencia_quemador:.1%}" if aux.eficiencia_quemador else "—"),
             f"  Consumo nominal    : "
-            + (f"{aux.consumo_biomasa_kg_h:.3f} kg/h"
-               if aux.consumo_biomasa_kg_h else "(calculado por PCI)"),
-            f"  Consumo efectivo   : "
-            + (f"{consumo:.3f} kg/h" if consumo is not None else "—"),
+            + (
+                f"{aux.consumo_biomasa_kg_h:.3f} kg/h"
+                if aux.consumo_biomasa_kg_h
+                else "(calculado por PCI)"
+            ),
+            f"  Consumo efectivo   : " + (f"{consumo:.3f} kg/h" if consumo is not None else "—"),
         ]
     elif aux.tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
         lines += [
@@ -121,8 +125,9 @@ def _texto_config_auxiliar(aux: "Auxiliar") -> str:
             f"  Tensión            : "
             + (f"{aux.tension_V:.0f} V" if aux.tension_V else "(no especificada)"),
             f"  Corriente máx.     : "
-            + (f"{aux.corriente_maxima_A:.2f} A"
-               if aux.corriente_maxima_A else "(no especificada)"),
+            + (
+                f"{aux.corriente_maxima_A:.2f} A" if aux.corriente_maxima_A else "(no especificada)"
+            ),
         ]
         if aux.tension_V:
             i_aprox = aux.potencia_efectiva_W() / aux.tension_V
@@ -161,30 +166,25 @@ def _from_json_auxiliar(data: dict) -> "Auxiliar":
         potencia_nominal_W=float(data["potencia_nominal_W"]),
         temperatura_maxima_salida_K=float(data["temperatura_maxima_salida_K"]),
         set_point_T_K=float(set_point) if set_point is not None else None,
-        fraccion_potencia_operacion=float(
-            data.get("fraccion_potencia_operacion", 1.0)
-        ),
+        fraccion_potencia_operacion=float(data.get("fraccion_potencia_operacion", 1.0)),
         disponible_nocturno=bool(data.get("disponible_nocturno", False)),
         tipo_biomasa=biomasa.get("tipo_biomasa"),
-        PCI_MJ_kg=(
-            float(biomasa["PCI_MJ_kg"]) if biomasa.get("PCI_MJ_kg") is not None
-            else None
-        ),
+        PCI_MJ_kg=(float(biomasa["PCI_MJ_kg"]) if biomasa.get("PCI_MJ_kg") is not None else None),
         eficiencia_quemador=(
             float(biomasa["eficiencia_quemador"])
-            if biomasa.get("eficiencia_quemador") is not None else None
+            if biomasa.get("eficiencia_quemador") is not None
+            else None
         ),
         consumo_biomasa_kg_h=(
             float(biomasa["consumo_biomasa_kg_h_nominal"])
-            if biomasa.get("consumo_biomasa_kg_h_nominal") is not None else None
-        ),
-        tension_V=(
-            float(re_dict["tension_V"]) if re_dict.get("tension_V") is not None
+            if biomasa.get("consumo_biomasa_kg_h_nominal") is not None
             else None
         ),
+        tension_V=(float(re_dict["tension_V"]) if re_dict.get("tension_V") is not None else None),
         corriente_maxima_A=(
             float(re_dict["corriente_maxima_A"])
-            if re_dict.get("corriente_maxima_A") is not None else None
+            if re_dict.get("corriente_maxima_A") is not None
+            else None
         ),
         notas=data.get("notas") or "",
     )
@@ -265,9 +265,11 @@ def render() -> None:
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
+
         archivo = st.file_uploader(
             "Subí un archivo .json del auxiliar previamente guardado",
-            type=["json"], key="p5_cargar_json",
+            type=["json"],
+            key="p5_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "auxiliar")
@@ -280,9 +282,7 @@ def render() -> None:
                     st.error(f"❌ Error reconstruyendo el auxiliar: {exc}")
                 else:
                     proyecto.auxiliar = aux_cargado
-                    n_borr = limpiar_session_state_prefijo(
-                        st.session_state, "p5_"
-                    )
+                    n_borr = limpiar_session_state_prefijo(st.session_state, "p5_")
                     # También aux_*: claves auxiliares usadas por widgets
                     limpiar_session_state_prefijo(st.session_state, "aux_")
                     st.session_state.pop("p5_cargar_json", None)
@@ -326,8 +326,7 @@ def render() -> None:
             "Quemador de biomasa": TipoAuxiliar.QUEMADOR_BIOMASA,
         }
         tipo_prev_label = next(
-            (k for k, v in tipo_opciones.items()
-             if aux_prev is not None and v == aux_prev.tipo),
+            (k for k, v in tipo_opciones.items() if aux_prev is not None and v == aux_prev.tipo),
             "Resistencia eléctrica",
         )
         tipo_label = st.selectbox(
@@ -347,8 +346,11 @@ def render() -> None:
             "Respaldo independiente": ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
         }
         modo_prev_label = next(
-            (k for k, v in modo_opciones.items()
-             if aux_prev is not None and v == aux_prev.modo_operacion),
+            (
+                k
+                for k, v in modo_opciones.items()
+                if aux_prev is not None and v == aux_prev.modo_operacion
+            ),
             "Serie post-colector",
         )
         modo_label = st.selectbox(
@@ -367,15 +369,16 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección B: Parámetros comunes
     # -----------------------------------------------------------------------
-    with st.expander("Parámetros de operación", expanded=True):
+    with st.expander("Parámetros de operación", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             potencia_kW = st.number_input(
                 "Potencia nominal [kW]",
-                min_value=0.05, max_value=100.0,
-                value=(aux_prev.potencia_nominal_W / 1000.0
-                       if aux_prev is not None else 1.0),
-                step=0.05, format="%.2f",
+                min_value=0.05,
+                max_value=100.0,
+                value=(aux_prev.potencia_nominal_W / 1000.0 if aux_prev is not None else 1.0),
+                step=0.05,
+                format="%.2f",
                 help=(
                     "Potencia térmica nominal entregada al aire. "
                     "Para resistencia eléctrica: potencia eléctrica = potencia térmica."
@@ -385,9 +388,11 @@ def render() -> None:
 
             fraccion = st.slider(
                 "Fracción de potencia en operación [%]",
-                min_value=10, max_value=100,
-                value=int((aux_prev.fraccion_potencia_operacion
-                           if aux_prev is not None else 1.0) * 100),
+                min_value=10,
+                max_value=100,
+                value=int(
+                    (aux_prev.fraccion_potencia_operacion if aux_prev is not None else 1.0) * 100
+                ),
                 step=5,
                 help="Permite modelar operación parcial del auxiliar.",
             )
@@ -396,12 +401,15 @@ def render() -> None:
         with c2:
             T_max_C = st.number_input(
                 "T máxima de salida [°C]",
-                min_value=30.0, max_value=200.0,
+                min_value=30.0,
+                max_value=200.0,
                 value=kelvin_a_celsius(
                     aux_prev.temperatura_maxima_salida_K
-                    if aux_prev is not None else celsius_a_kelvin(_T_MAX_DEFAULT_C)
+                    if aux_prev is not None
+                    else celsius_a_kelvin(_T_MAX_DEFAULT_C)
                 ),
-                step=1.0, format="%.0f",
+                step=1.0,
+                format="%.0f",
                 help=(
                     "Límite de seguridad para proteger el producto. "
                     "Para frutas y hortalizas: ≤ 60–70 °C."
@@ -421,14 +429,18 @@ def render() -> None:
             if usar_set_point:
                 sp_C = st.number_input(
                     "Set point [°C]",
-                    min_value=30.0, max_value=T_max_C,
+                    min_value=30.0,
+                    max_value=T_max_C,
                     value=min(
-                        kelvin_a_celsius(aux_prev.set_point_T_K)
-                        if (aux_prev is not None and aux_prev.set_point_T_K is not None)
-                        else _T_MAX_DEFAULT_C - 5.0,
+                        (
+                            kelvin_a_celsius(aux_prev.set_point_T_K)
+                            if (aux_prev is not None and aux_prev.set_point_T_K is not None)
+                            else _T_MAX_DEFAULT_C - 5.0
+                        ),
                         T_max_C,
                     ),
-                    step=1.0, format="%.0f",
+                    step=1.0,
+                    format="%.0f",
                 )
                 set_point_K = celsius_a_kelvin(sp_C)
 
@@ -452,7 +464,7 @@ def render() -> None:
     corriente_val: float | None = None
 
     if tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
-        with st.expander("Parámetros del quemador de biomasa", expanded=True):
+        with st.expander("Parámetros del quemador de biomasa", expanded=False):
             _COMBUSTIBLES = {
                 "Leña seca (~20% HR)": (14.5, 0.65),
                 "Pellets de madera": (17.5, 0.70),
@@ -460,14 +472,19 @@ def render() -> None:
                 "Bagazo de caña (seco)": (17.0, 0.65),
                 "Otro (ingresar manualmente)": (None, None),
             }
-            combustible_prev = (aux_prev.tipo_biomasa
-                                if aux_prev is not None and aux_prev.tipo_biomasa else
-                                "Leña seca (~20% HR)")
+            combustible_prev = (
+                aux_prev.tipo_biomasa
+                if aux_prev is not None and aux_prev.tipo_biomasa
+                else "Leña seca (~20% HR)"
+            )
             combustible_sel = st.selectbox(
                 "Combustible",
                 options=list(_COMBUSTIBLES.keys()),
-                index=0 if combustible_prev not in _COMBUSTIBLES else
-                      list(_COMBUSTIBLES.keys()).index(combustible_prev),
+                index=(
+                    0
+                    if combustible_prev not in _COMBUSTIBLES
+                    else list(_COMBUSTIBLES.keys()).index(combustible_prev)
+                ),
             )
             PCI_default, eta_default = _COMBUSTIBLES[combustible_sel]
 
@@ -475,34 +492,47 @@ def render() -> None:
             with c1:
                 PCI_val = st.number_input(
                     "PCI [MJ/kg]",
-                    min_value=5.0, max_value=40.0,
+                    min_value=5.0,
+                    max_value=40.0,
                     value=float(
                         aux_prev.PCI_MJ_kg
                         if (aux_prev is not None and aux_prev.PCI_MJ_kg is not None)
                         else (PCI_default or 14.5)
                     ),
-                    step=0.5, format="%.1f",
+                    step=0.5,
+                    format="%.1f",
                     help="Poder calorífico inferior del combustible.",
                 )
-                tipo_biomasa_val = (combustible_sel
-                                    if combustible_sel != "Otro (ingresar manualmente)"
-                                    else st.text_input("Nombre del combustible", value=""))
+                tipo_biomasa_val = (
+                    combustible_sel
+                    if combustible_sel != "Otro (ingresar manualmente)"
+                    else st.text_input("Nombre del combustible", value="")
+                )
             with c2:
-                eta_quemador_val = st.slider(
-                    "Eficiencia del quemador [%]",
-                    min_value=30, max_value=95,
-                    value=int((
-                        aux_prev.eficiencia_quemador
-                        if (aux_prev is not None and aux_prev.eficiencia_quemador is not None)
-                        else (eta_default or 0.65)
-                    ) * 100),
-                    step=5,
-                ) / 100.0
+                eta_quemador_val = (
+                    st.slider(
+                        "Eficiencia del quemador [%]",
+                        min_value=30,
+                        max_value=95,
+                        value=int(
+                            (
+                                aux_prev.eficiencia_quemador
+                                if (
+                                    aux_prev is not None
+                                    and aux_prev.eficiencia_quemador is not None
+                                )
+                                else (eta_default or 0.65)
+                            )
+                            * 100
+                        ),
+                        step=5,
+                    )
+                    / 100.0
+                )
 
             # Consumo estimado (solo informativo)
             if PCI_val and eta_quemador_val:
-                consumo_est = (potencia_W * fraccion_f * 3600.0
-                               / (PCI_val * 1e6 * eta_quemador_val))
+                consumo_est = potencia_W * fraccion_f * 3600.0 / (PCI_val * 1e6 * eta_quemador_val)
                 st.caption(
                     f"💡 Consumo estimado a potencia efectiva "
                     f"({potencia_W * fraccion_f / 1000:.2f} kW): "
@@ -510,12 +540,11 @@ def render() -> None:
                 )
 
     elif tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
-        with st.expander("Parámetros de la resistencia eléctrica", expanded=True):
+        with st.expander("Parámetros de la resistencia eléctrica", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
                 tension_opciones = [None, 220.0, 380.0]
-                tension_prev = (aux_prev.tension_V
-                                if aux_prev is not None else 220.0)
+                tension_prev = aux_prev.tension_V if aux_prev is not None else 220.0
                 usar_tension = st.checkbox(
                     "Especificar tensión de alimentación",
                     value=tension_prev is not None,
@@ -585,9 +614,11 @@ def render() -> None:
             )
             T_entrada_C = st.number_input(
                 "Temperatura de entrada al auxiliar [°C]",
-                min_value=-10.0, max_value=120.0,
+                min_value=-10.0,
+                max_value=120.0,
                 value=st.session_state.get("aux_T_entrada_C", _T_SALIDA_DEFAULT_C),
-                step=1.0, format="%.1f",
+                step=1.0,
+                format="%.1f",
                 help=T_entrada_hint,
             )
             st.session_state["aux_T_entrada_C"] = T_entrada_C
@@ -600,8 +631,7 @@ def render() -> None:
                 Q_m3s = proyecto.colector.caudal_total_m3_s()
                 caudal_default = Q_m3s * 1.1  # ρ ≈ 1.1 kg/m³
                 caudal_hint = (
-                    f"Tomado del colector: {Q_m3s * 1000:.1f} L/s → "
-                    f"~{caudal_default:.3f} kg/s"
+                    f"Tomado del colector: {Q_m3s * 1000:.1f} L/s → " f"~{caudal_default:.3f} kg/s"
                 )
             if proyecto.camara is not None:
                 caudal_default = proyecto.camara.flujo.caudal_masico_kg_s
@@ -609,9 +639,11 @@ def render() -> None:
 
             caudal_kg_s = st.number_input(
                 "Caudal másico [kg/s]",
-                min_value=0.001, max_value=10.0,
+                min_value=0.001,
+                max_value=10.0,
                 value=caudal_default,
-                step=0.001, format="%.4f",
+                step=0.001,
+                format="%.4f",
                 help=caudal_hint or "Caudal de aire seco que pasa por el auxiliar.",
             )
             if caudal_hint:
@@ -672,24 +704,32 @@ def render() -> None:
                 st.write(f"**Potencia nominal:** {potencia_kW:.2f} kW")
                 st.write(f"**Fracción operación:** {fraccion} %")
                 st.write(f"**T_max salida:** {T_max_C:.0f} °C")
-                st.write(f"**Set point:** "
-                         + (f"{kelvin_a_celsius(set_point_K):.0f} °C"
-                            if set_point_K else "No definido"))
+                st.write(
+                    f"**Set point:** "
+                    + (f"{kelvin_a_celsius(set_point_K):.0f} °C" if set_point_K else "No definido")
+                )
             with c2:
                 st.write(f"**Disponible nocturno:** {'Sí' if disponible_nocturno else 'No'}")
                 if tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
                     st.write(f"**Combustible:** {tipo_biomasa_val or '—'}")
                     st.write(f"**PCI:** {PCI_val:.1f} MJ/kg" if PCI_val else "**PCI:** —")
-                    st.write(f"**η quemador:** {eta_quemador_val:.0%}"
-                             if eta_quemador_val else "**η quemador:** —")
+                    st.write(
+                        f"**η quemador:** {eta_quemador_val:.0%}"
+                        if eta_quemador_val
+                        else "**η quemador:** —"
+                    )
                 elif tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
-                    st.write(f"**Tensión:** {tension_val:.0f} V"
-                             if tension_val else "**Tensión:** No especificada")
+                    st.write(
+                        f"**Tensión:** {tension_val:.0f} V"
+                        if tension_val
+                        else "**Tensión:** No especificada"
+                    )
 
     # --- Guardar configuración ---
     if proyecto.auxiliar is not None:
         st.divider()
         from ui.componentes.serializacion import dump_json, nombre_archivo_descarga
+
         col_txt, col_json = st.columns(2)
         with col_txt:
             st.download_button(
