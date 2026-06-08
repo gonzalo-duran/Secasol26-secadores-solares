@@ -223,19 +223,56 @@ def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
 # ---------------------------------------------------------------------------
 
 
+def resumen_camara(solver_cam: _SolverCamaraUnion) -> dict:
+    """Resumen uniforme de un resultado de cámara, abstrayendo el tipo de motor.
+
+    Las dos firmas de resultado de cámara divergen en los nombres de sus campos
+    (``ResultadoMotorTermodinamico`` vs ``ResultadosCamara``). Esta función es la
+    **fuente de verdad única** de esa abstracción: cualquier consumidor (balance
+    global, UI de P7, barridos paramétricos) extrae los campos comunes desde acá.
+
+    Args:
+        solver_cam: Resultado de cámara de cualquiera de los dos motores.
+
+    Returns:
+        dict con claves:
+            ``t_secado_s`` (float | None): tiempo de secado [s]. ``None`` en modo
+                termodinámico cuando no se alcanzó X_obj.
+            ``masa_agua_kg`` (float): masa de agua evaporada/extraída [kg].
+            ``status`` (str): estado legible del solver.
+            ``convergio`` (bool): True si el secado se completó correctamente.
+    """
+    if isinstance(solver_cam, ResultadoMotorTermodinamico):
+        convergio = solver_cam.t_secado_s is not None and solver_cam.status == "X_obj_alcanzado"
+        return {
+            "t_secado_s": solver_cam.t_secado_s,
+            "masa_agua_kg": solver_cam.masa_evaporada_total_kg,
+            "status": solver_cam.status,
+            "convergio": convergio,
+        }
+    status = "OK" if solver_cam.convergencia_ok else solver_cam.mensaje_convergencia
+    return {
+        "t_secado_s": solver_cam.t_secado_s,
+        "masa_agua_kg": solver_cam.masa_agua_extraida_kg,
+        "status": status,
+        "convergio": solver_cam.convergencia_ok,
+    }
+
+
 def _extraer_t_y_masa(
     solver_cam: _SolverCamaraUnion,
 ) -> tuple[Optional[float], float]:
     """Extrae (t_secado_s, masa_agua_kg) abstrayendo los nombres divergentes.
 
-    En modo capa fina ambos campos existen siempre como ``float``. En modo
-    termodinámico ``t_secado_s`` puede ser ``None`` cuando el solver no llegó
-    a X_obj (status ``t_max_alcanzado`` o ``error``); en ese caso el balance
-    global no puede multiplicar potencias × tiempo y los devuelve como ``None``.
+    Wrapper fino sobre :func:`resumen_camara` que conserva la firma de tupla
+    usada históricamente por el balance global. En modo capa fina ambos campos
+    existen siempre como ``float``. En modo termodinámico ``t_secado_s`` puede
+    ser ``None`` cuando el solver no llegó a X_obj (status ``t_max_alcanzado`` o
+    ``error``); en ese caso el balance global no puede multiplicar potencias ×
+    tiempo y los devuelve como ``None``.
     """
-    if isinstance(solver_cam, ResultadoMotorTermodinamico):
-        return solver_cam.t_secado_s, solver_cam.masa_evaporada_total_kg
-    return solver_cam.t_secado_s, solver_cam.masa_agua_extraida_kg
+    r = resumen_camara(solver_cam)
+    return r["t_secado_s"], r["masa_agua_kg"]
 
 
 def _T_salida_camara(solver_cam, T_op_K_fallback: float) -> float:

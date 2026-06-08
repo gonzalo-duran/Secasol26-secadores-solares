@@ -20,6 +20,7 @@ from calculos.balance_global import (
     ResultadosCompletosTransitorio,
     calcular_todo,
     calcular_todo_transitorio,
+    resumen_camara,
 )
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.advertencias import Severidad
@@ -48,13 +49,16 @@ def _estado(ok: bool) -> str:
 
 
 def _resumen_camara(cam) -> tuple[float | None, float, str, bool]:
-    """Extrae (t_h, masa_agua_kg, status_legible, ok) abstrayendo el tipo."""
-    if isinstance(cam, ResultadoMotorTermodinamico):
-        ok = cam.t_secado_s is not None and cam.status == "X_obj_alcanzado"
-        t_h = cam.t_secado_s / 3600.0 if cam.t_secado_s is not None else None
-        return t_h, cam.masa_evaporada_total_kg, cam.status, ok
-    status = "OK" if cam.convergencia_ok else cam.mensaje_convergencia
-    return cam.t_secado_s / 3600.0, cam.masa_agua_extraida_kg, status, cam.convergencia_ok
+    """Extrae (t_h, masa_agua_kg, status_legible, ok) abstrayendo el tipo.
+
+    Wrapper de UI sobre :func:`calculos.balance_global.resumen_camara` que
+    convierte el tiempo a horas (la conversión de unidades vive en la frontera
+    de UI) y conserva la firma de tupla usada por los consumidores de P7.
+    """
+    r = resumen_camara(cam)
+    t_s = r["t_secado_s"]
+    t_h = t_s / 3600.0 if t_s is not None else None
+    return t_h, r["masa_agua_kg"], r["status"], r["convergio"]
 
 
 def _mostrar_errores(errores: list[str]) -> None:
@@ -420,8 +424,7 @@ def _seccion_config(proyecto) -> None:
     st.subheader("Estado de configuración")
 
     motor_o_chim_ok = (proyecto.motor is not None) or (
-        proyecto.chimenea is not None
-        and st.session_state.get("p6_chimenea_eval") is not None
+        proyecto.chimenea is not None and st.session_state.get("p6_chimenea_eval") is not None
     )
     if proyecto.motor is not None:
         label_p6 = "P6 · Motor"
@@ -1145,6 +1148,285 @@ def _json_resultados_completo(
 
 
 # ---------------------------------------------------------------------------
+# Corridas paramétricas (barridos)
+# ---------------------------------------------------------------------------
+
+_PALETA_BARRIDO = ("#1f77b4", "#d62728", "#2ca02c")  # azul, rojo, verde
+_MAX_BARRIDOS = 3
+_N_DEFAULT_POR_MODO = {"constantes": 7, "transitorio": 5, "anual": 3}
+
+
+def _paleta_color_barrido(indice: int) -> str:
+    """Color fijo de la paleta de barridos según índice (cicla si excede)."""
+    return _PALETA_BARRIDO[indice % len(_PALETA_BARRIDO)]
+
+
+def _barrido_a_dataframe(resultado):
+    """Convierte un ResultadosBarrido en DataFrame (valor + KPIs + error)."""
+    import pandas as pd
+
+    meta = resultado.parametro_meta
+    col_valor = f"{meta.label} [{meta.unidad_ui}]"
+    filas = []
+    for pt in resultado.puntos:
+        fila = {col_valor: pt.valor_ui}
+        fila.update(pt.kpis)
+        fila["error"] = pt.error
+        filas.append(fila)
+    return pd.DataFrame(filas)
+
+
+def _bounds_ui_parametro(parametro) -> tuple[float, float]:
+    """Cotas en unidad de UI por muestreo de ``si_a_ui`` (robusto si no es monótona)."""
+    lo, hi = parametro.valor_min_si, parametro.valor_max_si
+    muestras = [parametro.si_a_ui(lo + f * (hi - lo)) for f in (0.0, 0.25, 0.5, 0.75, 1.0)]
+    return min(muestras), max(muestras)
+
+
+def _valor_actual_si_barrido(proyecto, parametro, condiciones):
+    """Valor SI actual del parámetro (desde el proyecto, o desde condiciones si es forzante)."""
+    if parametro.es_forzante:
+        cond = condiciones or {}
+        if parametro.nombre_forzante == "HR_camara":
+            return cond.get("HR_camara")
+        if parametro.nombre_forzante == "T_amb":
+            return cond.get("T_amb_K")
+        return None
+    from operator import attrgetter
+
+    try:
+        return attrgetter(parametro.path)(proyecto)
+    except AttributeError:
+        return None
+
+
+def _render_barridos_parametricos(
+    proyecto,
+    modo: str,
+    *,
+    condiciones: dict | None = None,
+    forzantes_base=None,
+    n_dias: int | None = None,
+) -> None:
+    """Sección de corridas paramétricas para un modo de cálculo dado.
+
+    Permite variar un parámetro curado (filtrado por tipología y modo), correr
+    N simulaciones y comparar hasta ``_MAX_BARRIDOS`` corridas con gráficas
+    superpuestas. Estado efímero en ``session_state`` (no se persiste al JSON).
+    """
+    from calculos.barrido_parametrico import BarridoConfig, correr_barrido
+    from calculos.catalogo_kpis_barrido import KPIS_AVANZADOS
+    from calculos.catalogo_parametros_barrido import parametros_para_tipologia
+
+    st.divider()
+    st.subheader("🔀 Corridas paramétricas")
+    st.caption(
+        f"Variá un parámetro y compará hasta {_MAX_BARRIDOS} corridas (modo **{modo}**). "
+        "Los resultados son efímeros: viven solo en esta sesión."
+    )
+
+    tipologia = proyecto.configuracion.tipologia
+    params = parametros_para_tipologia(tipologia, modo)
+    if not params:
+        st.info("No hay parámetros barrideables para esta tipología y modo.")
+        return
+
+    key_estado = f"p7_barridos_{modo}"
+    barridos: list = st.session_state.get(key_estado, [])
+
+    with st.expander("➕ Configurar un nuevo barrido", expanded=not barridos):
+        labels = {p.label: p for p in params}
+        label_sel = st.selectbox(
+            "Parámetro a variar", list(labels.keys()), key=f"barrido_param_{modo}"
+        )
+        parametro = labels[label_sel]
+        st.caption(parametro.descripcion_corta)
+
+        lo_ui, hi_ui = _bounds_ui_parametro(parametro)
+        actual_si = _valor_actual_si_barrido(proyecto, parametro, condiciones)
+        actual_ui = parametro.si_a_ui(actual_si) if actual_si is not None else None
+        if actual_ui is not None and actual_ui > 0:
+            min_def = max(lo_ui, 0.5 * actual_ui)
+            max_def = min(hi_ui, 1.5 * actual_ui)
+        else:
+            min_def, max_def = lo_ui, hi_ui
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            min_ui = st.number_input(
+                f"Mínimo [{parametro.unidad_ui}]",
+                min_value=float(lo_ui),
+                max_value=float(hi_ui),
+                value=float(min_def),
+                key=f"barrido_min_{modo}",
+            )
+        with c2:
+            max_ui = st.number_input(
+                f"Máximo [{parametro.unidad_ui}]",
+                min_value=float(lo_ui),
+                max_value=float(hi_ui),
+                value=float(max_def),
+                key=f"barrido_max_{modo}",
+            )
+        with c3:
+            n_puntos = st.number_input(
+                "N° de puntos",
+                min_value=2,
+                max_value=30,
+                value=_N_DEFAULT_POR_MODO.get(modo, 5),
+                step=1,
+                key=f"barrido_n_{modo}",
+            )
+
+        # KPIs avanzados opt-in válidos para el modo.
+        avanzados_modo = [k for k in KPIS_AVANZADOS if modo in k.modos_validos]
+        kpis_extra: list[str] = []
+        if avanzados_modo:
+            with st.expander("KPIs adicionales (avanzado)", expanded=False):
+                for k in avanzados_modo:
+                    if st.checkbox(f"{k.label} [{k.unidad}]", key=f"barrido_kpi_{modo}_{k.id}"):
+                        kpis_extra.append(k.id)
+
+        nombre_def = f"{parametro.label} ({len(barridos) + 1})"
+        nombre = st.text_input(
+            "Nombre de la corrida", value=nombre_def, key=f"barrido_nombre_{modo}"
+        )
+
+        # Estimación de tiempo.
+        t_base = st.session_state.get(f"p7_t_calc_base_s_{modo}")
+        if t_base:
+            t_est = t_base * int(n_puntos)
+            st.caption(
+                f"⏱️ Tiempo estimado ≈ {t_est:.0f} s ({int(n_puntos)} × {t_base:.1f} s base)."
+            )
+            if t_est > 120:
+                st.warning(
+                    f"El barrido podría tardar ~{t_est:.0f} s. Reducí N° de puntos si es mucho."
+                )
+
+        bloqueado = len(barridos) >= _MAX_BARRIDOS
+        if bloqueado:
+            st.warning(f"Ya hay {_MAX_BARRIDOS} barridos. Eliminá uno para correr otro.")
+        correr = st.button(
+            "▶ Correr barrido", type="primary", key=f"barrido_run_{modo}", disabled=bloqueado
+        )
+
+        if correr:
+            valores_ui = np.linspace(float(min_ui), float(max_ui), int(n_puntos))
+            valores_si = tuple(float(parametro.ui_a_si(v)) for v in valores_ui)
+            cfg = BarridoConfig(
+                parametro_id=parametro.id,
+                valores_si=valores_si,
+                modo=modo,
+                nombre=nombre or nombre_def,
+                kpis_extra=tuple(kpis_extra),
+                condiciones_constantes=condiciones,
+                forzantes_base=forzantes_base,
+                n_dias=n_dias,
+            )
+            prog = st.progress(0.0)
+            status = st.empty()
+
+            def _cb(i, n, v, _status=status, _prog=prog, _p=parametro):
+                _prog.progress(i / n)
+                _status.text(f"Punto {i}/{n}: {_p.label} = {v:.4g} {_p.unidad_ui}")
+
+            with st.spinner("Corriendo barrido..."):
+                resultado = correr_barrido(proyecto, cfg, callback_progreso=_cb)
+            prog.empty()
+            status.empty()
+            barridos.append(resultado)
+            st.session_state[key_estado] = barridos
+            st.rerun()
+
+    if not barridos:
+        return
+
+    _render_resultados_barridos(barridos, modo, key_estado)
+
+
+def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> None:
+    """Tarjetas de gestión + tablas + gráficas superpuestas por KPI."""
+    from calculos.catalogo_kpis_barrido import kpis_fijos_para_modo, obtener_kpi
+
+    # Tarjetas de gestión (nombre, parámetro, N, eliminar).
+    st.markdown("#### Barridos activos")
+    for idx, b in enumerate(list(barridos)):
+        color = _paleta_color_barrido(idx)
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            st.markdown(
+                f"<span style='color:{color}'>●</span> **{b.nombre}** — "
+                f"{b.parametro_meta.label}, {len(b.puntos)} puntos, "
+                f"{b.t_ejecucion_s:.1f} s",
+                unsafe_allow_html=True,
+            )
+        with c2:
+            if st.button("🗑️", key=f"barrido_del_{modo}_{idx}", help="Eliminar"):
+                barridos.pop(idx)
+                st.session_state[key_estado] = barridos
+                st.rerun()
+
+    # Tablas por barrido.
+    for b in barridos:
+        with st.expander(f"📋 Tabla — {b.nombre}", expanded=False):
+            st.dataframe(_barrido_a_dataframe(b), width="stretch")
+
+    # Gráficas por KPI. Si todos los barridos comparten parámetro, se superponen.
+    params_distintos = {b.config.parametro_id for b in barridos}
+    comparten_parametro = len(params_distintos) == 1
+    if not comparten_parametro:
+        st.info(
+            "Los barridos activos varían parámetros distintos: cada gráfica usa "
+            "su propio eje X y no se superponen."
+        )
+
+    # Conjunto de KPIs a graficar: fijos del modo + extras presentes en algún barrido.
+    kpis_ids: list[str] = [k.id for k in kpis_fijos_para_modo(modo)]
+    for b in barridos:
+        for kid in b.config.kpis_extra:
+            if kid not in kpis_ids:
+                kpis_ids.append(kid)
+
+    for kid in kpis_ids:
+        kpi = obtener_kpi(kid)
+        fig = go.Figure()
+        hay_datos = False
+        for idx, b in enumerate(barridos):
+            if kid not in {kk for pt in b.puntos for kk in pt.kpis}:
+                continue
+            xs = [pt.valor_ui for pt in b.puntos]
+            ys = [pt.kpis.get(kid) for pt in b.puntos]
+            if all(y is None for y in ys):
+                continue
+            hay_datos = True
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines+markers",
+                    name=b.nombre,
+                    line=dict(color=_paleta_color_barrido(idx)),
+                    connectgaps=False,
+                )
+            )
+        if not hay_datos:
+            continue
+        eje_x = (
+            f"{barridos[0].parametro_meta.label} [{barridos[0].parametro_meta.unidad_ui}]"
+            if comparten_parametro
+            else "valor del parámetro"
+        )
+        fig.update_layout(
+            title=f"{kpi.label} [{kpi.unidad}]",
+            xaxis_title=eje_x,
+            yaxis_title=f"{kpi.label} [{kpi.unidad}]",
+            height=360,
+        )
+        st.plotly_chart(fig, width="stretch")
+
+
+# ---------------------------------------------------------------------------
 # Render principal
 # ---------------------------------------------------------------------------
 
@@ -1177,6 +1459,7 @@ def render() -> None:
         res_anual = st.session_state.get("p4_resultado_anual")
         if res_anual is not None:
             _render_operacion_anual_detalle(proyecto)
+            _render_barridos_parametricos(proyecto, "anual")
             st.divider()
             st.markdown("### Cálculo de un día representativo (contexto adicional)")
             st.caption(
@@ -1256,6 +1539,9 @@ def render() -> None:
             key="p7_btn_calc_tr",
         )
         if calcular_tr:
+            import time as _time
+
+            _t0 = _time.perf_counter()
             with st.spinner("Corriendo auxiliar(t) + cámara TD + motor..."):
                 res_tr: ResultadosCompletosTransitorio = calcular_todo_transitorio(
                     proyecto,
@@ -1263,6 +1549,7 @@ def render() -> None:
                     n_dias=n_dias_hor,
                 )
             st.session_state["p7_resultados_tr"] = res_tr
+            st.session_state["p7_t_calc_base_s_transitorio"] = _time.perf_counter() - _t0
 
         if "p7_resultados_tr" not in st.session_state:
             st.info("ℹ️ Presioná **Calcular** para evaluar la pipeline transitoria.")
@@ -1282,6 +1569,13 @@ def render() -> None:
             I_g=I_sug,
             v_viento=v_sug,
             HR_cam_pct=_HR_CAMARA_DEFAULT_PCT,
+        )
+
+        _render_barridos_parametricos(
+            proyecto,
+            "transitorio",
+            forzantes_base=fz_horizonte,
+            n_dias=n_dias_hor,
         )
         return  # no caer en el flujo de constantes representativas
 
@@ -1350,6 +1644,9 @@ def render() -> None:
     calcular = st.button("▶ Calcular prediseño completo", type="primary")
 
     if calcular:
+        import time as _time
+
+        _t0 = _time.perf_counter()
         with st.spinner("Calculando..."):
             res: ResultadosCompletos = calcular_todo(
                 proyecto=proyecto,
@@ -1360,6 +1657,7 @@ def render() -> None:
                 HR_camara=HR_cam,
             )
         st.session_state["p7_resultados"] = res
+        st.session_state["p7_t_calc_base_s_constantes"] = _time.perf_counter() - _t0
 
     # Usar resultados almacenados si existen
     if "p7_resultados" not in st.session_state:
@@ -1644,6 +1942,19 @@ def render() -> None:
         I_g=I_g,
         v_viento=v_viento,
         HR_cam_pct=HR_cam_pct,
+    )
+
+    # --- Corridas paramétricas (modo Constantes) ---
+    _render_barridos_parametricos(
+        proyecto,
+        "constantes",
+        condiciones=dict(
+            T_amb_K=T_amb_K,
+            I_g_W_m2=I_g,
+            v_viento_ms=v_viento,
+            T_entrada_K=T_amb_K,
+            HR_camara=HR_cam,
+        ),
     )
 
 
