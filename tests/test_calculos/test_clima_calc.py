@@ -327,3 +327,54 @@ def test_POA_albedo_irrelevante_en_horizontal():
     poa_bajo = calcular_POA_horizonte(df, _empl(0.20))
     poa_alto = calcular_POA_horizonte(df, _empl(0.90))
     np.testing.assert_allclose(poa_alto.values, poa_bajo.values, rtol=1e-9)
+
+
+# =============================================================================
+# slice_n_dias_consecutivos — recorte de N días reales consecutivos
+# =============================================================================
+
+from datetime import date  # noqa: E402
+
+from calculos.clima_calc import slice_n_dias_consecutivos  # noqa: E402
+
+
+def _df_multidia_dic(anio: int = 2022) -> pd.DataFrame:
+    """Clima horario de diciembre de un año (tz local), valor distinto por hora."""
+    idx = pd.date_range(
+        f"{anio}-12-01", f"{anio}-12-31 23:00", freq="h", tz="America/Argentina/Salta"
+    )
+    n = len(idx)
+    return pd.DataFrame(
+        {
+            "T_amb_K": 290.0 + np.arange(n) * 0.01,  # crece monótono → días distintos
+            "GHI_Wm2": np.zeros(n),
+            "DNI_Wm2": np.zeros(n),
+            "DHI_Wm2": np.zeros(n),
+            "WS_ms": np.full(n, 2.0),
+            "presion_Pa": np.full(n, 101325.0),
+            "HR": np.full(n, 0.5),
+        },
+        index=idx,
+    )
+
+
+def test_slice_consecutivo_normal():
+    """Recorte de 3 días desde una fecha interior: 72 h, 3 días distintos, sin truncar."""
+    df = _df_multidia_dic()
+    sl, n_ef, trunc = slice_n_dias_consecutivos(df, date(2022, 12, 10), 3)
+    assert len(sl) == 72
+    assert n_ef == 3
+    assert trunc is False
+    # los días no son idénticos (T_amb crece) — a diferencia del tile del modo repetir
+    dia0 = sl[sl.index.date == date(2022, 12, 10)]["T_amb_K"].to_numpy()
+    dia1 = sl[sl.index.date == date(2022, 12, 11)]["T_amb_K"].to_numpy()
+    assert not np.allclose(dia0, dia1)
+
+
+def test_slice_consecutivo_trunca_en_borde_de_anio():
+    """Pedir 5 días desde el 30-dic con clima de un solo año trunca a 2 días."""
+    df = _df_multidia_dic(2022)
+    sl, n_ef, trunc = slice_n_dias_consecutivos(df, date(2022, 12, 30), 5)
+    assert n_ef == 2  # solo 30 y 31 de diciembre disponibles
+    assert trunc is True
+    assert len(sl) == 48

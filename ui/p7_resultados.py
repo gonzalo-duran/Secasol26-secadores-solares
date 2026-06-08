@@ -1520,11 +1520,15 @@ def render() -> None:
     if modo_p7 == "Transitorio (horizonte de P4)":
         n_dias_hor = int(horizonte_meta.get("n_dias", 1))
         modo_fz_label = str(horizonte_meta.get("modo_forzantes", "sintético"))
+        horizonte_tipo = horizonte_meta.get("horizonte_tipo")
         horizonte_h = float(fz_horizonte.t_s[-1]) / 3600.0
 
         st.subheader("Horizonte propagado de cámara")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Horizonte", f"{n_dias_hor} día(s)")
+        _hz_txt = f"{n_dias_hor} día(s)"
+        if horizonte_tipo and n_dias_hor > 1:
+            _hz_txt += f" · {horizonte_tipo}"
+        c1.metric("Horizonte", _hz_txt)
         c2.metric("Duración", f"{horizonte_h:.1f} h")
         c3.metric("Forzantes", modo_fz_label)
         st.caption(

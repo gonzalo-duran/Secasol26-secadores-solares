@@ -18,16 +18,22 @@ from calculos.psicrometria import humedad_absoluta
 from core.camara import ForzantesAire
 from core.auxiliar import Auxiliar, ModoOperacionAuxiliar, TipoAuxiliar
 from core.camara import (
-    Camara, CargaProducto, ConfiguracionBandejas, ConfiguracionFlujo,
+    Camara,
+    CargaProducto,
+    ConfiguracionBandejas,
+    ConfiguracionFlujo,
     GeometriaCamara,
 )
 from core.chimenea import Chimenea
 from core.colector import Colector
 from core.motor import Motor, TipoAccionamiento
 from core.proyecto import (
-    Configuracion, Meta, ModoAnalisis, Proyecto, Tipologia,
+    Configuracion,
+    Meta,
+    ModoAnalisis,
+    Proyecto,
+    Tipologia,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -69,8 +75,7 @@ def proyecto_camara_solo():
     """Proyecto con solo cámara (sin colector) — válido si auxiliar es respaldo."""
     p = Proyecto(
         meta=Meta(nombre="Solo camara", autor="pytest"),
-        configuracion=Configuracion(tipologia=Tipologia.ARMARIO,
-                                    modo_analisis=ModoAnalisis.DIARIO),
+        configuracion=Configuracion(tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO),
     )
     p.camara = Camara(
         carga_producto=CargaProducto(
@@ -97,8 +102,9 @@ class TestVerificarCoherencia:
 
     def test_caja_con_colector(self):
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.CAJA,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.colector = Colector()
         errores = verificar_coherencia_proyecto(p)
@@ -106,8 +112,9 @@ class TestVerificarCoherencia:
 
     def test_caja_con_motor(self):
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.CAJA,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.motor = Motor(
             tipo_accionamiento=TipoAccionamiento.MOTOR_ELECTRICO,
@@ -119,8 +126,9 @@ class TestVerificarCoherencia:
 
     def test_auxiliar_serie_sin_colector(self):
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.ARMARIO,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.camara = Camara()
         p.auxiliar = Auxiliar(
@@ -134,8 +142,9 @@ class TestVerificarCoherencia:
 
     def test_motor_sin_camara(self):
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.ARMARIO,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.motor = Motor(
             tipo_accionamiento=TipoAccionamiento.MOTOR_ELECTRICO,
@@ -167,16 +176,22 @@ class TestCalcularTodo:
     def test_sin_errores_proyecto_valido(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.errores == []
 
     def test_colector_calculado(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.colector is not None
         assert res.colector.T_salida_K > 298.15
@@ -184,29 +199,34 @@ class TestCalcularTodo:
     def test_camara_calculada(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.camara is not None
         assert res.camara.t_secado_s > 0
 
-    def test_T_entrada_camara_igual_T_salida_col_sin_auxiliar(
-        self, proyecto_armario_completo
-    ):
+    def test_T_entrada_camara_igual_T_salida_col_sin_auxiliar(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
-        assert res.T_entrada_camara_K == pytest.approx(
-            res.colector.T_salida_K, rel=1e-6
-        )
+        assert res.T_entrada_camara_K == pytest.approx(res.colector.T_salida_K, rel=1e-6)
 
     def test_balance_energetico_calculado(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.energia_total_MJ is not None
         assert res.energia_total_MJ > 0
@@ -214,8 +234,11 @@ class TestCalcularTodo:
     def test_COP_positivo(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.COP_secado is not None
         assert res.COP_secado > 0
@@ -224,8 +247,11 @@ class TestCalcularTodo:
         T_amb = 313.15
         res = calcular_todo(
             proyecto_camara_solo,
-            T_amb_K=T_amb, I_g_W_m2=0.0, v_viento_ms=2.0,
-            T_entrada_K=T_amb, HR_camara=0.20,
+            T_amb_K=T_amb,
+            I_g_W_m2=0.0,
+            v_viento_ms=2.0,
+            T_entrada_K=T_amb,
+            HR_camara=0.20,
         )
         assert res.colector is None
         assert res.T_entrada_camara_K == pytest.approx(T_amb, rel=1e-6)
@@ -233,22 +259,28 @@ class TestCalcularTodo:
 
     def test_errores_con_proyecto_incoherente(self):
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.CAJA,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.colector = Colector()  # CAJA + colector = error cruzado
         p.camara = Camara()
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert len(res.errores) > 0
 
     def test_auxiliar_encadenado(self):
         """Con auxiliar, T_entrada_camara > T_salida_colector."""
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.ARMARIO,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.colector = Colector()
         p.camara = Camara(
@@ -268,8 +300,12 @@ class TestCalcularTodo:
             temperatura_maxima_salida_K=353.15,
         )
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.auxiliar is not None
         # T_entrada_camara debe ser >= T_salida_colector
@@ -278,8 +314,11 @@ class TestCalcularTodo:
     def test_fraccion_solar_uno_sin_auxiliar(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         # Sin auxiliar, fraccion_solar = 1.0
         assert res.fraccion_solar == pytest.approx(1.0, abs=1e-6)
@@ -287,8 +326,11 @@ class TestCalcularTodo:
     def test_rendimiento_masa_positivo(self, proyecto_armario_completo):
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.rendimiento_masa is not None
         assert 0 < res.rendimiento_masa < 1
@@ -296,17 +338,18 @@ class TestCalcularTodo:
     def test_I_g_cero_reduce_T_salida(self):
         """Sin irradiancia, el colector no aporta calor útil."""
         p = Proyecto(
-            configuracion=Configuracion(tipologia=Tipologia.ARMARIO,
-                                        modo_analisis=ModoAnalisis.DIARIO),
+            configuracion=Configuracion(
+                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO
+            ),
         )
         p.colector = Colector()
         p.camara = Camara()
-        res_con = calcular_todo(p, T_amb_K=298.15, I_g_W_m2=800.0,
-                                v_viento_ms=2.0, T_entrada_K=298.15,
-                                HR_camara=0.20)
-        res_sin = calcular_todo(p, T_amb_K=298.15, I_g_W_m2=0.0,
-                                v_viento_ms=2.0, T_entrada_K=298.15,
-                                HR_camara=0.20)
+        res_con = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0, T_entrada_K=298.15, HR_camara=0.20
+        )
+        res_sin = calcular_todo(
+            p, T_amb_K=298.15, I_g_W_m2=0.0, v_viento_ms=2.0, T_entrada_K=298.15, HR_camara=0.20
+        )
         assert res_con.colector.T_salida_K > res_sin.colector.T_salida_K
 
 
@@ -325,7 +368,8 @@ class TestChimeneaIntegrada:
     def _proyecto_chimenea(self) -> Proyecto:
         p = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.ARMARIO,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         p.colector = Colector()
@@ -347,8 +391,11 @@ class TestChimeneaIntegrada:
         """Proyecto con motor y sin chimenea: res.chimenea no se computa."""
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.chimenea is None
 
@@ -357,8 +404,11 @@ class TestChimeneaIntegrada:
         proyecto_armario_completo.chimenea = Chimenea(diametro_m=0.25, altura_m=3.0)
         res = calcular_todo(
             proyecto_armario_completo,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.chimenea is None
 
@@ -366,8 +416,12 @@ class TestChimeneaIntegrada:
         """motor=None + chimenea → res.chimenea poblado con dict del solver."""
         p = self._proyecto_chimenea()
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert res.chimenea is not None
         assert "m_punto_kgs" in res.chimenea
@@ -382,8 +436,12 @@ class TestChimeneaIntegrada:
         p = self._proyecto_chimenea()
         caudal_orig = p.camara.flujo.caudal_masico_kg_s
         calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert p.camara.flujo.caudal_masico_kg_s == caudal_orig
 
@@ -394,8 +452,12 @@ class TestChimeneaIntegrada:
         p = self._proyecto_chimenea()
         caudal_design = p.camara.flujo.caudal_masico_kg_s
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         # No es razonable exigir un valor exacto, pero deberían diferir > 1%
         # en casi cualquier configuración no-trivial.
@@ -406,25 +468,33 @@ class TestChimeneaIntegrada:
         """En el equilibrio: ΔP_tiro = ΔP_chimenea + ΔP_resto."""
         p = self._proyecto_chimenea()
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         ch = res.chimenea
         assert ch["delta_P_tiro_Pa"] == pytest.approx(
-            ch["delta_P_chimenea_Pa"] + ch["delta_P_resto_Pa"], rel=1e-5,
+            ch["delta_P_chimenea_Pa"] + ch["delta_P_resto_Pa"],
+            rel=1e-5,
         )
 
     def test_caja_con_chimenea_funciona(self):
         """Tipología CAJA (sin colector) + chimenea: no debe fallar y
         debe producir un caudal natural con T_chim fallback."""
         from core.camara import GeometriaCamara
+
         p = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.CAJA,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         # CAJA requiere cubierta translúcida en la cámara
         from core.camara import ConstruccionCamara
+
         p.camara = Camara(
             geometria=GeometriaCamara(largo_m=1.0, ancho_m=0.8, alto_m=1.2),
             construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
@@ -439,8 +509,12 @@ class TestChimeneaIntegrada:
         )
         p.chimenea = Chimenea(diametro_m=0.20, altura_m=2.5)
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         # No errores fatales; chimenea calculada
         assert res.errores == [] or all("CAMARA" not in e for e in res.errores)
@@ -451,8 +525,12 @@ class TestChimeneaIntegrada:
         """El dict res.chimenea debe traer la metadata del Picard."""
         p = self._proyecto_chimenea()
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         ch = res.chimenea
         for k in ("iteraciones", "convergio", "delta_T_chim_final_K", "T_chim_K"):
@@ -465,8 +543,12 @@ class TestChimeneaIntegrada:
         iteraciones permitido y ΔT_chim final < tolerancia."""
         p = self._proyecto_chimenea()
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         ch = res.chimenea
         assert ch["convergio"] is True
@@ -480,14 +562,22 @@ class TestChimeneaIntegrada:
         p = self._proyecto_chimenea()
         # Corrida 1: D, H = (0.25, 3.0) → ṁ_nat distinto a corrida 2.
         res1 = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         # Corrida 2: chimenea más grande (D=0.40, H=5.0) → más tiro, ṁ mayor.
         p.chimenea = Chimenea(diametro_m=0.40, altura_m=5.0)
         res2 = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         # ṁ mayor con chimenea más grande
         assert res2.chimenea["m_punto_kgs"] > res1.chimenea["m_punto_kgs"]
@@ -498,9 +588,11 @@ class TestChimeneaIntegrada:
         """CAJA sin colector: T_chim no depende del lazo (heurística estática
         T_amb + 25 K), Picard converge en 1 iter."""
         from core.camara import GeometriaCamara, ConstruccionCamara
+
         p = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.CAJA,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         p.camara = Camara(
@@ -508,15 +600,21 @@ class TestChimeneaIntegrada:
             construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.020),
             carga_producto=CargaProducto(
-                producto_id="manzana", masa_total_kg=5.0,
-                humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+                producto_id="manzana",
+                masa_total_kg=5.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
                 modelo_capa_fina="logaritmico",
             ),
         )
         p.chimenea = Chimenea(diametro_m=0.20, altura_m=2.5)
         res = calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         ch = res.chimenea
         assert ch["convergio"] is True
@@ -529,8 +627,12 @@ class TestChimeneaIntegrada:
         p = self._proyecto_chimenea()
         v_diseno_orig = p.colector.unidad.velocidad_diseno_ms
         calcular_todo(
-            p, T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.20,
+            p,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.20,
         )
         assert p.colector.unidad.velocidad_diseno_ms == v_diseno_orig
 
@@ -550,15 +652,18 @@ class TestModoTermodinamico:
         """ARMARIO + colector + cámara TD con yacón (GAB calibrada → converge)."""
         p = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.ARMARIO,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         p.colector = Colector()
         p.camara = Camara(
             geometria=GeometriaCamara(largo_m=0.6, ancho_m=0.4, alto_m=0.6),
             bandejas=ConfiguracionBandejas(
-                n_bandejas=3, area_bandeja_m2=0.20,
-                espesor_capa_m=0.015, separacion_entre_bandejas_m=0.06,
+                n_bandejas=3,
+                area_bandeja_m2=0.20,
+                espesor_capa_m=0.015,
+                separacion_entre_bandejas_m=0.06,
             ),
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.10),
             carga_producto=CargaProducto(
@@ -575,8 +680,11 @@ class TestModoTermodinamico:
     def test_devuelve_ResultadoMotorTermodinamico(self, proyecto_yacon_TD):
         res = calcular_todo(
             proyecto_yacon_TD,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.15,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.15,
         )
         assert isinstance(res.camara, ResultadoMotorTermodinamico)
         assert res.camara.status == "X_obj_alcanzado"
@@ -584,8 +692,11 @@ class TestModoTermodinamico:
     def test_balance_energetico_calculado_cuando_converge(self, proyecto_yacon_TD):
         res = calcular_todo(
             proyecto_yacon_TD,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.15,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.15,
         )
         # Con TD convergente, el balance global debe poblarse igual que con capa fina.
         assert res.energia_total_MJ is not None
@@ -598,12 +709,17 @@ class TestModoTermodinamico:
         """E_secado = masa_evaporada_total × Lv (no masa_agua_extraida)."""
         res = calcular_todo(
             proyecto_yacon_TD,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
-            T_entrada_K=298.15, HR_camara=0.15,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            T_entrada_K=298.15,
+            HR_camara=0.15,
         )
         from core.resultados import LV_AGUA_MJ_KG
+
         assert res.energia_secado_MJ == pytest.approx(
-            res.camara.masa_evaporada_total_kg * LV_AGUA_MJ_KG, rel=1e-9,
+            res.camara.masa_evaporada_total_kg * LV_AGUA_MJ_KG,
+            rel=1e-9,
         )
 
     def test_no_convergencia_emite_advertencia_y_energias_None(self):
@@ -611,14 +727,15 @@ class TestModoTermodinamico:
         a X_obj. El balance global no calcula energías y emite BG_TD_NO_CONVERGE."""
         p = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.ARMARIO, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.ARMARIO,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         p.colector = Colector()
         p.camara = Camara(
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
             carga_producto=CargaProducto(
-                producto_id="manzana",         # sin GAB → fallback aw lineal
+                producto_id="manzana",  # sin GAB → fallback aw lineal
                 masa_total_kg=10.0,
                 humedad_inicial_X=4.6,
                 humedad_objetivo_X=0.10,
@@ -628,9 +745,11 @@ class TestModoTermodinamico:
         )
         res = calcular_todo(
             p,
-            T_amb_K=298.15, I_g_W_m2=800.0, v_viento_ms=2.0,
+            T_amb_K=298.15,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
             T_entrada_K=298.15,
-            HR_camara=0.50,                    # alta → atasca el fallback
+            HR_camara=0.50,  # alta → atasca el fallback
         )
         assert isinstance(res.camara, ResultadoMotorTermodinamico)
         assert res.camara.t_secado_s is None
@@ -680,8 +799,8 @@ class TestSerieSinteticaDiaTipo:
         """El colector no enfría el aire por debajo del ambiente (clamp)."""
         # Caso extremo: amplitud T_col muy alta llevaría T_col < T_amb por la noche
         fz = construir_serie_sintetica_dia_tipo(
-            T_sal_col_promedio_K=305.0,        # cerca del ambiente
-            T_sal_col_amplitud_K=30.0,         # amplitud muy grande
+            T_sal_col_promedio_K=305.0,  # cerca del ambiente
+            T_sal_col_amplitud_K=30.0,  # amplitud muy grande
             T_amb_promedio_K=295.0,
             T_amb_amplitud_K=5.0,
             omega_amb=0.008,
@@ -728,8 +847,11 @@ class TestWireUpForzantes:
         """Si forzantes_aire=None, el wire-up arma degeneradas (comportamiento previo)."""
         cam = self._camara_minima()
         res = calcular_camara(
-            cam, T_operacion_K=323.15, HR_operacion=0.30,
-            T_amb_K=293.15, t_max_s=12 * 3600.0,
+            cam,
+            T_operacion_K=323.15,
+            HR_operacion=0.30,
+            T_amb_K=293.15,
+            t_max_s=12 * 3600.0,
         )
         assert isinstance(res, ResultadoMotorTermodinamico)
         # Con forzantes degeneradas constantes, T_flujo debería ser casi constante
@@ -740,7 +862,7 @@ class TestWireUpForzantes:
         cam = self._camara_minima()
         fz = construir_serie_sintetica_dia_tipo(
             T_sal_col_promedio_K=323.15,
-            T_sal_col_amplitud_K=15.0,                 # ±15 K día/noche
+            T_sal_col_amplitud_K=15.0,  # ±15 K día/noche
             omega_amb=humedad_absoluta(0.40, 295.0),
             m_dot_aire_seco_kg_s=0.030,
             T_amb_promedio_K=293.15,
@@ -748,8 +870,11 @@ class TestWireUpForzantes:
             n_dias=2,
         )
         res = calcular_camara(
-            cam, T_operacion_K=323.15, HR_operacion=0.30,
-            T_amb_K=293.15, t_max_s=48 * 3600.0,
+            cam,
+            T_operacion_K=323.15,
+            HR_operacion=0.30,
+            T_amb_K=293.15,
+            t_max_s=48 * 3600.0,
             forzantes_aire=fz,
         )
         assert isinstance(res, ResultadoMotorTermodinamico)
@@ -759,7 +884,7 @@ class TestWireUpForzantes:
     def test_modo_capa_fina_ignora_forzantes(self):
         """capa_fina no usa forzantes_aire; pasar no debe fallar."""
         cam = self._camara_minima()
-        cam.modo_calculo = "capa_fina"   # cambio para este test
+        cam.modo_calculo = "capa_fina"  # cambio para este test
         # Forzantes válidas pero el motor estático las ignora
         fz = construir_serie_sintetica_dia_tipo(
             T_sal_col_promedio_K=323.15,
@@ -769,7 +894,9 @@ class TestWireUpForzantes:
         )
         # No debe lanzar
         res = calcular_camara(
-            cam, T_operacion_K=323.15, HR_operacion=0.30,
+            cam,
+            T_operacion_K=323.15,
+            HR_operacion=0.30,
             forzantes_aire=fz,
         )
         # ResultadosCamara (estático), no ResultadoMotorTermodinamico
@@ -794,13 +921,29 @@ class TestArmarForzantesAireYaExistente:
         T_col = np.linspace(310.0, 330.0, 24)
         omega = np.full(24, 0.008)
         fz = armar_forzantes_aire(
-            modo="multi_dia", n_dias=2,
+            modo="multi_dia",
+            n_dias=2,
             T_salida_colector_K=T_col,
             omega_ambiente=omega,
             m_dot_aire_seco_kg_s=0.03,
         )
         assert len(fz.t_s) == 48
         assert np.allclose(fz.T_ent_K[:24], fz.T_ent_K[24:])
+
+    def test_serie_multidia_sin_replicar_preserva_dias_distintos(self):
+        """Camino 'días reales consecutivos': una serie de 48 h ya armada se pasa
+        con modo='diario' (n_reps=1) → NO se replica y los días difieren."""
+        T_col = np.linspace(310.0, 350.0, 48)  # 2 días distintos
+        omega = np.full(48, 0.008)
+        fz = armar_forzantes_aire(
+            modo="diario",  # n_reps=1: usa la serie tal cual aunque tenga 48 puntos
+            T_salida_colector_K=T_col,
+            omega_ambiente=omega,
+            m_dot_aire_seco_kg_s=0.03,
+        )
+        assert len(fz.t_s) == 48
+        # A diferencia del tile, los dos días NO son idénticos.
+        assert not np.allclose(fz.T_ent_K[:24], fz.T_ent_K[24:])
 
 
 # ===========================================================================
@@ -820,7 +963,7 @@ class TestIntegralEndToEnd:
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
             carga_producto=CargaProducto(
                 producto_id="manzana",
-                masa_total_kg=5.0,                # carga menor para que converja
+                masa_total_kg=5.0,  # carga menor para que converja
                 humedad_inicial_X=2.0,
                 humedad_objetivo_X=0.30,
                 modelo_isoterma="gab",
@@ -838,8 +981,11 @@ class TestIntegralEndToEnd:
             n_dias=3,
         )
         res = calcular_camara(
-            cam, T_operacion_K=325.15, HR_operacion=0.30,
-            T_amb_K=295.0, t_max_s=72 * 3600.0,
+            cam,
+            T_operacion_K=325.15,
+            HR_operacion=0.30,
+            T_amb_K=295.0,
+            t_max_s=72 * 3600.0,
             forzantes_aire=fz,
         )
         # X final < X inicial (hubo secado, aunque no necesariamente alcanzó X_obj)

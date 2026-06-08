@@ -176,6 +176,7 @@ def _construir_forzantes_termodinamico(
     p3_eval=None,
     I_g_max_W_m2: float = 0.0,
     P_Pa: float = 101325.0,
+    dias_consecutivos: bool = False,
 ) -> ForzantesAire | None:
     """Arma ForzantesAire para el motor termodinámico según el tipo elegido.
 
@@ -206,15 +207,14 @@ def _construir_forzantes_termodinamico(
     if tipo_forzantes == "real":
         from core.proyecto import Tipologia
 
-        tipologia = getattr(
-            getattr(proyecto, "configuracion", None), "tipologia", None
-        )
+        tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
         if tipologia == Tipologia.CAJA:
             return _construir_forzantes_reales_caja(
                 proyecto=proyecto,
                 caudal_kg_s=caudal_kg_s,
                 n_dias=n_dias,
                 P_Pa=P_Pa,
+                dias_consecutivos=dias_consecutivos,
             )
         return _construir_forzantes_reales(
             p3_eval=p3_eval,
@@ -222,8 +222,79 @@ def _construir_forzantes_termodinamico(
             caudal_kg_s=caudal_kg_s,
             n_dias=n_dias,
             P_Pa=P_Pa,
+            dias_consecutivos=dias_consecutivos,
         )
     raise ValueError(f"tipo_forzantes desconocido: {tipo_forzantes!r}")
+
+
+def _resolver_fecha_dia(cfg, datos_local, anio):
+    """Resuelve la fecha (date) del día de diseño según ``cfg.dia_analisis``.
+
+    Mapeo único reutilizado por los builders de forzantes reales (CAJA y
+    ARMARIO) para el modo "días reales consecutivos".
+    """
+    from datetime import date as _date
+
+    from core.proyecto import DiaAnalisis
+
+    if cfg.dia_analisis == DiaAnalisis.ESPECIFICO and cfg.fecha_especifica:
+        return cfg.fecha_especifica
+    if cfg.dia_analisis == DiaAnalisis.SOLSTICIO_VERANO:
+        return _date(anio, 12, 21)
+    if cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
+        return _date(anio, 6, 21)
+    if cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_MARZO:
+        return _date(anio, 3, 21)
+    if cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
+        return _date(anio, 9, 21)
+    if cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
+        return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
+    return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
+
+
+def _forzantes_desde_slice(
+    *,
+    datos_slice,
+    empl,
+    caudal_kg_s: float,
+    T_sal_col_K,
+    P_Pa: float,
+) -> ForzantesAire:
+    """Arma ForzantesAire desde un slice climático de 24·N h sin replicar.
+
+    Construye T_amb/ω/v/GHI/POA desde ``datos_slice`` y usa la ``T_sal_col_K``
+    provista (T_amb en CAJA; salida del colector hora a hora en ARMARIO). Pasa
+    la serie completa a ``armar_forzantes_aire`` por el camino sin replicación
+    (modo "diario": n_reps=1, usa la serie tal cual aunque tenga 24·N puntos).
+    """
+    T_amb_K_arr = np.asarray(datos_slice["T_amb_K"], dtype=float)
+    HR_arr = np.asarray(datos_slice["HR"], dtype=float)
+    v_viento_arr = np.asarray(datos_slice["WS_ms"], dtype=float)
+    I_g_arr = np.asarray(datos_slice["GHI_Wm2"], dtype=float)
+    try:
+        from calculos.clima_calc import calcular_POA_horizonte
+
+        I_g_POA_arr = np.asarray(calcular_POA_horizonte(datos_slice, empl), dtype=float)
+    except Exception:
+        I_g_POA_arr = None
+
+    omega_amb_arr = np.array(
+        [humedad_absoluta(float(hr), float(T), P_Pa) for hr, T in zip(HR_arr, T_amb_K_arr)],
+        dtype=float,
+    )
+
+    return armar_forzantes_aire(
+        modo="diario",  # n_reps=1 → serie completa de 24·N sin replicar
+        n_dias=1,
+        T_salida_colector_K=np.asarray(T_sal_col_K, dtype=float),
+        omega_ambiente=omega_amb_arr,
+        m_dot_aire_seco_kg_s=caudal_kg_s,
+        v_viento_ms=v_viento_arr,
+        T_amb_K=T_amb_K_arr,
+        I_g_W_m2=I_g_arr,
+        I_g_POA_W_m2=I_g_POA_arr,
+        dt_s=3600.0,
+    )
 
 
 def _construir_forzantes_reales(
@@ -233,6 +304,7 @@ def _construir_forzantes_reales(
     caudal_kg_s: float,
     n_dias: int,
     P_Pa: float = 101325.0,
+    dias_consecutivos: bool = False,
 ) -> ForzantesAire:
     """Construye ForzantesAire desde el día de análisis real (P2 + P3).
 
@@ -242,6 +314,9 @@ def _construir_forzantes_reales(
             debe contener `horas` (timestamps) y `T_salida_C` (lista
             del mismo largo, con None en horas sin radiación).
         proyecto: Proyecto con `emplazamiento` y `clima.datos` no nulo.
+        dias_consecutivos: Si True (modo multi-día), toma N días calendario
+            consecutivos del clima desde el día de diseño y corre el colector
+            sobre todo el horizonte (no usa ``p3_eval``).
 
     Si las series del colector tienen huecos (None por noche), se rellenan
     con T_amb local del clima.
@@ -249,6 +324,43 @@ def _construir_forzantes_reales(
     Raises:
         RuntimeError: Si `p3_eval` no es válido o si el clima no está cargado.
     """
+    # --- Días reales consecutivos: corre el colector sobre N días del clima ---
+    if dias_consecutivos and n_dias > 1:
+        if proyecto is None or proyecto.clima is None or proyecto.clima.datos is None:
+            raise RuntimeError("Para días reales consecutivos necesitas el clima cargado en P2.")
+        if proyecto.colector is None:
+            raise RuntimeError("Tipología ARMARIO sin colector configurado (P3).")
+        from calculos.clima_calc import slice_n_dias_consecutivos
+        from ui.p3_colector import _evaluar_diario
+
+        empl = proyecto.emplazamiento
+        cfg = proyecto.configuracion
+        anio = proyecto.clima.anio
+        datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
+        datos_local = datos_local[datos_local.index.year == anio]
+        fecha_dia = _resolver_fecha_dia(cfg, datos_local, anio)
+        datos_slice, _, _ = slice_n_dias_consecutivos(datos_local, fecha_dia, n_dias)
+        if len(datos_slice) == 0:
+            raise RuntimeError(f"Sin datos climáticos desde {fecha_dia} en el año {anio}.")
+        # T_salida del colector hora a hora sobre el slice (reusa el evaluador de P3,
+        # que itera cualquier rango). None de noche → se rellena con T_amb.
+        ev = _evaluar_diario(proyecto.colector, datos_slice, empl)
+        T_amb_slice = np.asarray(datos_slice["T_amb_K"], dtype=float)
+        T_sal_col_K = np.array(
+            [
+                (float(t) + 273.15) if t is not None else T_amb_slice[i]
+                for i, t in enumerate(ev["T_salida_C"])
+            ],
+            dtype=float,
+        )
+        return _forzantes_desde_slice(
+            datos_slice=datos_slice,
+            empl=empl,
+            caudal_kg_s=caudal_kg_s,
+            T_sal_col_K=T_sal_col_K,
+            P_Pa=P_Pa,
+        )
+
     if not p3_eval or p3_eval.get("modo") != "diario":
         raise RuntimeError(
             "Para usar forzantes reales necesitas calcular el colector en modo "
@@ -340,6 +452,7 @@ def _construir_forzantes_reales_caja(
     caudal_kg_s: float,
     n_dias: int,
     P_Pa: float = 101325.0,
+    dias_consecutivos: bool = False,
 ) -> ForzantesAire:
     """Construye ForzantesAire para tipología CAJA desde un día real del clima.
 
@@ -352,10 +465,6 @@ def _construir_forzantes_reales_caja(
         RuntimeError: Si el clima no está cargado o no hay datos para el día
             resuelto.
     """
-    from datetime import date as _date
-
-    from core.proyecto import DiaAnalisis
-
     if proyecto is None or proyecto.clima is None or proyecto.clima.datos is None:
         raise RuntimeError(
             "Para usar forzantes reales en CAJA necesitas tener el clima cargado "
@@ -368,23 +477,22 @@ def _construir_forzantes_reales_caja(
     datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
     datos_local = datos_local[datos_local.index.year == anio]
 
-    if cfg.dia_analisis == DiaAnalisis.ESPECIFICO and cfg.fecha_especifica:
-        fecha_dia = cfg.fecha_especifica
-    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_VERANO:
-        fecha_dia = _date(anio, 12, 21)
-    elif cfg.dia_analisis == DiaAnalisis.SOLSTICIO_INVIERNO:
-        fecha_dia = _date(anio, 6, 21)
-    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_MARZO:
-        fecha_dia = _date(anio, 3, 21)
-    elif cfg.dia_analisis == DiaAnalisis.EQUINOCCIO_SEPTIEMBRE:
-        fecha_dia = _date(anio, 9, 21)
-    elif cfg.dia_analisis == DiaAnalisis.MAS_CALUROSO:
-        fecha_dia = (
-            (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmax().date()
-        )
-    else:  # MAS_FRIO
-        fecha_dia = (
-            (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
+    fecha_dia = _resolver_fecha_dia(cfg, datos_local, anio)
+
+    # --- Días reales consecutivos: N días calendario desde el día de diseño ---
+    if dias_consecutivos and n_dias > 1:
+        from calculos.clima_calc import slice_n_dias_consecutivos
+
+        datos_slice, _, _ = slice_n_dias_consecutivos(datos_local, fecha_dia, n_dias)
+        if len(datos_slice) == 0:
+            raise RuntimeError(f"Sin datos climáticos desde {fecha_dia} en el año {anio}.")
+        # CAJA: T_salida_colector(t) = T_amb(t) sobre todo el slice.
+        return _forzantes_desde_slice(
+            datos_slice=datos_slice,
+            empl=empl,
+            caudal_kg_s=caudal_kg_s,
+            T_sal_col_K=np.asarray(datos_slice["T_amb_K"], dtype=float),
+            P_Pa=P_Pa,
         )
 
     mask_dia = datos_local.index.date == fecha_dia
@@ -799,8 +907,10 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         resumen = _resumen_resultado_termodinamico(res)
         lines.append("  Modo               : termodinámico (horizonte)")
         if meta:
+            _tipo_hz = meta.get("horizonte_tipo")
+            _hz_extra = f", {_tipo_hz}" if _tipo_hz and int(meta.get("n_dias", 1)) > 1 else ""
             lines.append(
-                f"  Horizonte          : {meta.get('n_dias')} día(s), "
+                f"  Horizonte          : {meta.get('n_dias')} día(s){_hz_extra}, "
                 f"forzantes={meta.get('modo_forzantes')}"
             )
         lines += [
@@ -1403,7 +1513,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección B: Geometría y construcción
     # -----------------------------------------------------------------------
-    with st.expander("Geometría de la cámara", expanded=True):
+    with st.expander("Geometría de la cámara", expanded=False):
         with st.expander("📐 Esquema de la cámara", expanded=False):
             mostrar_esquema(
                 "camara_dimensiones",
@@ -1460,6 +1570,7 @@ def render() -> None:
             "Techo translúcido",
             options=opciones_cubierta,
             index=idx_cub_default,
+            format_func=lambda k: catalogo.CUBIERTAS.get(k, {}).get("descripcion", k),
             help=(
                 "Opaca: cámara cerrada al sol (secador indirecto puro). "
                 "Material translúcido: ingresa radiación al producto "
@@ -1534,6 +1645,7 @@ def render() -> None:
                 help="fondos = chapa/madera estructural; aislantes = lana, EPS, PUR.",
             )
             opciones_mat = fondos_keys if cat_sel == "fondos" else aislantes_keys
+            _cat_dict = catalogo.FONDOS if cat_sel == "fondos" else catalogo.AISLANTES
             try:
                 idx_mat = opciones_mat.index(mat_prev_id)
             except ValueError:
@@ -1542,16 +1654,20 @@ def render() -> None:
                 "Material",
                 options=opciones_mat,
                 index=idx_mat,
+                format_func=lambda k: _cat_dict.get(k, {}).get("descripcion", k),
                 key="p4_pared_simple_mat",
             )
-            esp_sel = c_esp.number_input(
-                "Espesor [m]",
-                min_value=0.001,
-                max_value=0.50,
-                value=float(esp_prev),
-                step=0.005,
-                format="%.4f",
-                key="p4_pared_simple_esp",
+            esp_sel = (
+                c_esp.number_input(
+                    "Espesor [mm]",
+                    min_value=1.0,
+                    max_value=500.0,
+                    value=float(esp_prev) * 1000.0,
+                    step=5.0,
+                    format="%.1f",
+                    key="p4_pared_simple_esp",
+                )
+                / 1000.0
             )
             pared_widget = ParedCamara(
                 capas=[
@@ -1586,19 +1702,23 @@ def render() -> None:
             except ValueError:
                 idx_ext = 0
             mat_ext = c1.selectbox(
-                "Material (fondos.yaml)",
+                "Material (estructural)",
                 options=fondos_keys,
                 index=idx_ext,
+                format_func=lambda k: catalogo.FONDOS.get(k, {}).get("descripcion", k),
                 key="p4_pared_comp_mat_ext",
             )
-            esp_ext = c2.number_input(
-                "Espesor externa [m]",
-                min_value=0.0001,
-                max_value=0.20,
-                value=float(cap_ext_prev.espesor_m),
-                step=0.0005,
-                format="%.4f",
-                key="p4_pared_comp_esp_ext",
+            esp_ext = (
+                c2.number_input(
+                    "Espesor externa [mm]",
+                    min_value=0.1,
+                    max_value=200.0,
+                    value=float(cap_ext_prev.espesor_m) * 1000.0,
+                    step=0.5,
+                    format="%.1f",
+                    key="p4_pared_comp_esp_ext",
+                )
+                / 1000.0
             )
 
             st.caption("**Aislante**")
@@ -1612,19 +1732,23 @@ def render() -> None:
             except ValueError:
                 idx_ais = 0
             mat_ais = c3.selectbox(
-                "Material (aislantes.yaml)",
+                "Material (aislante)",
                 options=aislantes_keys,
                 index=idx_ais,
+                format_func=lambda k: catalogo.AISLANTES.get(k, {}).get("descripcion", k),
                 key="p4_pared_comp_mat_ais",
             )
-            esp_ais = c4.number_input(
-                "Espesor aislante [m]",
-                min_value=0.001,
-                max_value=0.50,
-                value=float(cap_ais_prev.espesor_m),
-                step=0.005,
-                format="%.4f",
-                key="p4_pared_comp_esp_ais",
+            esp_ais = (
+                c4.number_input(
+                    "Espesor aislante [mm]",
+                    min_value=1.0,
+                    max_value=500.0,
+                    value=float(cap_ais_prev.espesor_m) * 1000.0,
+                    step=5.0,
+                    format="%.1f",
+                    key="p4_pared_comp_esp_ais",
+                )
+                / 1000.0
             )
 
             st.caption("**Cara interna**")
@@ -1638,19 +1762,23 @@ def render() -> None:
             except ValueError:
                 idx_int = 0
             mat_int = c5.selectbox(
-                "Material (fondos.yaml)",
+                "Material (estructural)",
                 options=fondos_keys,
                 index=idx_int,
+                format_func=lambda k: catalogo.FONDOS.get(k, {}).get("descripcion", k),
                 key="p4_pared_comp_mat_int",
             )
-            esp_int = c6.number_input(
-                "Espesor interna [m]",
-                min_value=0.0001,
-                max_value=0.20,
-                value=float(cap_int_prev.espesor_m),
-                step=0.0005,
-                format="%.4f",
-                key="p4_pared_comp_esp_int",
+            esp_int = (
+                c6.number_input(
+                    "Espesor interna [mm]",
+                    min_value=0.1,
+                    max_value=200.0,
+                    value=float(cap_int_prev.espesor_m) * 1000.0,
+                    step=0.5,
+                    format="%.1f",
+                    key="p4_pared_comp_esp_int",
+                )
+                / 1000.0
             )
 
             pared_widget = ParedCamara(
@@ -1679,7 +1807,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección C: Bandejas
     # -----------------------------------------------------------------------
-    with st.expander("Configuración de bandejas", expanded=True):
+    with st.expander("Configuración de bandejas", expanded=False):
         band_prev = (
             proyecto.camara.bandejas if proyecto.camara is not None else ConfiguracionBandejas()
         )
@@ -1774,7 +1902,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección D: Flujo de aire
     # -----------------------------------------------------------------------
-    with st.expander("Flujo de aire", expanded=True):
+    with st.expander("Flujo de aire", expanded=False):
         flujo_prev = proyecto.camara.flujo if proyecto.camara is not None else ConfiguracionFlujo()
 
         # Sugerir caudal del colector si está disponible
@@ -1842,7 +1970,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección E: Condiciones de operación
     # -----------------------------------------------------------------------
-    with st.expander("Condiciones de operación", expanded=True):
+    with st.expander("Condiciones de operación", expanded=False):
         if es_caja_pre:
             hint_T = (
                 "Tipología CAJA: el aire entrante es el ambiente (sin colector). "
@@ -1930,6 +2058,7 @@ def render() -> None:
         # Sub-controles del modo termodinámico: tipo de forzantes + horizonte
         tipo_forzantes = "constantes"
         n_dias = 1
+        dias_consecutivos = False
         I_g_max_W_m2 = 0.0
         if modo_calculo == "termodinamico":
             real_ok, real_motivo = _disponibilidad_forzantes_reales(
@@ -1937,11 +2066,7 @@ def render() -> None:
                 proyecto,
             )
 
-            _label_real = (
-                "Día real (clima ambiente)"
-                if es_caja
-                else "Día real (clima + colector)"
-            )
+            _label_real = "Día real (clima ambiente)" if es_caja else "Día real (clima + colector)"
             _opciones_forz = [
                 "Constantes (rápido)",
                 "Día sintético (senoidal)",
@@ -1965,8 +2090,7 @@ def render() -> None:
                     "**Constantes:** T_ent, ω y T_amb fijos al valor de diseño. "
                     "Equivale a una corrida puntual.\n\n"
                     "**Día sintético:** curva senoidal día/noche (pico al mediodía, "
-                    "±15 K en T_sal_col, ±5 K en T_amb). Captura ciclo diurno.\n\n"
-                    + _help_real
+                    "±15 K en T_sal_col, ±5 K en T_amb). Captura ciclo diurno.\n\n" + _help_real
                 ),
             )
             st.session_state["cam_forz_idx"] = _opciones_forz.index(forz_sel)
@@ -2006,6 +2130,27 @@ def render() -> None:
                     )
                 )
                 st.session_state["cam_n_dias"] = n_dias
+
+                # Solo con forzantes "real": elegir repetir el día de diseño o
+                # tomar N días reales consecutivos del clima.
+                if tipo_forzantes == "real":
+                    _opciones_md = ["Repetir día típico", "Días reales consecutivos"]
+                    _md_idx = 1 if st.session_state.get("cam_multidia_consecutivo", False) else 0
+                    md_sel = st.radio(
+                        "Composición del horizonte",
+                        options=_opciones_md,
+                        index=_md_idx,
+                        horizontal=True,
+                        help=(
+                            "Repetir día típico: el día de diseño se repite N veces "
+                            "(forzante periódico).\n\n"
+                            "Días reales consecutivos: N días calendario del clima NASA "
+                            "a partir del día de diseño (variabilidad real día a día). "
+                            "Si el rango cruza el 31-dic se recorta y se avisa."
+                        ),
+                    )
+                    dias_consecutivos = md_sel == "Días reales consecutivos"
+                    st.session_state["cam_multidia_consecutivo"] = dias_consecutivos
 
             if tipo_forzantes == "real":
                 if es_caja:
@@ -2241,10 +2386,22 @@ def render() -> None:
                     p3_eval=st.session_state.get("p3_eval"),
                     I_g_max_W_m2=I_g_max_W_m2,
                     P_Pa=P_proyecto_Pa,
+                    dias_consecutivos=dias_consecutivos,
                 )
                 t_max_efectivo = (
                     float(fz_aire.t_s[-1]) if fz_aire is not None else float(n_dias) * 24.0 * 3600.0
                 )
+                # Días efectivamente simulados (en consecutivos puede truncarse en el
+                # borde del año). Se infiere de la longitud de la serie horaria.
+                n_dias_efectivo = (
+                    max(1, round(len(fz_aire.t_s) / 24)) if fz_aire is not None else int(n_dias)
+                )
+                if dias_consecutivos and n_dias_efectivo < n_dias:
+                    st.warning(
+                        f"⚠️ El horizonte se recortó a {n_dias_efectivo} día(s): el día de "
+                        f"diseño + {n_dias} días cruza el fin del año climático ({proyecto.clima.anio}). "
+                        "Elegí un día de inicio más temprano (P1) o menos días para el horizonte completo."
+                    )
                 with st.spinner("Integrando motor termodinámico..."):
                     res = calcular_camara(
                         camara,
@@ -2261,8 +2418,13 @@ def render() -> None:
                     st.session_state["p4_forzantes_horizonte"] = fz_aire
                     st.session_state["p4_horizonte_resultado"] = res
                     st.session_state["p4_horizonte_meta"] = {
-                        "n_dias": int(n_dias),
+                        "n_dias": int(n_dias_efectivo),
                         "modo_forzantes": tipo_forzantes,
+                        "horizonte_tipo": (
+                            "días reales consecutivos"
+                            if dias_consecutivos and n_dias > 1
+                            else ("día típico repetido" if n_dias > 1 else "1 día")
+                        ),
                     }
                 else:
                     # Modo "Constantes": no hay horizonte transitorio para P7.

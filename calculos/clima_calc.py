@@ -21,7 +21,7 @@ from __future__ import annotations
 import hashlib
 import json
 import pathlib
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import numpy as np  # noqa: F401  (requerido por pvlib internamente)
@@ -412,3 +412,37 @@ def dia_tipo_mensual(
     )
     df_dia.index = timestamps
     return df_dia
+
+
+def slice_n_dias_consecutivos(
+    datos_local: pd.DataFrame,
+    fecha_inicio: date,
+    n_dias: int,
+) -> tuple[pd.DataFrame, int, bool]:
+    """Recorta N días calendario consecutivos del clima desde ``fecha_inicio``.
+
+    Usado por el modo multi-día "días reales consecutivos": en vez de replicar
+    el día de diseño, toma los N días siguientes del clima NASA. Si el rango
+    excede el año disponible (cruza el 31-dic), trunca al último día disponible
+    y lo marca con ``truncado=True`` — no se inventa empalme (decisión de diseño).
+
+    Args:
+        datos_local: DataFrame horario tz-aware ya en hora local y filtrado al
+            año del clima (índice DatetimeIndex).
+        fecha_inicio: Fecha del primer día del horizonte.
+        n_dias: Número de días pedidos.
+
+    Returns:
+        Tupla ``(datos_slice, n_dias_efectivo, truncado)``:
+        - ``datos_slice``: subconjunto de ``datos_local`` del rango recortado.
+        - ``n_dias_efectivo``: días calendario distintos efectivamente incluidos.
+        - ``truncado``: True si ``n_dias_efectivo < n_dias`` (se cruzó el borde
+          del año).
+    """
+    fin_excl = fecha_inicio + timedelta(days=n_dias)
+    fechas = datos_local.index.date
+    mask = (fechas >= fecha_inicio) & (fechas < fin_excl)
+    datos_slice = datos_local[mask]
+    n_dias_efectivo = len(set(datos_slice.index.date))
+    truncado = n_dias_efectivo < n_dias
+    return datos_slice, n_dias_efectivo, truncado
