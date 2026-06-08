@@ -96,3 +96,20 @@ def test_empl_zona_horaria_invalida_vacia():
     """Zona horaria vacía debe lanzar EMPL_ZONA_HORARIA_INVALIDA."""
     with pytest.raises(ValueError, match="EMPL_ZONA_HORARIA_INVALIDA"):
         Emplazamiento(zona_horaria="")
+
+
+def test_empl_albedo_default():
+    """El albedo del suelo por defecto es 0.25 (valor histórico de pvlib)."""
+    assert Emplazamiento().albedo_suelo == 0.25
+
+
+def test_empl_albedo_invalido_negativo():
+    """Albedo < 0 debe lanzar EMPL_ALBEDO_INVALIDO."""
+    with pytest.raises(ValueError, match="EMPL_ALBEDO_INVALIDO"):
+        Emplazamiento(albedo_suelo=-0.01)
+
+
+def test_empl_albedo_invalido_excede_1():
+    """Albedo > 1 debe lanzar EMPL_ALBEDO_INVALIDO."""
+    with pytest.raises(ValueError, match="EMPL_ALBEDO_INVALIDO"):
+        Emplazamiento(albedo_suelo=1.01)

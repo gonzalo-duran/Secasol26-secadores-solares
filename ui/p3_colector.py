@@ -10,6 +10,7 @@ Sin cálculo físico aquí: solo configuración de entrada y validación estáti
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date as _date_type
 
 import numpy as np
@@ -575,6 +576,56 @@ def _poa_serie(datos, empl):
     colector, derivada de DNI/GHI/DHI + tilt/azimut del emplazamiento."""
     from calculos.clima_calc import calcular_POA_horizonte
     return calcular_POA_horizonte(datos, empl)
+
+
+def _render_albedo_suelo(proyecto, empl) -> None:
+    """Desplegable de albedo del suelo (superficie circundante) en P3.
+
+    El albedo es una propiedad del sitio (se guarda en ``emplazamiento``), pero
+    el widget vive en P3 porque —como el tilt— gobierna la componente reflejada
+    del suelo en la POA. Escribe ``proyecto.emplazamiento`` reconstruyendo el
+    dataclass con ``dataclasses.replace`` para re-disparar la validación.
+    """
+    from calculos.catalogo_albedos import (
+        ALBEDOS_SUPERFICIE,
+        ETIQUETA_PERSONALIZADO,
+        etiqueta_desde_albedo,
+    )
+
+    opciones = list(ALBEDOS_SUPERFICIE.keys()) + [ETIQUETA_PERSONALIZADO]
+    etiqueta_actual = etiqueta_desde_albedo(empl.albedo_suelo)
+
+    col_sel, col_val = st.columns([2, 1])
+    with col_sel:
+        seleccion = st.selectbox(
+            "Albedo del suelo (superficie circundante)",
+            options=opciones,
+            index=opciones.index(etiqueta_actual),
+            key="p3_albedo_superficie",
+            help="Reflectancia solar del suelo que rodea al colector. Alimenta la "
+            "componente reflejada de la POA (GHI·ρ·(1−cos β)/2). Su efecto crece "
+            "con la inclinación: en un colector vertical, la mitad de GHI·ρ "
+            "llega al plano del colector.",
+        )
+
+    if seleccion == ETIQUETA_PERSONALIZADO:
+        with col_val:
+            nuevo_albedo = st.number_input(
+                "ρ personalizado",
+                min_value=0.0,
+                max_value=1.0,
+                value=float(empl.albedo_suelo),
+                step=0.01,
+                format="%.2f",
+                key="p3_albedo_personalizado",
+            )
+    else:
+        nuevo_albedo = ALBEDOS_SUPERFICIE[seleccion]
+        with col_val:
+            st.metric("ρ", f"{nuevo_albedo:.2f}")
+
+    if abs(nuevo_albedo - empl.albedo_suelo) > 1e-9:
+        proyecto.emplazamiento = dataclasses.replace(empl, albedo_suelo=nuevo_albedo)
 
 
 def _correr_colector(colector, T_amb_K, I_g_W_m2, v_viento_ms, pendiente_deg=30.0):
@@ -1396,6 +1447,8 @@ def render() -> None:
             f"Pendiente: {_empl.pendiente_colector_deg:.0f}°  |  "
             f"Año climático: {_clima.anio}"
         )
+
+        _render_albedo_suelo(proyecto, _empl)
 
         if st.button("Calcular desempeño del colector", type="primary", key="p3_calcular_eval"):
             _datos_local = _clima.datos.tz_convert(_empl.zona_horaria)

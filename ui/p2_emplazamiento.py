@@ -10,6 +10,7 @@ Las conversiones a pvlib ocurren en ui/componentes/unidades.py, nunca aquí.
 
 from __future__ import annotations
 
+import dataclasses
 import io
 
 import pandas as pd
@@ -204,10 +205,13 @@ def _calcular_poa_horaria(
     altitud_m: float,
     pendiente_deg: float,
     acimut_pvlib_deg: float,
+    albedo: float = 0.25,
 ) -> pd.Series:
     """Calcula la irradiancia global sobre el plano del colector (POA) hora a hora.
 
-    Usa pvlib para la posición solar y el modelo de transposición Hay-Davies.
+    Usa pvlib para la posición solar y el modelo de transposición Hay-Davies. La componente reflejada
+    del suelo usa ``albedo`` (debe pasarse ``emplazamiento.albedo_suelo`` para que
+    la figura sea coherente con el solver del colector, que usa ese mismo albedo).
 
     Args:
         datos_local: DataFrame SI con índice tz-aware (hora local).
@@ -216,6 +220,7 @@ def _calcular_poa_horaria(
         altitud_m: Altitud [m].
         pendiente_deg: Inclinación del colector [°].
         acimut_pvlib_deg: Acimut del colector en convención pvlib [°].
+        albedo: Reflectancia solar del suelo [adim]. Default 0.25.
 
     Returns:
         Serie de POA global [W/m²], misma frecuencia que datos_local.
@@ -231,6 +236,7 @@ def _calcular_poa_horaria(
         dni=datos_local["DNI_Wm2"],
         ghi=datos_local["GHI_Wm2"],
         dhi=datos_local["DHI_Wm2"],
+        albedo=albedo,
     )
     return poa["poa_global"].clip(lower=0).fillna(0.0)
 
@@ -473,12 +479,11 @@ def render() -> None:
 
         # Aplicar cambios al emplazamiento
         try:
-            nuevo_empl = Emplazamiento(
+            nuevo_empl = dataclasses.replace(
+                empl,
                 latitud_deg=lat,
                 longitud_deg=lon,
                 altitud_m=alt,
-                acimut_colector_deg=empl.acimut_colector_deg,
-                pendiente_colector_deg=empl.pendiente_colector_deg,
                 zona_horaria=zona,
             )
             if nuevo_empl != empl:
@@ -539,13 +544,10 @@ def render() -> None:
 
         # Actualizar emplazamiento con orientación (almacenamiento en Duffie)
         try:
-            nuevo_empl = Emplazamiento(
-                latitud_deg=empl.latitud_deg,
-                longitud_deg=empl.longitud_deg,
-                altitud_m=empl.altitud_m,
+            nuevo_empl = dataclasses.replace(
+                empl,
                 acimut_colector_deg=acimut_duffie,
                 pendiente_colector_deg=pendiente,
-                zona_horaria=empl.zona_horaria,
             )
             if nuevo_empl != empl:
                 proyecto.emplazamiento = nuevo_empl
@@ -704,6 +706,7 @@ def render() -> None:
                 altitud_m=empl.altitud_m,
                 pendiente_deg=empl.pendiente_colector_deg,
                 acimut_pvlib_deg=acimut_pvlib_actual,
+                albedo=empl.albedo_suelo,
             )
 
         tab_t, tab_rad, tab_vhr, tab_tabla = st.tabs(

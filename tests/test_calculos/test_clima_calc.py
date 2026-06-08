@@ -16,7 +16,6 @@ import pytest
 from calculos.clima_calc import _aplicar_politica_huecos, _hash_cache
 from core.clima import COLUMNAS_SI
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -118,7 +117,7 @@ def test_politica_hueco_4h_bloqueado():
 def test_politica_dos_huecos_mixtos():
     """Un hueco de 2 h (interpolado) y otro de 5 h (bloqueado) coexisten."""
     df = _df_sin_huecos(n=72)
-    df.iloc[5:7] = np.nan    # hueco de 2 h → se interpola
+    df.iloc[5:7] = np.nan  # hueco de 2 h → se interpola
     df.iloc[20:25] = np.nan  # hueco de 5 h → se bloquea
     df_corr, calidad = _aplicar_politica_huecos(df)
     assert calidad.n_huecos_originales == 2
@@ -144,7 +143,9 @@ from core.emplazamiento import Emplazamiento
 
 
 def _df_clima_dia_claro(
-    lat: float = -24.79, lon: float = -65.41, n_horas: int = 24,
+    lat: float = -24.79,
+    lon: float = -65.41,
+    n_horas: int = 24,
     fecha: str = "2022-06-21",
 ) -> pd.DataFrame:
     """DataFrame horario con perfil de día claro y DNI/DHI coherentes con GHI.
@@ -158,7 +159,10 @@ def _df_clima_dia_claro(
     import pvlib.solarposition
 
     idx = pd.date_range(
-        fecha, periods=n_horas, freq="h", tz="America/Argentina/Salta",
+        fecha,
+        periods=n_horas,
+        freq="h",
+        tz="America/Argentina/Salta",
     )
     horas = np.arange(n_horas, dtype=float)
     fase = np.pi * (horas - 6.0) / 12.0
@@ -170,7 +174,9 @@ def _df_clima_dia_claro(
     sol_pos = pvlib.solarposition.get_solarposition(idx, lat, lon)
     # Erbs descompone GHI → DNI/DHI consistentes con la geometría solar.
     descomp = pvlib.irradiance.erbs(
-        ghi=ghi, zenith=sol_pos["apparent_zenith"], datetime_or_doy=idx,
+        ghi=ghi,
+        zenith=sol_pos["apparent_zenith"],
+        datetime_or_doy=idx,
     )
     dni = np.asarray(descomp["dni"], dtype=float)
     dhi = np.asarray(descomp["dhi"], dtype=float)
@@ -191,8 +197,10 @@ def _df_clima_dia_claro(
 def test_POA_horizontal_aproxima_GHI():
     """Colector horizontal (tilt=0): POA debe ser ~GHI hora a hora."""
     empl = Emplazamiento(
-        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
-        acimut_colector_deg=180.0,    # Norte en Duffie — irrelevante con tilt=0
+        latitud_deg=-24.79,
+        longitud_deg=-65.41,
+        altitud_m=1200.0,
+        acimut_colector_deg=180.0,  # Norte en Duffie — irrelevante con tilt=0
         pendiente_colector_deg=0.0,
         zona_horaria="America/Argentina/Salta",
     )
@@ -212,8 +220,10 @@ def test_POA_invierno_Salta_supera_GHI_al_mediodia():
     al mediodía la POA debe superar a GHI por el factor de incidencia más
     favorable al plano inclinado. Cociente esperado en rango razonable."""
     empl = Emplazamiento(
-        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
-        acimut_colector_deg=180.0,    # 180° en Duffie = Norte hemisferio S
+        latitud_deg=-24.79,
+        longitud_deg=-65.41,
+        altitud_m=1200.0,
+        acimut_colector_deg=180.0,  # 180° en Duffie = Norte hemisferio S
         pendiente_colector_deg=30.0,
         zona_horaria="America/Argentina/Salta",
     )
@@ -230,8 +240,11 @@ def test_POA_invierno_Salta_supera_GHI_al_mediodia():
 def test_POA_clipea_negativos_y_nan():
     """POA siempre ≥ 0; horas nocturnas con DNI/DHI=0 → POA=0."""
     empl = Emplazamiento(
-        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
-        acimut_colector_deg=180.0, pendiente_colector_deg=30.0,
+        latitud_deg=-24.79,
+        longitud_deg=-65.41,
+        altitud_m=1200.0,
+        acimut_colector_deg=180.0,
+        pendiente_colector_deg=30.0,
         zona_horaria="America/Argentina/Salta",
     )
     df = _df_clima_dia_claro()
@@ -245,8 +258,11 @@ def test_POA_clipea_negativos_y_nan():
 def test_POA_fallback_a_GHI_con_dni_nan():
     """Si DNI o DHI son NaN en una hora, esa hora cae a POA=GHI (clip)."""
     empl = Emplazamiento(
-        latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0,
-        acimut_colector_deg=180.0, pendiente_colector_deg=30.0,
+        latitud_deg=-24.79,
+        longitud_deg=-65.41,
+        altitud_m=1200.0,
+        acimut_colector_deg=180.0,
+        pendiente_colector_deg=30.0,
         zona_horaria="America/Argentina/Salta",
     )
     df = _df_clima_dia_claro()
@@ -255,15 +271,59 @@ def test_POA_fallback_a_GHI_con_dni_nan():
     df.loc[h_pico, "DNI_Wm2"] = np.nan
     poa = calcular_POA_horizonte(df, empl)
     assert float(poa.loc[h_pico]) == pytest.approx(
-        float(df.loc[h_pico, "GHI_Wm2"]), rel=1e-9,
+        float(df.loc[h_pico, "GHI_Wm2"]),
+        rel=1e-9,
     )
 
 
 def test_POA_rechaza_indice_naive():
     """Sin tz-aware en el índice, debe rechazar con mensaje claro."""
-    empl = Emplazamiento(latitud_deg=-24.79, longitud_deg=-65.41,
-                          altitud_m=1200.0)
+    empl = Emplazamiento(latitud_deg=-24.79, longitud_deg=-65.41, altitud_m=1200.0)
     df = _df_clima_dia_claro()
     df.index = df.index.tz_localize(None)  # naive
     with pytest.raises(ValueError, match="CLIMA_INDICE_NAIVE"):
         calcular_POA_horizonte(df, empl)
+
+
+def test_POA_crece_con_albedo_en_colector_inclinado():
+    """Con tilt > 0, mayor albedo del suelo → mayor POA (componente reflejada).
+
+    El término reflejado es GHI·ρ·(1−cos β)/2: crece monótonamente con ρ. Se
+    compara la energía diurna total para ρ=0.2 vs ρ=0.6 en un colector a 30°.
+    """
+
+    def _empl(albedo: float) -> Emplazamiento:
+        return Emplazamiento(
+            latitud_deg=-24.79,
+            longitud_deg=-65.41,
+            altitud_m=1200.0,
+            acimut_colector_deg=180.0,
+            pendiente_colector_deg=30.0,
+            zona_horaria="America/Argentina/Salta",
+            albedo_suelo=albedo,
+        )
+
+    df = _df_clima_dia_claro()
+    poa_bajo = calcular_POA_horizonte(df, _empl(0.20))
+    poa_alto = calcular_POA_horizonte(df, _empl(0.60))
+    assert poa_alto.sum() > poa_bajo.sum()
+
+
+def test_POA_albedo_irrelevante_en_horizontal():
+    """Con tilt = 0, (1−cos β)/2 = 0 → el albedo no cambia la POA."""
+
+    def _empl(albedo: float) -> Emplazamiento:
+        return Emplazamiento(
+            latitud_deg=-24.79,
+            longitud_deg=-65.41,
+            altitud_m=1200.0,
+            acimut_colector_deg=180.0,
+            pendiente_colector_deg=0.0,
+            zona_horaria="America/Argentina/Salta",
+            albedo_suelo=albedo,
+        )
+
+    df = _df_clima_dia_claro()
+    poa_bajo = calcular_POA_horizonte(df, _empl(0.20))
+    poa_alto = calcular_POA_horizonte(df, _empl(0.90))
+    np.testing.assert_allclose(poa_alto.values, poa_bajo.values, rtol=1e-9)

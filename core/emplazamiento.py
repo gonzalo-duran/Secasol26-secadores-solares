@@ -30,6 +30,12 @@ class Emplazamiento:
             horizontal [°]. 0° = horizontal, 90° = vertical. Rango: [0, 90].
         zona_horaria: Identificador IANA de zona horaria
             (ej.: 'America/Argentina/Salta').
+        albedo_suelo: Reflectancia solar (onda corta) de la superficie que rodea
+            al colector [adim], rango [0, 1]. Alimenta la componente reflejada
+            del suelo en la transposición POA (``GHI·ρ·(1−cos β)/2``). Relevante
+            para colectores inclinados/verticales. Default 0.25 (valor histórico
+            de pvlib). Ver ``calculos/catalogo_albedos.py`` para superficies
+            usuales.
     """
 
     latitud_deg: float = -24.72
@@ -38,6 +44,7 @@ class Emplazamiento:
     acimut_colector_deg: float = 180.0
     pendiente_colector_deg: float = 25.0
     zona_horaria: str = "America/Argentina/Salta"
+    albedo_suelo: float = 0.25
 
     def __post_init__(self) -> None:
         if not (-90.0 <= self.latitud_deg <= 90.0):
@@ -64,6 +71,11 @@ class Emplazamiento:
             raise ValueError(
                 f"EMPL_PENDIENTE_INVALIDA: pendiente {self.pendiente_colector_deg:.1f}° "
                 "fuera del rango válido [0, 90]."
+            )
+        if not (0.0 <= self.albedo_suelo <= 1.0):
+            raise ValueError(
+                f"EMPL_ALBEDO_INVALIDO: albedo_suelo {self.albedo_suelo:.3f} "
+                "fuera del rango válido [0, 1] (reflectancia solar adimensional)."
             )
         try:
             zoneinfo.ZoneInfo(self.zona_horaria)

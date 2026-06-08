@@ -280,7 +280,8 @@ def calcular_POA_horizonte(
 
     Aplica transposición de Liu-Jordan (componente directa: DNI·cos(θ_i);
     componente difusa: ``modelo_difuso``; componente reflejada del suelo:
-    GHI·ρ_g·(1−cos β)/2) usando pvlib.
+    GHI·ρ_g·(1−cos β)/2) usando pvlib. El albedo ρ_g sale de
+    ``emplazamiento.albedo_suelo`` (configurable en P3; default 0.25).
 
     Args:
         datos_clima: DataFrame horario con columnas ``GHI_Wm2``, ``DNI_Wm2``,
@@ -333,6 +334,7 @@ def calcular_POA_horizonte(
         dni=datos_clima["DNI_Wm2"],
         ghi=datos_clima["GHI_Wm2"],
         dhi=datos_clima["DHI_Wm2"],
+        albedo=emplazamiento.albedo_suelo,
         model=modelo_difuso,
     )
 

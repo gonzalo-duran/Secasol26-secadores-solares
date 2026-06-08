@@ -619,6 +619,7 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             f"  Acimut colector     : {empl.acimut_colector_deg:.1f}° "
             "(convención Duffie: 0°=Sur)",
             f"  Pendiente colector  : {empl.pendiente_colector_deg:.1f}°",
+            f"  Albedo del suelo    : {empl.albedo_suelo:.2f}",
             f"  Zona horaria        : {empl.zona_horaria}",
         ]
         json_empl = {
@@ -627,6 +628,7 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             "altitud_m": empl.altitud_m,
             "acimut_colector_deg_duffie": empl.acimut_colector_deg,
             "pendiente_colector_deg": empl.pendiente_colector_deg,
+            "albedo_suelo": empl.albedo_suelo,
             "zona_horaria": empl.zona_horaria,
         }
     else:
