@@ -32,6 +32,7 @@ import pvlib.iotools
 import pvlib.irradiance
 import pvlib.solarposition
 
+from calculos.conversiones_angulo import acimut_duffie_a_pvlib
 from core.clima import CalidadClima, Clima, COLUMNAS_SI
 from core.emplazamiento import Emplazamiento
 
@@ -269,15 +270,6 @@ def obtener_clima(
 # ---------------------------------------------------------------------------
 
 
-def _acimut_duffie_a_pvlib(acimut_duffie_deg: float) -> float:
-    """Convierte acimut de convención Duffie a convención pvlib.
-
-    Duffie: 0°=Sur, +90°=Oeste, -90°=Este, ±180°=Norte. Rango [-180, +180].
-    pvlib:  0°=Norte, 90°=Este, 180°=Sur, 270°=Oeste. Rango [0°, 360°).
-    """
-    return (180.0 + float(acimut_duffie_deg)) % 360.0
-
-
 def calcular_POA_horizonte(
     datos_clima: pd.DataFrame,
     emplazamiento: Emplazamiento,
@@ -331,7 +323,7 @@ def calcular_POA_horizonte(
         altitude=emplazamiento.altitud_m,
     )
 
-    acimut_pvlib = _acimut_duffie_a_pvlib(emplazamiento.acimut_colector_deg)
+    acimut_pvlib = acimut_duffie_a_pvlib(emplazamiento.acimut_colector_deg)
 
     poa = pvlib.irradiance.get_total_irradiance(
         surface_tilt=emplazamiento.pendiente_colector_deg,
