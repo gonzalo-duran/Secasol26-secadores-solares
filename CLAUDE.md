@@ -228,3 +228,12 @@ Un test por validación dura. Nombre del test = nombre del código de error en m
 - `Balance_de_calor_y_masa_en_camara_ampliado.md` (raíz) — derivación física de las ecuaciones del motor termodinámico de cámara.
 
 Antes de cambios estructurales grandes, consultar la bitácora más reciente para entender el contexto histórico de las decisiones.
+
+## Ver también (Obsidian)
+
+Notas enlazadas para navegación en el *graph view* de Obsidian:
+
+- [[README]] — descripción de producto.
+- [[docs/arquitectura]] — capas, subsistemas y mapa de módulos.
+- [[docs/tareas]] — backlog y estado.
+- [[docs/decisiones]] — registro de decisiones de diseño (ADR).

@@ -16,6 +16,9 @@ data/cache/
 .vscode/settings.json
 .idea/
 
+# Configuración local de Obsidian (vault apuntando a la carpeta del proyecto)
+.obsidian/
+
 # Artefactos del SO
 .DS_Store
 Thumbs.db

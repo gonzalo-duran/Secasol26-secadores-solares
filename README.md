@@ -194,3 +194,9 @@ secador_solar/
 
 Desarrollado por Gonzalo Durán. GEEDSP INENCO — Instituto de Investigación en Energías No Convencionales,
 Universidad Nacional de Salta – CONICET.
+
+## Ver también (Obsidian)
+
+- [[CLAUDE]] — instrucciones para Claude Code y convenciones.
+- [[docs/arquitectura]] — arquitectura del sistema y mapa de módulos.
+- [[CHANGELOG]] — historial de cambios.
