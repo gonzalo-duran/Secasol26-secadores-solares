@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-VERSION_SOFTWARE = "0.7.0"
+VERSION_SOFTWARE = "0.10.0"
 
 
 class Tipologia(Enum):
@@ -96,14 +96,14 @@ class Proyecto:
 
     meta: Meta = field(default_factory=Meta)
     configuracion: Configuracion = field(default_factory=Configuracion)
-    emplazamiento: Optional[object] = None   # Emplazamiento — se importa en emplazamiento.py
-    clima: Optional[object] = None           # Clima
-    colector: Optional[object] = None        # Colector — None si tipología CAJA
-    camara: Optional[object] = None          # Camara
-    auxiliar: Optional[object] = None        # Auxiliar — None si sin auxiliar
-    motor: Optional[object] = None           # Motor — None si convección natural
-    chimenea: Optional[object] = None        # Chimenea — None si sin tiro natural
-    resultados: Optional[object] = None      # Resultados
+    emplazamiento: Optional[object] = None  # Emplazamiento — se importa en emplazamiento.py
+    clima: Optional[object] = None  # Clima
+    colector: Optional[object] = None  # Colector — None si tipología CAJA
+    camara: Optional[object] = None  # Camara
+    auxiliar: Optional[object] = None  # Auxiliar — None si sin auxiliar
+    motor: Optional[object] = None  # Motor — None si convección natural
+    chimenea: Optional[object] = None  # Chimenea — None si sin tiro natural
+    resultados: Optional[object] = None  # Resultados
 
     def validar_coherencia_global(self) -> list:
         """Valida las invariantes de coherencia entre secciones.

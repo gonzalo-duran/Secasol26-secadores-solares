@@ -1,7 +1,9 @@
 # Mapa de conexiones — Secasol
 
-> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22).
+> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01).
 > Objetivo: detectar **widgets UI sin consumidor en `calculos/`** y **campos consumidos sin widget UI** (toggles/inputs huérfanos).
+>
+> S33 (deploy a HF Spaces) no introdujo cableado widget→campo→consumidor: ver `docs/bitacora/bitacora_sesion33.md`.
 
 ---
 
@@ -99,7 +101,7 @@ graph LR
   BAL --> RES
 ```
 
-**Regla arquitectónica**: `core/` y `calculos/` no importan `streamlit`. Toda conversión de unidades (°C↔K, %↔fracción, Duffie↔pvlib) ocurre en `ui/componentes/unidades.py`.
+**Regla arquitectónica**: `core/` y `calculos/` no importan `streamlit`. La conversión de unidades **físicas** (°C↔K, kPa↔Pa, %↔fracción) ocurre en `ui/componentes/unidades.py`. Desde S35 las conversiones de **ángulos** (Duffie↔UI360↔pvlib) son matemática pura y viven en `calculos/conversiones_angulo.py` (fuente de verdad única, consumida por `clima_calc` y por el catálogo de barridos); `unidades.py` las **re-exporta** por compatibilidad con la UI histórica. Nunca duplicar la fórmula.
 
 ---
 
@@ -374,6 +376,60 @@ graph LR
 
 ---
 
+## Diagrama 6 — P7 Corridas paramétricas (barridos, S35)
+
+Patrón **inverso** al resto del mapa: los widgets de barrido **no escriben en `Proyecto`**. Seleccionan, desde un catálogo curado, **un campo existente del `Proyecto`** (o una forzante) para barrerlo en N puntos sin mutar el proyecto persistente. El estado es **efímero** (`session_state`, no se serializa al JSON).
+
+```mermaid
+graph LR
+  subgraph UI7["ui/p7_resultados.py — _render_barridos_parametricos"]
+    W_PARAM["selectbox parámetro a barrer"]
+    W_RANGO["min / max / N puntos (unidades UI)"]
+    W_KPI["multiselect KPIs avanzados (opt-in)"]
+    BTN["botón Correr barrido (≤3 comparables)"]
+    SS_B["session_state['p7_barridos_{modo}']"]
+    SS_T["session_state['p7_t_calc_base_s_{constantes,transitorio}']"]
+  end
+
+  subgraph CATB["calculos/ (catálogos + motor de barrido)"]
+    CPAR["catalogo_parametros_barrido.ParametroBarrido<br/>(path, si_a_ui/ui_a_si, filtros tipología+modo)"]
+    CKPI["catalogo_kpis_barrido.KpiBarrido<br/>(6 fijos + 14 avanzados, extractores tolerantes)"]
+    CORR["barrido_parametrico.correr_barrido<br/>(aplicar_parametro → dataclasses.replace → __post_init__)"]
+    ANG["conversiones_angulo.* (acimut/pendiente UI↔SI)"]
+  end
+
+  subgraph BG7["calculos/balance_global.py"]
+    RC["resumen_camara (fuente de verdad única S35)"]
+    CT["calcular_todo / calcular_todo_transitorio / operacion_anual"]
+  end
+
+  W_PARAM --> CPAR
+  W_RANGO --> CORR
+  W_KPI --> CKPI
+  BTN --> CORR
+  CPAR -->|path → campo Proyecto| CORR
+  ANG --> CORR
+  CORR -->|dispatch por modo| CT
+  CT --> RC
+  RC --> CKPI
+  CKPI --> SS_B
+  SS_B -.lee.-> RES7["_render_resultados_barridos (curvas superpuestas)"]
+  CT -.estima tiempo.-> SS_T
+
+  classDef new fill:#d4edda,stroke:#155724
+  class CPAR,CKPI,CORR,ANG,RC new
+```
+
+**Hallazgos P7 barridos (S35)**:
+
+- **Sin huérfanos nuevos**: cada `path` del catálogo (`camara.flujo.caudal_masico_kg_s`, `colector.unidad.largo_m`, `colector.banco.n_serie/n_paralelo`, `emplazamiento.{pendiente,acimut}_colector_deg`, `camara.carga_producto.*`, `camara.geometria.*`) apunta a un campo **ya cableado** del `Proyecto`. El barrido los lee y los reescribe vía `dataclasses.replace` (regatilla `__post_init__` → revalida). Las forzantes (`forzante:HR_camara`, `forzante:T_amb`, solo modo Constantes) devuelven override sin tocar el proyecto.
+- **Filtrado por tipología y modo**: `parametros_para_tipologia` oculta parámetros no aplicables. `pendiente`/`acimut` solo en `{transitorio, anual}` (en Constantes la POA es input directo, no se recalcula). El sweep de ángulos se construye en unidades de UI (`linspace` UI → `ui_a_si` por punto) para sortear la no-monotonía del acimut — usa `conversiones_angulo` (S35).
+- **`resumen_camara` (S35)**: fuente de verdad única para extraer `t_secado_s`/`masa_agua_kg`/`status`/`convergio` de las dos firmas de resultado de cámara. La consumen el barrido (`catalogo_kpis_barrido`), `balance_global._extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara` (agrega conversión a horas en la frontera UI). Cualquier cambio en una firma de resultado se centraliza acá.
+- **Tolerancia a fallos**: un punto que lanza `ValueError`/`RuntimeError` (ej. `n_paralelo=0`) deja un **hueco** en la curva, no aborta el barrido. KPIs no aplicables al modo se extraen como `None` (`getattr` con default).
+- **Estado efímero**: los barridos viven en `session_state['p7_barridos_{modo}']` y **no se persisten** en el JSON/TXT/PDF del proyecto. La estimación de tiempo usa una base stasheada en `p7_t_calc_base_s_{constantes,transitorio}` tras cada cálculo normal.
+
+---
+
 ## Tabla maestra — widget → campo → consumidor
 
 | Pestaña | Widget UI | Campo `Proyecto.*` | Leído por |
@@ -384,6 +440,7 @@ graph LR
 | P2 | latitud/longitud | `emplazamiento.lat/lon_deg` | `clima_calc.obtener_clima` |
 | P2 | altitud (display NASA + override usuario) | `emplazamiento.altitud_m` | `calculos.balance_global.presion_representativa_proyecto` (S32c → ISA cuando no hay clima) |
 | P2 | acimut/pendiente | `emplazamiento.acimut/pendiente` | `solar_geometria` (vía emplazamiento) |
+| **P3** (cross-tab) | albedo del suelo (selectbox superficies + personalizado) | `emplazamiento.albedo_suelo` | `clima_calc.calcular_POA_horizonte` (componente reflejada `GHI·ρ·(1−cosβ)/2` → POA → solver colector y todos los consumidores de POA). **Widget en P3, campo en Emplazamiento.** Reemplaza el `0.25` hardcodeado de pvlib. Catálogo en `calculos/catalogo_albedos.py`. |
 | P2 | zona_horaria | `emplazamiento.zona_horaria` | `solar_geometria` |
 | P3 | N° cubiertas ⚑ | `colector.unidad.n_cubiertas` + `espaciado_entre_cubiertas_m` | `colector_calc`, `tipos234_calc` (vía `_U_cubierta_efectiva`) |
 | **P3** | **Espesor placa** ⚑ | `colector.unidad.espesor_placa_m` | **⚠️ ninguno** |
@@ -399,7 +456,7 @@ graph LR
 | P4 | pared compuesta (capas) | `camara.construccion.pared.capas` | `camara_calc` (vía métodos U/R) |
 | P4 | bandejas (todo) | `camara.bandejas.*` | `camara_calc`, `motor_calc` |
 | P4 | caudal/dirección/recirc/HR | `camara.flujo.*` | `camara_calc`, `motor_calc` |
-| P4 | modo_calculo | `camara.modo_calculo` | `camara_calc` (selección de rama) |
+| P4 | modo_calculo (radio; **default `termodinamico` desde S34**) | `camara.modo_calculo` | `camara_calc.calcular_camara` (dispatcher: selección de rama capa_fina/termodinámico) |
 | P4 | batches_por_mes (slider, solo ANUAL) | `camara.operacion_anual.batches_por_mes` | `operacion_anual_camara.calcular_operacion_anual_camara` (escala mensual) |
 | P4 → P7 | `ResultadosAnualCamara` (session_state) | `st.session_state["p4_resultado_anual"]` | `p7_resultados._render_operacion_anual_detalle` (tabla + barras 12 meses) |
 | P5 | tipo/modo/P_nom/setpoint/T_max/η_quem/PCI | `auxiliar.*` | `auxiliar_calc` |
@@ -413,6 +470,8 @@ graph LR
 | P4→core | I_g_POA(t) sobre plano colector | `forzantes_base.I_g_POA_W_m2` (transitorio) | `balance_global._correr_colector_horizonte` → `_correr_colector` → `colector_calc`/`tipos234_calc` |
 | P4→core | GHI(t) sobre techo cámara | `forzantes_base.I_g_W_m2` (transitorio) | `camara_termodinamica.simular_secado` (Q_rad por techo translúcido) |
 | (interno) | POA representativa anual (sugerido P7) | — | `ui/p7_resultados._sugerir_condiciones` → `calcular_POA_horizonte` (quantile 90) |
+| P7 (S35) | barrido: parámetro / rango / N / KPIs avanzados | **ningún campo `Proyecto`** (estado efímero `session_state['p7_barridos_{modo}']`) | `barrido_parametrico.correr_barrido` lee el `path` del `ParametroBarrido` seleccionado sobre una **copia** del proyecto (`dataclasses.replace`, sin mutar el persistente). KPIs vía `catalogo_kpis_barrido` + `balance_global.resumen_camara` |
+| (interno, S35) | base de tiempo de cálculo para estimar barrido | — (`session_state['p7_t_calc_base_s_{constantes,transitorio}']`) | `ui/p7_resultados` stash tras cada `calcular_todo(_transitorio)` normal |
 
 ---
 
@@ -427,7 +486,7 @@ Pendientes:
 ✓ **Resueltos en S30 (2026-05-19):**
 
 - **`n_cubiertas`** conectada a los 4 motores numéricos vía `_U_cubierta_efectiva`, junto con `espaciado_entre_cubiertas_m`.
-- **Bugs preexistentes de signos** en F1 (los 4 tipos) y F3 (Tipo 1) del residual algebraico — raíz espuria con `T_cub_e ≈ −200 °C`. Validado contra HWB con R²=1.0000.
+- **Bugs preexistentes de signos** en F1 (los 4 tipos) y F3 (Tipo 1) del residual algebraico — raíz espuria con `T_cub_e ≈ −200 °C`. Validado contra HWB con R²=1.0000 (en S30, con propiedades del aire constantes; desde S36 el modelo usa propiedades variables y el R² es ≈0.999, ver nota de h local más abajo).
 - **F4 Tipos 2/3/4**: incoherencia entre EDO del fluido ci y balance del fondo corregida agregando `conv_ci_int` explícito.
 - **Chimenea solar**: cerrado el ciclo huérfano → modelo (`chimenea_calc.py`), migración a `Proyecto` top-level, UI propia en P6, integración del caudal natural en `balance_global` (single-pass).
 
@@ -457,6 +516,36 @@ Ver `docs/bitacora/bitacora_sesion31.md` (§121-§125). Suite al cierre de S31: 
 - **Botón "Calcular chimenea" en P6** (S32d): nuevo helper `_render_calcular_chimenea` con dos auxiliares (`_condiciones_representativas_chimenea` y heurística T_chim = Tamb + 25 K CAJA / +30 K ARMARIO). Resuelve `_caudal_natural_loop` y persiste resultado en `st.session_state["p6_chimenea_eval"]`. P7 checklist actualizado: marca `P6 · Chimenea ✅` cuando hay chimenea + eval. Los números son **preliminares**; P7 vuelve a resolver con Picard completo (divergencia aceptada por el usuario).
 
 Ver `docs/bitacora/bitacora_sesion32.md` (§126-§130). Suite al cierre de S32: **833 + 2 xfailed** (sin cambio — todo wire-up + helpers UI sin tests nuevos; deuda explícita en la bitácora).
+
+✓ **S33 (2026-05-26)** — deploy a Hugging Face Spaces vía GitHub Action (`deploy_hf.yml`). Infraestructura: **sin cambios de cableado** widget→campo→consumidor. Ver `docs/bitacora/bitacora_sesion33.md`.
+
+✓ **S34 (2026-05-29)** — default de `Camara.modo_calculo` invertido de `capa_fina` a `termodinamico` (`core/camara.py`, fallbacks de UI/deserialización en `ui/p4_camara.py`). El motor termodinámico es el camino físicamente completo y el único soportado por la operación anual. Ver `docs/bitacora/bitacora_sesion34.md`. Suite al cierre: **833 + 2 xfailed** (sin cambio neto; 2 fixtures y 1 test adaptados al nuevo default).
+
+✓ **S35 (2026-06-01)** — corridas paramétricas en P7 + refactor de ángulos + integración Obsidian:
+
+- **Conversiones de ángulo a `calculos/`**: nuevo `calculos/conversiones_angulo.py` (matemática pura, fuente de verdad única). `ui/componentes/unidades.py` las re-exporta; `clima_calc` consume del módulo nuevo. **Cambió una invariante documentada** del mapa (ver regla arquitectónica en Diagrama 1).
+- **`resumen_camara` (fuente de verdad única)**: en `balance_global.py`, abstrae las dos firmas de resultado de cámara (`ResultadoMotorTermodinamico` vs `ResultadosCamara`). La consumen el barrido, `_extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara`.
+- **Barridos paramétricos (feature completa, etapas 1-11)**: nuevos `calculos/{catalogo_parametros_barrido,barrido_parametrico,catalogo_kpis_barrido}.py` + UI en `p7_resultados.py` (3 call-sites: Constantes/Transitorio/Anual). Estado **efímero** en `session_state`, no toca el `Proyecto`. Ver Diagrama 6 arriba. **Pendiente: etapa 12** (verificación manual e2e en Streamlit, no auto-testeable).
+- **Integración Obsidian**: notas de módulos autogeneradas (`scripts/generar_notas_obsidian.py` → `docs/modulos/`), docs de navegación (`docs/{arquitectura,tareas,decisiones}.md`) y bloques `[[...]]` en README/CLAUDE/CHANGELOG. Solo documentación.
+
+Ver `docs/bitacora/bitacora_sesion35.md` (§149-§154). Suite al cierre de S35: **885 + 2 xfailed** (+52 tests: barrido_parametrico 18, catalogo_kpis 15, catalogo_parametros 11, p7_barridos 6). Sin commitear (working tree puro).
+
+✓ **S36 (2026-06-03)** — modelo físico del colector (albedo→POA + h_int local):
+
+- **Albedo del suelo seleccionable** (S36a): `emplazamiento.albedo_suelo` (widget en P3, cross-tab) → `clima_calc.calcular_POA_horizonte` (componente reflejada solar). Ver la fila en la tabla maestra y el catálogo `calculos/catalogo_albedos.py`. Bug colateral corregido: `ui/p2_emplazamiento.py` reconstruía `Emplazamiento` campo por campo y reseteaba el albedo en cada rerun → migrado a `dataclasses.replace` (preserva campos no tocados; elimina la clase de bug para campos futuros).
+- **Coeficiente convectivo interno LOCAL** (S36b): `h_int` ya no es un escalar único; se evalúa nodo a nodo en los 4 motores con propiedades del aire vs T (`calculos/propiedades_aire.py`), Nu de entrada local, blending de régimen y convección mixta (`calculos/correlaciones_nusselt.py`), vía el helper `colector_calc.coef_conveccion_interna_local`. Cambio interno (sin widgets nuevos). El caudal másico se fija con `ρ(T_entrada)`.
+- **Modo multi-día "días reales consecutivos"** (S36c): widget en P4 (`st.radio` "Repetir día típico"/"Días reales consecutivos", solo con forzantes "Día real" + Multi-día; flag en `session_state["cam_multidia_consecutivo"]`, no en el core). Consume el clima vía `clima_calc.slice_n_dias_consecutivos` (recorta N días reales desde el día de diseño, trunca en el borde de año). En ARMARIO corre el colector sobre el slice (`p3_colector._evaluar_diario`); arma forzantes sin replicar (`p4_camara._forzantes_desde_slice` → `armar_forzantes_aire` con `n_reps=1`). Meta del horizonte con `horizonte_tipo`/`n_dias_efectivo` → etiqueta en P7.
+
+Ver `docs/bitacora/bitacora_sesion36.md` (§155-§158). Suite al cierre de S36: **914 + 2 xfailed** (+29: albedo 9, h local 17, multi-día 3). Validación HWB con piso R²≥0.99 + monotonía + parámetros. Sin commitear (working tree puro).
+
+✓ **S37 (2026-06-04)** — tanda UX/UI (mejoras 20–24). **Sin cambios de cableado** widget→campo→consumidor (son layout/presentación/export):
+
+- **Mejora 20**: navegación movida de `st.tabs` a un `st.radio` en el sidebar (`Secasol.py`, key `nav_seccion`) con dispatch que renderiza solo la sección activa. Fix en `ui/componentes/header.py` (ocultar solo `stToolbarActions`+`stDecoration`, no todo el `stToolbar`, para conservar el botón de reapertura del sidebar).
+- **Mejora 21**: subsecciones de P1–P6 con `expanded=False` al inicio.
+- **Mejora 22**: selectores de material de P4 muestran `descripcion` del catálogo + espesores en mm (solo presentación; valores guardados siguen siendo las keys del catálogo).
+- **Mejoras 23–24**: helper `ui/componentes/graficas.mostrar_plotly` (chokepoint de los 22 gráficos) agrega descarga PNG (vista del navegador) y CSV de datos (`_fig_a_dataframe`, server-side).
+
+Ver `docs/bitacora/bitacora_sesion37.md` (§159-§164). Suite al cierre de S37: **919 + 2 xfailed** (+5: extractor de datos de gráficos + regresión del fix). Versión local 0.10.0. Sin commitear (working tree puro).
 
 ---
 

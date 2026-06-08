@@ -115,6 +115,8 @@ El modelo soporta **doble cubierta con cavidad de aire** vía `n_cubiertas + esp
 
 `calculos/correlaciones_nusselt.py` es el catálogo de correlaciones de convección (Shah-London, Heaton, Gnielinski, Sparrow-Liu, Dittus-Boelter, Cengel-Ghajar, Hollands). La función `calcular_h_int()` selecciona automáticamente según Re y L/Dh, o usa la indicada por el usuario.
 
+Desde S36 el coeficiente convectivo interno se calcula **localmente nodo a nodo** (no un escalar único): `nusselt_forzado_local` (entrada térmica + blending continuo de régimen en Re=2300/10000), `nusselt_natural_canal` y `nusselt_mixto_local` (convección mixta de Churchill para baja velocidad/vertical). Las propiedades del aire dejan de ser constantes a 323 K: `calculos/propiedades_aire.py` da `k(T), μ(T), Pr(T), cp(T), ρ(T,P)` evaluadas en `T_f(x)`. El helper de orquestación `colector_calc.coef_conveccion_interna_local()` (reusado por los Tipos 2/3/4) combina propiedades locales + Nu local + flotación (Ra con `g·sin β` y ΔT del warm-start). El caudal másico se fija con `ρ(T_entrada)`.
+
 El solver de colector recibe **POA** (radiación en plano del colector, transposición Liu-Jordan con `pvlib`), no GHI. Esto vale en todos los pipelines: P3 horario/diario, P3 constantes, P7 constantes, P7 transitorio con clima real.
 
 ### Motores numéricos de cámara — tres motores con dispatcher
@@ -171,7 +173,7 @@ Si POA no está disponible (forzante sintética, clima incompleto), el balance c
 - Caudal másico en kg/s; volumétrico en m³/s
 - Ángulos en grados (°) pero con convención Duffie (ver abajo)
 
-**La única conversión de unidades ocurre en `ui/componentes/unidades.py`**, incluyendo la conversión de ángulos entre convenciones.
+**La única conversión de unidades físicas (°C↔K, kPa↔Pa, %↔fracción) ocurre en `ui/componentes/unidades.py`.** La conversión de ángulos entre convenciones es matemática pura y vive en `calculos/conversiones_angulo.py` (la consumen tanto la UI como `calculos/`); `unidades.py` la re-exporta por compatibilidad. Ver "Convención de ángulos".
 
 ### Convención de ángulos (crítico)
 
@@ -180,7 +182,7 @@ Hay tres convenciones y **no deben mezclarse**:
 - **UI360** (entrada del usuario en P2 desde S20): 0° = Norte, sentido horario. Rango [0, 360).
 - **pvlib** (cálculo interno de irradiancia): surface_azimuth ψ: 0° = Norte, 90° = Este, 180° = Sur. Rango [0, 360).
 
-Conversiones (todas en `ui/componentes/unidades.py`, **nunca en `core/` ni `calculos/`**):
+Conversiones (matemática pura en **`calculos/conversiones_angulo.py`**, re-exportadas desde `ui/componentes/unidades.py` para los consumidores históricos de la UI; nunca duplicar la fórmula en otro módulo):
 - Duffie → UI360: `α = (−γ) mod 360`
 - UI360 → Duffie: `γ = (−α) mod 360`; si γ > 180: γ −= 360
 - Duffie → pvlib: `ψ = (180 + γ) mod 360`
@@ -215,7 +217,7 @@ Python 3.11+. Streamlit (UI), NumPy/SciPy/pandas (cálculo), pvlib (datos solare
 
 ### Tests
 
-Suite con pytest. Estructura: `tests/test_core/` para validaciones de dataclasses, `tests/test_calculos/` para motores numéricos, `tests/test_ui/` para helpers de UI testeables sin servidor. Validación física del modelo de colector en `validacion/` (HWB, Klein) — scripts standalone que confirman R² = 1.0000 vs el modelo lineal de Hottel-Whillier-Bliss.
+Suite con pytest. Estructura: `tests/test_core/` para validaciones de dataclasses, `tests/test_calculos/` para motores numéricos, `tests/test_ui/` para helpers de UI testeables sin servidor. Validación física del modelo de colector en `validacion/` (HWB, Klein) — scripts standalone que confirman linealidad vs el modelo de Hottel-Whillier-Bliss. Con propiedades del aire variables (desde S36) el R² es ≈0.999 (era 1.0000 con propiedades constantes); el criterio es R²≥0.99 + monotonía de η + parámetros `F_R·(τα)`/`F_R·U_L` en rango.
 
 Un test por validación dura. Nombre del test = nombre del código de error en minúsculas cuando aplica (ej. `test_MOT_CAUDAL_NO_POSITIVO`).
 
