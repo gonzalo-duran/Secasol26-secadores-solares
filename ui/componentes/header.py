@@ -43,16 +43,23 @@ _LOGO_INENCO = _ASSETS_DIR / "logo_inenco.png"
 
 _ANCHO_LOGO_PX = 90  # ancho de cada logo en píxeles
 
-# CSS que elimina el toolbar nativo de Streamlit y ajusta el padding superior.
-# Selector principal: [data-testid="stToolbar"]
-# Selector de la línea de decoración de color: [data-testid="stDecoration"]
-# Selector del header contenedor: header[data-testid="stHeader"]
+# CSS que elimina el menú/Deploy nativos de Streamlit, SIN romper el control de
+# reapertura del sidebar.
+#
+# IMPORTANTE: NO ocultar `[data-testid="stToolbar"]` ni todo el `stHeader`. En
+# Streamlit 1.57 el botón para REABRIR el sidebar colapsado
+# (`stExpandSidebarButton`) se renderiza COMO HIJO de `stToolbar` (verificado en
+# el frontend compilado). Ocultar el toolbar entero también ocultaba ese botón,
+# dejando al usuario sin forma de recuperar la cinta de navegación lateral
+# (mejora 20) una vez colapsada.
+#
+# Por eso ocultamos únicamente `[data-testid="stToolbarActions"]` (el grupo de la
+# derecha: Deploy + menú ⋮ + indicador de estado) y la línea de decoración. El
+# toolbar y su botón de reapertura del sidebar quedan intactos.
 _CSS_OCULTAR_TOOLBAR = """
 <style>
-    [data-testid="stToolbar"]    { display: none !important; }
-    [data-testid="stDecoration"] { display: none !important; }
-    header[data-testid="stHeader"] { display: none !important; }
-    .block-container { padding-top: 0.8rem !important; }
+    [data-testid="stToolbarActions"] { display: none !important; }
+    [data-testid="stDecoration"]     { display: none !important; }
 </style>
 """
 
