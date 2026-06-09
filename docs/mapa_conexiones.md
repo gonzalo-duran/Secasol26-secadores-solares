@@ -198,7 +198,6 @@ graph LR
 graph LR
   subgraph UI4["ui/p4_camara.py"]
     W_PROD[producto/X0/Xobj/masa]
-    W_MOD["selectbox modelo_capa_fina"]
     W_ISO["selectbox modelo_isoterma"]
     W_TPROD["checkbox T_prod inicial ⚑"]
     W_GEO[largo/ancho/alto cámara]
@@ -209,8 +208,7 @@ graph LR
     W_BAND[n_bandejas/dim/porosidad/...]
     W_FLUJO[caudal/dirección/recirculación]
     W_HR["checkbox HR entrada ⚑"]
-    W_MODO["radio modo_calculo"]
-    W_HORIZ["selectbox horizonte (modo transitorio)"]
+    W_HORIZ["selectbox horizonte de simulación"]
   end
 
   subgraph DATA4["core/camara.py"]
@@ -224,7 +222,7 @@ graph LR
   end
 
   subgraph CONS4["calculos/"]
-    CCAM[camara_calc.py capa fina]
+    CCAM[camara_calc.py wire-up TD]
     CTD[camara_termodinamica.py]
     MOTPC[motor_calc.estimar_delta_P_camara]
     POAH["clima_calc.calcular_POA_horizonte"]
@@ -232,7 +230,6 @@ graph LR
   end
 
   W_PROD --> CARGA
-  W_MOD --> CARGA
   W_ISO --> CARGA
   W_TPROD --> CARGA
   W_GEO --> GEOM
@@ -243,7 +240,6 @@ graph LR
   W_BAND --> BAND
   W_FLUJO --> FLUJO
   W_HR --> FLUJO
-  W_MODO --> CARGA
 
   CARGA --> CCAM
   CARGA --> CTD
@@ -274,7 +270,7 @@ graph LR
   - `I_g_POA_W_m2`: POA sobre el plano del colector (input a `_correr_colector_horizonte` cuando el lazo natural por chimenea está activo). Calculada con `calculos.clima_calc.calcular_POA_horizonte` (transposición Liu-Jordan con pvlib, mismo modelo que P3).
 - Si DNI/DHI no están disponibles (clima incompleto, modo sintético), POA queda en `None` y el balance global cae a GHI con aviso explícito `ADV_PICARD_POA_NO_DISPONIBLE`.
 - **"Día real" habilitado en CAJA (S32b)**: nuevo helper `_construir_forzantes_reales_caja` arma `ForzantesAire` desde clima NASA + `cfg.dia_analisis` directamente, con `T_salida_colector_K = T_amb_K` (la cámara *es* el colector). `_disponibilidad_forzantes_reales` ahora hace branch por tipología (CAJA exige sólo clima; ARMARIO/GRAN_ESCALA siguen exigiendo P3). El radio "Forzantes del aire de entrada" muestra label dinámico ("Día real (clima ambiente)" en CAJA / "Día real (clima + colector)" en el resto).
-- **Presión atmosférica corregida por altitud (S32c)**: el botón "Calcular" computa `P_proyecto_Pa` vía `presion_representativa_proyecto` y lo propaga a `_construir_forzantes_termodinamico` (ω desde HR y T_amb) y a `calcular_camara` (modos capa fina y termodinámico). Caption visible con el origen del valor.
+- **Presión atmosférica corregida por altitud (S32c)**: el botón "Calcular" computa `P_proyecto_Pa` vía `presion_representativa_proyecto` y lo propaga a `_construir_forzantes_termodinamico` (ω desde HR y T_amb) y a `calcular_camara` (motor termodinámico). Caption visible con el origen del valor.
 
 ---
 
@@ -424,7 +420,7 @@ graph LR
 
 - **Sin huérfanos nuevos**: cada `path` del catálogo (`camara.flujo.caudal_masico_kg_s`, `colector.unidad.largo_m`, `colector.banco.n_serie/n_paralelo`, `emplazamiento.{pendiente,acimut}_colector_deg`, `camara.carga_producto.*`, `camara.geometria.*`) apunta a un campo **ya cableado** del `Proyecto`. El barrido los lee y los reescribe vía `dataclasses.replace` (regatilla `__post_init__` → revalida). Las forzantes (`forzante:HR_camara`, `forzante:T_amb`, solo modo Constantes) devuelven override sin tocar el proyecto.
 - **Filtrado por tipología y modo**: `parametros_para_tipologia` oculta parámetros no aplicables. `pendiente`/`acimut` solo en `{transitorio, anual}` (en Constantes la POA es input directo, no se recalcula). El sweep de ángulos se construye en unidades de UI (`linspace` UI → `ui_a_si` por punto) para sortear la no-monotonía del acimut — usa `conversiones_angulo` (S35).
-- **`resumen_camara` (S35)**: fuente de verdad única para extraer `t_secado_s`/`masa_agua_kg`/`status`/`convergio` de las dos firmas de resultado de cámara. La consumen el barrido (`catalogo_kpis_barrido`), `balance_global._extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara` (agrega conversión a horas en la frontera UI). Cualquier cambio en una firma de resultado se centraliza acá.
+- **`resumen_camara` (S35; motor único desde S38)**: fuente de verdad única para extraer `t_secado_s`/`masa_agua_kg`/`status`/`convergio` del resultado de cámara (`ResultadoMotorTermodinamico`). La consumen el barrido (`catalogo_kpis_barrido`), `balance_global._extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara` (agrega conversión a horas en la frontera UI).
 - **Tolerancia a fallos**: un punto que lanza `ValueError`/`RuntimeError` (ej. `n_paralelo=0`) deja un **hueco** en la curva, no aborta el barrido. KPIs no aplicables al modo se extraen como `None` (`getattr` con default).
 - **Estado efímero**: los barridos viven en `session_state['p7_barridos_{modo}']` y **no se persisten** en el JSON/TXT/PDF del proyecto. La estimación de tiempo usa una base stasheada en `p7_t_calc_base_s_{constantes,transitorio}` tras cada cálculo normal.
 
@@ -456,7 +452,7 @@ graph LR
 | P4 | pared compuesta (capas) | `camara.construccion.pared.capas` | `camara_calc` (vía métodos U/R) |
 | P4 | bandejas (todo) | `camara.bandejas.*` | `camara_calc`, `motor_calc` |
 | P4 | caudal/dirección/recirc/HR | `camara.flujo.*` | `camara_calc`, `motor_calc` |
-| P4 | modo_calculo (radio; **default `termodinamico` desde S34**) | `camara.modo_calculo` | `camara_calc.calcular_camara` (dispatcher: selección de rama capa_fina/termodinámico) |
+| P4 | ~~modo_calculo (radio)~~ **eliminado en S38** | `camara.modo_calculo` (vestigial; coacción `capa_fina`→`termodinamico`) | `camara_calc.calcular_camara` (motor único: termodinámico) |
 | P4 | batches_por_mes (slider, solo ANUAL) | `camara.operacion_anual.batches_por_mes` | `operacion_anual_camara.calcular_operacion_anual_camara` (escala mensual) |
 | P4 → P7 | `ResultadosAnualCamara` (session_state) | `st.session_state["p4_resultado_anual"]` | `p7_resultados._render_operacion_anual_detalle` (tabla + barras 12 meses) |
 | P5 | tipo/modo/P_nom/setpoint/T_max/η_quem/PCI | `auxiliar.*` | `auxiliar_calc` |
@@ -524,7 +520,7 @@ Ver `docs/bitacora/bitacora_sesion32.md` (§126-§130). Suite al cierre de S32: 
 ✓ **S35 (2026-06-01)** — corridas paramétricas en P7 + refactor de ángulos + integración Obsidian:
 
 - **Conversiones de ángulo a `calculos/`**: nuevo `calculos/conversiones_angulo.py` (matemática pura, fuente de verdad única). `ui/componentes/unidades.py` las re-exporta; `clima_calc` consume del módulo nuevo. **Cambió una invariante documentada** del mapa (ver regla arquitectónica en Diagrama 1).
-- **`resumen_camara` (fuente de verdad única)**: en `balance_global.py`, abstrae las dos firmas de resultado de cámara (`ResultadoMotorTermodinamico` vs `ResultadosCamara`). La consumen el barrido, `_extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara`.
+- **`resumen_camara` (fuente de verdad única)**: en `balance_global.py`, accede a la firma de resultado de cámara (`ResultadoMotorTermodinamico`; motor único desde S38). La consumen el barrido, `_extraer_t_y_masa` (wrapper) y `p7_resultados._resumen_camara`.
 - **Barridos paramétricos (feature completa, etapas 1-11)**: nuevos `calculos/{catalogo_parametros_barrido,barrido_parametrico,catalogo_kpis_barrido}.py` + UI en `p7_resultados.py` (3 call-sites: Constantes/Transitorio/Anual). Estado **efímero** en `session_state`, no toca el `Proyecto`. Ver Diagrama 6 arriba. **Pendiente: etapa 12** (verificación manual e2e en Streamlit, no auto-testeable).
 - **Integración Obsidian**: notas de módulos autogeneradas (`scripts/generar_notas_obsidian.py` → `docs/modulos/`), docs de navegación (`docs/{arquitectura,tareas,decisiones}.md`) y bloques `[[...]]` en README/CLAUDE/CHANGELOG. Solo documentación.
 

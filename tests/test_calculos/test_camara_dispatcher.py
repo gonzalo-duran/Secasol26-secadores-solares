@@ -1,7 +1,7 @@
 """Tests del despachador `calcular_camara` y wire-up `_calcular_termodinamico`.
 
 Verifica que:
-    - El despachador selecciona el motor correcto según camara.modo_calculo.
+    - El despachador siempre delega en el motor termodinámico (motor único desde S38).
     - El wire-up con S3 prepara correctamente los argumentos para simular_secado
       y devuelve un ResultadoMotorTermodinamico válido.
     - Productos sin GAB calibrado disparan el fallback de aw_func + advertencia.
@@ -13,7 +13,6 @@ import numpy as np
 import pytest
 
 from calculos.camara_calc import (
-    ResultadosCamara,
     _calcular_termodinamico,
     _h_conv_camara_placa_plana,
     calcular_camara,
@@ -28,25 +27,9 @@ from core.camara import (
     GeometriaCamara,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def camara_manzana_capa_fina():
-    """Cámara con manzana, modo capa_fina."""
-    return Camara(
-        carga_producto=CargaProducto(
-            producto_id="manzana",
-            masa_total_kg=10.0,
-            humedad_inicial_X=4.6,
-            humedad_objetivo_X=0.20,
-            modelo_capa_fina="logaritmico",
-        ),
-        modo_calculo="capa_fina",
-    )
 
 
 @pytest.fixture
@@ -80,7 +63,7 @@ class TestHConvCamaraPlacaPlana:
             omega_pelicula=0.012,
             P_Pa=101325.0,
         )
-        assert 1.0 < h < 10.0   # rango razonable para convección natural-forzada suave
+        assert 1.0 < h < 10.0  # rango razonable para convección natural-forzada suave
 
     def test_crece_con_velocidad(self):
         h_lento = _h_conv_camara_placa_plana(0.2, 1.0, 323.15, 0.012, 101325.0)
@@ -95,18 +78,7 @@ class TestHConvCamaraPlacaPlana:
 
 class TestDispatcher:
 
-    def test_capa_fina_devuelve_resultados_camara(self, camara_manzana_capa_fina):
-        res = calcular_camara(
-            camara_manzana_capa_fina,
-            T_operacion_K=323.15,
-            HR_operacion=0.20,
-        )
-        assert isinstance(res, ResultadosCamara)
-        assert res.t_secado_s > 0
-
-    def test_termodinamico_devuelve_resultado_motor(
-        self, camara_manzana_termodinamico
-    ):
+    def test_termodinamico_devuelve_resultado_motor(self, camara_manzana_termodinamico):
         res = calcular_camara(
             camara_manzana_termodinamico,
             T_operacion_K=323.15,
@@ -149,7 +121,7 @@ class TestDispatcher:
         )
         res = calcular_camara(
             cam,
-            T_operacion_K=333.15,        # 60 °C
+            T_operacion_K=333.15,  # 60 °C
             HR_operacion=0.15,
             T_amb_K=298.15,
         )
@@ -172,7 +144,7 @@ class TestWireUpTermodinamico:
             camara_manzana_termodinamico,
             T_operacion_K=323.15,
             HR_operacion=0.20,
-            T_amb_K=288.15,            # 15 °C — distinto de cualquier default
+            T_amb_K=288.15,  # 15 °C — distinto de cualquier default
             P_Pa=101325.0,
         )
         # T_prod en t=0 ≈ T_amb (un único punto de tiempo guardado al inicio)
@@ -187,7 +159,7 @@ class TestWireUpTermodinamico:
                 humedad_inicial_X=4.6,
                 humedad_objetivo_X=0.20,
                 modelo_capa_fina="logaritmico",
-                T_prod_inicial_K=305.15,    # 32 °C — explícito
+                T_prod_inicial_K=305.15,  # 32 °C — explícito
             ),
             modo_calculo="termodinamico",
         )
@@ -195,7 +167,7 @@ class TestWireUpTermodinamico:
             cam,
             T_operacion_K=323.15,
             HR_operacion=0.20,
-            T_amb_K=288.15,                  # ignorado
+            T_amb_K=288.15,  # ignorado
             P_Pa=101325.0,
         )
         assert res.T_prod_K[0] == pytest.approx(305.15, abs=0.5)
@@ -213,7 +185,10 @@ class TestWireUpTermodinamico:
             modo_calculo="termodinamico",
         )
         res = calcular_camara(
-            cam, T_operacion_K=323.15, HR_operacion=0.20, T_amb_K=298.15,
+            cam,
+            T_operacion_K=323.15,
+            HR_operacion=0.20,
+            T_amb_K=298.15,
         )
         assert not any("GAB_FALTA" in a for a in res.advertencias)
 
@@ -227,9 +202,13 @@ class TestWireUpTermodinamico:
         )
         n = len(res.t_array_s)
         for arr in (
-            res.T_prod_K, res.X_prod_kg_kg,
-            res.T_flujo_K, res.omega_flujo_kg_kg,
-            res.m_dot_w_kg_s, res.q_prod_W, res.q_pared_W,
+            res.T_prod_K,
+            res.X_prod_kg_kg,
+            res.T_flujo_K,
+            res.omega_flujo_kg_kg,
+            res.m_dot_w_kg_s,
+            res.q_prod_W,
+            res.q_pared_W,
         ):
             assert isinstance(arr, np.ndarray)
             assert arr.shape == (n,)

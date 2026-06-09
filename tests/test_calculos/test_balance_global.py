@@ -51,16 +51,24 @@ def proyecto_armario_completo():
         ),
     )
     p.colector = Colector()
+    # Cámara dimensionada para que el motor termodinámico converja a X_obj
+    # (yacón con GAB real, cámara chica de flujo activo). Desde S38 el motor
+    # de cámara es único (termodinámico) y exige una config que alcance X_obj.
     p.camara = Camara(
-        flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
-        carga_producto=CargaProducto(
-            producto_id="manzana",
-            masa_total_kg=10.0,
-            humedad_inicial_X=4.6,
-            humedad_objetivo_X=0.15,
-            modelo_capa_fina="logaritmico",
+        geometria=GeometriaCamara(largo_m=0.6, ancho_m=0.4, alto_m=0.6),
+        bandejas=ConfiguracionBandejas(
+            n_bandejas=3,
+            area_bandeja_m2=0.20,
+            espesor_capa_m=0.015,
+            separacion_entre_bandejas_m=0.06,
         ),
-        modo_calculo="capa_fina",
+        flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.10),
+        carga_producto=CargaProducto(
+            producto_id="yacon",
+            masa_total_kg=2.0,
+            humedad_inicial_X=9.0,
+            humedad_objetivo_X=0.50,
+        ),
     )
     p.motor = Motor(
         tipo_accionamiento=TipoAccionamiento.MOTOR_ELECTRICO,
@@ -880,27 +888,6 @@ class TestWireUpForzantes:
         assert isinstance(res, ResultadoMotorTermodinamico)
         # T_flujo debería oscilar siguiendo la forzante
         assert np.std(res.T_flujo_K) > 3.0
-
-    def test_modo_capa_fina_ignora_forzantes(self):
-        """capa_fina no usa forzantes_aire; pasar no debe fallar."""
-        cam = self._camara_minima()
-        cam.modo_calculo = "capa_fina"  # cambio para este test
-        # Forzantes válidas pero el motor estático las ignora
-        fz = construir_serie_sintetica_dia_tipo(
-            T_sal_col_promedio_K=323.15,
-            T_sal_col_amplitud_K=10.0,
-            omega_amb=0.008,
-            m_dot_aire_seco_kg_s=0.030,
-        )
-        # No debe lanzar
-        res = calcular_camara(
-            cam,
-            T_operacion_K=323.15,
-            HR_operacion=0.30,
-            forzantes_aire=fz,
-        )
-        # ResultadosCamara (estático), no ResultadoMotorTermodinamico
-        assert not isinstance(res, ResultadoMotorTermodinamico)
 
 
 class TestArmarForzantesAireYaExistente:

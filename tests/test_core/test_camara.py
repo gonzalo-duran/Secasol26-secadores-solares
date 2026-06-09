@@ -27,7 +27,6 @@ from core.camara import (
 )
 from core.advertencias import Severidad
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -92,7 +91,9 @@ class TestConfiguracionBandejas:
 
     def test_instancia_valida(self):
         b = ConfiguracionBandejas(
-            n_bandejas=3, area_bandeja_m2=0.5, espesor_capa_m=0.02,
+            n_bandejas=3,
+            area_bandeja_m2=0.5,
+            espesor_capa_m=0.02,
             separacion_entre_bandejas_m=0.10,
         )
         assert b.n_bandejas == 3
@@ -195,17 +196,6 @@ class TestCamaraValidacionProducto:
         with pytest.raises(ValueError, match="PROD_ID_NO_ENCONTRADO"):
             Camara(carga_producto=CargaProducto(producto_id="producto_imaginario_xyz"))
 
-    def test_modelo_cf_sin_params(self):
-        # durazno no tiene parámetros de capa fina en v1
-        with pytest.raises(ValueError, match="MOD_CAPA_FINA_NO_DISPONIBLE"):
-            Camara(
-                carga_producto=CargaProducto(
-                    producto_id="durazno",
-                    humedad_inicial_X=6.3,
-                    modelo_capa_fina="page",
-                )
-            )
-
     def test_manzana_logaritmico_valido(self, camara_minima):
         assert camara_minima.carga_producto.producto_id == "manzana"
         assert camara_minima.carga_producto.modelo_capa_fina == "logaritmico"
@@ -286,13 +276,19 @@ class TestAdvertenciasCamara:
             geometria=GeometriaCamara(largo_m=1.5, ancho_m=1.0, alto_m=1.5),
             construccion=ConstruccionCamara(
                 cubierta_translucida_id=None,
-                pared=ParedCamara(capas=[
-                    CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
-                ]),
+                pared=ParedCamara(
+                    capas=[
+                        CapaPared(
+                            material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"
+                        ),
+                    ]
+                ),
             ),
             bandejas=ConfiguracionBandejas(
-                n_bandejas=5, area_bandeja_m2=0.5,
-                espesor_capa_m=0.02, separacion_entre_bandejas_m=0.15,
+                n_bandejas=5,
+                area_bandeja_m2=0.5,
+                espesor_capa_m=0.02,
+                separacion_entre_bandejas_m=0.15,
             ),
             flujo=ConfiguracionFlujo(
                 caudal_masico_kg_s=0.9,
@@ -312,20 +308,10 @@ class TestAdvertenciasCamara:
         assert "GEO_RELACION_ASPECTO_EXTREMA" not in codigos
         assert "FLUJO_VELOCIDAD_SUPERFICIAL_BAJA" not in codigos
 
-    @pytest.mark.xfail(
-        reason="Todos los productos del catálogo con capa fina calibrada ahora "
-               "también tienen GAB cargado. Para reactivar este test, instanciar "
-               "una Camara con un producto que tenga capa fina pero NO GAB — "
-               "ningún producto cumple esa condición hoy. La rama PROD_ISOTERMA_"
-               "FALLBACK del código sigue existiendo y se ejercita en producción "
-               "cuando un usuario carga manualmente un producto sin GAB.",
-        strict=True,
-    )
     def test_advertencia_isoterma_fallback_sin_gab(self):
         """Producto sin GAB calibrado debe emitir PROD_ISOTERMA_FALLBACK CRITICAL.
-        Tomate sirve conceptualmente (no tiene GAB) pero su capa fina tampoco
-        está calibrada → instanciar Camara levanta MOD_CAPA_FINA_NO_DISPONIBLE
-        antes de poder llamar advertencias_camara."""
+        Tomate no tiene GAB pero sí fallback escalar de X_eq → instancia y
+        advertencias_camara emite PROD_ISOTERMA_FALLBACK (CRITICAL)."""
         camara = Camara(
             carga_producto=CargaProducto(
                 producto_id="tomate",
@@ -397,24 +383,14 @@ class TestAdvertenciasCamara:
         assert "FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA" in codigos
 
     def test_no_advertencia_HR_entrada_especificada(self):
-        camara = Camara(
-            flujo=ConfiguracionFlujo(
-                caudal_masico_kg_s=0.05, HR_entrada_fraccion=0.20
-            )
-        )
+        camara = Camara(flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.05, HR_entrada_fraccion=0.20))
         adv = advertencias_camara(camara)
         codigos = [a.codigo for a in adv]
         assert "FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA" not in codigos
 
-    @pytest.mark.xfail(
-        reason="charqui_vacuno no tiene parámetros de capa fina en el catálogo v1. "
-               "Habilitar cuando se carguen los coeficientes cinéticos.",
-        strict=True,
-    )
     def test_advertencia_inio_carne_sin_isoterma(self):
-        # Este test falla porque charqui_vacuno no tiene capa_fina params → MOD_CAPA_FINA_NO_DISPONIBLE
-        # antes de poder instanciar Camara y llamar advertencias_camara().
-        # Cuando se carguen los coeficientes, el test debe pasar directamente.
+        # charqui_vacuno (CARNE) no tiene GAB pero sí fallback escalar de X_eq →
+        # instancia y advertencias_camara emite INIO_PRODUCTO_CARNE_SIN_ISOTERMA.
         camara = Camara(
             carga_producto=CargaProducto(
                 producto_id="charqui_vacuno",
@@ -467,17 +443,17 @@ class TestCargaProductoTInicial:
         assert p.T_prod_inicial_K is None
 
     def test_valor_razonable_pasa(self):
-        p = CargaProducto(T_prod_inicial_K=298.15)   # 25 °C
+        p = CargaProducto(T_prod_inicial_K=298.15)  # 25 °C
         assert p.T_prod_inicial_K == 298.15
 
     def test_refrigerado_pasa(self):
-        p = CargaProducto(T_prod_inicial_K=278.15)   # 5 °C
+        p = CargaProducto(T_prod_inicial_K=278.15)  # 5 °C
         assert p.T_prod_inicial_K == 278.15
 
     def test_demasiado_frio_lanza(self):
         with pytest.raises(ValueError, match="PROD_T_INICIAL_FUERA_RANGO"):
-            CargaProducto(T_prod_inicial_K=253.15)   # −20 °C
+            CargaProducto(T_prod_inicial_K=253.15)  # −20 °C
 
     def test_demasiado_caliente_lanza(self):
         with pytest.raises(ValueError, match="PROD_T_INICIAL_FUERA_RANGO"):
-            CargaProducto(T_prod_inicial_K=373.15)   # 100 °C
+            CargaProducto(T_prod_inicial_K=373.15)  # 100 °C

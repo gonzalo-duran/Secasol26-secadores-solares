@@ -22,7 +22,7 @@ from calculos.balance_global import (
     armar_forzantes_aire,
     construir_serie_sintetica_dia_tipo,
 )
-from calculos.camara_calc import ResultadosCamara, calcular_camara
+from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.motor_calc import _D_P_DEFAULT_M, _K_rugosidad_default
 from calculos.psicrometria import humedad_absoluta
@@ -747,42 +747,14 @@ def _resumen_resultado_termodinamico(res) -> dict:
     return out
 
 
-def _resumen_resultado_capa_fina(res) -> dict:
-    """Extrae métricas del resultado de capa fina estático."""
-    return {
-        "X_eq_kg_kg": float(res.X_eq_kg_kg),
-        "fuente_X_eq": res.fuente_X_eq,
-        "modelo_usado": res.modelo_usado,
-        "t_secado_s": float(res.t_secado_s),
-        "t_secado_h": float(res.t_secado_s) / 3600.0,
-        "MR_obj": float(res.MR_obj),
-        "masa_agua_extraida_kg": float(res.masa_agua_extraida_kg),
-        "convergencia_ok": bool(res.convergencia_ok),
-        "mensaje_convergencia": res.mensaje_convergencia,
-        "advertencias": list(res.advertencias),
-        "omega_entrada_kg_kg": res.omega_entrada_kg_kg,
-        "omega_salida_kg_kg": res.omega_salida_kg_kg,
-        "HR_salida": res.HR_salida,
-        "HR_media": res.HR_media,
-        "X_eq_corregido_kg_kg": res.X_eq_corregido_kg_kg,
-        "t_secado_corregido_s": res.t_secado_corregido_s,
-        "t_secado_corregido_h": (
-            res.t_secado_corregido_s / 3600.0 if res.t_secado_corregido_s is not None else None
-        ),
-    }
-
-
 def _obtener_resultado_camara(session_state) -> tuple[str | None, object | None, dict | None]:
     """Devuelve (tipo, resultado, meta) extraído de session_state.
 
-    tipo ∈ {"termodinamico_horizonte", "capa_fina", None}.
+    tipo ∈ {"termodinamico_horizonte", None}.
     """
     horizonte = session_state.get("p4_horizonte_resultado")
     if horizonte is not None:
         return "termodinamico_horizonte", horizonte, session_state.get("p4_horizonte_meta")
-    estatico = session_state.get("p4_resultado_dinamico")
-    if estatico is not None:
-        return "capa_fina", estatico, None
     return None, None, None
 
 
@@ -857,7 +829,6 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         f"  Masa total         : {c.masa_total_kg:.2f} kg",
         f"  X inicial          : {c.humedad_inicial_X:.4f} kg/kg ms",
         f"  X objetivo         : {c.humedad_objetivo_X:.4f} kg/kg ms",
-        f"  Modelo capa fina   : {c.modelo_capa_fina}",
         f"  Modelo isoterma    : {c.modelo_isoterma}",
         "  T_prod inicial     : "
         + (
@@ -929,41 +900,6 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
             f"  Horas clipeo noct. : {resumen['horas_clipeo_nocturno_h']:.2f} h",
             f"  Horas HR > 0.95    : {resumen['horas_HR_alta_h']:.2f} h",
         ]
-        if resumen["advertencias"]:
-            lines.append("  Advertencias cálculo:")
-            for adv in resumen["advertencias"]:
-                lines.append(f"    - {adv}")
-    elif tipo_res == "capa_fina":
-        resumen = _resumen_resultado_capa_fina(res)
-        lines += [
-            "  Modo               : capa fina (estático)",
-            f"  Modelo aplicado    : {resumen['modelo_usado']}",
-            f"  X_eq               : {resumen['X_eq_kg_kg']:.4f} kg/kg ms",
-            f"  Fuente X_eq        : {resumen['fuente_X_eq']}",
-            f"  Tiempo de secado   : {resumen['t_secado_h']:.2f} h",
-            f"  Agua extraída      : {resumen['masa_agua_extraida_kg']:.3f} kg",
-            f"  MR objetivo        : {resumen['MR_obj']:.4f}",
-            f"  Convergencia       : "
-            + (
-                "OK" if resumen["convergencia_ok"] else f"FALLA — {resumen['mensaje_convergencia']}"
-            ),
-        ]
-        if resumen["HR_media"] is not None:
-            lines += [
-                f"  HR media (psicro)  : {resumen['HR_media']:.3f}",
-                f"  X_eq corregido     : "
-                + (
-                    f"{resumen['X_eq_corregido_kg_kg']:.4f} kg/kg"
-                    if resumen["X_eq_corregido_kg_kg"] is not None
-                    else "—"
-                ),
-                f"  t_secado corregido : "
-                + (
-                    f"{resumen['t_secado_corregido_h']:.2f} h"
-                    if resumen["t_secado_corregido_h"] is not None
-                    else "—"
-                ),
-            ]
         if resumen["advertencias"]:
             lines.append("  Advertencias cálculo:")
             for adv in resumen["advertencias"]:
@@ -1166,12 +1102,6 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "tipo": "termodinamico_horizonte",
             "meta_horizonte": meta,
             "resumen": _resumen_resultado_termodinamico(res),
-        }
-    elif tipo_res == "capa_fina":
-        snapshot["resultados"] = {
-            "ejecutado": True,
-            "tipo": "capa_fina",
-            "resumen": _resumen_resultado_capa_fina(res),
         }
     return snapshot
 
@@ -1395,13 +1325,11 @@ def render() -> None:
         "Producto",
         options=labels_disponibles,
         index=idx_default,
-        help="Solo se muestran productos con al menos un modelo de capa fina calibrado.",
+        help="Solo se muestran productos con datos de secado calibrados en el catálogo.",
     )
     prod_id = ids_disponibles[labels_disponibles.index(prod_sel_label)]
     datos_prod = catalogo.PRODUCTOS[prod_id]
     props = datos_prod.get("propiedades_basicas") or {}
-
-    modelos_disp = _modelos_disponibles(datos_prod)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1454,44 +1382,14 @@ def render() -> None:
         )
 
     with col2:
-        modelo_cf_idx = 0
-        if (
-            proyecto.camara is not None
-            and proyecto.camara.carga_producto.modelo_capa_fina in modelos_disp
-        ):
-            modelo_cf_idx = modelos_disp.index(proyecto.camara.carga_producto.modelo_capa_fina)
-
-        modelo_cf = st.selectbox(
-            "Modelo cinético de capa fina",
-            options=modelos_disp,
-            index=modelo_cf_idx,
-            help=(
-                "Solo se muestran los modelos con parámetros calibrados para el producto. "
-                "El modelo logarítmico de Sacilik 2006 es el recomendado para manzana."
-            ),
+        # El selector de "modelo cinético de capa fina" se eliminó en S38
+        # (motor único: termodinámico). El campo modelo_capa_fina quedó
+        # vestigial; se preserva el valor previo para round-trip de snapshots.
+        modelo_cf = (
+            proyecto.camara.carga_producto.modelo_capa_fina
+            if proyecto.camara is not None
+            else "logaritmico"
         )
-
-        # Información del modelo seleccionado
-        cf = datos_prod.get("capa_fina") or {}
-        m_entry = cf.get(modelo_cf) or {}
-        calidad_cf = (m_entry.get("calidad_datos") or "").upper() if m_entry else ""
-        fuente_cf = m_entry.get("fuente", "—") if m_entry else "—"
-        cond = m_entry.get("condiciones_calibracion") or {} if m_entry else {}
-        T_K_cal = cond.get("T_K")
-        v_cal = cond.get("v_aire_m_s")
-
-        if calidad_cf:
-            icono_cal = {"ALTA": "🟢", "MEDIA": "🟡", "BAJA": "🔴"}.get(calidad_cf, "⚪")
-            st.caption(f"{icono_cal} Calidad: {calidad_cf}")
-        if T_K_cal:
-            T_rango = T_K_cal if isinstance(T_K_cal, list) else [T_K_cal]
-            T_str = f"{min(T_rango)-273.15:.0f}–{max(T_rango)-273.15:.0f} °C"
-            st.caption(
-                f"🌡️ Rango calibración: {T_str}" + (f"  |  💨 v = {v_cal} m/s" if v_cal else "")
-            )
-        if fuente_cf and fuente_cf != "—":
-            with st.expander("Fuente bibliográfica"):
-                st.caption(fuente_cf[:300] + "..." if len(fuente_cf) > 300 else fuente_cf)
 
         # Isoterma disponible?
         iso = datos_prod.get("isoterma") or {}
@@ -1970,45 +1868,67 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección E: Condiciones de operación
     # -----------------------------------------------------------------------
-    with st.expander("Condiciones de operación", expanded=False):
-        if es_caja_pre:
-            hint_T = (
-                "Tipología CAJA: el aire entrante es el ambiente (sin colector). "
-                "Configurar T ≈ T_amb representativa del emplazamiento."
+    with st.expander("Aire de entrada a la cámara (condición de borde)", expanded=False):
+        # En modo "Día real" (con datos reales disponibles) el borde y los
+        # coeficientes salen del clima/colector → estos sliders no intervienen
+        # y se ocultan para no confundir. Si "Día real" se eligió pero no hay
+        # datos reales, el cálculo cae a "Sintético", que SÍ usa estos valores
+        # → en ese caso se muestran igual.
+        _sel_forz = str(st.session_state.get("cam_forz_sel", ""))
+        _real_disp, _ = _disponibilidad_forzantes_reales(st.session_state.get("p3_eval"), proyecto)
+        _borde_no_aplica = _sel_forz.startswith("Día real") and _real_disp
+
+        if _borde_no_aplica:
+            st.info(
+                "Modo **Día real** activo: la temperatura y la humedad del aire de "
+                "entrada salen del clima/colector, y los coeficientes de transporte se "
+                "recalculan en el tiempo. Estos valores no se configuran en este modo."
             )
+            # Valores vestigiales para el build (no afectan el cálculo en Día real).
+            T_op_C = st.session_state.get("cam_T_op_C", _T_OP_DEFAULT_C)
+            HR_op_pct = st.session_state.get("cam_HR_op_pct", _HR_DEFAULT_PCT)
         else:
-            hint_T = (
-                "Temperatura del aire en la cámara. " "Típicamente ≈ T_salida del colector solar."
+            st.caption(
+                "Estos valores describen el aire que **entra** a la cámara, no la "
+                "temperatura/HR **dentro** de ella (que el motor calcula y varían en el "
+                "tiempo). Son la condición de borde de los modos **Constantes** y "
+                "**Sintético**."
             )
-        T_op_prev_C = _T_OP_DEFAULT_C
-        if proyecto.camara is not None and "T_operacion_K" in st.session_state:
-            T_op_prev_C = kelvin_a_celsius(
-                st.session_state.get("cam_T_operacion_K", celsius_a_kelvin(_T_OP_DEFAULT_C))
+            if es_caja_pre:
+                hint_T = (
+                    "Tipología CAJA: el aire entrante es el ambiente (sin colector). "
+                    "Configurar T ≈ T_amb representativa del emplazamiento."
+                )
+            else:
+                hint_T = (
+                    "Temperatura del aire que entra a la cámara. Típicamente ≈ T_salida "
+                    "del colector. La T dentro de la cámara es una salida dinámica del motor."
+                )
+
+            T_op_C = st.slider(
+                "Temperatura del aire de entrada [°C]",
+                min_value=int(_T_OP_MIN_C),
+                max_value=int(_T_OP_MAX_C),
+                value=int(st.session_state.get("cam_T_op_C", _T_OP_DEFAULT_C)),
+                step=1,
+                help=hint_T,
             )
+            st.session_state["cam_T_op_C"] = T_op_C
 
-        T_op_C = st.slider(
-            "Temperatura de operación en cámara [°C]",
-            min_value=int(_T_OP_MIN_C),
-            max_value=int(_T_OP_MAX_C),
-            value=int(st.session_state.get("cam_T_op_C", _T_OP_DEFAULT_C)),
-            step=1,
-            help=hint_T,
-        )
-        st.session_state["cam_T_op_C"] = T_op_C
-
-        HR_op_pct = st.slider(
-            "HR en cámara para cálculo de X_eq [%]",
-            min_value=5,
-            max_value=95,
-            value=int(st.session_state.get("cam_HR_op_pct", _HR_DEFAULT_PCT)),
-            step=1,
-            help=(
-                "Humedad relativa del aire dentro de la cámara. "
-                "Determina X_eq via isoterma GAB. En la práctica sube durante el secado; "
-                "para prediseño se usa un valor representativo."
-            ),
-        )
-        st.session_state["cam_HR_op_pct"] = HR_op_pct
+            HR_op_pct = st.slider(
+                "HR del aire de entrada [%]",
+                min_value=5,
+                max_value=95,
+                value=int(st.session_state.get("cam_HR_op_pct", _HR_DEFAULT_PCT)),
+                step=1,
+                help=(
+                    "Humedad relativa del aire que entra a la cámara; fija su humedad "
+                    "absoluta ω de entrada. La HR dentro de la cámara es dinámica (salida "
+                    "del motor termodinámico). En modo Día real no se usa: ω de entrada "
+                    "sale del clima."
+                ),
+            )
+            st.session_state["cam_HR_op_pct"] = HR_op_pct
 
     # -----------------------------------------------------------------------
     # Sección F: Modo de cálculo
@@ -2019,41 +1939,13 @@ def render() -> None:
 
     tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
     es_caja = tipologia == Tipologia.CAJA
-    solo_midilli = modelos_disp == ["midilli"]
 
-    with st.expander("Modo de cálculo (motor numérico)", expanded=False):
+    with st.expander("Forzantes del aire y horizonte de simulación", expanded=False):
 
-        _OPCIONES_MODO = [
-            "Capa fina — Estático (rápido)",
-            "Termodinámico (balance acoplado)",
-        ]
-
-        # Reconstruir índice previo
-        _modo_prev_raw = (
-            proyecto.camara.modo_calculo if proyecto.camara is not None else "termodinamico"
-        )
-        _idx_prev = 1 if _modo_prev_raw == "termodinamico" else 0
-
-        modo_label = st.radio(
-            "Motor para el cálculo del secado",
-            options=_OPCIONES_MODO,
-            index=_idx_prev,
-            help=(
-                "**Estático:** brentq algebraico — no depende de la masa, rápido.\n\n"
-                "**Termodinámico:** balance acoplado calor-masa con pared 3-nodos, "
-                "cp(X) variable y política anti-rehumectación. Soporta forzantes "
-                "constantes o día sintético senoidal, en horizonte 1–21 días."
-            ),
-        )
-
-        # Limpiar flag obsoleto del antiguo motor dinámico
+        # Motor único desde S38 (termodinámico). El antiguo selector de motor
+        # (capa fina vs termodinámico) se eliminó.
+        modo_calculo = "termodinamico"
         st.session_state.pop("cam_modo_dinamico", None)
-
-        # Derive modo_calculo para el objeto Camara
-        if "Termodinámico" in modo_label:
-            modo_calculo = "termodinamico"
-        else:
-            modo_calculo = "capa_fina"
 
         # Sub-controles del modo termodinámico: tipo de forzantes + horizonte
         tipo_forzantes = "constantes"
@@ -2073,6 +1965,13 @@ def render() -> None:
                 _label_real,
             ]
             _forz_idx_prev = st.session_state.get("cam_forz_idx", 0)
+            # Pre-sembrar la key del radio: permite que la sección "Aire de
+            # entrada" (que se renderiza antes) lea la selección sin lag. Sanear
+            # si las opciones cambiaron (CAJA↔ARMARIO) o en la primera carga.
+            if st.session_state.get("cam_forz_sel") not in _opciones_forz:
+                st.session_state["cam_forz_sel"] = _opciones_forz[
+                    min(_forz_idx_prev, len(_opciones_forz) - 1)
+                ]
             _help_real = (
                 "**Día real:** serie horaria de T_amb, ω, viento e I_g del "
                 "clima NASA POWER de P2 para el día seleccionado en P1. "
@@ -2084,7 +1983,7 @@ def render() -> None:
             forz_sel = st.radio(
                 "Forzantes del aire de entrada",
                 options=_opciones_forz,
-                index=_forz_idx_prev,
+                key="cam_forz_sel",
                 horizontal=False,
                 help=(
                     "**Constantes:** T_ent, ω y T_amb fijos al valor de diseño. "
@@ -2431,18 +2330,6 @@ def render() -> None:
                     st.session_state.pop("p4_forzantes_horizonte", None)
                     st.session_state.pop("p4_horizonte_resultado", None)
                     st.session_state.pop("p4_horizonte_meta", None)
-            else:
-                res = calcular_camara(
-                    camara,
-                    T_op_K,
-                    HR_op,
-                    T_amb_K=T_amb_calc_K,
-                    P_Pa=P_proyecto_Pa,
-                )
-                # Modo capa fina: no se propaga horizonte a P7.
-                st.session_state.pop("p4_forzantes_horizonte", None)
-                st.session_state.pop("p4_horizonte_resultado", None)
-                st.session_state.pop("p4_horizonte_meta", None)
         except Exception as exc:
             st.error(f"❌ Error en el cálculo: {exc}")
             return
@@ -2606,10 +2493,7 @@ def render() -> None:
                 st.write(f"**Espesor capa:** {espesor_capa*100:.1f} cm")
                 st.write(f"**Caudal:** {caudal:.4f} kg/s")
                 st.write(f"**Dirección:** {dir_sel}")
-                if isinstance(res, ResultadosCamara):
-                    st.write(f"**Fuente X_eq:** {res.fuente_X_eq}")
-                else:
-                    st.write(f"**T_amb (cálculo):** {T_amb_calc_K - 273.15:.1f} °C")
+                st.write(f"**T_amb (cálculo):** {T_amb_calc_K - 273.15:.1f} °C")
 
     # --- Guardar configuración ---
     if proyecto.camara is not None:

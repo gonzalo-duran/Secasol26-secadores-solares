@@ -23,7 +23,6 @@ from calculos.psicrometria import (
     volumen_especifico_aire_humedo,
 )
 
-
 # ===========================================================================
 # Tests originales — Sesión 18 — funciones psicrométricas base
 # ===========================================================================
@@ -268,97 +267,6 @@ class TestEntalpiaAireHumedo:
         assert h == pytest.approx(102125.0, rel=0.005)
 
 
-# ---------------------------------------------------------------------------
-# Integración: corrección psicrométrica en calcular_tiempo_secado_estatico
-# ---------------------------------------------------------------------------
-
-
-class TestIntegracionPsicrometriaCamara:
-    """Verifica que calcular_tiempo_secado_estatico popula los campos psicrométricos."""
-
-    @pytest.fixture
-    def camara_manzana(self):
-        from core.camara import Camara, CargaProducto, ConfiguracionFlujo
-        return Camara(
-            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
-            carga_producto=CargaProducto(
-                producto_id="manzana",
-                masa_total_kg=10.0,
-                humedad_inicial_X=4.6,
-                humedad_objetivo_X=0.15,
-                modelo_capa_fina="logaritmico",
-            ),
-        )
-
-    def test_omega_entrada_poblado(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
-        assert res.omega_entrada_kg_kg is not None
-        assert res.omega_entrada_kg_kg > 0
-
-    def test_omega_salida_mayor_que_entrada(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
-        assert res.omega_salida_kg_kg > res.omega_entrada_kg_kg
-
-    def test_HR_salida_entre_0_y_1(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
-        assert res.HR_salida is not None
-        assert 0.0 < res.HR_salida <= 1.0
-
-    def test_HR_media_entre_HR_entrada_y_HR_salida(self, camara_manzana):
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        HR_in = 0.20
-        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, HR_in)
-        assert res.HR_media is not None
-        assert min(HR_in, res.HR_salida) <= res.HR_media <= max(HR_in, res.HR_salida)
-
-    def test_saturacion_con_caudal_muy_bajo(self):
-        """Caudal muy bajo → el aire se satura → advertencia CAM_RIESGO_SATURACION_AIRE."""
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        from core.camara import Camara, CargaProducto, ConfiguracionFlujo
-        cam = Camara(
-            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.0005),  # caudal minúsculo
-            carga_producto=CargaProducto(
-                producto_id="manzana",
-                masa_total_kg=10.0,
-                humedad_inicial_X=4.6,
-                humedad_objetivo_X=0.15,
-                modelo_capa_fina="logaritmico",
-            ),
-        )
-        res = calcular_tiempo_secado_estatico(cam, 323.15, 0.10)
-        assert any("SATURACION" in a for a in res.advertencias)
-
-    def test_t_secado_corregido_mayor_igual_original(self, camara_manzana):
-        """La corrección aumenta X_eq → MR_obj más pequeño → t_secado mayor o igual."""
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        res = calcular_tiempo_secado_estatico(camara_manzana, 323.15, 0.20)
-        # Solo aplica si hay isoterma GAB (yacón); manzana usa fallback → sin corrección
-        # Si no hay corrección, t_secado_corregido == t_secado
-        assert res.t_secado_corregido_s >= res.t_secado_s - 1.0  # tolerancia 1 s
-
-    def test_camara_yacon_tiene_correccion_gab(self):
-        """Yacón tiene GAB → X_eq_corregido debería diferir de X_eq base."""
-        from calculos.camara_calc import calcular_tiempo_secado_estatico
-        from core.camara import Camara, CargaProducto, ConfiguracionFlujo
-        cam = Camara(
-            flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
-            carga_producto=CargaProducto(
-                producto_id="yacon",
-                masa_total_kg=5.0,
-                humedad_inicial_X=9.0,
-                humedad_objetivo_X=0.20,
-                modelo_capa_fina="page",
-            ),
-        )
-        res = calcular_tiempo_secado_estatico(cam, 323.15, 0.20)
-        # X_eq con HR_media > X_eq con HR_entrada (aire en cámara es más húmedo)
-        assert res.X_eq_corregido_kg_kg is not None
-        assert res.X_eq_corregido_kg_kg >= res.X_eq_kg_kg - 0.001  # corrección ≥ 0
-
-
 # ===========================================================================
 # Tests Sesión 20 — funciones psicrométricas para motor termodinámico
 # ===========================================================================
@@ -400,7 +308,7 @@ class TestCalorLatenteVaporizacion:
         # -10 °C debe ser admitido (extrapolación)
         Lv = calor_latente_vaporizacion(263.15)
         Lv_0C = calor_latente_vaporizacion(273.15)
-        assert Lv > Lv_0C   # crece con T decreciente (fórmula lineal)
+        assert Lv > Lv_0C  # crece con T decreciente (fórmula lineal)
 
     def test_T_extremadamente_baja_lanza(self):
         """Por debajo de -23 °C (250 K) sí lanzamos error: ya es sublimación
@@ -620,7 +528,7 @@ class TestActividadAguaDesdeXGAB:
         casos = [
             (0.05, 12.0, 0.85),  # frutas tipo manzana
             (0.08, 15.0, 0.80),  # carne
-            (0.04, 8.0, 0.90),   # cereales
+            (0.04, 8.0, 0.90),  # cereales
             (0.10, 25.0, 0.75),  # producto con monocapa alta
         ]
         for X_m, C, K in casos:
@@ -698,9 +606,7 @@ class TestCoefTransferenciaMasa:
             ρ ≈ 1.085 kg/m³, cp ≈ 1006 + 1805·0.020 = 1042 J/(kg·K)
             h_m = 20 / (1.085 · 1042 · 1) ≈ 0.0177 m/s
         """
-        h_m = coef_transferencia_masa_chilton_colburn(
-            h_conv=20.0, T_K=323.15, omega=0.020, Le=1.0
-        )
+        h_m = coef_transferencia_masa_chilton_colburn(h_conv=20.0, T_K=323.15, omega=0.020, Le=1.0)
         assert h_m == pytest.approx(0.0177, rel=0.02)
 
     def test_proporcional_a_h_conv(self):
@@ -715,12 +621,8 @@ class TestCoefTransferenciaMasa:
 
     def test_efecto_lewis(self):
         """Le > 1 reduce h_m respecto a Le=1."""
-        h_m_Le1 = coef_transferencia_masa_chilton_colburn(
-            20.0, 323.15, 0.020, Le=1.0
-        )
-        h_m_Le2 = coef_transferencia_masa_chilton_colburn(
-            20.0, 323.15, 0.020, Le=2.0
-        )
+        h_m_Le1 = coef_transferencia_masa_chilton_colburn(20.0, 323.15, 0.020, Le=1.0)
+        h_m_Le2 = coef_transferencia_masa_chilton_colburn(20.0, 323.15, 0.020, Le=2.0)
         assert h_m_Le2 < h_m_Le1
         # Con Le=2: factor = 1/2^(2/3) ≈ 0.630
         ratio = h_m_Le2 / h_m_Le1

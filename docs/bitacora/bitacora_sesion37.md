@@ -83,3 +83,34 @@ fallo de exportación **nunca** rompa el render del gráfico. +1 test de regresi
   convección mixta para flujo opuesto (S36); validación cruzada motor TD vs capa fina.
 - Avisos cosméticos de markdownlint (MD029) en `docs/notas/mejoras.md` por los bloques multilínea
   `[IMPLEMENTADO]`; no afectan nada.
+
+## 165. Cierre operativo (2026-06-08) — push de la tanda S35+S36+S37 a producción
+
+Sesión corta de devops, sin cambios de código. Se pushearon a `origin/main` los 5 commits
+acumulados desde S34 (`b5fd460..06958cd`: nav lateral + fix sidebar, multi-día y materiales de
+cámara, subsecciones colapsadas, descarga PNG/CSV, docs S35-S37 + CHANGELOG 0.8-0.10). El
+`deploy_hf.yml` corrió en verde y el Space `gonzalojduran/Secasol26` quedó actualizado (verificado
+viendo la navegación lateral S37 en producción).
+
+**Lío de autenticación de git resuelto** (queda como referencia para próximas sesiones):
+
+- GitHub ya no acepta password auth desde 2021. Hubo que generar un **fine-grained token**
+  (`https://github.com/settings/tokens?type=beta`) con `Repository permissions → Contents: Read and
+  write` (sin eso da 403 *"Write access to repository not granted"*, no error de auth). Mientras se
+  esté tocando workflows también conviene marcar `Workflows: Read and write`.
+- Con el token correcto, el `git push` seguía fallando silenciosamente con *"Invalid username or
+  token"* y **sin mostrar prompt** (probablemente cache transitorio + interacción con el helper
+  `store` vacío en Fedora/KDE). Bypass que destrabó: forzar prompt e ignorar todos los helpers en
+  una sola corrida:
+  ```bash
+  GIT_TERMINAL_PROMPT=1 GIT_ASKPASS= SSH_ASKPASS= GITHUB_TOKEN= git -c credential.helper= push
+  ```
+- Para persistir el token sin instalar nada extra (`store` plano, ya configurado en `~/.gitconfig`):
+  ```bash
+  printf 'https://gonzalo-duran:TOKEN@github.com\n' > ~/.git-credentials
+  chmod 600 ~/.git-credentials
+  ```
+  Verificación rápida sin commitear: `git ls-remote origin > /dev/null && echo OK`.
+- Limpieza: removido el archivo huérfano `Sin título.base` del working tree (basura de algún editor).
+
+Working tree limpio, `main` en sync con `origin/main`, app live en HF Spaces.

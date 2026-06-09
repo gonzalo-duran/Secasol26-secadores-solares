@@ -14,6 +14,53 @@ Hoja de ruta a 1.0 (sin orden estricto):
 
 ---
 
+## [0.12.0] — 2026-06-09
+
+Coeficientes de transporte de cámara variables en el tiempo + limpieza de los inputs de operación
+(T_op/HR_op) que eran residuo del motor de capa fina. Suite: 875 tests.
+
+### Changed
+
+- **`h_conv` y `K_m` interiores de la cámara dejan de congelarse** (antes "opción ii" §24.10). El
+  motor termodinámico (`camara_termodinamica.simular_secado`) acepta un `coef_transporte_func`
+  opcional que recalcula los coeficientes **por paso** desde el estado real del aire
+  (`T_ent(t)`, `T_prod(t)`, `ω_ent(t)`, `ṁ(t)`); el closure se arma en
+  `camara_calc._calcular_termodinamico` (placa plana + Chilton-Colburn, película en
+  `(T_ent+T_prod)/2`). Reevaluar desde cantidades conocidas no rompe la linealidad del sistema
+  algebraico por paso. Back-compat: sin el callable se usan los escalares congelados. **Efecto:** en
+  los modos Sintético/Día real/Anual los valores de T_op/HR_op ya **no influyen** en el resultado
+  (la cámara queda gobernada por el clima/colector y los coeficientes variables); solo son
+  condición de borde en modo Constantes.
+- **UX P4/P7:** los sliders de "operación de cámara" se renombraron a **aire de entrada** (condición
+  de borde) y se eliminó el texto "HR → X_eq vía GAB" (residuo de capa fina). Se aclara que la T y
+  la HR **dentro** de la cámara son salida dinámica del motor. Además, en P4 los sliders T_op/HR_op
+  se **ocultan** en modo **Día real** (con datos reales disponibles), reemplazados por una nota — no
+  intervienen en ese modo (si "Día real" cae a "Sintético" por falta de datos, se siguen mostrando).
+  Para leer el modo sin lag, el radio de forzantes pasó a usar `key="cam_forz_sel"`.
+
+### Added
+
+- Tests del callable de coeficientes en `tests/test_calculos/test_camara_termodinamica.py`
+  (consistencia con el caso congelado, los coeficientes mandan en el secado, evaluación por paso
+  con `ṁ(t)` variable).
+
+---
+
+## [0.11.0] — 2026-06-08
+
+Eliminación del motor de capa fina: la cámara de secado pasa a tener un **único** motor físico (termodinámico, balance acoplado calor-masa). Suite: 872 tests.
+
+### Removed
+
+- **Motor de cámara "capa fina"** (correlaciones empíricas MR(t) de Lewis/Page/Henderson-Pabis/Midilli/Logarítmico). Diagnóstico (ver `docs/bitacora/bitacora_sesion38.md`): era un evaluador de punto único a temperatura pico, insensible al espesor de lecho y a la velocidad de aire reales (el k está calibrado a un espesor y velocidad de laboratorio), no entregaba temperaturas ni flujos, y no existía en los pipelines transitorio/multidía/anual — produciendo tiempos de secado irreales. El motor termodinámico, físicamente completo e independiente, lo reemplaza. Se eliminaron `calcular_tiempo_secado_estatico`, `evaluar_MR`, `calcular_X_eq_gab`, `_interpolar_params_cf` y la dataclass `ResultadosCamara` de `calculos/camara_calc.py`, el selector de motor en P4, y las ramas de capa fina en P7. Tests del motor borrados/migrados.
+
+### Changed
+
+- **`calcular_camara` despacha siempre al motor termodinámico**. El campo `Camara.modo_calculo` queda **vestigial**: `Camara.__post_init__` coacciona el legacy `"capa_fina"` → `"termodinamico"`, de modo que los snapshots `.json` antiguos cargan sin error. Los campos `modelo_capa_fina`/`modelo_isoterma` y los bloques `capa_fina:` de los catálogos se conservan como dato (no los consume el cálculo).
+- **`balance_global.resumen_camara`** se simplifica a la única firma de resultado (`ResultadoMotorTermodinamico`).
+
+---
+
 ## [0.10.0] — 2026-06-04
 
 Tanda de mejoras UX/UI (backlog `docs/notas/mejoras.md`, ítems 20–24): navegación lateral persistente, subsecciones colapsadas al inicio, consistencia de materiales en cámara, y descarga de imágenes y datos por gráfico. Suite: 919 tests + 2 xfailed.

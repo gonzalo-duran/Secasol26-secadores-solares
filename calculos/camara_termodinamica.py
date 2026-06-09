@@ -381,7 +381,9 @@ def simular_secado(
     # Geometría de cámara
     A_prod_m2: float,
     A_cuerpo_m2: float,
-    # Aire en cámara — coeficientes congelados al inicio (bitácora §24.10)
+    # Aire en cámara — coeficientes de transporte interior.
+    # Por defecto se usan estos escalares (congelados, opción ii §24.10). Si se
+    # provee coef_transporte_func, se recalculan por paso (ver más abajo).
     h_conv_W_m2K: float,
     K_m_kg_m2s: float,
     # Paredes — geometría (h_w se calcula del v_viento del forzante)
@@ -390,6 +392,10 @@ def simular_secado(
     P_Pa: float,
     # Isoterma del producto
     aw_func: Callable[[float], float],
+    # Coeficientes de transporte interior variables en el tiempo (opcional).
+    # Firma: (T_ent_K, T_prod_K, omega_ent, m_dot_as) -> (h_conv, K_m_base).
+    # Si None, se usan los escalares h_conv_W_m2K / K_m_kg_m2s (congelados).
+    coef_transporte_func: Callable[[float, float, float, float], tuple[float, float]] | None = None,
     # Radiación solar directa al producto (techo translúcido).
     # Q_rad(t) = I_g(t)·τ·α·A_rad. Defaults 0 → cámara opaca, sin término radiativo.
     tau_cubierta_solar: float = 0.0,
@@ -417,8 +423,12 @@ def simular_secado(
     Forzantes horarias: T_ent, ω_ent, ṁ_as, T_amb, v_viento se interpolan
     linealmente en cada evaluación del RHS desde `forzantes`. El coeficiente
     convectivo exterior h_w se recalcula cada paso por McAdams desde el
-    v_viento(t). h_conv interior y K_m permanecen congelados (opción ii —
-    variación < 5 % en el rango operativo).
+    v_viento(t). Los coeficientes interiores h_conv y K_m se recalculan por
+    paso vía `coef_transporte_func(T_ent(t), T_prod(t), ω_ent(t), ṁ(t))` cuando
+    se provee (la película usa T_ent + T_prod, ambas conocidas al evaluar el
+    RHS, por lo que no se rompe la linealidad del sistema algebraico dentro del
+    paso); si es None, quedan congelados en h_conv_W_m2K / K_m_kg_m2s
+    (comportamiento histórico, opción ii §24.10).
 
     Política B anti-rehumectación: si la solución algebraica daría ṁ_w < 0
     (condensación neta sobre el producto, fuerza motriz invertida), se
@@ -535,11 +545,19 @@ def simular_secado(
         )
 
     # --- Closure: resolver con boundary interpolado ---
+    # Los coeficientes interiores (h_conv, K_m) se evalúan por paso desde el
+    # estado del aire si hay coef_transporte_func; si no, se usan los escalares
+    # congelados. K_m_override=0.0 lo usa la política B (sin evaporación).
     def _resolver(
-        T_prod: float, X_prod: float, t: float, K_m_efectivo: float
+        T_prod: float, X_prod: float, t: float, K_m_override: float | None = None
     ) -> EstadoCamara:
         X_safe = max(X_prod, 0.0)
         T_ent, omega_ent, m_dot, T_amb, h_w = _boundary_t(t)
+        if coef_transporte_func is not None:
+            h_conv_local, K_m_base = coef_transporte_func(T_ent, T_prod, omega_ent, m_dot)
+        else:
+            h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
+        K_m_usado = K_m_override if K_m_override is not None else K_m_base
         return resolver_estado_camara(
             T_prod_K=T_prod,
             X_prod_kg_kg=X_safe,
@@ -548,8 +566,8 @@ def simular_secado(
             A_prod_m2=A_prod_m2,
             A_cuerpo_m2=A_cuerpo_m2,
             m_dot_as_kg_s=m_dot,
-            h_conv_W_m2K=h_conv_W_m2K,
-            K_m_kg_m2s=K_m_efectivo,
+            h_conv_W_m2K=h_conv_local,
+            K_m_kg_m2s=K_m_usado,
             h_w_W_m2K=h_w,
             k_aisl_W_mK=k_aisl_W_mK,
             esp_cam_m=esp_cam_m,
@@ -573,9 +591,9 @@ def simular_secado(
         Returns:
             (EstadoCamara final, clipeado_flag).
         """
-        est = _resolver(T_prod, X_prod, t, K_m_kg_m2s)
+        est = _resolver(T_prod, X_prod, t)
         if est.m_dot_w_kg_s < 0.0:
-            est_clip = _resolver(T_prod, X_prod, t, 0.0)
+            est_clip = _resolver(T_prod, X_prod, t, K_m_override=0.0)
             return est_clip, True
         return est, False
 

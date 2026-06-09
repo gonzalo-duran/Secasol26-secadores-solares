@@ -22,7 +22,9 @@ from calculos.psicrometria import humedad_absoluta
 from core.camara import (
     Camara,
     CargaProducto,
+    ConfiguracionBandejas,
     ConfiguracionFlujo,
+    GeometriaCamara,
     OperacionAnualConfig,
 )
 from core.clima import Clima
@@ -58,16 +60,24 @@ def proyecto_completo() -> Proyecto:
     )
     p.emplazamiento = Emplazamiento(latitud_deg=-24.7, longitud_deg=-65.4)
     p.colector = Colector()
+    # Cámara dimensionada para que el motor termodinámico converja a X_obj en
+    # el rango de caudales barridos (yacón con GAB real, cámara chica). Desde
+    # S38 el motor de cámara es único (termodinámico).
     p.camara = Camara(
-        flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
-        carga_producto=CargaProducto(
-            producto_id="manzana",
-            masa_total_kg=10.0,
-            humedad_inicial_X=4.6,
-            humedad_objetivo_X=0.15,
-            modelo_capa_fina="logaritmico",
+        geometria=GeometriaCamara(largo_m=0.6, ancho_m=0.4, alto_m=0.6),
+        bandejas=ConfiguracionBandejas(
+            n_bandejas=3,
+            area_bandeja_m2=0.20,
+            espesor_capa_m=0.015,
+            separacion_entre_bandejas_m=0.06,
         ),
-        modo_calculo="capa_fina",
+        flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.10),
+        carga_producto=CargaProducto(
+            producto_id="yacon",
+            masa_total_kg=2.0,
+            humedad_inicial_X=9.0,
+            humedad_objetivo_X=0.50,
+        ),
     )
     return p
 
@@ -144,7 +154,7 @@ def test_aplicar_sobre_clon_no_toca_original(proyecto_completo):
     clon = copy.deepcopy(proyecto_completo)
     aplicar_parametro(clon, "caudal_masico", 0.123)
     assert clon.camara.flujo.caudal_masico_kg_s == pytest.approx(0.123)
-    assert proyecto_completo.camara.flujo.caudal_masico_kg_s == pytest.approx(0.030)
+    assert proyecto_completo.camara.flujo.caudal_masico_kg_s == pytest.approx(0.10)
 
 
 # ===========================================================================
@@ -199,7 +209,7 @@ def test_correr_barrido_no_muta_proyecto_base(proyecto_completo):
         condiciones_constantes=_COND_CONST,
     )
     correr_barrido(proyecto_completo, cfg)
-    assert proyecto_completo.camara.flujo.caudal_masico_kg_s == pytest.approx(0.030)
+    assert proyecto_completo.camara.flujo.caudal_masico_kg_s == pytest.approx(0.10)
 
 
 def test_punto_invalido_no_aborta_barrido(proyecto_completo):

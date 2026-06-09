@@ -119,18 +119,21 @@ Desde S36 el coeficiente convectivo interno se calcula **localmente nodo a nodo*
 
 El solver de colector recibe **POA** (radiación en plano del colector, transposición Liu-Jordan con `pvlib`), no GHI. Esto vale en todos los pipelines: P3 horario/diario, P3 constantes, P7 constantes, P7 transitorio con clima real.
 
-### Motores numéricos de cámara — tres motores con dispatcher
+### Motor numérico de cámara — motor único (termodinámico)
 
-`Camara.modo_calculo: Literal["capa_fina", "termodinamico"]` selecciona uno de dos motores físicos. El dispatcher único vive en `calculos/camara_calc.py::calcular_camara()`:
+Desde **S38** la cámara tiene un **único** motor físico: el balance acoplado calor-masa. El punto de entrada es `calculos/camara_calc.py::calcular_camara()`, que arma los parámetros desde el objeto `Camara` y delega en `camara_termodinamica.py::simular_secado`:
 
-| Modo | Módulo | Modelo físico | Estado de resultado |
-|------|--------|---------------|---------------------|
-| `capa_fina` | `camara_calc.py::calcular_tiempo_secado_estatico` | Lewis/Page/Henderson-Pabis/Midilli/Logarítmico con k constante; X_eq por GAB con HR_media | `ResultadosCamara`, `t_secado_s: float`, `masa_agua_extraida_kg` |
-| `termodinamico` (default desde S34) | `camara_termodinamica.py::simular_secado` | Balance acoplado calor-masa, EDOs `[T_prod, X_prod]` + 4 algebraicas, evaporación difusiva `ṁ_w = h_m·A·(ω_sat(T_prod)·a_w − ω_flujo)`, CSTR | `ResultadoMotorTermodinamico`, `t_secado_s: float | None` (None si no convergió), `masa_evaporada_total_kg` |
+| Módulo | Modelo físico | Estado de resultado |
+|--------|---------------|---------------------|
+| `camara_termodinamica.py::simular_secado` | Balance acoplado calor-masa, EDOs `[T_prod, X_prod]` + 4 algebraicas, evaporación difusiva `ṁ_w = h_m·A·(ω_sat(T_prod)·a_w − ω_flujo)`, CSTR | `ResultadoMotorTermodinamico`, `t_secado_s: float | None` (None si no convergió), `masa_evaporada_total_kg` |
 
-**Operación anual de cámara** (cascada A + B, solo con `modo_calculo == "termodinamico"` y `modo_analisis == ANUAL`): el módulo `calculos/operacion_anual_camara.py` corre `simular_secado` sobre el día típico de cada mes (promedio horario desde NASA POWER vía `clima_calc.dia_tipo_mensual`), estima `T_salida_colector` con modelo lineal `T_amb + η_col·POA·A / (ṁ·c_p)` (Opción A), y calcula las 4 eficiencias de Augustus Leon (`calculos/eficiencias_camara.py`: η_drying, η_pickup, η_térmica, η_total). El usuario configura `batches_por_mes` en P4 vía `Camara.operacion_anual: OperacionAnualConfig`. Resumen anual en P4 + tabla mensual + barras en P7.
+**Coeficientes de transporte variables en el tiempo (S39):** `h_conv` interior y `K_m` ya **no se congelan**. `simular_secado` acepta `coef_transporte_func(T_ent(t), T_prod(t), ω_ent(t), ṁ(t)) → (h_conv, K_m)` (closure construido en `camara_calc._calcular_termodinamico` con placa plana + Chilton-Colburn, película en `(T_ent+T_prod)/2`), evaluado por paso. Reevaluar desde cantidades conocidas al inicio del paso no rompe la linealidad del sistema algebraico (`resolver_estado_camara` sin cambios). Si el callable es `None`, se usan los escalares congelados (back-compat: tests que llaman `simular_secado` directo con escalares no cambian). **Consecuencia:** en modos Sintético/Día real/Anual los sliders T_op/HR_op de P4 ya **no influyen** en el cálculo (borde y coeficientes salen del clima/colector); solo son condición de borde en modo Constantes. Ver `docs/bitacora/bitacora_sesion39.md`.
 
-Las divergencias entre las dos firmas de resultado se abstraen en `balance_global._extraer_t_y_masa()` y `ui/p7_resultados._resumen_camara()`. Cualquier cambio en una firma requiere actualizar ambos helpers — no hay error de tipo que lo avise.
+El antiguo motor de **capa fina** (correlaciones empíricas MR(t) de Lewis/Page/Henderson-Pabis/Midilli/Logarítmico) fue **eliminado en S38**: era un evaluador de punto único a temperatura pico, insensible al espesor de lecho y a la velocidad de aire reales, sin temperaturas ni flujos, y desacoplado de los pipelines transitorio/multidía/anual (ver `docs/bitacora/bitacora_sesion38.md`). El campo `Camara.modo_calculo` quedó **vestigial** (back-compat de snapshots): `Camara.__post_init__` coacciona cualquier `"capa_fina"` heredado a `"termodinamico"`. `modelo_capa_fina` es vestigial puro (no lo lee nadie para calcular); `modelo_isoterma` es semi-vestigial (lo usa la validación/advertencias de `core/camara.py`, pero el TD hardcodea `"gab"`). **Ojo:** los bloques `capa_fina:` de los catálogos **no son inertes** — `_modelos_disponibles()` los lee para filtrar qué productos aparecen en el selector de P4 (`_productos_disponibles`); borrarlos sacaría productos del dropdown. El detalle de la deuda vestigial está en `docs/bitacora/bitacora_sesion38.md` §170.
+
+**Operación anual de cámara** (cascada A + B, solo con `modo_analisis == ANUAL`): el módulo `calculos/operacion_anual_camara.py` corre `simular_secado` sobre el día típico de cada mes (promedio horario desde NASA POWER vía `clima_calc.dia_tipo_mensual`), estima `T_salida_colector` con modelo lineal `T_amb + η_col·POA·A / (ṁ·c_p)` (Opción A), y calcula las 4 eficiencias de Augustus Leon (`calculos/eficiencias_camara.py`: η_drying, η_pickup, η_térmica, η_total). El usuario configura `batches_por_mes` en P4 vía `Camara.operacion_anual: OperacionAnualConfig`. Resumen anual en P4 + tabla mensual + barras en P7.
+
+La firma del resultado de cámara (`ResultadoMotorTermodinamico`) se accede uniformemente vía `balance_global.resumen_camara()` (reusado por `_extraer_t_y_masa` y `ui/p7_resultados._resumen_camara()`).
 
 `camara_calc.py` también contiene la lógica de pared compuesta vía `ConstruccionCamara.pared` (capas con resistencia térmica agregada), techo translúcido con Q_rad cuando está activo, y bandejas (Ergun para pérdida de carga en lecho).
 

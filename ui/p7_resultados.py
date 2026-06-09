@@ -480,36 +480,6 @@ def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
     return T_sug, I_sug, v_sug
 
 
-def _fig_drying_curve(solver_cam) -> go.Figure:
-    t_h = solver_cam.t_array_s / 3600.0
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=list(t_h),
-            y=list(solver_cam.X_array_kg_kg),
-            mode="lines",
-            line=dict(color="#1f77b4", width=2),
-            name="X(t)",
-        )
-    )
-    fig.add_hline(
-        y=solver_cam.X_eq_kg_kg,
-        line=dict(color="gray", dash="dash", width=1),
-        annotation_text=f"X_eq={solver_cam.X_eq_kg_kg:.3f}",
-        annotation_position="bottom right",
-    )
-    t_fin = solver_cam.t_secado_s / 3600.0
-    fig.add_vline(
-        x=t_fin,
-        line=dict(color="orange", dash="dashdot", width=1.5),
-        annotation_text=f"t={t_fin:.1f}h",
-    )
-    fig.update_xaxes(title_text="Tiempo [h]")
-    fig.update_yaxes(title_text="Humedad X [kg/kg ms]", rangemode="tozero")
-    fig.update_layout(title_text="Curva de secado", height=350, showlegend=True)
-    return fig
-
-
 def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
     """Gráfico de barras del balance energético."""
     etiquetas = []
@@ -715,7 +685,7 @@ def _texto_resultados_completo(
         f"  T ambiente          : {T_amb_C:.1f} °C",
         f"  Irradiancia (POA)   : {I_g:.0f} W/m²",
         f"  Velocidad viento    : {v_viento:.1f} m/s",
-        f"  HR cámara (X_eq)    : {HR_cam_pct:.0f} %",
+        f"  HR aire entrada     : {HR_cam_pct:.0f} %",
     ]
 
     # --- Colector ---
@@ -854,14 +824,6 @@ def _texto_resultados_completo(
                 f"  X final       : {X_final:.4f} kg/kg ms",
                 f"  T prod. final : {T_prod_final_C:.1f} °C",
                 f"  Status        : {status_cam}",
-            ]
-        else:
-            lines += [
-                f"  Modo cálculo  : capa fina estático",
-                f"  X_eq          : {_cam_show.X_eq_kg_kg:.4f} kg/kg ms",
-                f"  Tiempo secado : {t_h_cam:.2f} h",
-                f"  Agua evap.    : {masa_cam:.3f} kg",
-                f"  Convergencia  : {status_cam}",
             ]
 
     res_chim = getattr(res, "chimenea", None)
@@ -1074,16 +1036,6 @@ def _json_resultados_completo(
                 "T_prod_final_C": (
                     float(cam_r.T_prod_K[-1]) - 273.15 if len(cam_r.T_prod_K) else None
                 ),
-            }
-        else:
-            t_h, masa, status, ok = _resumen_camara(cam_r)
-            res_globales["camara"] = {
-                "modo_calculo": "capa_fina",
-                "t_secado_h": t_h,
-                "masa_agua_extraida_kg": float(masa),
-                "status": status,
-                "convergencia_ok": ok,
-                "X_eq_kg_kg": getattr(cam_r, "X_eq_kg_kg", None),
             }
     res_chim = getattr(res, "chimenea", None)
     if res_chim is not None:
@@ -1631,12 +1583,16 @@ def render() -> None:
         st.session_state["p7_v_viento"] = v_viento
     with c4:
         HR_cam_pct = st.slider(
-            "HR en cámara para X_eq [%]",
+            "HR del aire de entrada [%]",
             min_value=5.0,
             max_value=80.0,
             value=st.session_state.get("p7_HR_cam", _HR_CAMARA_DEFAULT_PCT),
             step=5.0,
-            help="HR del aire en la cámara. Determina la humedad de equilibrio del producto.",
+            help=(
+                "HR del aire que entra a la cámara, en el modo **Constantes "
+                "representativas**. Fija la ω de entrada. En el modo Transitorio la "
+                "HR de entrada sale de las forzantes y este valor no se usa."
+            ),
         )
         st.session_state["p7_HR_cam"] = HR_cam_pct
 
@@ -1768,30 +1724,6 @@ def render() -> None:
                 "el aire mantiene la temperatura cercana a T_entrada. Cada curva usa "
                 "su propia escala (ejes izquierdo y derecho)."
             )
-        else:
-            c1, c2, c3, c4 = st.columns(4)
-            t_h = cam.t_secado_s / 3600.0
-            c1.metric(
-                "Tiempo de secado", f"{t_h:.1f} h" if cam.convergencia_ok else f">{t_h:.0f} h"
-            )
-            c2.metric(
-                "X equilibrio", f"{cam.X_eq_kg_kg:.4f} kg/kg ms", help=f"Fuente: {cam.fuente_X_eq}"
-            )
-            c3.metric("Agua evaporada", f"{cam.masa_agua_extraida_kg:.2f} kg")
-            c4.metric("MR objetivo", f"{cam.MR_obj:.4f}")
-
-            if res.T_entrada_camara_K is not None:
-                st.info(
-                    f"ℹ️ **Modelo de capa fina:** supone temperatura del aire "
-                    f"**T = {kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C** y "
-                    f"HR = **{HR_cam_pct:.0f} %** constantes durante todo el secado. "
-                    "El modelo cinético no calcula temperaturas del producto ni flujos de "
-                    "calor dinámicos. Para análisis con temperatura y humedad variables, "
-                    "usar el modo **Termodinámico** en P4."
-                )
-
-            fig_dry = _fig_drying_curve(cam)
-            mostrar_plotly(fig_dry, nombre="camara_secado")
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
@@ -1899,8 +1831,6 @@ def render() -> None:
                     ("Cámara — X final [kg/kg ms]", f"{X_final:.4f}"),
                     ("Cámara — T producto final [°C]", f"{T_prod_final_C:.1f}"),
                 ]
-            else:
-                filas.append(("Cámara — X_eq [kg/kg ms]", f"{cam.X_eq_kg_kg:.4f}"))
         if proyecto.motor and proyecto.motor.potencia_a_instalar_W:
             mot = proyecto.motor
             filas += [

@@ -591,6 +591,61 @@ def _kwargs_motor_con_forzantes(forzantes, **overrides):
     return base
 
 
+class TestCoefTransporteVariable:
+    """Verifica el callable `coef_transporte_func` (coeficientes interiores variables)."""
+
+    def test_callable_constante_reproduce_frozen(self):
+        """Un callable que devuelve los mismos escalares == comportamiento congelado.
+
+        Cierra el back-compat: si los coeficientes no varían, el resultado debe
+        ser idéntico al de pasar h_conv/K_m escalares sin callable.
+        """
+        res_frozen = simular_secado(**_kwargs_motor())  # sin callable → congelado
+        res_cb = simular_secado(
+            **_kwargs_motor(coef_transporte_func=lambda Te, Tp, w, m: (15.0, 0.015))
+        )
+        assert res_cb.t_secado_s == pytest.approx(res_frozen.t_secado_s, rel=1e-9)
+        assert np.allclose(res_cb.T_prod_K, res_frozen.T_prod_K, rtol=1e-9, atol=1e-9)
+
+    def test_callable_coeficientes_altos_aceleran_secado(self):
+        """Coeficientes interiores mayores → secado más rápido (el callable manda)."""
+        res_bajo = simular_secado(**_kwargs_motor(coef_transporte_func=lambda *a: (8.0, 0.008)))
+        res_alto = simular_secado(**_kwargs_motor(coef_transporte_func=lambda *a: (40.0, 0.040)))
+        assert res_alto.t_secado_s is not None and res_bajo.t_secado_s is not None
+        assert res_alto.t_secado_s < res_bajo.t_secado_s
+
+    def test_callable_evaluado_con_estado_variable(self):
+        """El callable se evalúa por paso con el ṁ(t) variable de la forzante."""
+        t = np.linspace(0.0, 12 * 3600.0, 13)
+        m_dot = np.linspace(0.02, 0.06, 13)  # caudal que rampa en el tiempo
+        fz = ForzantesAire(
+            t_s=t,
+            T_ent_K=np.full_like(t, 323.15),
+            omega_ent=np.full_like(t, humedad_absoluta(0.20, 323.15)),
+            m_dot_aire_seco_kg_s=m_dot,
+            T_amb_K=np.full_like(t, 298.15),
+            v_viento_ms=np.full_like(t, 2.5),
+        )
+        m_recibidos: list[float] = []
+
+        def _cb(T_ent, T_prod, omega_ent, m):
+            m_recibidos.append(m)
+            return 15.0, 0.015
+
+        simular_secado(
+            **_kwargs_motor_con_forzantes(
+                fz,
+                X_prod_objetivo_kg_kg=0.30,
+                t_max_s=12 * 3600.0,
+                coef_transporte_func=_cb,
+            )
+        )
+        # Recibió múltiples caudales distintos → se evaluó con el estado variable
+        assert len({round(m, 5) for m in m_recibidos}) > 1
+        assert min(m_recibidos) >= 0.02 - 1e-6
+        assert max(m_recibidos) <= 0.06 + 1e-6
+
+
 class TestForzantesVariables:
     """Verifica que las forzantes horarias se interpolan y mueven el sistema."""
 

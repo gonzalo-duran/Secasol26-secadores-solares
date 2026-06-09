@@ -21,7 +21,7 @@ Hipótesis de v0:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
@@ -37,7 +37,6 @@ from calculos.auxiliar_calc import (
 )
 from calculos.auxiliar_calc import ResultadosAuxiliar as _SolverAuxiliar
 from calculos.camara_calc import calcular_camara
-from calculos.camara_calc import ResultadosCamara as _SolverCamara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.colector_calc import calcular_colector_tipo1
 from calculos.colector_tipos234_calc import (
@@ -50,7 +49,9 @@ from core.resultados import LV_AGUA_MJ_KG
 
 _HORIZONTE_MAX_DIAS: int = 21
 
-_SolverCamaraUnion = Union[_SolverCamara, ResultadoMotorTermodinamico]
+# Desde S38 la cámara tiene un único motor (termodinámico). El alias se conserva
+# por compatibilidad de las firmas internas que lo referencian.
+_SolverCamaraUnion = ResultadoMotorTermodinamico
 
 # ---------------------------------------------------------------------------
 # Dataclass de resultados integrados
@@ -224,38 +225,30 @@ def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
 
 
 def resumen_camara(solver_cam: _SolverCamaraUnion) -> dict:
-    """Resumen uniforme de un resultado de cámara, abstrayendo el tipo de motor.
+    """Resumen uniforme de un resultado de cámara (motor termodinámico).
 
-    Las dos firmas de resultado de cámara divergen en los nombres de sus campos
-    (``ResultadoMotorTermodinamico`` vs ``ResultadosCamara``). Esta función es la
-    **fuente de verdad única** de esa abstracción: cualquier consumidor (balance
-    global, UI de P7, barridos paramétricos) extrae los campos comunes desde acá.
+    Punto único donde se extraen los campos comunes del resultado del motor de
+    cámara para los consumidores (balance global, UI de P7, barridos
+    paramétricos). Desde S38 la cámara tiene un único motor, pero se mantiene el
+    helper para no dispersar el acceso a los campos.
 
     Args:
-        solver_cam: Resultado de cámara de cualquiera de los dos motores.
+        solver_cam: Resultado del motor termodinámico de cámara.
 
     Returns:
         dict con claves:
-            ``t_secado_s`` (float | None): tiempo de secado [s]. ``None`` en modo
-                termodinámico cuando no se alcanzó X_obj.
-            ``masa_agua_kg`` (float): masa de agua evaporada/extraída [kg].
+            ``t_secado_s`` (float | None): tiempo de secado [s]. ``None`` cuando
+                no se alcanzó X_obj.
+            ``masa_agua_kg`` (float): masa de agua evaporada [kg].
             ``status`` (str): estado legible del solver.
             ``convergio`` (bool): True si el secado se completó correctamente.
     """
-    if isinstance(solver_cam, ResultadoMotorTermodinamico):
-        convergio = solver_cam.t_secado_s is not None and solver_cam.status == "X_obj_alcanzado"
-        return {
-            "t_secado_s": solver_cam.t_secado_s,
-            "masa_agua_kg": solver_cam.masa_evaporada_total_kg,
-            "status": solver_cam.status,
-            "convergio": convergio,
-        }
-    status = "OK" if solver_cam.convergencia_ok else solver_cam.mensaje_convergencia
+    convergio = solver_cam.t_secado_s is not None and solver_cam.status == "X_obj_alcanzado"
     return {
         "t_secado_s": solver_cam.t_secado_s,
-        "masa_agua_kg": solver_cam.masa_agua_extraida_kg,
-        "status": status,
-        "convergio": solver_cam.convergencia_ok,
+        "masa_agua_kg": solver_cam.masa_evaporada_total_kg,
+        "status": solver_cam.status,
+        "convergio": convergio,
     }
 
 

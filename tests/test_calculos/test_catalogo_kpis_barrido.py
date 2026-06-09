@@ -60,23 +60,22 @@ def test_filtro_por_modo():
 # --- Extractores: modo Constantes -----------------------------------------
 
 
-def _camara_capa_fina_mock(t_secado_s, masa_kg, ok=True):
-    """Mock duck-typed del resultado de cámara capa-fina (no es TD)."""
+def _camara_td_mock(t_secado_s, masa_kg, ok=True):
+    """Mock duck-typed del resultado de cámara (motor termodinámico)."""
     return SimpleNamespace(
-        convergencia_ok=ok,
+        status="X_obj_alcanzado" if ok else "t_max_alcanzado",
         t_secado_s=t_secado_s,
-        masa_agua_extraida_kg=masa_kg,
-        mensaje_convergencia="OK" if ok else "no convergió",
+        masa_evaporada_total_kg=masa_kg,
     )
 
 
 def test_extractor_t_secado_h_via_camara():
-    res = SimpleNamespace(camara=_camara_capa_fina_mock(t_secado_s=7200.0, masa_kg=3.0))
+    res = SimpleNamespace(camara=_camara_td_mock(t_secado_s=7200.0, masa_kg=3.0))
     assert obtener_kpi("t_secado_h").extractor(res) == pytest.approx(2.0)
 
 
 def test_extractor_masa_agua_via_camara():
-    res = SimpleNamespace(camara=_camara_capa_fina_mock(t_secado_s=3600.0, masa_kg=4.2))
+    res = SimpleNamespace(camara=_camara_td_mock(t_secado_s=3600.0, masa_kg=4.2))
     assert obtener_kpi("masa_agua_evap_kg").extractor(res) == pytest.approx(4.2)
 
 

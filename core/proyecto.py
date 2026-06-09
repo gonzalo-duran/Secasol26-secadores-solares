@@ -12,7 +12,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import Optional
 
-VERSION_SOFTWARE = "0.10.0"
+VERSION_SOFTWARE = "0.12.0"
 
 
 class Tipologia(Enum):

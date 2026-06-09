@@ -49,7 +49,7 @@ _ALTO_MIN_TIPICO_M: float = 0.3  # límite inferior de rango típico [m]
 _ALTO_MAX_TIPICO_M: float = 3.0  # límite superior de rango típico [m]
 _RATIO_LARGO_ANCHO_MAX: float = 10.0
 _RATIO_LARGO_ANCHO_MIN: float = 0.1
-_ESPESOR_MAX_CAPA_FINA_M: float = 0.05  # 5 cm — límite de capa fina
+_ESPESOR_MAX_BANDEJA_M: float = 0.05  # 5 cm — espesor de lecho recomendado
 _N_BANDEJAS_ALTO: int = 20
 _V_SUP_MIN_MS: float = 0.3  # velocidad superficial mínima [m/s]
 _V_SUP_MAX_MS: float = 3.0  # velocidad superficial máxima [m/s]
@@ -512,10 +512,10 @@ class Camara:
         bandejas: Configuración del sistema de bandejas.
         flujo: Configuración del flujo de aire.
         carga_producto: Producto y condiciones de secado.
-        modo_calculo: Selector del motor numérico:
-            'capa_fina'    → modelo cinético empírico (Lewis/Page/...).
-            'termodinamico' → balance acoplado calor-masa con `solve_ivp`.
-            Default: 'termodinamico' (motor físicamente más completo).
+        modo_calculo: Campo vestigial (desde S38). La cámara tiene un único
+            motor físico (balance acoplado calor-masa). Cualquier valor se
+            resuelve al motor termodinámico; el legacy 'capa_fina' se coacciona
+            a 'termodinamico' en __post_init__ para back-compat de snapshots.
     """
 
     geometria: GeometriaCamara = field(default_factory=GeometriaCamara)
@@ -527,6 +527,11 @@ class Camara:
     operacion_anual: Optional[OperacionAnualConfig] = None
 
     def __post_init__(self) -> None:
+        # Back-compat (S38): el motor de capa fina fue eliminado. Snapshots y
+        # llamadas antiguas con modo_calculo='capa_fina' se normalizan al único
+        # motor disponible (termodinámico).
+        if self.modo_calculo == "capa_fina":
+            self.modo_calculo = "termodinamico"
         if self.modo_calculo not in _MODOS_CALCULO_VALIDOS:
             raise ValueError(
                 f"CAM_MODO_INVALIDO: modo_calculo='{self.modo_calculo}' no es válido. "
@@ -539,9 +544,8 @@ class Camara:
         """Valida que el producto y sus modelos existan en el catálogo.
 
         Raises:
-            ValueError: Si el producto_id no existe, o si el modelo de capa fina
-                seleccionado no tiene parámetros calibrados para el producto.
-                También si no hay isoterma ni fallback escalar.
+            ValueError: Si el producto_id no existe, o si no hay isoterma de
+                sorción ni fallback escalar de X_eq para el producto.
         """
         p = self.carga_producto
 
@@ -553,22 +557,6 @@ class Camara:
             )
 
         datos = catalogo.PRODUCTOS[p.producto_id]
-
-        # Modelo de capa fina con params calibrados
-        cf = datos.get("capa_fina") or {}
-        modelo_entry = cf.get(p.modelo_capa_fina) or {}
-        params_cf = modelo_entry.get("params") or {} if modelo_entry else {}
-        params_cf_vacios = not params_cf or all(
-            v is None for v in params_cf.values() if not isinstance(v, (list, dict))
-        )
-        if params_cf_vacios:
-            modelos_disponibles = _modelos_disponibles(datos)
-            raise ValueError(
-                f"MOD_CAPA_FINA_NO_DISPONIBLE: modelo '{p.modelo_capa_fina}' sin parámetros "
-                f"calibrados para '{p.producto_id}'. "
-                f"Modelos disponibles: {modelos_disponibles}. "
-                "Cargar parámetros en el catálogo o seleccionar otro modelo."
-            )
 
         # Isoterma: error duro solo si no hay parámetros Y no hay fallback escalar
         iso = datos.get("isoterma") or {}
@@ -737,19 +725,20 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
         )
 
     # --- BAND: espesor de capa grande ---
-    if b.espesor_capa_m > _ESPESOR_MAX_CAPA_FINA_M:
+    if b.espesor_capa_m > _ESPESOR_MAX_BANDEJA_M:
         adv.append(
             Advertencia(
                 codigo="BAND_ESPESOR_CAPA_GRANDE",
                 severidad=Severidad.WARNING,
                 mensaje=(
                     f"Espesor de capa {b.espesor_capa_m * 100:.1f} cm > "
-                    f"{_ESPESOR_MAX_CAPA_FINA_M * 100:.0f} cm. "
-                    "Los modelos de capa fina pueden subestimar el tiempo de secado."
+                    f"{_ESPESOR_MAX_BANDEJA_M * 100:.0f} cm. "
+                    "En lechos gruesos la resistencia interna a la difusión de humedad "
+                    "crece y el secado real puede ser más lento que el estimado."
                 ),
                 campo="bandejas.espesor_capa_m",
-                sugerencia="Reducir espesor de capa o evaluar un modelo difusivo.",
-                contexto={"espesor_m": b.espesor_capa_m, "limite_m": _ESPESOR_MAX_CAPA_FINA_M},
+                sugerencia="Reducir el espesor de capa para acelerar y uniformar el secado.",
+                contexto={"espesor_m": b.espesor_capa_m, "limite_m": _ESPESOR_MAX_BANDEJA_M},
             )
         )
 
@@ -828,25 +817,6 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
                 campo="flujo.HR_entrada_fraccion",
                 sugerencia="Especificar HR de entrada para mayor precisión en el cálculo de X_eq.",
                 contexto={},
-            )
-        )
-
-    # --- PROD: calidad de datos baja ---
-    cf = datos.get("capa_fina") or {}
-    modelo_entry = cf.get(p.modelo_capa_fina) or {}
-    calidad = (modelo_entry.get("calidad_datos") or "").upper() if modelo_entry else ""
-    if calidad in ("BAJA", "ESTIMADA_POR_ANALOGIA"):
-        adv.append(
-            Advertencia(
-                codigo="PROD_CALIDAD_DATOS_BAJA",
-                severidad=Severidad.WARNING,
-                mensaje=(
-                    f"Modelo '{p.modelo_capa_fina}' para '{p.producto_id}' tiene "
-                    f"calidad '{calidad}'. Resultados orientativos."
-                ),
-                campo="carga_producto.modelo_capa_fina",
-                sugerencia="Verificar con datos experimentales propios o literatura específica.",
-                contexto={"calidad": calidad},
             )
         )
 
