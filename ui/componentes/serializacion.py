@@ -210,10 +210,7 @@ def parsear_json_seccion(
 
     actual = data.get("seccion")
     if actual != seccion_esperada:
-        return None, (
-            f"El archivo es de sección '{actual}', "
-            f"se esperaba '{seccion_esperada}'."
-        )
+        return None, (f"El archivo es de sección '{actual}', " f"se esperaba '{seccion_esperada}'.")
     return data, None
 
 

@@ -36,38 +36,38 @@ from scipy.optimize import brentq
 # Constantes — propiedades termofísicas del aire húmedo
 # ---------------------------------------------------------------------------
 
-_EPSILON: float = 0.622          # M_agua / M_aire_seco [adim]
-_R_AIRE_SECO: float = 287.058    # constante específica del aire seco [J/(kg·K)]
+_EPSILON: float = 0.622  # M_agua / M_aire_seco [adim]
+_R_AIRE_SECO: float = 287.058  # constante específica del aire seco [J/(kg·K)]
 
 # Calores específicos a presión constante (rango 0–80 °C)
-_CP_AIRE_SECO: float = 1006.0    # J/(kg·K) — aire seco
-_CP_VAPOR: float = 1805.0        # J/(kg·K) — vapor de agua
-_LV_0: float = 2_501_000.0       # J/kg — calor latente a 0 °C
-_T_REF: float = 273.15           # K — referencia para entalpías (0 °C)
+_CP_AIRE_SECO: float = 1006.0  # J/(kg·K) — aire seco
+_CP_VAPOR: float = 1805.0  # J/(kg·K) — vapor de agua
+_LV_0: float = 2_501_000.0  # J/kg — calor latente a 0 °C
+_T_REF: float = 273.15  # K — referencia para entalpías (0 °C)
 
 # Coeficientes de la correlación lineal de Rogers & Yau (1989)
 # L_v(T) = L_v0 − k_Lv · (T − T_ref)
-_K_LV: float = 2370.0            # J/(kg·K) — pendiente
+_K_LV: float = 2370.0  # J/(kg·K) — pendiente
 
 # ---------------------------------------------------------------------------
 # Constantes — Ecuación de Buck (1981)
 # ---------------------------------------------------------------------------
 
-_A_BUCK: float = 18.678          # coeficiente ecuación Buck [adim]
-_B_BUCK: float = 234.5           # coeficiente ecuación Buck [°C]
-_C_BUCK: float = 257.14          # coeficiente ecuación Buck [°C]
-_PS0_PA: float = 611.21          # Ps a T=0°C [Pa]
+_A_BUCK: float = 18.678  # coeficiente ecuación Buck [adim]
+_B_BUCK: float = 234.5  # coeficiente ecuación Buck [°C]
+_C_BUCK: float = 257.14  # coeficiente ecuación Buck [°C]
+_PS0_PA: float = 611.21  # Ps a T=0°C [Pa]
 
 # Para la aproximación del punto de rocío (Alduchov & Eskridge 1996)
 _A_DP: float = 17.625
-_B_DP: float = 243.04            # [°C]
+_B_DP: float = 243.04  # [°C]
 
 # ---------------------------------------------------------------------------
 # Tolerancias numéricas
 # ---------------------------------------------------------------------------
 
-_TOL_TWB: float = 1e-4           # [K] tolerancia de convergencia de T_wb
-_MAX_ITER_TWB: int = 100         # iteraciones máximas para T_wb
+_TOL_TWB: float = 1e-4  # [K] tolerancia de convergencia de T_wb
+_MAX_ITER_TWB: int = 100  # iteraciones máximas para T_wb
 
 
 # ---------------------------------------------------------------------------
@@ -87,9 +87,7 @@ def presion_vapor_saturacion(T_K: float) -> float:
         Ps [Pa].
     """
     T_C = T_K - 273.15
-    return _PS0_PA * math.exp(
-        (_A_BUCK - T_C / _B_BUCK) * T_C / (_C_BUCK + T_C)
-    )
+    return _PS0_PA * math.exp((_A_BUCK - T_C / _B_BUCK) * T_C / (_C_BUCK + T_C))
 
 
 # ---------------------------------------------------------------------------
@@ -214,13 +212,9 @@ def balance_masa_camara(
         ValueError: Si m_dot_aire_seco_kg_s ≤ 0 o t_secado_s ≤ 0.
     """
     if m_dot_aire_seco_kg_s <= 0:
-        raise ValueError(
-            f"PSICRO_CAUDAL_NO_POSITIVO: m_dot={m_dot_aire_seco_kg_s:.4f} kg/s ≤ 0."
-        )
+        raise ValueError(f"PSICRO_CAUDAL_NO_POSITIVO: m_dot={m_dot_aire_seco_kg_s:.4f} kg/s ≤ 0.")
     if t_secado_s <= 0:
-        raise ValueError(
-            f"PSICRO_T_SECADO_NO_POSITIVO: t={t_secado_s:.1f} s ≤ 0."
-        )
+        raise ValueError(f"PSICRO_T_SECADO_NO_POSITIVO: t={t_secado_s:.1f} s ≤ 0.")
     return omega_entrada + masa_agua_kg / (m_dot_aire_seco_kg_s * t_secado_s)
 
 
@@ -322,15 +316,11 @@ def cp_aire_humedo(omega: float) -> float:
         ValueError: Si omega < 0 (no físico).
     """
     if omega < 0.0:
-        raise ValueError(
-            f"PSICRO_OMEGA_NEGATIVA: ω={omega:.6f} kg/kg < 0."
-        )
+        raise ValueError(f"PSICRO_OMEGA_NEGATIVA: ω={omega:.6f} kg/kg < 0.")
     return _CP_AIRE_SECO + omega * _CP_VAPOR
 
 
-def volumen_especifico_aire_humedo(
-    T_K: float, omega: float, P_Pa: float = 101325.0
-) -> float:
+def volumen_especifico_aire_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -> float:
     """Volumen específico del aire húmedo [m³ / kg_aire_seco].
 
     Por unidad de masa de aire seco, suponiendo gas ideal:
@@ -359,9 +349,7 @@ def volumen_especifico_aire_humedo(
     return _R_AIRE_SECO * T_K * (1.0 + omega / _EPSILON) / P_Pa
 
 
-def densidad_aire_humedo(
-    T_K: float, omega: float, P_Pa: float = 101325.0
-) -> float:
+def densidad_aire_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -> float:
     """Densidad de la mezcla aire húmedo [kg_mezcla / m³].
 
     Por unidad de volumen total. Útil para el cálculo de h_m (Chilton-Colburn)
@@ -388,9 +376,7 @@ def densidad_aire_humedo(
 # ---------------------------------------------------------------------------
 
 
-def temperatura_bulbo_humedo(
-    T_K: float, omega: float, P_Pa: float = 101325.0
-) -> float:
+def temperatura_bulbo_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -> float:
     """Temperatura de bulbo húmedo (saturación adiabática) [K].
 
     Resuelve el balance energético de saturación adiabática:
@@ -470,9 +456,7 @@ def temperatura_bulbo_humedo(
 # ---------------------------------------------------------------------------
 
 
-def actividad_agua_desde_X_GAB(
-    X: float, X_m: float, C: float, K: float
-) -> float:
+def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> float:
     """Inversión analítica del modelo GAB: dado X, devuelve a_w.
 
     Modelo GAB directo:
@@ -596,9 +580,7 @@ def coef_transferencia_masa_chilton_colburn(
         §6.7 (Chapter 6, Boundary Layer Similarity).
     """
     if h_conv < 0.0:
-        raise ValueError(
-            f"PSICRO_HCONV_NEGATIVO: h_conv={h_conv:.2f} W/(m²·K) < 0."
-        )
+        raise ValueError(f"PSICRO_HCONV_NEGATIVO: h_conv={h_conv:.2f} W/(m²·K) < 0.")
     if Le <= 0.0:
         raise ValueError(f"PSICRO_LEWIS_NO_POSITIVO: Le={Le:.3f} ≤ 0.")
     rho = densidad_aire_humedo(T_K, omega, P_Pa)

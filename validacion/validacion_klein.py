@@ -27,7 +27,10 @@ import numpy as np
 
 from core.colector import Colector, ColectorUnidad, BancoColectores
 from calculos.colector_calc import (
-    calcular_colector_tipo1, _h_viento_W_m2K, _T_cielo_K, SIGMA_SB,
+    calcular_colector_tipo1,
+    _h_viento_W_m2K,
+    _T_cielo_K,
+    SIGMA_SB,
 )
 from core.catalogo import CUBIERTAS, PLACAS
 
@@ -58,7 +61,7 @@ def u_top_klein(
         U_top [W/m²·K].
     """
     f = (1.0 + 0.089 * h_w_W_m2K - 0.1166 * h_w_W_m2K * em_p) * (1.0 + 0.07866 * N)
-    C = 520.0 * (1.0 - 0.000051 * beta_deg ** 2)
+    C = 520.0 * (1.0 - 0.000051 * beta_deg**2)
     e = 0.430 * (1.0 - 100.0 / T_pm_K)
 
     # Componente convectiva (entre placa y ambiente vía cubiertas y viento)
@@ -66,11 +69,9 @@ def u_top_klein(
     U_conv = 1.0 / (N / termino_C + 1.0 / h_w_W_m2K)
 
     # Componente radiativa (linealizada)
-    numerador_rad = SIGMA_SB * (T_pm_K + T_amb_K) * (T_pm_K ** 2 + T_amb_K ** 2)
+    numerador_rad = SIGMA_SB * (T_pm_K + T_amb_K) * (T_pm_K**2 + T_amb_K**2)
     denominador_rad = (
-        1.0 / (em_p + 0.00591 * N * h_w_W_m2K)
-        + (2.0 * N + f - 1.0 + 0.133 * em_p) / em_g
-        - N
+        1.0 / (em_p + 0.00591 * N * h_w_W_m2K) + (2.0 * N + f - 1.0 + 0.133 * em_p) / em_g - N
     )
     U_rad = numerador_rad / denominador_rad
 
@@ -90,18 +91,26 @@ def u_top_modelo(resultado, T_amb_K, h_wind, em_cub, T_cie_K=None):
     T_cub_e = resultado.T_cub_e_K
     T_abs = resultado.T_abs_K
     q_conv = h_wind * (T_cub_e - T_amb_K)
-    q_rad = em_cub * SIGMA_SB * (T_cub_e ** 4 - T_ref_cie ** 4)
+    q_rad = em_cub * SIGMA_SB * (T_cub_e**4 - T_ref_cie**4)
     q_top = q_conv + q_rad
     dT = T_abs - T_amb_K
     # Promedios a lo largo de x
     return float(np.mean(q_top) / np.mean(dT))
 
 
-def caso(nombre: str, id_cubierta: str, id_placa: str,
-          T_amb_C: float, I_g: float, v_w: float, beta: float):
+def caso(
+    nombre: str,
+    id_cubierta: str,
+    id_placa: str,
+    T_amb_C: float,
+    I_g: float,
+    v_w: float,
+    beta: float,
+):
     """Corre un caso del modelo y lo compara contra Klein."""
     u = ColectorUnidad(
-        ancho_m=1.0, largo_m=2.0,
+        ancho_m=1.0,
+        largo_m=2.0,
         id_cubierta=id_cubierta,
         id_placa=id_placa,
     )
@@ -109,8 +118,11 @@ def caso(nombre: str, id_cubierta: str, id_placa: str,
     T_amb_K = T_amb_C + 273.15
     res = calcular_colector_tipo1(
         colector=col,
-        T_amb_K=T_amb_K, I_g_W_m2=I_g, v_viento_ms=v_w,
-        P_amb_Pa=101325.0, T_entrada_K=T_amb_K,
+        T_amb_K=T_amb_K,
+        I_g_W_m2=I_g,
+        v_viento_ms=v_w,
+        P_amb_Pa=101325.0,
+        T_entrada_K=T_amb_K,
         pendiente_deg=beta,
     )
     h_w, _ = _h_viento_W_m2K(v_w)
@@ -120,18 +132,20 @@ def caso(nombre: str, id_cubierta: str, id_placa: str,
     T_pm_K = float(np.mean(res.T_abs_K))
 
     # Klein contra T_amb
-    U_klein = u_top_klein(N=1, T_pm_K=T_pm_K, T_amb_K=T_amb_K,
-                          h_w_W_m2K=h_w, em_p=em_abs, em_g=em_cub,
-                          beta_deg=beta)
+    U_klein = u_top_klein(
+        N=1, T_pm_K=T_pm_K, T_amb_K=T_amb_K, h_w_W_m2K=h_w, em_p=em_abs, em_g=em_cub, beta_deg=beta
+    )
     # Modelo contra T_amb (consistente con Klein)
     U_mod_a = u_top_modelo(res, T_amb_K, h_w, em_cub, T_cie_K=None)
     # Modelo contra T_cie (físicamente exacto pero diverge de Klein)
     U_mod_c = u_top_modelo(res, T_amb_K, h_w, em_cub, T_cie_K=T_cie_K)
 
     disc = abs(U_klein - U_mod_a) / U_klein * 100
-    print(f"  {nombre:30s}  T_pm={T_pm_K-273.15:5.1f}°C  η={res.eta_termica:.3f}  "
-          f"U_klein={U_klein:5.2f}  U_mod(Tamb)={U_mod_a:5.2f}  U_mod(Tcie)={U_mod_c:5.2f}  "
-          f"disc={disc:4.1f}%")
+    print(
+        f"  {nombre:30s}  T_pm={T_pm_K-273.15:5.1f}°C  η={res.eta_termica:.3f}  "
+        f"U_klein={U_klein:5.2f}  U_mod(Tamb)={U_mod_a:5.2f}  U_mod(Tcie)={U_mod_c:5.2f}  "
+        f"disc={disc:4.1f}%"
+    )
     return disc
 
 
@@ -139,45 +153,72 @@ if __name__ == "__main__":
     print("=" * 110)
     print("Validación U_top: modelo numérico Tipo 1  vs.  Klein 1979 (D&B ec. 6.4.9)")
     print("=" * 110)
-    print(f"  {'Caso':30s}  {'T_pm':>10s}  {'η':>5s}  {'U_klein':>7s}  "
-          f"{'U_mod(Tamb)':>11s}  {'U_mod(Tcie)':>11s}  {'disc':>5s}")
+    print(
+        f"  {'Caso':30s}  {'T_pm':>10s}  {'η':>5s}  {'U_klein':>7s}  "
+        f"{'U_mod(Tamb)':>11s}  {'U_mod(Tcie)':>11s}  {'disc':>5s}"
+    )
     print("-" * 110)
 
     discrepancias = []
 
     # Casos con vidrio + placa selectiva (caso clásico de D&B)
-    discrepancias.append(caso(
-        "vidrio, selectiva, viento bajo",
-        id_cubierta="vidrio_comun",
-        id_placa="aluminio_tinox",
-        T_amb_C=20, I_g=800, v_w=1.0, beta=30,
-    ))
-    discrepancias.append(caso(
-        "vidrio, selectiva, viento alto",
-        id_cubierta="vidrio_comun",
-        id_placa="aluminio_tinox",
-        T_amb_C=20, I_g=800, v_w=4.0, beta=30,
-    ))
-    discrepancias.append(caso(
-        "vidrio, selectiva, invierno",
-        id_cubierta="vidrio_comun",
-        id_placa="aluminio_tinox",
-        T_amb_C=0, I_g=600, v_w=3.0, beta=45,
-    ))
+    discrepancias.append(
+        caso(
+            "vidrio, selectiva, viento bajo",
+            id_cubierta="vidrio_comun",
+            id_placa="aluminio_tinox",
+            T_amb_C=20,
+            I_g=800,
+            v_w=1.0,
+            beta=30,
+        )
+    )
+    discrepancias.append(
+        caso(
+            "vidrio, selectiva, viento alto",
+            id_cubierta="vidrio_comun",
+            id_placa="aluminio_tinox",
+            T_amb_C=20,
+            I_g=800,
+            v_w=4.0,
+            beta=30,
+        )
+    )
+    discrepancias.append(
+        caso(
+            "vidrio, selectiva, invierno",
+            id_cubierta="vidrio_comun",
+            id_placa="aluminio_tinox",
+            T_amb_C=0,
+            I_g=600,
+            v_w=3.0,
+            beta=45,
+        )
+    )
 
     # Casos con placa no selectiva (negro mate clásico)
-    discrepancias.append(caso(
-        "vidrio, negra mate",
-        id_cubierta="vidrio_comun",
-        id_placa="galvanizada_pintada_negro_mate",
-        T_amb_C=20, I_g=800, v_w=2.0, beta=30,
-    ))
-    discrepancias.append(caso(
-        "policarbonato, negra mate",
-        id_cubierta="policarbonato_alveolar",
-        id_placa="galvanizada_pintada_negro_mate",
-        T_amb_C=20, I_g=800, v_w=2.0, beta=30,
-    ))
+    discrepancias.append(
+        caso(
+            "vidrio, negra mate",
+            id_cubierta="vidrio_comun",
+            id_placa="galvanizada_pintada_negro_mate",
+            T_amb_C=20,
+            I_g=800,
+            v_w=2.0,
+            beta=30,
+        )
+    )
+    discrepancias.append(
+        caso(
+            "policarbonato, negra mate",
+            id_cubierta="policarbonato_alveolar",
+            id_placa="galvanizada_pintada_negro_mate",
+            T_amb_C=20,
+            I_g=800,
+            v_w=2.0,
+            beta=30,
+        )
+    )
 
     print("-" * 110)
     print(f"Discrepancia media: {np.mean(discrepancias):.1f}%   máx: {max(discrepancias):.1f}%")

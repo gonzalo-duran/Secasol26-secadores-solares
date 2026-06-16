@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from core.auxiliar import Auxiliar
 
 # Propiedades del aire a ~50 °C (valor medio típico de operación)
-CP_AIRE: float = 1007.0   # J/(kg·K)
+CP_AIRE: float = 1007.0  # J/(kg·K)
 
 # Umbral de irradiancia para considerar "día" en disponible_nocturno=False [W/m²]
 _I_G_UMBRAL_DIA_W_M2: float = 10.0
@@ -103,9 +103,7 @@ def calcular_auxiliar(
     if T_entrada_K <= 0:
         raise ValueError(f"T_entrada_K debe ser > 0 K. Recibido: {T_entrada_K}")
     if caudal_masico_kg_s <= 0:
-        raise ValueError(
-            f"caudal_masico_kg_s debe ser > 0 kg/s. Recibido: {caudal_masico_kg_s}"
-        )
+        raise ValueError(f"caudal_masico_kg_s debe ser > 0 kg/s. Recibido: {caudal_masico_kg_s}")
 
     advertencias: list[str] = []
     from core.auxiliar import TipoAuxiliar
@@ -116,9 +114,7 @@ def calcular_auxiliar(
     # Potencia necesaria para alcanzar el set_point (si está definido)
     set_point_activo = False
     if auxiliar.set_point_T_K is not None:
-        Q_para_set_point = caudal_masico_kg_s * CP_AIRE * (
-            auxiliar.set_point_T_K - T_entrada_K
-        )
+        Q_para_set_point = caudal_masico_kg_s * CP_AIRE * (auxiliar.set_point_T_K - T_entrada_K)
         if Q_para_set_point < 0:
             # T_entrada ya supera el set_point — el auxiliar no aporta calor
             Q_efectivo = 0.0
@@ -166,8 +162,9 @@ def calcular_auxiliar(
             # Ajustar consumo a la fracción activa real
             consumo_nominal = auxiliar.consumo_biomasa_efectivo_kg_h()
             if consumo_nominal and auxiliar.fraccion_potencia_operacion > 0:
-                consumo_biomasa = (consumo_nominal
-                                   * fraccion_activa / auxiliar.fraccion_potencia_operacion)
+                consumo_biomasa = (
+                    consumo_nominal * fraccion_activa / auxiliar.fraccion_potencia_operacion
+                )
 
     # Consumo eléctrico
     consumo_electrico: Optional[float] = None
@@ -243,6 +240,27 @@ class ResultadosAuxiliarTransitorio:
     fraccion_horas_activo: float
     advertencias_unicas: list[str] = field(default_factory=list)
     activado_alguna_vez: bool = False
+    lena_consumida_kg: float = 0.0
+
+
+def _mascara_calendario(t_s: np.ndarray, cargas: list, hora_offset_h: float) -> np.ndarray:
+    """Máscara booleana de operación según el calendario de arranque diario.
+
+    Cada paso ``t`` se mapea a su hora del día ``((t/3600) + offset) % 24`` y se
+    marca activo si cae dentro de alguna ventana ``[inicio, inicio+duracion)``
+    (con envoltura en 24 h si la ventana cruza la medianoche).
+    """
+    horas = ((np.asarray(t_s, dtype=float) / 3600.0) + hora_offset_h) % 24.0
+    activo = np.zeros(len(horas), dtype=bool)
+    for c in cargas:
+        ini = c.hora_inicio_h % 24.0
+        fin = ini + c.duracion_h
+        if fin <= 24.0:
+            activo |= (horas >= ini) & (horas < fin)
+        else:
+            # Ventana que cruza medianoche: [ini, 24) ∪ [0, fin-24)
+            activo |= (horas >= ini) | (horas < (fin - 24.0))
+    return activo
 
 
 def calcular_auxiliar_transitorio(
@@ -252,6 +270,7 @@ def calcular_auxiliar_transitorio(
     t_s: np.ndarray,
     caudal_masico_kg_s: float,
     I_g_W_m2_serie: Optional[np.ndarray] = None,
+    hora_offset_h: float = 0.0,
 ) -> ResultadosAuxiliarTransitorio:
     """Evalúa el auxiliar a cada paso del horizonte temporal.
 
@@ -280,20 +299,25 @@ def calcular_auxiliar_transitorio(
         )
     if caudal_masico_kg_s <= 0:
         raise ValueError(
-            f"AUX_TR_CAUDAL_NO_POSITIVO: caudal_masico_kg_s="
-            f"{caudal_masico_kg_s} ≤ 0."
+            f"AUX_TR_CAUDAL_NO_POSITIVO: caudal_masico_kg_s=" f"{caudal_masico_kg_s} ≤ 0."
         )
 
-    es_dia = (
-        np.full(n, True, dtype=bool)
-        if I_g_W_m2_serie is None or auxiliar.disponible_nocturno
-        else (np.asarray(I_g_W_m2_serie) > _I_G_UMBRAL_DIA_W_M2)
-    )
+    # Operación: si hay calendario de arranque (híbrido mañana/tarde), opera solo
+    # en esas ventanas horarias (independiente de I_g). Si no, opera por "día"
+    # (I_g) salvo disponible_nocturno.
+    if auxiliar.tiene_calendario_arranque():
+        es_dia = _mascara_calendario(t_s, auxiliar.cargas_arranque, hora_offset_h)
+    else:
+        es_dia = (
+            np.full(n, True, dtype=bool)
+            if I_g_W_m2_serie is None or auxiliar.disponible_nocturno
+            else (np.asarray(I_g_W_m2_serie) > _I_G_UMBRAL_DIA_W_M2)
+        )
 
     T_salida = np.empty(n, dtype=float)
     delta_T = np.empty(n, dtype=float)
     Q_eff = np.empty(n, dtype=float)
-    advertencias_set: dict[str, None] = {}    # dict preserva orden de inserción
+    advertencias_set: dict[str, None] = {}  # dict preserva orden de inserción
 
     for i in range(n):
         T_ent_i = float(T_entrada_K_serie[i])
@@ -321,6 +345,18 @@ def calcular_auxiliar_transitorio(
     span_s = float(t_s[-1] - t_s[0]) if n > 1 else 0.0
     fraccion = horas_activo_s / span_s if span_s > 0 else 0.0
 
+    # Leña consumida (solo quemador de biomasa): de la energía entregada al aire
+    # y el PCI·η del quemador. lena = E_aux / (PCI·η).
+    lena_kg = 0.0
+    from core.auxiliar import TipoAuxiliar
+
+    if (
+        auxiliar.tipo == TipoAuxiliar.QUEMADOR_BIOMASA
+        and auxiliar.PCI_MJ_kg
+        and auxiliar.eficiencia_quemador
+    ):
+        lena_kg = E_aux_MJ / (auxiliar.PCI_MJ_kg * auxiliar.eficiencia_quemador)
+
     return ResultadosAuxiliarTransitorio(
         t_s=np.asarray(t_s, dtype=float),
         T_entrada_K=np.asarray(T_entrada_K_serie, dtype=float),
@@ -334,4 +370,5 @@ def calcular_auxiliar_transitorio(
         fraccion_horas_activo=fraccion,
         advertencias_unicas=list(advertencias_set.keys()),
         activado_alguna_vez=bool(np.any(Q_eff > 0.0)),
+        lena_consumida_kg=lena_kg,
     )

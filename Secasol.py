@@ -58,5 +58,24 @@ _rotulo = st.sidebar.radio(
     key="nav_seccion",
 )
 
+# Persistencia de widget-keys entre secciones (mejora 28). En esta arquitectura
+# de render condicional, Streamlit purga al fin del run las widget-keys de la
+# sección no montada (las plain-keys sí sobreviven). Eso hacía que, al navegar
+# P1↔P2 varias veces, el año de descarga (`p2_anio_descarga`) y las fechas de la
+# ventana de producción volvieran a su default. Re-asignar la key al inicio del
+# run —mientras todavía existe, antes de desmontar la sección— la convierte en
+# valor de usuario persistente, inmune al cleanup. Lista curada (no global) para
+# no tocar widgets que combinan `key=` + `index=/value=` (ya nav-safe vía el
+# objeto `proyecto`) ni los flags/cachés que se limpian a propósito con `.pop()`.
+_KEYS_PERSISTENTES = (
+    "p1_vent_inicio",
+    "p1_vent_fin",
+    "p1_vent_dur_dias",
+    "p2_anio_descarga",
+)
+for _k in _KEYS_PERSISTENTES:
+    if _k in st.session_state:
+        st.session_state[_k] = st.session_state[_k]
+
 _modulo = dict(_SECCIONES)[_rotulo]
 importlib.import_module(_modulo).render()

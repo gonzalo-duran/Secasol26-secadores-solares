@@ -12,7 +12,6 @@ from calculos.solar_geometria import (
     mediodia_solar_transit,
 )
 
-
 # Coordenadas Salta capital (referencia del proyecto).
 _LAT_SALTA = -24.7821
 _LON_SALTA = -65.4232
@@ -23,13 +22,16 @@ class TestMediodiaSolarTransit:
     """El tránsito SPA debe caer cerca de 13:15-13:25 hora local en Salta
     todos los días del año (ecuación del tiempo varía ±15 min)."""
 
-    @pytest.mark.parametrize("fecha,hora_min,hora_max", [
-        # (fecha, rango aceptable [hh, mm] - [hh, mm])
-        (date(2020, 12, 21), (13, 0), (13, 35)),    # solsticio verano
-        (date(2020, 6, 21), (13, 0), (13, 35)),     # solsticio invierno
-        (date(2020, 3, 21), (12, 50), (13, 30)),    # equinoccio marzo
-        (date(2020, 9, 23), (12, 50), (13, 30)),    # equinoccio septiembre
-    ])
+    @pytest.mark.parametrize(
+        "fecha,hora_min,hora_max",
+        [
+            # (fecha, rango aceptable [hh, mm] - [hh, mm])
+            (date(2020, 12, 21), (13, 0), (13, 35)),  # solsticio verano
+            (date(2020, 6, 21), (13, 0), (13, 35)),  # solsticio invierno
+            (date(2020, 3, 21), (12, 50), (13, 30)),  # equinoccio marzo
+            (date(2020, 9, 23), (12, 50), (13, 30)),  # equinoccio septiembre
+        ],
+    )
     def test_transit_salta_en_rango_esperado(self, fecha, hora_min, hora_max):
         transit = mediodia_solar_transit(fecha, _LAT_SALTA, _LON_SALTA, _TZ_SALTA)
         h, m = transit.hour, transit.minute
@@ -38,7 +40,10 @@ class TestMediodiaSolarTransit:
 
     def test_transit_es_tz_aware(self):
         transit = mediodia_solar_transit(
-            date(2020, 12, 21), _LAT_SALTA, _LON_SALTA, _TZ_SALTA,
+            date(2020, 12, 21),
+            _LAT_SALTA,
+            _LON_SALTA,
+            _TZ_SALTA,
         )
         assert transit.tz is not None
         assert str(transit.tz) == _TZ_SALTA
@@ -46,16 +51,25 @@ class TestMediodiaSolarTransit:
     def test_acepta_string(self):
         t1 = mediodia_solar_transit("2020-12-21", _LAT_SALTA, _LON_SALTA, _TZ_SALTA)
         t2 = mediodia_solar_transit(
-            date(2020, 12, 21), _LAT_SALTA, _LON_SALTA, _TZ_SALTA,
+            date(2020, 12, 21),
+            _LAT_SALTA,
+            _LON_SALTA,
+            _TZ_SALTA,
         )
         assert t1 == t2
 
     def test_acepta_timestamp(self):
         t1 = mediodia_solar_transit(
-            pd.Timestamp("2020-12-21"), _LAT_SALTA, _LON_SALTA, _TZ_SALTA,
+            pd.Timestamp("2020-12-21"),
+            _LAT_SALTA,
+            _LON_SALTA,
+            _TZ_SALTA,
         )
         t2 = mediodia_solar_transit(
-            date(2020, 12, 21), _LAT_SALTA, _LON_SALTA, _TZ_SALTA,
+            date(2020, 12, 21),
+            _LAT_SALTA,
+            _LON_SALTA,
+            _TZ_SALTA,
         )
         assert t1 == t2
 
@@ -79,8 +93,10 @@ class TestBinHorarioQueContiene:
     def indice_horario_dia(self):
         """24 bins horarios del 21 dic 2020 en hora Salta."""
         return pd.date_range(
-            "2020-12-21 00:00", "2020-12-21 23:00",
-            freq="h", tz=_TZ_SALTA,
+            "2020-12-21 00:00",
+            "2020-12-21 23:00",
+            freq="h",
+            tz=_TZ_SALTA,
         )
 
     def test_13_20_cae_en_bin_13(self, indice_horario_dia):

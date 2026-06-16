@@ -228,6 +228,12 @@ class ConstruccionCamara:
             techo translúcido [m²]. ``None`` → toma ``area_bandeja_m2`` de la
             bandeja superior (sólo la primera "ve" el sol). Ignorado si
             ``cubierta_translucida_id is None``.
+        cubierta_translucida_espesor_m: Espesor de la cubierta translúcida
+            [m]. ``None`` → el motor usa un default razonable (6 mm). El
+            espesor entra al balance térmico de la cámara como conducción del
+            vidriado ``R_cond = espesor / k_efectivo`` (la cara del techo deja
+            de modelarse como pared opaca; ver ``camara_calc``). Ignorado si
+            ``cubierta_translucida_id is None``.
         pared: Composición de la envolvente opaca (paredes + piso + techo
             cuando es opaco). 1 capa = pared simple; 3 capas = pared compuesta
             cara externa + aislante + cara interna.
@@ -239,6 +245,7 @@ class ConstruccionCamara:
 
     cubierta_translucida_id: Optional[str] = None
     A_rad_m2: Optional[float] = None
+    cubierta_translucida_espesor_m: Optional[float] = None
     pared: ParedCamara = field(default_factory=_default_pared_camara)
 
     def __post_init__(self) -> None:
@@ -251,6 +258,14 @@ class ConstruccionCamara:
                 )
         if self.A_rad_m2 is not None and self.A_rad_m2 <= 0:
             raise ValueError(f"CONS_A_RAD_NO_POSITIVA: A_rad_m2={self.A_rad_m2:.4f} m² ≤ 0.")
+        if (
+            self.cubierta_translucida_espesor_m is not None
+            and self.cubierta_translucida_espesor_m <= 0
+        ):
+            raise ValueError(
+                "CONS_ESPESOR_CUBIERTA_NO_POSITIVO: cubierta_translucida_espesor_m="
+                f"{self.cubierta_translucida_espesor_m} m ≤ 0. Si se especifica debe ser > 0."
+            )
 
     @property
     def U_muros_W_m2K(self) -> float:
@@ -494,6 +509,108 @@ class OperacionAnualConfig:
 
 
 # ---------------------------------------------------------------------------
+# Configuración del túnel semicontinuo (solo subtipo GRAN_ESCALA SEMICONTINUO)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ConfiguracionTunel:
+    """Configuración del túnel semicontinuo a contracorriente (estilo ADITAL).
+
+    Solo aplica cuando ``configuracion.tipologia == GRAN_ESCALA`` y
+    ``configuracion.subtipo_gran_escala == SEMICONTINUO``. La geometría total
+    del túnel y la carga total de producto se toman de ``Camara`` (geometria,
+    bandejas, carga_producto) y se reparten en ``n_zonas`` columnas iguales; el
+    motor ``camara_termodinamica.simular_cascada`` integra la cascada.
+
+    El producto avanza a contracorriente del aire: una columna avanza una
+    posición cada ``intervalo_avance_h`` horas (cadencia fija → sequedad de
+    salida emergente). La residencia total de un carro es
+    ``n_zonas × intervalo_avance_h``.
+
+    Attributes:
+        n_zonas: Número de columnas (zonas) en serie (≥ 1). Default 6.
+        intervalo_avance_h: Cada cuántas horas avanza una columna [h] (> 0).
+            Default 24 h (una jornada, cadencia típica del operario de ADITAL).
+    """
+
+    n_zonas: int = 6
+    intervalo_avance_h: float = 24.0
+
+    def __post_init__(self) -> None:
+        if self.n_zonas < 1:
+            raise ValueError(f"TUNEL_N_ZONAS_INVALIDO: n_zonas={self.n_zonas} < 1.")
+        if self.intervalo_avance_h <= 0:
+            raise ValueError(
+                f"TUNEL_INTERVALO_NO_POSITIVO: intervalo_avance_h="
+                f"{self.intervalo_avance_h:.2f} h ≤ 0."
+            )
+
+    @property
+    def intervalo_avance_s(self) -> float:
+        """Intervalo de avance en segundos."""
+        return self.intervalo_avance_h * 3600.0
+
+    @property
+    def residencia_total_h(self) -> float:
+        """Residencia total de un carro a través del túnel [h]."""
+        return self.n_zonas * self.intervalo_avance_h
+
+
+@dataclass
+class ConfiguracionCarros:
+    """Disposición real del producto en gran escala: carros con bandejas (S41).
+
+    En el secador industrial (estilo ADITAL) el producto no va en bandejas
+    sueltas apiladas en la cámara: va en **carros** móviles, cada uno con una
+    pila de bandejas. En el subtipo SEMICONTINUO el carro es la unidad física
+    que avanza por el túnel (**cada zona aloja exactamente un carro**, por lo
+    que ``ConfiguracionTunel.n_zonas`` debe coincidir con ``n_carros``); en
+    BATCH los carros son estáticos dentro de la cámara.
+
+    El número total de bandejas queda **derivado**:
+    ``n_carros × bandejas_por_carro`` — ``Camara.__post_init__`` lo sincroniza
+    sobre ``ConfiguracionBandejas.n_bandejas``. La geometría de cada bandeja
+    (área, espesor de capa, separación vertical) sigue viviendo en
+    ``ConfiguracionBandejas``.
+
+    Attributes:
+        n_carros: Carros en la cámara/túnel (≥ 1). ADITAL: 24.
+        bandejas_por_carro: Bandejas apiladas en cada carro (≥ 1).
+        largo_carro_m: Huella del carro en la dirección del túnel [m]
+            (opcional, para la advertencia de encaje en fila).
+        ancho_carro_m: Huella transversal del carro [m] (opcional).
+    """
+
+    n_carros: int = 24
+    bandejas_por_carro: int = 14
+    largo_carro_m: Optional[float] = None
+    ancho_carro_m: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.n_carros < 1:
+            raise ValueError(f"CARROS_N_NO_POSITIVO: n_carros={self.n_carros} < 1.")
+        if self.bandejas_por_carro < 1:
+            raise ValueError(
+                f"CARROS_BANDEJAS_NO_POSITIVAS: bandejas_por_carro="
+                f"{self.bandejas_por_carro} < 1."
+            )
+        if self.largo_carro_m is not None and self.largo_carro_m <= 0:
+            raise ValueError(
+                f"CARROS_LARGO_NO_POSITIVO: largo_carro_m={self.largo_carro_m:.3f} ≤ 0."
+            )
+        if self.ancho_carro_m is not None and self.ancho_carro_m <= 0:
+            raise ValueError(
+                f"CARROS_ANCHO_NO_POSITIVO: ancho_carro_m={self.ancho_carro_m:.3f} ≤ 0."
+            )
+
+    @property
+    def n_bandejas_total(self) -> int:
+        """Bandejas totales de la cámara: n_carros × bandejas_por_carro."""
+        return self.n_carros * self.bandejas_por_carro
+
+
+# ---------------------------------------------------------------------------
 # Camara (raíz de la sección)
 # ---------------------------------------------------------------------------
 
@@ -525,6 +642,8 @@ class Camara:
     carga_producto: CargaProducto = field(default_factory=CargaProducto)
     modo_calculo: Literal["capa_fina", "termodinamico"] = "termodinamico"
     operacion_anual: Optional[OperacionAnualConfig] = None
+    tunel: Optional[ConfiguracionTunel] = None
+    carros: Optional[ConfiguracionCarros] = None
 
     def __post_init__(self) -> None:
         # Back-compat (S38): el motor de capa fina fue eliminado. Snapshots y
@@ -537,6 +656,16 @@ class Camara:
                 f"CAM_MODO_INVALIDO: modo_calculo='{self.modo_calculo}' no es válido. "
                 f"Opciones: {_MODOS_CALCULO_VALIDOS}."
             )
+        # Carros (S41): el total de bandejas queda derivado de la jerarquía
+        # carro → bandejas; en el túnel cada zona aloja exactamente un carro.
+        if self.carros is not None:
+            self.bandejas.n_bandejas = self.carros.n_bandejas_total
+            if self.tunel is not None and self.tunel.n_zonas != self.carros.n_carros:
+                raise ValueError(
+                    f"CAM_CARROS_ZONAS_INCONSISTENTES: tunel.n_zonas="
+                    f"{self.tunel.n_zonas} ≠ carros.n_carros={self.carros.n_carros}. "
+                    "En el túnel semicontinuo cada zona aloja un carro."
+                )
         self._validar_producto()
         self._validar_coherencia()
 
@@ -585,10 +714,18 @@ class Camara:
         b = self.bandejas
         p = self.carga_producto
 
-        alto_requerido = b.n_bandejas * b.separacion_entre_bandejas_m
+        # Con carros (S41) la pila vertical es POR CARRO, no el total de la
+        # cámara (los carros se distribuyen en planta, no apilados).
+        if self.carros is not None:
+            n_pila = self.carros.bandejas_por_carro
+            etiqueta_pila = f"{n_pila} bandejas/carro"
+        else:
+            n_pila = b.n_bandejas
+            etiqueta_pila = f"{n_pila} bandejas"
+        alto_requerido = n_pila * b.separacion_entre_bandejas_m
         if alto_requerido > g.alto_m:
             raise ValueError(
-                f"COHE_BANDEJAS_NO_CABEN_EN_CAMARA: {b.n_bandejas} bandejas × "
+                f"COHE_BANDEJAS_NO_CABEN_EN_CAMARA: {etiqueta_pila} × "
                 f"{b.separacion_entre_bandejas_m:.3f} m = {alto_requerido:.3f} m > "
                 f"alto cámara {g.alto_m:.3f} m."
             )
@@ -599,6 +736,23 @@ class Camara:
                 f"COHE_AREA_BANDEJA_EXCEDE_CAMARA: área bandeja {b.area_bandeja_m2:.3f} m² > "
                 f"área planta {area_planta:.3f} m²."
             )
+
+        # Encaje de los carros en fila a lo largo del túnel/cámara (si se
+        # declaró la huella del carro).
+        if self.carros is not None and self.carros.largo_carro_m is not None:
+            largo_fila = self.carros.n_carros * self.carros.largo_carro_m
+            if largo_fila > g.largo_m:
+                raise ValueError(
+                    f"COHE_CARROS_NO_CABEN_EN_LARGO: {self.carros.n_carros} carros × "
+                    f"{self.carros.largo_carro_m:.2f} m = {largo_fila:.2f} m > "
+                    f"largo cámara {g.largo_m:.2f} m."
+                )
+        if self.carros is not None and self.carros.ancho_carro_m is not None:
+            if self.carros.ancho_carro_m > g.ancho_m:
+                raise ValueError(
+                    f"COHE_CARRO_EXCEDE_ANCHO: ancho del carro "
+                    f"{self.carros.ancho_carro_m:.2f} m > ancho cámara {g.ancho_m:.2f} m."
+                )
 
         carga_por_m2 = p.masa_total_kg / b.n_bandejas / b.area_bandeja_m2
         if carga_por_m2 > _CARGA_MAX_KG_M2:

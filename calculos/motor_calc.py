@@ -8,15 +8,20 @@ Modelos:
     Colector (canal rectangular) — Darcy-Weisbach:
         ΔP = f × (L/Dh) × (ρ × v²/2)
         Dh = 2·W·e / (W + e)    [diámetro hidráulico canal plano]
-        f  = 64/Re               (laminar, Re < 2 300)
-        f  = 0.316·Re^(-0.25)   (Blasius turbulento, 2 300 ≤ Re < 100 000)
+        f  = 64/Re                         (laminar, Re < 2 300)
+        f  = Haaland(Re, ε/Dh)             (turbulento; aprox. de Colebrook,
+             ASHRAE cap. 21 ec. 19; mismo f en colector, caño maestro y cámara)
         En banco serie: ΔP_rama = ΔP_unidad × n_serie
         En paralelo:   ΔP banco = ΔP rama
 
-    Cámara — flujo HORIZONTAL:
-        ΔP_cam = K_malla × (ρ · v_sup²/2) × n_bandejas
-        v_sup = Q_vol / (ancho × alto)
-        K_malla = 2.0 (malla de alambre, conservador)
+    Cámara — flujo HORIZONTAL (cross-flow, canales EN PARALELO):
+        Los n_canales = n_bandejas−1 espacios entre bandejas están en paralelo:
+        el ΔP del sistema es el de UN canal (no la suma). v_canal reparte el
+        caudal: v_canal = Q_vol / (ancho · espacio_libre · n_canales).
+        ΔP_cam = ΔP_producto + ΔP_malla_lateral, con
+        ΔP_producto = fricción rugosa (Colebrook, ε_eff = max(ε_chapa, d_p)) +
+                      obstrucción por bloqueo C_obs(β), β = espesor_capa/separacion.
+        (Modelo combinado, mejora 29; reemplaza el Blasius + tabla heurística.)
 
     Cámara — flujo VERTICAL_ASCENDENTE:
         Por bandeja: ΔP = ΔP_malla + ΔP_lecho
@@ -93,6 +98,11 @@ _PHI_S_DEFAULT: float = 0.6
 # trae ``rugosidad_m`` en el catálogo. Valor representativo para chapa
 # metálica pintada (~50 µm), conservador.
 _RUGOSIDAD_DEFAULT_M: float = 5.0e-5
+
+# Rugosidad absoluta de chapa galvanizada para ductos/canales de cámara.
+# ASHRAE 2017 HVAC Fundamentals cap. 21, Tabla 1 (galvanizado rectangular,
+# juntas varias): ε ≈ 0.09–0.15 mm. Se toma 0.15 mm (extremo conservador).
+_RUGOSIDAD_GALVANIZADO_M: float = 1.5e-4
 
 
 def _factor_friccion_haaland(Re: float, eps_rel: float) -> float:
@@ -384,6 +394,16 @@ def _delta_P_lecho_por_bandeja(
 ) -> float:
     """ΔP a través de la capa de producto en una bandeja via ecuación de Ergun [Pa].
 
+    Solo aplica a flujo VERTICAL_ASCENDENTE (el aire ATRAVIESA el lecho). En
+    cross-flow (HORIZONTAL) el aire pasa paralelo sobre la bandeja y se usa el
+    modelo combinado ``_delta_P_producto_crossflow``, no Ergun.
+
+    Rango de validez (mejora 29): Ergun es el estándar para lechos empacados de
+    partículas razonablemente uniformes. Para rodajas/trozos de alimento (no
+    esféricos, polidispersos) es una aproximación a través de la esfericidad Φ_s
+    y el diámetro equivalente d_p del catálogo del producto; los parámetros del
+    lecho (ε, Φ_s, d_p) gobiernan fuertemente el resultado.
+
     Geometría del lecho (d_p, ε, Φ_s) resuelta por ``_geometria_lecho``:
     bandejas explícito → catálogo del producto → defaults conservadores.
 
@@ -422,47 +442,101 @@ def _delta_P_lecho_por_bandeja(
 # Independiente del producto.
 K_TRANSICION_LECHO: float = 1.5
 
-# Tabla de anclajes para K_rugosidad en función de d_p / espacio_libre (sin
-# correlación específica de literatura para "cross-flow sobre lecho rugoso de
-# secador"; valores inspirados en Idelchik para superficies con rugosidad
-# elevada y bancos de obstáculos). Interpolación lineal entre puntos; valor
-# constante fuera de los extremos.
-_K_RUGOSIDAD_TABLA: tuple[tuple[float, float], ...] = (
-    (0.05, 0.2),  # casi liso: pequeñas perturbaciones
-    (0.15, 0.5),  # rugosidad significativa, estelas pequeñas
-    (0.30, 1.0),  # producto comparable al canal, obstrucción parcial
-    (0.50, 2.0),  # cuasi-bloqueo, el aire tropieza
-)
 
+def _C_obstruccion_bloqueo(beta: float) -> float:
+    """Coeficiente de obstrucción por bloqueo del lecho en cross-flow [adim].
 
-def _K_rugosidad_default(d_p: float, espacio_libre: float) -> float:
-    """Estima K_rugosidad por bandeja en función del ratio ``d_p/espacio_libre``.
+    El producto sobre la bandeja ocupa una fracción ``β = espesor_capa/separacion``
+    del gap entre bandejas. La pérdida de forma se modela como una contracción
+    brusca al entrar al canal estrechado por el lecho (K_c ≈ 0.5·σ', Idelchik)
+    más una expansión Borda-Carnot a la salida (K_e ≈ σ'²), referidas a la
+    velocidad del canal libre, con ``σ' = β/(1−β)`` el factor de obstrucción:
 
-    Interpolación lineal por tramos sobre ``_K_RUGOSIDAD_TABLA``. Saturada
-    por debajo del primer punto (K = 0.2) y por encima del último (K = 2.0).
+        C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
+
+    Crece monótonamente con β, vale 0 para lecho despreciable y diverge cuando
+    β→1 (gap totalmente bloqueado). Reemplaza la antigua tabla heurística
+    ``_K_rugosidad`` (S41, mejora 29).
 
     Args:
-        d_p: Diámetro equivalente de partícula [m].
-        espacio_libre: Altura libre del canal entre bandejas [m] en flujo
-            HORIZONTAL. Si ≤ 0 devuelve 0 (degenerado).
+        beta: Fracción del gap ocupada por el producto, β ∈ [0, 1).
 
     Returns:
-        K adimensional para aplicar como K·ρv²/2 una vez por bandeja.
+        Coeficiente de obstrucción C_obs para aplicar como C·ρv²/2.
     """
-    if d_p <= 0 or espacio_libre <= 0:
+    if beta <= 0.0:
         return 0.0
-    ratio = d_p / espacio_libre
-    x0, y0 = _K_RUGOSIDAD_TABLA[0]
-    xN, yN = _K_RUGOSIDAD_TABLA[-1]
-    if ratio <= x0:
-        return y0
-    if ratio >= xN:
-        return yN
-    for (x1, y1), (x2, y2) in zip(_K_RUGOSIDAD_TABLA, _K_RUGOSIDAD_TABLA[1:]):
-        if x1 <= ratio <= x2:
-            t = (ratio - x1) / (x2 - x1)
-            return y1 + t * (y2 - y1)
-    return yN  # defensa contra inexactitud de float
+    beta = min(beta, 0.95)  # cota para evitar divergencia numérica en β→1
+    sigma = beta / (1.0 - beta)
+    return 0.5 * sigma + sigma**2
+
+
+def _delta_P_producto_crossflow(
+    *,
+    v_canal: float,
+    Dh: float,
+    L: float,
+    rho: float,
+    mu: float,
+    d_p: float,
+    espesor_capa: float,
+    separacion: float,
+    K_obstruccion_override: Optional[float] = None,
+    n_obstruccion_serie: int = 1,
+) -> dict[str, float]:
+    """ΔP del producto en cross-flow (flujo paralelo sobre la bandeja) [Pa].
+
+    Modelo COMBINADO (mejora 29), referido a un canal entre bandejas (los canales
+    de un mismo grupo están en paralelo, así que este es el ΔP del sistema, no la
+    suma de canales):
+
+    1. **Fricción con rugosidad aumentada:** el lecho de producto es la pared
+       rugosa del canal. Rugosidad efectiva ``ε_eff = max(ε_galvanizado, d_p)``
+       (el producto domina sobre la chapa), Colebrook/Haaland sobre el largo L.
+    2. **Obstrucción por bloqueo:** ``C_obs(β)·ρv²/2 × n_obstruccion_serie`` con
+       ``β = espesor_capa/separacion`` (ver ``_C_obstruccion_bloqueo``). El
+       multiplicador en serie cuenta los grupos de bandejas que el aire atraviesa
+       uno tras otro (p. ej. los carros de un túnel; =1 en cámara simple). Si se
+       pasa ``K_obstruccion_override`` se usa ese C en lugar del auto-cálculo.
+
+    Args:
+        v_canal: Velocidad del aire en el canal libre entre bandejas [m/s].
+        Dh: Diámetro hidráulico del canal [m].
+        L: Largo del recorrido del aire (largo de la cámara) [m].
+        rho: Densidad del aire [kg/m³].
+        mu: Viscosidad dinámica del aire [Pa·s].
+        d_p: Dimensión característica del producto [m] (rugosidad del lecho).
+        espesor_capa: Espesor de la capa de producto sobre la bandeja [m].
+        separacion: Separación entre bandejas consecutivas [m].
+        K_obstruccion_override: Override manual del coeficiente de obstrucción.
+            ``None`` usa el auto-cálculo ``_C_obstruccion_bloqueo(β)``.
+        n_obstruccion_serie: Grupos de bandejas en serie a lo largo del flujo
+            (carros de un túnel). Multiplica la obstrucción. Default 1.
+
+    Returns:
+        Dict con 'friccion_rugosa', 'obstruccion' y 'total' [Pa].
+    """
+    if v_canal <= 0.0 or Dh <= 0.0:
+        return {"friccion_rugosa": 0.0, "obstruccion": 0.0, "total": 0.0}
+
+    q_din = rho * v_canal**2 / 2.0
+    eps_eff = max(_RUGOSIDAD_GALVANIZADO_M, d_p)
+    Re = rho * v_canal * Dh / mu if mu > 0 else 0.0
+    f = _factor_friccion_haaland(Re, eps_eff / Dh)
+    dP_fric = f * (L / Dh) * q_din if Dh > 0 else 0.0
+
+    beta = espesor_capa / separacion if separacion > 0 else 0.0
+    C_obs = (
+        float(K_obstruccion_override)
+        if K_obstruccion_override is not None
+        else _C_obstruccion_bloqueo(beta)
+    )
+    dP_obs = C_obs * q_din * max(1, n_obstruccion_serie)
+    return {
+        "friccion_rugosa": dP_fric,
+        "obstruccion": dP_obs,
+        "total": dP_fric + dP_obs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -487,28 +561,20 @@ def estimar_delta_P_camara(
         En VERTICAL no se aplica K_rugosidad explícito porque Ergun ya
         captura la rugosidad del producto vía Φ_s y d_p.
 
-    Flujo HORIZONTAL (aire pasa entre bandejas, no las atraviesa):
-        Modelo de canal rectangular Darcy-Weisbach por par de bandejas:
-            Dh_canal = 2·ancho·sep / (ancho + sep)
-            v_canal = Q_vol / [ancho · sep · (n_bandejas − 1)]
-                      (Q se reparte entre los espacios libres entre bandejas)
-            ΔP_friccion = f · (largo/Dh) · (ρ·v_canal²/2)   por espacio
-            ΔP_malla    = K_malla_lateral · (ρ·v_canal²/2)   (~0.5, baja)
-        ΔP_rugosidad = K_rug × (ρ·v_canal²/2) × n_bandejas
-            K_rug del usuario (``bandejas.K_rugosidad_producto``) o
-            autocalculado por ``_K_rugosidad_default`` a partir del ratio
-            ``d_p / espacio_libre``. Captura la pérdida de forma por
-            superficie rugosa del lecho de producto en cross-flow, que
-            Darcy-Weisbach de pared lisa subestima.
-        Total = (ΔP_friccion + ΔP_malla) × (n_bandejas − 1) + ΔP_rugosidad
+    Flujo HORIZONTAL (cross-flow: el aire pasa entre bandejas en PARALELO):
+        Los n_canales = n_bandejas−1 espacios entre bandejas están en paralelo,
+        así que el ΔP del sistema es el de UN canal (no la suma):
+            v_canal = Q_vol / [ancho · espacio_libre · (n_bandejas − 1)]
+            Dh_canal = 2·ancho·espacio_libre / (ancho + espacio_libre)
+        ΔP = ΔP_producto + ΔP_malla_lateral, con el modelo COMBINADO del
+        producto (``_delta_P_producto_crossflow``, mejora 29):
+            ΔP_producto = fricción rugosa (Colebrook, ε_eff = max(ε_chapa, d_p))
+                          + obstrucción C_obs(β)·ρv²/2,  β = espesor_capa/separacion
+            ΔP_malla    = 0.25·K_malla·(ρ·v_canal²/2)  (placa perforada paralela)
+            El override ``bandejas.K_rugosidad_producto`` reemplaza el C_obs auto.
 
-        Notas:
-        - K_malla aplicado lateralmente es bajo (~0.5) porque la malla está
-          paralela al flujo, no atravesada. La pérdida principal es por
-          fricción contra la pared y las superficies de las bandejas.
-        - Si hay sólo 1 bandeja, no hay canal definido; se omite el término
-          de fricción/malla y queda sólo K_rugosidad sobre la velocidad del
-          ducto vacío.
+        Nota: corrige el sobreconteo previo (×n_canales y ×n_bandejas), que
+        ignoraba que los canales están en paralelo.
 
     Args:
         camara: Objeto Camara con geometría, bandejas y flujo definidos.
@@ -540,46 +606,56 @@ def estimar_delta_P_camara(
         dP_transicion = K_TRANSICION_LECHO * (rho * v0**2 / 2.0)
         return (dP_malla + dP_lecho + dP_transicion) * b.n_bandejas
 
-    # --- HORIZONTAL: canal rectangular entre bandejas ---
-    # Espaciado entre bandejas = sep − espesor_capa_producto (espacio libre real)
-    espacio_libre = max(0.0, b.separacion_entre_bandejas_m - b.espesor_capa_m)
-    n_canales = max(1, b.n_bandejas - 1)  # entre N bandejas hay N-1 canales
+    # --- HORIZONTAL: cross-flow entre bandejas (paralelo + serie) ---
+    # Topología (mejora 29):
+    #  - Dentro de un grupo de bandejas apiladas el aire se reparte entre los
+    #    canales EN PARALELO → todos con el mismo ΔP, así que el ΔP del grupo es
+    #    el de UN canal (no la suma de los n canales).
+    #  - Si la cámara tiene carros (túnel), el aire atraviesa los carros EN SERIE
+    #    a lo largo del túnel → la obstrucción se acumula × n_carros.
+    # (Antes se tomaban TODAS las bandejas como paralelas y se multiplicaba por
+    # n_canales y n_bandejas, lo que sobreestimaba el roce y, en el túnel,
+    # subestimaba la obstrucción del producto al diluir la velocidad del canal.)
+    carros = camara.carros
+    if carros is not None:
+        n_canales = max(1, carros.bandejas_por_carro - 1)  # paralelo dentro del carro
+        n_serie = carros.n_carros  # carros en serie a lo largo del túnel
+    else:
+        n_canales = max(1, b.n_bandejas - 1)  # entre N bandejas hay N-1 canales
+        n_serie = 1
 
+    espacio_libre = max(0.0, b.separacion_entre_bandejas_m - b.espesor_capa_m)
     if espacio_libre <= 0 or g.ancho_m <= 0:
         return 0.0
 
-    # Caudal repartido entre canales paralelos
     area_canal = g.ancho_m * espacio_libre
-    v_canal = Q_vol / (area_canal * n_canales)
+    v_canal = Q_vol / (area_canal * n_canales)  # caudal repartido en paralelo
     Dh = 2.0 * g.ancho_m * espacio_libre / (g.ancho_m + espacio_libre)
-    Re = rho * v_canal * Dh / mu if mu > 0 else 0.0
-    if Re <= 0:
-        f_fric = 0.0
-    elif Re < 2300.0:
-        f_fric = 64.0 / Re
-    else:
-        f_fric = 0.316 * Re ** (-0.25)
-
     L = g.largo_m  # largo del recorrido del aire (igual al largo de la cámara)
-    dP_friccion_por_canal = f_fric * (L / Dh) * (rho * v_canal**2 / 2.0)
-    # Pérdida lateral por la malla (paralela al flujo). Se aplica una fracción
-    # del K_malla (típicamente ~25 %) porque la malla no está perpendicular al
-    # flujo en este caso, sólo le agrega rozamiento adicional.
-    dP_malla_por_canal = 0.25 * K_malla_eff * (rho * v_canal**2 / 2.0)
-    dP_canales = (dP_friccion_por_canal + dP_malla_por_canal) * n_canales
+    q_din = rho * v_canal**2 / 2.0
 
-    # Pérdida de forma por rugosidad del producto sobre cada bandeja. K override
-    # del usuario o autocalculado desde d_p/espacio_libre. Aplicado n_bandejas
-    # veces (una por superficie rugosa, no por canal): si N=1 hay una sola
-    # superficie expuesta; si N>1, cada bandeja agrega su contribución.
-    if b.K_rugosidad_producto is not None:
-        K_rug = float(b.K_rugosidad_producto)
-    else:
-        d_p, _eps, _phi_s = _geometria_lecho(b, producto_id)
-        K_rug = _K_rugosidad_default(d_p, espacio_libre)
-    dP_rugosidad = K_rug * (rho * v_canal**2 / 2.0) * b.n_bandejas
+    # ΔP del producto: modelo combinado (mejora 29) — fricción con rugosidad
+    # aumentada (el lecho es la pared rugosa del canal, sustituye al Darcy de
+    # pared lisa) + obstrucción por bloqueo β = espesor_capa/separacion × n_serie.
+    d_p, _eps, _phi_s = _geometria_lecho(b, producto_id)
+    dP_prod = _delta_P_producto_crossflow(
+        v_canal=v_canal,
+        Dh=Dh,
+        L=L,
+        rho=rho,
+        mu=mu,
+        d_p=d_p,
+        espesor_capa=b.espesor_capa_m,
+        separacion=b.separacion_entre_bandejas_m,
+        K_obstruccion_override=b.K_rugosidad_producto,
+        n_obstruccion_serie=n_serie,
+    )
 
-    return dP_canales + dP_rugosidad
+    # Pérdida lateral por la malla/placa perforada de la bandeja (paralela al
+    # flujo): aporta rozamiento adicional, fracción del K perpendicular.
+    dP_malla = 0.25 * K_malla_eff * q_din
+
+    return dP_prod["total"] + dP_malla
 
 
 # ---------------------------------------------------------------------------
@@ -597,21 +673,25 @@ def estimar_delta_P_singulares(
     K_salida: float = 1.0,
     K_codo: float = 0.9,
     K_manifold: float = 1.5,
+    K_difusor: float = 0.3,
     T_K: float = 323.15,
     P_Pa: float = 101325.0,
 ) -> dict[str, float]:
-    """Estima las pérdidas singulares del sistema (entrada, salida, codos, manifold).
+    """Estima las pérdidas singulares del sistema (taxonomía ASHRAE cap. 21).
 
-    Los K-coefficients se aplican sobre la presión dinámica del ducto principal
-    (ρ·v_ducto²/2). Para banco con n_paralelo > 1, se agrega un par
-    distribuidor/colector (manifold) con K combinado.
+    Los coeficientes de pérdida C se aplican sobre la presión dinámica del ducto
+    principal (ρ·v_ducto²/2), método de ASHRAE 2017 cap. 21 (Dynamic Losses) y
+    Idelchik. Categorías cubiertas: Entries, Exits, Elbows, Junctions, Transitions.
 
-    Valores K conservadores estándar (Idelchik, Crane TP-410):
-    - Entrada borde vivo: K = 0.5
-    - Salida descarga libre: K = 1.0 (toda la energía cinética se pierde)
-    - Codo 90° bridado liso: K = 0.3; codo 90° gajos chapa: K = 1.3.
+    Valores C conservadores (ASHRAE cap. 21 / Idelchik / Crane TP-410):
+    - Entrada (Entries) borde vivo: C = 0.5
+    - Salida (Exits) descarga libre: C = 1.0 (toda la energía cinética se pierde)
+    - Codo 90° (Elbows) bridado liso C = 0.3; gajos de chapa C = 1.3.
       Default 0.9 (promedio conservador).
-    - Manifold simétrico distribuidor+colector: K_total = 1.5
+    - Manifold banco→caño maestro (Junctions, confluencia convergente): C = 1.5
+      (par distribuidor/colector simétrico). Solo si n_paralelo > 1.
+    - Difusor de entrada a cámara (Transitions, expansión ducto→cámara): C = 0.3
+      (difusor con cierto diseño; expansión brusca Borda-Carnot daría C ≈ 1.0).
 
     Args:
         Q_vol_m3_s: Caudal volumétrico del sistema [m³/s].
@@ -619,11 +699,11 @@ def estimar_delta_P_singulares(
             Típico: 4–7 m/s en secadores solares.
         n_paralelo: Ramas paralelas del banco. >1 activa el término manifold.
         n_codos: Cambios de dirección 90° en el circuito. Default 2.
-        K_entrada, K_salida, K_codo, K_manifold: Coeficientes singulares.
+        K_entrada, K_salida, K_codo, K_manifold, K_difusor: Coeficientes C.
         T_K, P_Pa: Condiciones del aire para ρ.
 
     Returns:
-        Dict con claves 'entrada', 'salida', 'codos', 'manifold', 'total' [Pa].
+        Dict con 'entrada', 'salida', 'codos', 'manifold', 'difusor', 'total' [Pa].
     """
     rho = densidad_aire(T_K, P_Pa)
     q_dinamica = rho * v_ducto_m_s**2 / 2.0
@@ -632,13 +712,15 @@ def estimar_delta_P_singulares(
     dP_salida = K_salida * q_dinamica
     dP_codos = max(0, n_codos) * K_codo * q_dinamica
     dP_manifold = K_manifold * q_dinamica if n_paralelo > 1 else 0.0
-    total = dP_entrada + dP_salida + dP_codos + dP_manifold
+    dP_difusor = K_difusor * q_dinamica
+    total = dP_entrada + dP_salida + dP_codos + dP_manifold + dP_difusor
 
     return {
         "entrada": dP_entrada,
         "salida": dP_salida,
         "codos": dP_codos,
         "manifold": dP_manifold,
+        "difusor": dP_difusor,
         "total": total,
     }
 

@@ -19,7 +19,6 @@ from calculos.psicrometria import (
     omega_saturacion,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helper: kwargs base para un secador armario tipo (10 kg de fruta)
 # ---------------------------------------------------------------------------
@@ -34,19 +33,19 @@ def _kwargs_base(**overrides):
     = 2.0 m²K/W ⇒ U_total = 0.5.
     """
     base = dict(
-        T_prod_K=313.15,                                    # 40 °C
+        T_prod_K=313.15,  # 40 °C
         X_prod_kg_kg=2.0,
-        T_ent_K=323.15,                                     # 50 °C aire del colector
-        omega_ent_kg_kg=humedad_absoluta(0.20, 323.15),     # HR=20 %
-        A_prod_m2=2.5,                                      # 5 bandejas × 0.5 m²
-        A_cuerpo_m2=8.0,                                    # paredes
+        T_ent_K=323.15,  # 50 °C aire del colector
+        omega_ent_kg_kg=humedad_absoluta(0.20, 323.15),  # HR=20 %
+        A_prod_m2=2.5,  # 5 bandejas × 0.5 m²
+        A_cuerpo_m2=8.0,  # paredes
         m_dot_as_kg_s=0.030,
-        h_conv_W_m2K=15.0,                                  # convección interior
+        h_conv_W_m2K=15.0,  # convección interior
         K_m_kg_m2s=0.015,
-        h_w_W_m2K=15.0,                                     # convección exterior (viento)
-        k_aisl_W_mK=0.02679,                                # espuma rígida
+        h_w_W_m2K=15.0,  # convección exterior (viento)
+        k_aisl_W_mK=0.02679,  # espuma rígida
         esp_cam_m=0.05,
-        T_amb_K=298.15,                                     # 25 °C
+        T_amb_K=298.15,  # 25 °C
         P_Pa=101325.0,
         aw_func=lambda X: 0.85,
     )
@@ -101,9 +100,7 @@ class TestCasosLimite:
         """K_m = 0 → ω_flujo = ω_ent y ṁ_w = 0."""
         kw = _kwargs_base(K_m_kg_m2s=0.0)
         est = resolver_estado_camara(**kw)
-        assert est.omega_flujo_kg_kg == pytest.approx(
-            kw["omega_ent_kg_kg"], rel=1e-12
-        )
+        assert est.omega_flujo_kg_kg == pytest.approx(kw["omega_ent_kg_kg"], rel=1e-12)
         assert est.m_dot_w_kg_s == pytest.approx(0.0, abs=1e-12)
 
     def test_aw_cero_aire_pierde_humedad_al_producto(self):
@@ -132,9 +129,7 @@ class TestCasosLimite:
         kw = _kwargs_base(m_dot_as_kg_s=1000.0)
         est = resolver_estado_camara(**kw)
         assert est.T_flujo_K == pytest.approx(kw["T_ent_K"], abs=0.5)
-        assert est.omega_flujo_kg_kg == pytest.approx(
-            kw["omega_ent_kg_kg"], rel=1e-3
-        )
+        assert est.omega_flujo_kg_kg == pytest.approx(kw["omega_ent_kg_kg"], rel=1e-3)
 
     def test_k_aisl_cero_pared_aislante_perfecta(self):
         """k_aisl = 0 → R_cond = ∞ → U_total = 0 → q_pared = 0."""
@@ -182,9 +177,7 @@ class TestCasosLimite:
         kw = _kwargs_base()
         est = resolver_estado_camara(**kw)
         flujo_int = kw["h_conv_W_m2K"] * (est.T_flujo_K - est.T_cam_int_K)
-        flujo_cond = (kw["k_aisl_W_mK"] / kw["esp_cam_m"]) * (
-            est.T_cam_int_K - est.T_cam_ext_K
-        )
+        flujo_cond = (kw["k_aisl_W_mK"] / kw["esp_cam_m"]) * (est.T_cam_int_K - est.T_cam_ext_K)
         flujo_ext = kw["h_w_W_m2K"] * (est.T_cam_ext_K - kw["T_amb_K"])
         # Los tres flujos por unidad de área deben coincidir (régimen estacionario)
         assert flujo_int == pytest.approx(flujo_cond, rel=1e-9)
@@ -197,9 +190,7 @@ class TestCasosLimite:
         kw = _kwargs_base()
         est = resolver_estado_camara(**kw)
         R_esperado = (
-            1.0 / kw["h_conv_W_m2K"]
-            + kw["esp_cam_m"] / kw["k_aisl_W_mK"]
-            + 1.0 / kw["h_w_W_m2K"]
+            1.0 / kw["h_conv_W_m2K"] + kw["esp_cam_m"] / kw["k_aisl_W_mK"] + 1.0 / kw["h_w_W_m2K"]
         )
         U_esperado = 1.0 / R_esperado
         assert est.U_pared_W_m2K == pytest.approx(U_esperado, rel=1e-12)
@@ -217,13 +208,9 @@ class TestBalancesCierran:
         """ṁ_as·(ω_flujo − ω_ent) = K_m·A_prod·(ω_sup − ω_flujo)."""
         kw = _kwargs_base()
         est = resolver_estado_camara(**kw)
-        omega_sup = omega_saturacion(kw["T_prod_K"], kw["P_Pa"]) * kw["aw_func"](
-            kw["X_prod_kg_kg"]
-        )
+        omega_sup = omega_saturacion(kw["T_prod_K"], kw["P_Pa"]) * kw["aw_func"](kw["X_prod_kg_kg"])
         LHS = kw["m_dot_as_kg_s"] * (est.omega_flujo_kg_kg - kw["omega_ent_kg_kg"])
-        RHS = kw["K_m_kg_m2s"] * kw["A_prod_m2"] * (
-            omega_sup - est.omega_flujo_kg_kg
-        )
+        RHS = kw["K_m_kg_m2s"] * kw["A_prod_m2"] * (omega_sup - est.omega_flujo_kg_kg)
         assert LHS == pytest.approx(RHS, rel=1e-9, abs=1e-15)
 
     def test_balance_energia_residuo_cero(self):
@@ -240,8 +227,7 @@ class TestBalancesCierran:
         LHS = kw["m_dot_as_kg_s"] * (h_sal - h_ent)
         RHS = (
             -est.q_pared_W
-            - kw["h_conv_W_m2K"] * kw["A_prod_m2"]
-            * (est.T_flujo_K - kw["T_prod_K"])
+            - kw["h_conv_W_m2K"] * kw["A_prod_m2"] * (est.T_flujo_K - kw["T_prod_K"])
             + est.m_dot_w_kg_s * h_v_prod
         )
         # Tolerancia: < 1e-6 W de residuo (precisión doble flotante).
@@ -313,7 +299,6 @@ from calculos.camara_termodinamica import (
 from calculos.psicrometria import temperatura_bulbo_humedo
 from core.camara import ForzantesAire
 
-
 # v_viento default de los tests: 2.5 m/s → h_w = 5.7 + 3.8·2.5 = 15.2 W/(m²·K)
 # (reproduce el U_total = 0.5 del fixture pared 3-nodos en _kwargs_base).
 _V_VIENTO_TEST_MS = 2.5
@@ -327,7 +312,7 @@ def _kwargs_motor(**overrides):
     se inyectan al construir ForzantesAire degeneradas en 2 puntos).
     """
     # Override-aware extracción de parámetros que van a la forzante
-    T_ent = overrides.pop("T_ent_K", 323.15)                 # 50 °C
+    T_ent = overrides.pop("T_ent_K", 323.15)  # 50 °C
     omega_ent = overrides.pop("omega_ent_kg_kg", humedad_absoluta(0.20, 323.15))
     m_dot = overrides.pop("m_dot_as_kg_s", 0.030)
     T_amb = overrides.pop("T_amb_K", 298.15)
@@ -344,11 +329,11 @@ def _kwargs_motor(**overrides):
     )
 
     base = dict(
-        T_prod_inicial_K=298.15,                            # 25 °C
-        X_prod_inicial_kg_kg=2.0,                           # producto bastante húmedo
+        T_prod_inicial_K=298.15,  # 25 °C
+        X_prod_inicial_kg_kg=2.0,  # producto bastante húmedo
         X_prod_objetivo_kg_kg=0.30,
-        m_seco_prod_kg=3.0,                                 # 10 kg fruta ≈ 3 kg seco
-        c_ps_J_kgK=1500.0,                                  # sólido seco (default catálogo)
+        m_seco_prod_kg=3.0,  # 10 kg fruta ≈ 3 kg seco
+        c_ps_J_kgK=1500.0,  # sólido seco (default catálogo)
         forzantes=forzantes,
         A_prod_m2=2.5,
         A_cuerpo_m2=8.0,
@@ -357,7 +342,7 @@ def _kwargs_motor(**overrides):
         k_aisl_W_mK=0.02679,
         esp_cam_m=0.05,
         P_Pa=101325.0,
-        aw_func=lambda X: min(1.0, max(0.0, X / 0.5)),      # rampa: aw=1 si X≥0.5
+        aw_func=lambda X: min(1.0, max(0.0, X / 0.5)),  # rampa: aw=1 si X≥0.5
         t_max_s=t_max,
     )
     base.update(overrides)
@@ -381,9 +366,13 @@ class TestMotorBasico:
         assert n > 1
         # Todas las series tienen el mismo tamaño
         for arr in (
-            res.T_prod_K, res.X_prod_kg_kg, res.T_flujo_K,
-            res.omega_flujo_kg_kg, res.m_dot_w_kg_s,
-            res.q_prod_W, res.q_pared_W,
+            res.T_prod_K,
+            res.X_prod_kg_kg,
+            res.T_flujo_K,
+            res.omega_flujo_kg_kg,
+            res.m_dot_w_kg_s,
+            res.q_prod_W,
+            res.q_pared_W,
         ):
             assert arr.shape == (n,)
 
@@ -421,16 +410,16 @@ class TestEventDetection:
     def test_X_en_t_secado_coincide_con_X_obj(self):
         kw = _kwargs_motor()
         res = simular_secado(**kw)
-        assert res.X_prod_kg_kg[-1] == pytest.approx(
-            kw["X_prod_objetivo_kg_kg"], abs=1e-3
-        )
+        assert res.X_prod_kg_kg[-1] == pytest.approx(kw["X_prod_objetivo_kg_kg"], abs=1e-3)
 
     def test_X_inicial_menor_X_obj_t_cero(self):
         """Producto ya seco → status especial, t_secado=0, sin integrar."""
-        res = simular_secado(**_kwargs_motor(
-            X_prod_inicial_kg_kg=0.10,
-            X_prod_objetivo_kg_kg=0.30,
-        ))
+        res = simular_secado(
+            **_kwargs_motor(
+                X_prod_inicial_kg_kg=0.10,
+                X_prod_objetivo_kg_kg=0.30,
+            )
+        )
         assert res.status == "X_inicial_ya_seco"
         assert res.t_secado_s == 0.0
         assert any("YA_SECO" in a for a in res.advertencias)
@@ -456,12 +445,8 @@ class TestConservacionFisica:
         """∫ṁ_w dt ≈ m_seco·(X_inicial − X_final). Tolerancia: 1 % por integración."""
         kw = _kwargs_motor()
         res = simular_secado(**kw)
-        masa_esperada = kw["m_seco_prod_kg"] * (
-            kw["X_prod_inicial_kg_kg"] - res.X_prod_kg_kg[-1]
-        )
-        assert res.masa_evaporada_total_kg == pytest.approx(
-            masa_esperada, rel=0.01
-        )
+        masa_esperada = kw["m_seco_prod_kg"] * (kw["X_prod_inicial_kg_kg"] - res.X_prod_kg_kg[-1])
+        assert res.masa_evaporada_total_kg == pytest.approx(masa_esperada, rel=0.01)
 
     def test_T_prod_tiende_a_T_wb_en_regimen_constante(self):
         """Con a_w=1 y caudal alto, T_prod → T_wb del aire entrante.
@@ -472,12 +457,12 @@ class TestConservacionFisica:
         T_ent = 323.15
         omega_ent = humedad_absoluta(0.20, 323.15)
         kw = _kwargs_motor(
-            aw_func=lambda X: 1.0,                          # producto saturado
-            X_prod_inicial_kg_kg=5.0,                       # mucha agua
-            X_prod_objetivo_kg_kg=0.001,                    # nunca se alcanza en t_max
+            aw_func=lambda X: 1.0,  # producto saturado
+            X_prod_inicial_kg_kg=5.0,  # mucha agua
+            X_prod_objetivo_kg_kg=0.001,  # nunca se alcanza en t_max
             T_ent_K=T_ent,
             omega_ent_kg_kg=omega_ent,
-            m_dot_as_kg_s=1.0,                              # caudal alto: ω_flujo ≈ ω_ent
+            m_dot_as_kg_s=1.0,  # caudal alto: ω_flujo ≈ ω_ent
             t_max_s=4 * 3600.0,
         )
         res = simular_secado(**kw)
@@ -496,16 +481,14 @@ class TestConservacionFisica:
         kw = _kwargs_motor(
             T_ent_K=T_ent,
             K_m_kg_m2s=0.0,
-            k_aisl_W_mK=0.0,                                # pared aislante perfecta
-            X_prod_objetivo_kg_kg=0.5,                      # nunca se alcanza
+            k_aisl_W_mK=0.0,  # pared aislante perfecta
+            X_prod_objetivo_kg_kg=0.5,  # nunca se alcanza
             t_max_s=4 * 3600.0,
         )
         res = simular_secado(**kw)
         assert res.status == "t_max_alcanzado"
         assert res.T_prod_K[-1] == pytest.approx(T_ent, abs=1.0)
-        assert res.X_prod_kg_kg[-1] == pytest.approx(
-            kw["X_prod_inicial_kg_kg"], rel=1e-6
-        )
+        assert res.X_prod_kg_kg[-1] == pytest.approx(kw["X_prod_inicial_kg_kg"], rel=1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -526,7 +509,7 @@ class TestSensibilidad:
         assert res_alto.t_secado_s < res_bajo.t_secado_s
 
     def test_mayor_T_ent_menor_t_secado(self):
-        res_frio = simular_secado(**_kwargs_motor(T_ent_K=313.15))   # 40 °C
+        res_frio = simular_secado(**_kwargs_motor(T_ent_K=313.15))  # 40 °C
         res_caliente = simular_secado(**_kwargs_motor(T_ent_K=333.15))  # 60 °C
         assert res_caliente.t_secado_s < res_frio.t_secado_s
 
@@ -659,25 +642,31 @@ class TestForzantesVariables:
         T_amb = np.full_like(t, 293.15)
         v_w = np.full_like(t, 2.5)
         fz = ForzantesAire(
-            t_s=t, T_ent_K=T_ent, omega_ent=omega_ent,
-            m_dot_aire_seco_kg_s=m_dot, T_amb_K=T_amb, v_viento_ms=v_w,
+            t_s=t,
+            T_ent_K=T_ent,
+            omega_ent=omega_ent,
+            m_dot_aire_seco_kg_s=m_dot,
+            T_amb_K=T_amb,
+            v_viento_ms=v_w,
         )
-        res = simular_secado(**_kwargs_motor_con_forzantes(
-            fz, X_prod_objetivo_kg_kg=0.05, t_max_s=24 * 3600.0,
-        ))
+        res = simular_secado(
+            **_kwargs_motor_con_forzantes(
+                fz,
+                X_prod_objetivo_kg_kg=0.05,
+                t_max_s=24 * 3600.0,
+            )
+        )
         # T_prod debe oscilar sin diverger ni dispararse
-        assert np.all(res.T_prod_K < 333.15)        # no excede T_ent_max + ~10 K
-        assert np.all(res.T_prod_K > 290.0)         # no se enfría por debajo de T_amb − algo
+        assert np.all(res.T_prod_K < 333.15)  # no excede T_ent_max + ~10 K
+        assert np.all(res.T_prod_K > 290.0)  # no se enfría por debajo de T_amb − algo
         # Y debe tener variabilidad (no es plana)
         assert np.std(res.T_prod_K) > 1.0
 
     def test_v_viento_alta_aumenta_perdidas(self):
         """Con más viento (h_w mayor), U_pared aumenta y q_pared crece."""
         # Caso bajo viento
-        kw_bajo = _kwargs_motor(v_viento_ms=0.5, X_prod_objetivo_kg_kg=0.05,
-                                  t_max_s=4 * 3600.0)
-        kw_alto = _kwargs_motor(v_viento_ms=10.0, X_prod_objetivo_kg_kg=0.05,
-                                   t_max_s=4 * 3600.0)
+        kw_bajo = _kwargs_motor(v_viento_ms=0.5, X_prod_objetivo_kg_kg=0.05, t_max_s=4 * 3600.0)
+        kw_alto = _kwargs_motor(v_viento_ms=10.0, X_prod_objetivo_kg_kg=0.05, t_max_s=4 * 3600.0)
         res_bajo = simular_secado(**kw_bajo)
         res_alto = simular_secado(**kw_alto)
         # U_pared debe ser mayor con más viento
@@ -696,8 +685,8 @@ class TestPoliticaBAntirehumectacion:
             X_prod_inicial_kg_kg=0.05,
             X_prod_objetivo_kg_kg=0.001,
             omega_ent_kg_kg=humedad_absoluta(0.95, 313.15),
-            T_ent_K=313.15,                          # T baja: ω_sat baja
-            aw_func=lambda X: 0.05,                  # producto seco → ω_sup muy baja
+            T_ent_K=313.15,  # T baja: ω_sat baja
+            aw_func=lambda X: 0.05,  # producto seco → ω_sup muy baja
             t_max_s=3600.0,
         )
         res = simular_secado(**kw)
@@ -719,7 +708,7 @@ class TestCpVariable:
         con los caudales nominales; aquí sólo verificamos consistencia física.
         """
         kw = _kwargs_motor(
-            X_prod_inicial_kg_kg=4.0,           # mucha agua: C_thermal alta al inicio
+            X_prod_inicial_kg_kg=4.0,  # mucha agua: C_thermal alta al inicio
             X_prod_objetivo_kg_kg=0.10,
             t_max_s=48 * 3600.0,
         )
@@ -740,12 +729,12 @@ class TestEventoTMaxAdmisible:
         """T_max_admisible bajo + producto seco que se calienta → dano_termico."""
         kw = _kwargs_motor(
             T_prod_inicial_K=298.15,
-            X_prod_inicial_kg_kg=0.05,           # poca agua
+            X_prod_inicial_kg_kg=0.05,  # poca agua
             X_prod_objetivo_kg_kg=0.001,
-            aw_func=lambda X: 0.0,               # nada de evaporación → solo se calienta
+            aw_func=lambda X: 0.0,  # nada de evaporación → solo se calienta
             K_m_kg_m2s=0.0,
-            T_ent_K=343.15,                      # 70 °C: producto se calienta
-            T_max_admisible_K=313.15,            # 40 °C: cota baja
+            T_ent_K=343.15,  # 70 °C: producto se calienta
+            T_max_admisible_K=313.15,  # 40 °C: cota baja
             t_max_s=4 * 3600.0,
         )
         res = simular_secado(**kw)
@@ -757,9 +746,11 @@ class TestEventoTMaxAdmisible:
 
     def test_T_max_no_alcanzado_no_dispara(self):
         """Si T_max es alto, status no es 'dano_termico'."""
-        res = simular_secado(**_kwargs_motor(
-            T_max_admisible_K=400.0,         # cota alta: nunca se alcanza
-        ))
+        res = simular_secado(
+            **_kwargs_motor(
+                T_max_admisible_K=400.0,  # cota alta: nunca se alcanza
+            )
+        )
         assert res.status != "dano_termico"
         # T_max_alcanzada reportada debe ser razonable
         assert res.T_max_alcanzada_K < 400.0

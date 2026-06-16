@@ -36,16 +36,20 @@ def _camara_armario_50kg_manzana(Q_vol_m3_s: float) -> Camara:
     return Camara(
         geometria=GeometriaCamara(largo_m=1.5, ancho_m=1.0, alto_m=1.5),
         bandejas=ConfiguracionBandejas(
-            n_bandejas=5, area_bandeja_m2=0.8,
-            espesor_capa_m=0.020, separacion_entre_bandejas_m=0.15,
+            n_bandejas=5,
+            area_bandeja_m2=0.8,
+            espesor_capa_m=0.020,
+            separacion_entre_bandejas_m=0.15,
         ),
         flujo=ConfiguracionFlujo(
             caudal_masico_kg_s=rho * Q_vol_m3_s,
             direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
         ),
         carga_producto=CargaProducto(
-            producto_id="manzana", masa_total_kg=50.0,
-            humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+            producto_id="manzana",
+            masa_total_kg=50.0,
+            humedad_inicial_X=4.6,
+            humedad_objetivo_X=0.15,
             modelo_capa_fina="logaritmico",
         ),
     )
@@ -71,8 +75,10 @@ class TestAnclajeExtractor76W:
         """Con v_ducto=6 m/s (típico ducto secador), las singulares deben
         ser > 30 Pa — antes del fix eran cero (no se calculaban)."""
         sing = estimar_delta_P_singulares(
-            Q_vol_m3_s=0.25, v_ducto_m_s=6.0,
-            n_paralelo=1, n_codos=2,
+            Q_vol_m3_s=0.25,
+            v_ducto_m_s=6.0,
+            n_paralelo=1,
+            n_codos=2,
         )
         assert sing["total"] > 30.0, (
             f"ΔP singulares = {sing['total']:.1f} Pa, esperaba > 30 Pa "
@@ -86,9 +92,12 @@ class TestAnclajeExtractor76W:
         cam = _camara_armario_50kg_manzana(Q_vol_m3_s=0.25)
         dP_cam = estimar_delta_P_camara(cam)
         sing = estimar_delta_P_singulares(
-            Q_vol_m3_s=0.25, v_ducto_m_s=6.0, n_paralelo=1, n_codos=2,
+            Q_vol_m3_s=0.25,
+            v_ducto_m_s=6.0,
+            n_paralelo=1,
+            n_codos=2,
         )
-        dP_col = 10.0   # colector típico armario (estimación)
+        dP_col = 10.0  # colector típico armario (estimación)
         dP_duc = 0.20 * (dP_col + dP_cam)
 
         mot = Motor(
@@ -97,8 +106,8 @@ class TestAnclajeExtractor76W:
             delta_P_camara_Pa=dP_cam,
             delta_P_ductos_Pa=dP_duc,
             delta_P_singulares_Pa=sing["total"],
-            eficiencia_ventilador=0.40,   # axial chico (campanita) realista
-            eficiencia_motor=0.70,        # motor monofásico ~70 W
+            eficiencia_ventilador=0.40,  # axial chico (campanita) realista
+            eficiencia_motor=0.70,  # motor monofásico ~70 W
             factor_servicio=1.15,
         )
 
@@ -117,12 +126,14 @@ class TestAnclajeExtractor76W:
         Motor.perdida_carga_total_Pa."""
         mot_sin = Motor(
             caudal_volumetrico_m3_s=0.25,
-            delta_P_colector_Pa=10.0, delta_P_camara_Pa=50.0,
+            delta_P_colector_Pa=10.0,
+            delta_P_camara_Pa=50.0,
             delta_P_ductos_Pa=12.0,
         )
         mot_con = Motor(
             caudal_volumetrico_m3_s=0.25,
-            delta_P_colector_Pa=10.0, delta_P_camara_Pa=50.0,
+            delta_P_colector_Pa=10.0,
+            delta_P_camara_Pa=50.0,
             delta_P_ductos_Pa=12.0,
             delta_P_singulares_Pa=60.0,
         )
@@ -145,17 +156,21 @@ class TestGeometriaLechoCatalogo:
         cam = Camara(
             geometria=GeometriaCamara(largo_m=1.0, ancho_m=1.0, alto_m=1.0),
             bandejas=ConfiguracionBandejas(
-                n_bandejas=3, area_bandeja_m2=0.5,
-                espesor_capa_m=0.020, separacion_entre_bandejas_m=0.15,
-                diametro_eq_particula_m=None,   # ← clave: no seteado
+                n_bandejas=3,
+                area_bandeja_m2=0.5,
+                espesor_capa_m=0.020,
+                separacion_entre_bandejas_m=0.15,
+                diametro_eq_particula_m=None,  # ← clave: no seteado
             ),
             flujo=ConfiguracionFlujo(
                 caudal_masico_kg_s=rho * 0.1,
                 direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
             ),
             carga_producto=CargaProducto(
-                producto_id="manzana", masa_total_kg=10.0,
-                humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+                producto_id="manzana",
+                masa_total_kg=10.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
                 modelo_capa_fina="logaritmico",
             ),
         )
@@ -179,15 +194,18 @@ class TestGeometriaLechoCatalogo:
         from core.camara import ConfiguracionBandejas
 
         b = ConfiguracionBandejas(
-            n_bandejas=3, area_bandeja_m2=0.5,
-            espesor_capa_m=0.020, separacion_entre_bandejas_m=0.15,
+            n_bandejas=3,
+            area_bandeja_m2=0.5,
+            espesor_capa_m=0.020,
+            separacion_entre_bandejas_m=0.15,
             diametro_eq_particula_m=None,
         )
         # producto inexistente → defaults (8 mm) → Ergun no-cero
         dP = _delta_P_lecho_por_bandeja(
-            b, v0=0.2, rho=1.09, mu=1.96e-5,
+            b,
+            v0=0.2,
+            rho=1.09,
+            mu=1.96e-5,
             producto_id="producto_que_no_existe",
         )
-        assert dP > 0, (
-            f"Esperaba ΔP_Ergun > 0 con defaults (8 mm). Obtuve {dP:.3f} Pa."
-        )
+        assert dP > 0, f"Esperaba ΔP_Ergun > 0 con defaults (8 mm). Obtuve {dP:.3f} Pa."

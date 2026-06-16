@@ -45,6 +45,15 @@ policarbonato_alveolar:
     Calibrado para alveolar 4 mm de pared simple. Para 6 mm: ~0.06; para
     10 mm: ~0.07. Si trabajás con espesor distinto, override recomendado.
     Atención: τ degrada con UV; reemplazo cada 10-15 años.
+  # Espesores de mercado [mm] → k EFECTIVO del panel [W/m·K]. Pueblan el
+  # selector de espesor en P3 y fijan automáticamente el k efectivo según el
+  # espesor elegido (4/6/10 documentados; 8/16 interpolados/extrapolados).
+  k_efectivo_por_espesor_mm:
+    4: 0.050
+    6: 0.060
+    8: 0.065
+    10: 0.070
+    16: 0.080
 
 polietileno_ldpe:
   descripcion: "Film de polietileno baja densidad (invernadero)"

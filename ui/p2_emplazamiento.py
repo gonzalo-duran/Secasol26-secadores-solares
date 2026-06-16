@@ -28,9 +28,6 @@ from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
     acimut_ui360_a_duffie,
-    fraccion_a_porcentaje,
-    kelvin_a_celsius,
-    pa_a_hpa,
 )
 
 # ---------------------------------------------------------------------------
@@ -62,6 +59,39 @@ _ZONAS_HORARIAS = [
 _ANIO_MIN = ANIO_NASA_MIN
 _ANIO_MAX = ANIO_NASA_MAX
 _ANIO_DEFAULT = 2022
+
+
+def _resolver_anio_descarga(
+    *,
+    anio_p1: int | None,
+    anio_descarga_actual: int | None,
+    ultimo_anio_p1_visto: int | None,
+) -> tuple[int, int | None]:
+    """Resuelve el año de descarga de P2 y el 'último año P1 visto' (mejora 28).
+
+    Lógica de sincronización P1→P2 robusta a la purga de widget-keys al navegar:
+
+    * Si ``anio_descarga_actual`` es ``None`` (primer ingreso o key purgada),
+      siembra desde la ventana/fecha de P1 (``anio_p1``) si existe; si P1 no
+      fijó fecha, cae al default. Antes caía SIEMPRE al default (2022), rompiendo
+      el vínculo ventana→año.
+    * Si P1 cambió de año respecto al último sincronizado, re-sincroniza.
+    * En caso contrario respeta el valor actual (override manual del usuario).
+
+    Args:
+        anio_p1: Año de la ventana/fecha de P1 (None si P1 no fijó fecha).
+        anio_descarga_actual: Valor actual de ``p2_anio_descarga`` (None si la
+            key fue purgada o es el primer ingreso).
+        ultimo_anio_p1_visto: Último ``anio_p1`` sincronizado (plain key).
+
+    Returns:
+        Tupla ``(anio_descarga, ultimo_anio_p1_visto)`` actualizada.
+    """
+    if anio_descarga_actual is None:
+        return (anio_p1 if anio_p1 is not None else _ANIO_DEFAULT), anio_p1
+    if anio_p1 is not None and anio_p1 != ultimo_anio_p1_visto:
+        return anio_p1, anio_p1
+    return anio_descarga_actual, ultimo_anio_p1_visto
 
 
 # ---------------------------------------------------------------------------
@@ -346,10 +376,23 @@ def _fecha_dia_analisis(datos_local: pd.DataFrame, cfg, anio: int):
         return (datos_local["T_amb_K"] - 273.15).resample("D").mean().idxmin().date()
 
 
+def _eje_x_temporal(indice: pd.DatetimeIndex):
+    """Eje X para los perfiles horarios (mejora 30).
+
+    Si el rango abarca un solo día devuelve etiquetas categóricas ``HH:MM``
+    (día de diseño). Si abarca varios días (ventana de producción) devuelve el
+    índice datetime completo, para que Plotly grafique sobre el dominio temporal
+    real en vez de encimar todos los días sobre 24 h.
+    """
+    if indice.normalize().nunique() > 1:
+        return indice
+    return [t.strftime("%H:%M") for t in indice]
+
+
 def _fig_temperatura_diaria(datos_dia: pd.DataFrame) -> go.Figure:
-    """Perfil horario de temperatura ambiente para el día de diseño."""
+    """Perfil horario de temperatura ambiente para el día/ventana de diseño."""
     T_C = datos_dia["T_amb_K"] - 273.15
-    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
+    horas_str = _eje_x_temporal(datos_dia.index)
 
     fig = go.Figure()
     fig.add_trace(
@@ -376,8 +419,8 @@ def _fig_temperatura_diaria(datos_dia: pd.DataFrame) -> go.Figure:
 
 def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.Figure:
     """Dos subgráficos horarios: plano horizontal y plano del colector."""
-    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
-    horas_poa = [t.strftime("%H:%M") for t in poa_dia.index]
+    horas_str = _eje_x_temporal(datos_dia.index)
+    horas_poa = _eje_x_temporal(poa_dia.index)
 
     fig = make_subplots(
         rows=2,
@@ -447,7 +490,7 @@ def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.F
 
 def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
     """Perfil horario de velocidad del viento y HR — eje Y secundario nativo Plotly."""
-    horas_str = [t.strftime("%H:%M") for t in datos_dia.index]
+    horas_str = _eje_x_temporal(datos_dia.index)
     ws = datos_dia["WS_ms"].values
     hr_pct = datos_dia["HR"].values * 100.0
 
@@ -693,21 +736,36 @@ def render() -> None:
 
     st.subheader("Datos climáticos NASA POWER")
 
-    # Sincronización con P1: si el usuario eligió un día específico en P1,
-    # el año de descarga arranca con el año de esa fecha. Si después cambia
-    # la fecha en P1, el widget se actualiza automáticamente. El usuario
-    # puede sobrescribir el año manualmente — su elección persiste hasta que
-    # vuelva a cambiar la fecha en P1.
-    fecha_p1 = (
-        proyecto.configuracion.fecha_especifica if proyecto.configuracion is not None else None
+    # Sincronización con P1: si el usuario eligió un día específico (modo
+    # DIARIO) o una ventana de producción (modo VENTANA) en P1, el año de
+    # descarga arranca con el año de esa fecha. Si después cambia la fecha en
+    # P1, el widget se actualiza automáticamente. El usuario puede sobrescribir
+    # el año manualmente — su elección persiste hasta que vuelva a cambiar la
+    # fecha en P1.
+    cfg_p1 = proyecto.configuracion
+    fecha_p1 = cfg_p1.fecha_especifica if cfg_p1 is not None else None
+    ventana_inicio_p1 = getattr(cfg_p1, "ventana_inicio", None) if cfg_p1 is not None else None
+    modo_ventana = (
+        cfg_p1 is not None and getattr(cfg_p1, "modo_analisis", None) == ModoAnalisis.VENTANA
     )
-    anio_p1 = fecha_p1.year if fecha_p1 else None
-    ultimo_anio_p1_visto = st.session_state.get("_p2_anio_p1_visto")
-    if anio_p1 is not None and anio_p1 != ultimo_anio_p1_visto:
-        st.session_state["p2_anio_descarga"] = anio_p1
-        st.session_state["_p2_anio_p1_visto"] = anio_p1
-    if "p2_anio_descarga" not in st.session_state:
-        st.session_state["p2_anio_descarga"] = _ANIO_DEFAULT
+    if modo_ventana and ventana_inicio_p1 is not None:
+        anio_p1 = ventana_inicio_p1.year
+        fecha_sync_label = f"ventana de producción desde {ventana_inicio_p1.isoformat()}"
+    elif fecha_p1:
+        anio_p1 = fecha_p1.year
+        fecha_sync_label = f"día específico {fecha_p1.isoformat()}"
+    else:
+        anio_p1 = None
+        fecha_sync_label = None
+    # Sincronización P1→P2 robusta a la purga de widget-keys al navegar (mejora
+    # 28). La lógica vive en _resolver_anio_descarga (pura, testeable).
+    anio_descarga, ultimo_visto = _resolver_anio_descarga(
+        anio_p1=anio_p1,
+        anio_descarga_actual=st.session_state.get("p2_anio_descarga"),
+        ultimo_anio_p1_visto=st.session_state.get("_p2_anio_p1_visto"),
+    )
+    st.session_state["p2_anio_descarga"] = anio_descarga
+    st.session_state["_p2_anio_p1_visto"] = ultimo_visto
 
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
@@ -721,11 +779,10 @@ def render() -> None:
                 f"Año calendar de los datos horarios. "
                 f"Rango disponible en NASA POWER: {_ANIO_MIN}–{_ANIO_MAX}. "
                 + (
-                    f"Sincronizado con la fecha del día específico en P1 "
-                    f"({fecha_p1.isoformat()}). Podés sobreescribirlo."
-                    if fecha_p1
-                    else "Cuando elijas un día específico en P1, este año se "
-                    "ajusta automáticamente."
+                    f"Sincronizado con P1 ({fecha_sync_label}). Podés sobreescribirlo."
+                    if fecha_sync_label
+                    else "Cuando elijas un día específico o una ventana de "
+                    "producción en P1, este año se ajusta automáticamente."
                 )
             ),
         )
@@ -780,6 +837,15 @@ def render() -> None:
             delta=None if cal.n_horas_bloqueadas == 0 else "⚠",
             help="Huecos > 3 h que requieren decisión del usuario.",
         )
+
+        # Coherencia con la ventana de producción de P1 (modo VENTANA).
+        if modo_ventana and ventana_inicio_p1 is not None and clima.anio != ventana_inicio_p1.year:
+            st.warning(
+                f"⚠️ El clima descargado es del año **{clima.anio}**, pero la ventana "
+                f"de producción de P1 empieza en **{ventana_inicio_p1.year}**. "
+                "P7 evaluará la ventana con los datos del año descargado. "
+                f"Para usar el clima correcto, descargá el año {ventana_inicio_p1.year}."
+            )
 
         # ---- Decisión de usuario para huecos bloqueados ----
         if cal.n_horas_bloqueadas > 0 and cal.decision_usuario is None:
@@ -956,6 +1022,77 @@ def render() -> None:
                     file_name=(
                         f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}"
                         f"_{fecha_dia.isoformat()}.csv"
+                    ),
+                    mime="text/csv",
+                )
+
+        # -----------------------------------------------------------------------
+        # Sección 5b: Recurso climático de la ventana de producción (modo
+        # VENTANA, gran escala — S41)
+        # -----------------------------------------------------------------------
+
+        if (
+            cfg is not None
+            and cfg.modo_analisis == ModoAnalisis.VENTANA
+            and getattr(cfg, "ventana_inicio", None) is not None
+            and getattr(cfg, "ventana_fin", None) is not None
+        ):
+            from calculos.clima_calc import slice_clima_ventana
+
+            st.subheader("Recurso climático de la ventana de producción")
+            df_vent, msg_vent = slice_clima_ventana(clima, cfg.ventana_inicio, cfg.ventana_fin)
+            if df_vent is None:
+                st.warning(f"⚠️ {msg_vent}")
+            else:
+                datos_vent = df_vent.tz_convert(empl.zona_horaria)
+                poa_vent = poa_horaria.reindex(datos_vent.index).fillna(0.0)
+                n_dias_vent = (cfg.ventana_fin - cfg.ventana_inicio).days
+                st.caption(
+                    f"Lapso {cfg.ventana_inicio} → {cfg.ventana_fin} "
+                    f"({n_dias_vent} días, {len(datos_vent)} horas de clima real, "
+                    f"año {clima.anio}) — "
+                    f"({empl.latitud_deg:.4f}°, {empl.longitud_deg:.4f}°)"
+                )
+
+                T_vent_C = datos_vent["T_amb_K"] - 273.15
+                col_v1, col_v2, col_v3, col_v4, col_v5 = st.columns(5)
+                col_v1.metric("T media", f"{T_vent_C.mean():.1f} °C")
+                col_v2.metric("T min / max", f"{T_vent_C.min():.1f} / {T_vent_C.max():.1f} °C")
+                col_v3.metric("GHI ventana", f"{datos_vent['GHI_Wm2'].sum()/1000:.1f} kWh/m²")
+                col_v4.metric("POA ventana", f"{poa_vent.sum()/1000:.1f} kWh/m²")
+                col_v5.metric("Viento medio", f"{datos_vent['WS_ms'].mean():.1f} m/s")
+
+                tab_vt, tab_vrad, tab_vvhr = st.tabs(
+                    ["Temperatura", "Irradiancia solar", "Viento y Humedad"]
+                )
+                with tab_vt:
+                    mostrar_plotly(
+                        _fig_temperatura_diaria(datos_vent), nombre="temperatura_ventana"
+                    )
+                with tab_vrad:
+                    mostrar_plotly(
+                        _fig_irradiancia_diaria(datos_vent, poa_vent),
+                        nombre="irradiancia_ventana",
+                    )
+                    st.caption(
+                        "Plano horizontal: datos directos de NASA POWER. "
+                        "Plano del colector: modelo Hay-Davies (pvlib), con la "
+                        "pendiente e inclinación configuradas arriba."
+                    )
+                with tab_vvhr:
+                    mostrar_plotly(_fig_viento_hr_diaria(datos_vent), nombre="viento_hr_ventana")
+
+                csv_vent = _generar_csv(datos_vent, empl.zona_horaria)
+                st.download_button(
+                    label=(
+                        f"Descargar CSV de la ventana "
+                        f"({cfg.ventana_inicio} → {cfg.ventana_fin})"
+                    ),
+                    data=csv_vent,
+                    file_name=(
+                        f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}"
+                        f"_ventana_{cfg.ventana_inicio.isoformat()}"
+                        f"_{cfg.ventana_fin.isoformat()}.csv"
                     ),
                     mime="text/csv",
                 )

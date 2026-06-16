@@ -26,16 +26,14 @@ from typing import TYPE_CHECKING, Any, Optional
 import numpy as np
 
 if TYPE_CHECKING:
-    from core.auxiliar import Auxiliar
-    from core.camara import Camara
-    from core.colector import Colector
+    pass
 
+from calculos.auxiliar_calc import ResultadosAuxiliar as _SolverAuxiliar
 from calculos.auxiliar_calc import (
     ResultadosAuxiliarTransitorio,
     calcular_auxiliar,
     calcular_auxiliar_transitorio,
 )
-from calculos.auxiliar_calc import ResultadosAuxiliar as _SolverAuxiliar
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.colector_calc import calcular_colector_tipo1
@@ -117,8 +115,8 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
     Returns:
         Lista de mensajes de error. Vacía si el proyecto es coherente.
     """
-    from core.proyecto import ModoAnalisis, Tipologia
     from core.auxiliar import ModoOperacionAuxiliar
+    from core.proyecto import ModoAnalisis, Tipologia
 
     errores: list[str] = []
     cfg = proyecto.configuracion
@@ -1697,4 +1695,305 @@ def calcular_todo_transitorio(
             res.energia_solar_util_MJ + res.energia_auxiliar_MJ
         )
 
+    return res
+
+
+# ===========================================================================
+# S40 — Ventana de producción (gran escala): clima real horario sobre [inicio, fin]
+# ===========================================================================
+
+
+def _correr_colector_horizonte_forzado(
+    proyecto,
+    *,
+    T_amb_K_serie: np.ndarray,
+    v_viento_ms_serie: np.ndarray,
+    I_g_POA_W_m2_serie: np.ndarray,
+    P_amb_Pa: float,
+    m_dot_sistema_kg_s: Optional[float] = None,
+) -> tuple[np.ndarray, int]:
+    """Corre el colector hora a hora con el caudal que impone el ventilador.
+
+    El ventilador fija el caudal del sistema (S41): la velocidad de aire en el
+    canal de cada módulo se deriva de ese caudal —
+    ``v = ṁ / (ρ(T_amb(t)) · A_canal · n_paralelo)`` — igual que hace
+    ``_correr_colector_horizonte`` en el lazo natural. Esto mantiene coherente
+    la cadena banco → caño maestro → cámara: el colector se evalúa al caudal
+    que realmente circula, no a su ``velocidad_diseno_ms`` nominal.
+
+    Si ``m_dot_sistema_kg_s`` es None (o no positivo), se conserva el
+    comportamiento previo: el colector corre a ``velocidad_diseno_ms``.
+
+    Si el solver falla en una hora, se asume sin aporte (T_salida = T_amb) y
+    se cuenta la falla — el llamador decide si emitir advertencia. Si no hay
+    colector, devuelve (T_amb, 0).
+
+    Returns:
+        (T_salida_colector_K(t), n_horas_con_falla_del_solver).
+    """
+    T_amb_arr = np.asarray(T_amb_K_serie, dtype=float)
+    if proyecto.colector is None:
+        return T_amb_arr.copy(), 0
+    N = len(T_amb_arr)
+    T_sal = np.empty(N, dtype=float)
+    n_fallas = 0
+
+    u = proyecto.colector.unidad
+    v_diseno_original = float(u.velocidad_diseno_ms)
+    derivar_v = m_dot_sistema_kg_s is not None and m_dot_sistema_kg_s > 0.0
+    try:
+        for i in range(N):
+            T_amb_i = float(T_amb_arr[i])
+            if derivar_v:
+                # ρ a T_entrada = T_amb (convención S36: ṁ fijado con ρ(T_entrada)).
+                v_modulo = _velocidad_modulo_desde_caudal(
+                    proyecto.colector,
+                    float(m_dot_sistema_kg_s),
+                    T_amb_i,
+                    P_amb_Pa,
+                )
+                u.velocidad_diseno_ms = float(np.clip(v_modulo, 0.05, 15.0))
+            try:
+                _solver, T_sal_K = _correr_colector(
+                    proyecto,
+                    T_amb_K=T_amb_i,
+                    I_g_W_m2=float(I_g_POA_W_m2_serie[i]),
+                    v_viento_ms=float(v_viento_ms_serie[i]),
+                    T_entrada_K=T_amb_i,
+                    P_amb_Pa=P_amb_Pa,
+                )
+                T_sal[i] = T_sal_K
+            except Exception:
+                # Régimen patológico (fsolve no converge, Re fuera de rango...):
+                # sin aporte del colector en esa hora. Se reporta vía n_fallas.
+                T_sal[i] = T_amb_i
+                n_fallas += 1
+    finally:
+        u.velocidad_diseno_ms = v_diseno_original
+    return np.maximum(T_sal, T_amb_arr), n_fallas
+
+
+def armar_forzantes_ventana(
+    proyecto,
+    clima_datos_df,
+    *,
+    P_Pa: float = 101325.0,
+) -> tuple[ForzantesAire, float, list[str]]:
+    """Arma las forzantes de cámara sobre la ventana desde clima real horario.
+
+    Encadena, hora a hora sobre el lapso ``clima_datos_df`` (slice horario con
+    columnas COLUMNAS_SI e índice DatetimeIndex):
+        1. POA sobre el plano del colector (transposición Liu-Jordan, pvlib).
+        2. Colector forzado → T_salida_colector(t).
+        3. Caño maestro (si presente): ΔT térmica (pérdida/aporte solar) → T(t).
+        4. Auxiliar en serie (si presente): ΔT(t) según su calendario de
+           arranque (mañana/tarde) → T_entrada de cámara. Acumula leña.
+
+    Args:
+        proyecto: Proyecto GRAN_ESCALA con colector y emplazamiento.
+        clima_datos_df: DataFrame horario (COLUMNAS_SI) del lapso [inicio, fin].
+        P_Pa: Presión representativa [Pa].
+
+    Returns:
+        (forzantes, lena_consumida_kg, advertencias).
+    """
+    from calculos.clima_calc import calcular_POA_horizonte
+    from calculos.psicrometria import humedad_absoluta
+    from core.auxiliar import ModoOperacionAuxiliar
+
+    advertencias: list[str] = []
+    df = clima_datos_df
+    n = len(df)
+
+    T_amb = np.asarray(df["T_amb_K"].to_numpy(), dtype=float)
+    v_viento = np.asarray(df["WS_ms"].to_numpy(), dtype=float)
+    GHI = np.asarray(df["GHI_Wm2"].to_numpy(), dtype=float)
+    HR = np.asarray(df["HR"].to_numpy(), dtype=float)
+
+    # POA sobre el plano del colector.
+    try:
+        POA = np.asarray(calcular_POA_horizonte(df, proyecto.emplazamiento).to_numpy(), dtype=float)
+    except Exception as exc:
+        advertencias.append(f"ADV_VENTANA_POA_NO_DISPONIBLE: {exc}. Se usa GHI como POA.")
+        POA = GHI.copy()
+
+    # Caudal del sistema: lo fija el ventilador y circula por banco, caño
+    # maestro y cámara por igual (S41 — caudal único).
+    m_dot_sistema = (
+        float(proyecto.camara.flujo.caudal_masico_kg_s) if proyecto.camara is not None else None
+    )
+
+    # Colector forzado hora a hora, a la velocidad que impone el caudal del
+    # sistema (no a la velocidad de diseño nominal del módulo).
+    T_sal_col, n_fallas_col = _correr_colector_horizonte_forzado(
+        proyecto,
+        T_amb_K_serie=T_amb,
+        v_viento_ms_serie=v_viento,
+        I_g_POA_W_m2_serie=POA,
+        P_amb_Pa=P_Pa,
+        m_dot_sistema_kg_s=m_dot_sistema,
+    )
+    if n_fallas_col > 0:
+        advertencias.append(
+            f"ADV_VENTANA_COLECTOR_FALLO_HORAS: el solver del colector falló en "
+            f"{n_fallas_col} de {n} horas (se asumió T_salida = T_amb, sin aporte "
+            "solar en esas horas). Revisá la configuración del colector."
+        )
+
+    # Coherencia de caudales banco ↔ sistema (S41): si el caudal de diseño del
+    # banco difiere mucho del que mueve el ventilador, el punto de operación
+    # real del colector se aleja del nominal — avisar para que el usuario
+    # redimensione banco o ventilador.
+    if proyecto.colector is not None and m_dot_sistema is not None and m_dot_sistema > 0:
+        from calculos.motor_calc import densidad_aire as _densidad_aire
+
+        _u = proyecto.colector.unidad
+        _b = proyecto.colector.banco
+        _rho_ref = _densidad_aire(float(np.mean(T_amb)), P_Pa)
+        m_banco_diseno = (
+            _b.n_paralelo * _u.velocidad_diseno_ms * _u.ancho_m * _u.espaciado_m * _rho_ref
+        )
+        if m_banco_diseno > 0:
+            _ratio = m_banco_diseno / m_dot_sistema
+            if _ratio > 1.5 or _ratio < (1.0 / 1.5):
+                _v_real = _velocidad_modulo_desde_caudal(
+                    proyecto.colector, m_dot_sistema, float(np.mean(T_amb)), P_Pa
+                )
+                advertencias.append(
+                    f"ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE: el caudal de diseño del "
+                    f"banco ({m_banco_diseno:.3f} kg/s = {_b.n_paralelo} ramas × "
+                    f"{_u.velocidad_diseno_ms:.2f} m/s) difiere {_ratio:.1f}× del "
+                    f"caudal del sistema ({m_dot_sistema:.3f} kg/s). El colector se "
+                    f"evaluó al caudal del sistema (v ≈ {_v_real:.2f} m/s por rama). "
+                    "Ajustá el caudal del ventilador o el tamaño del banco."
+                )
+
+        # Velocidad media del aire en la cámara: bajo ~0.1 m/s el secado queda
+        # limitado por transporte (h_conv y K_m minúsculos).
+        _geo = proyecto.camara.geometria
+        _A_frontal = float(_geo.ancho_m) * float(_geo.alto_m)
+        if _A_frontal > 0:
+            _v_camara = m_dot_sistema / (_rho_ref * _A_frontal)
+            if _v_camara < 0.10:
+                advertencias.append(
+                    f"ADV_VENTANA_VELOCIDAD_CAMARA_BAJA: velocidad media del aire en "
+                    f"la cámara ≈ {_v_camara * 100:.1f} cm/s (sección frontal "
+                    f"{_A_frontal:.2f} m²). Bajo ~10 cm/s los coeficientes de "
+                    "transporte se desploman y el secado se hace muy lento. "
+                    "Aumentá el caudal o reducí la sección de la cámara."
+                )
+
+    # Caño maestro: ΔT térmica entre la salida del banco y la cámara.
+    cano = getattr(getattr(proyecto.colector, "banco", None), "cano_maestro", None)
+    if cano is not None:
+        from calculos.cano_maestro_calc import delta_T_cano_maestro
+
+        m_dot = proyecto.camara.flujo.caudal_masico_kg_s
+        dT_cano = np.array(
+            [
+                delta_T_cano_maestro(
+                    cano,
+                    T_aire_K=float(T_sal_col[i]),
+                    T_amb_K=float(T_amb[i]),
+                    I_g_W_m2=float(GHI[i]),
+                    m_dot_as_kg_s=m_dot,
+                    v_viento_ms=float(v_viento[i]),
+                    P_Pa=P_Pa,
+                )
+                for i in range(n)
+            ]
+        )
+        T_post_cano = T_sal_col + dT_cano
+    else:
+        T_post_cano = T_sal_col
+
+    omega_amb = np.array([humedad_absoluta(float(HR[i]), float(T_amb[i]), P_Pa) for i in range(n)])
+    t_s = np.arange(n, dtype=float) * 3600.0
+
+    # Auxiliar en serie (con calendario de arranque) → ΔT y leña.
+    T_ent = T_post_cano.copy()
+    lena_kg = 0.0
+    aux = proyecto.auxiliar
+    if aux is not None and aux.modo_operacion == ModoOperacionAuxiliar.SERIE_POSCOLECTOR:
+        try:
+            hora_offset = _hora_offset_local(df, proyecto.emplazamiento)
+            aux_tr = calcular_auxiliar_transitorio(
+                aux,
+                T_entrada_K_serie=T_post_cano,
+                t_s=t_s,
+                caudal_masico_kg_s=proyecto.camara.flujo.caudal_masico_kg_s,
+                I_g_W_m2_serie=POA,
+                hora_offset_h=hora_offset,
+            )
+            T_ent = T_post_cano + aux_tr.delta_T_K
+            lena_kg = aux_tr.lena_consumida_kg
+            advertencias.extend(aux_tr.advertencias_unicas)
+        except Exception as exc:
+            advertencias.append(f"ADV_VENTANA_AUXILIAR: {exc}")
+
+    forzantes = ForzantesAire(
+        t_s=t_s,
+        T_ent_K=T_ent,
+        omega_ent=omega_amb,
+        m_dot_aire_seco_kg_s=np.full(n, proyecto.camara.flujo.caudal_masico_kg_s),
+        T_amb_K=T_amb,
+        v_viento_ms=v_viento,
+        I_g_W_m2=GHI,
+        I_g_POA_W_m2=POA,
+    )
+    return forzantes, lena_kg, advertencias
+
+
+def _hora_offset_local(clima_datos_df, emplazamiento) -> float:
+    """Hora del día (local) del primer registro de la ventana [h], para alinear
+    el calendario de arranque del auxiliar. Convierte el índice UTC a la zona
+    horaria del emplazamiento si es posible."""
+    try:
+        idx0 = clima_datos_df.index[0]
+        if getattr(idx0, "tzinfo", None) is not None and emplazamiento is not None:
+            idx0 = idx0.tz_convert(emplazamiento.zona_horaria)
+        return float(idx0.hour) + float(idx0.minute) / 60.0
+    except Exception:
+        return 0.0
+
+
+def calcular_todo_ventana(
+    proyecto,
+    clima_datos_df,
+    *,
+    P_Pa: Optional[float] = None,
+):
+    """Pipeline de ventana de producción (gran escala).
+
+    Arma las forzantes desde clima real horario sobre el lapso y delega en
+    ``simulacion_ventana.simular_ventana`` para acumular la producción según el
+    subtipo (BATCH / SEMICONTINUO). Es el punto de entrada que consume P7.
+
+    Args:
+        proyecto: Proyecto GRAN_ESCALA en modo VENTANA.
+        clima_datos_df: DataFrame horario (COLUMNAS_SI) del lapso [inicio, fin].
+        P_Pa: Presión representativa [Pa]. None → se deriva del emplazamiento.
+
+    Returns:
+        ResultadoVentana con producción, tasa de régimen, leña y diagnósticos.
+    """
+    from calculos.simulacion_ventana import ResultadoVentana, simular_ventana
+
+    if P_Pa is None:
+        P_Pa, _origen = presion_representativa_proyecto(proyecto)
+
+    errores = verificar_coherencia_proyecto(proyecto)
+    if errores:
+        return ResultadoVentana(
+            subtipo=proyecto.configuracion.subtipo_gran_escala.value,
+            horizonte_s=0.0,
+            status="error",
+            advertencias=errores,
+        )
+
+    forzantes, lena_kg, adv = armar_forzantes_ventana(proyecto, clima_datos_df, P_Pa=P_Pa)
+    res = simular_ventana(proyecto, forzantes_base=forzantes, P_Pa=P_Pa)
+    # La leña del auxiliar se computa al armar las forzantes (calendario de arranque).
+    res.lena_consumida_kg = lena_kg
+    res.advertencias = list(adv) + list(res.advertencias)
     return res

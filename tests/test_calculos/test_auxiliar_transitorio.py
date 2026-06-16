@@ -23,8 +23,9 @@ from core.auxiliar import (
 )
 
 
-def _aux_resistencia_500W(*, set_point_C: float | None = None,
-                          disponible_nocturno: bool = True) -> Auxiliar:
+def _aux_resistencia_500W(
+    *, set_point_C: float | None = None, disponible_nocturno: bool = True
+) -> Auxiliar:
     return Auxiliar(
         tipo=TipoAuxiliar.RESISTENCIA_ELECTRICA,
         modo_operacion=ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
@@ -51,7 +52,9 @@ class TestVectorizacion:
         m_dot = 0.030
 
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
             caudal_masico_kg_s=m_dot,
         )
         ref = calcular_auxiliar(aux, T_entrada_K=320.0, caudal_masico_kg_s=m_dot)
@@ -64,7 +67,9 @@ class TestVectorizacion:
         t = np.array([0.0, 1800.0, 3600.0])
         T_in = np.array([300.0, 310.0, 320.0])
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
             caudal_masico_kg_s=0.030,
         )
         np.testing.assert_allclose(res.T_salida_K, res.T_entrada_K + res.delta_T_K, atol=1e-9)
@@ -79,11 +84,13 @@ class TestSetPoint:
 
     def test_set_point_limita_Q_cuando_T_ent_se_acerca(self):
         """T_ent crece y se acerca al set_point → Q_eff baja a lo necesario."""
-        aux = _aux_resistencia_500W(set_point_C=60.0)   # set_point = 333.15 K
+        aux = _aux_resistencia_500W(set_point_C=60.0)  # set_point = 333.15 K
         t = np.linspace(0.0, 3600.0, 13)
-        T_in = np.linspace(290.0, 332.0, 13)            # va subiendo
+        T_in = np.linspace(290.0, 332.0, 13)  # va subiendo
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
             caudal_masico_kg_s=0.030,
         )
         # En el último paso (T_in muy cerca del set_point), Q_eff debería ser
@@ -93,11 +100,13 @@ class TestSetPoint:
         assert res.Q_efectivo_W[0] > 400.0
 
     def test_T_ent_supera_set_point_apaga_auxiliar(self):
-        aux = _aux_resistencia_500W(set_point_C=40.0)   # set_point = 313.15 K
+        aux = _aux_resistencia_500W(set_point_C=40.0)  # set_point = 313.15 K
         t = np.array([0.0, 3600.0])
-        T_in = np.array([320.0, 320.0])                  # ya por encima
+        T_in = np.array([320.0, 320.0])  # ya por encima
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
             caudal_masico_kg_s=0.030,
         )
         assert np.all(res.Q_efectivo_W == 0.0)
@@ -119,14 +128,17 @@ class TestDisponibleNocturno:
     def test_nocturno_off_apaga_de_noche(self):
         """Con disponible_nocturno=False y I_g=0 nocturno → Q_eff=0 en esos pasos."""
         aux = _aux_resistencia_500W(disponible_nocturno=False)
-        t = np.linspace(0.0, 24 * 3600.0, 25)            # 24 h horarias
+        t = np.linspace(0.0, 24 * 3600.0, 25)  # 24 h horarias
         T_in = np.full(25, 290.0)
         # Día: horas 6–18; noche: el resto.
         horas = np.arange(25)
         I_g = np.where((horas >= 6) & (horas <= 18), 800.0, 0.0)
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
-            caudal_masico_kg_s=0.030, I_g_W_m2_serie=I_g,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
+            caudal_masico_kg_s=0.030,
+            I_g_W_m2_serie=I_g,
         )
         # En la noche (h<6 y h>18) Q debe ser cero.
         mask_noche = (horas < 6) | (horas > 18)
@@ -139,10 +151,13 @@ class TestDisponibleNocturno:
         aux = _aux_resistencia_500W(disponible_nocturno=True)
         t = np.linspace(0.0, 24 * 3600.0, 25)
         T_in = np.full(25, 290.0)
-        I_g = np.zeros(25)                                # toda "noche"
+        I_g = np.zeros(25)  # toda "noche"
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
-            caudal_masico_kg_s=0.030, I_g_W_m2_serie=I_g,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
+            caudal_masico_kg_s=0.030,
+            I_g_W_m2_serie=I_g,
         )
         # Disponible nocturno: aporta siempre.
         assert np.all(res.Q_efectivo_W > 0.0)
@@ -158,10 +173,12 @@ class TestEnergiaIntegrada:
     def test_Q_constante_E_aux_es_Q_por_dt(self):
         """Si Q es constante a lo largo del horizonte, E_MJ = Q · Δt / 1e6."""
         aux = _aux_resistencia_500W()
-        t = np.linspace(0.0, 3600.0, 13)                  # 1 h
+        t = np.linspace(0.0, 3600.0, 13)  # 1 h
         T_in = np.full(13, 300.0)
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
             caudal_masico_kg_s=0.030,
         )
         Q = res.Q_efectivo_W[0]
@@ -175,8 +192,11 @@ class TestEnergiaIntegrada:
         horas = np.arange(25)
         I_g = np.where((horas >= 6) & (horas <= 18), 800.0, 0.0)
         res = calcular_auxiliar_transitorio(
-            aux, T_entrada_K_serie=T_in, t_s=t,
-            caudal_masico_kg_s=0.030, I_g_W_m2_serie=I_g,
+            aux,
+            T_entrada_K_serie=T_in,
+            t_s=t,
+            caudal_masico_kg_s=0.030,
+            I_g_W_m2_serie=I_g,
         )
         # 13 horas activas (06–18 inclusive).
         # Trapezoidal sobre el indicador 1_{Q>0} → ~12 h (porque los puntos
@@ -196,7 +216,9 @@ class TestErrores:
         aux = _aux_resistencia_500W()
         with pytest.raises(ValueError, match="AUX_TR_LONGITUD_INCONSISTENTE"):
             calcular_auxiliar_transitorio(
-                aux, T_entrada_K_serie=np.zeros(5), t_s=np.zeros(7),
+                aux,
+                T_entrada_K_serie=np.zeros(5),
+                t_s=np.zeros(7),
                 caudal_masico_kg_s=0.030,
             )
 
@@ -204,6 +226,8 @@ class TestErrores:
         aux = _aux_resistencia_500W()
         with pytest.raises(ValueError, match="AUX_TR_CAUDAL_NO_POSITIVO"):
             calcular_auxiliar_transitorio(
-                aux, T_entrada_K_serie=np.zeros(3), t_s=np.zeros(3),
+                aux,
+                T_entrada_K_serie=np.zeros(3),
+                t_s=np.zeros(3),
                 caudal_masico_kg_s=0.0,
             )

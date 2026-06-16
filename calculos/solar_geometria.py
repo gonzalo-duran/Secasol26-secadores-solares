@@ -53,9 +53,7 @@ def mediodia_solar_transit(
 
     # SPA requiere DatetimeIndex tz-aware. Le damos un único punto al mediodía
     # local del día para que el algoritmo sepa el día solar.
-    times = pd.DatetimeIndex(
-        [pd.Timestamp(fecha) + pd.Timedelta(hours=12)]
-    ).tz_localize(tz)
+    times = pd.DatetimeIndex([pd.Timestamp(fecha) + pd.Timedelta(hours=12)]).tz_localize(tz)
 
     res = pvlib.solarposition.sun_rise_set_transit_spa(times, lat, lon)
     transit = res["transit"].iloc[0]

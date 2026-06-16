@@ -70,8 +70,8 @@ import numpy as np
 from scipy.integrate import solve_ivp
 from scipy.optimize import fsolve
 
-from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
 from calculos.colector_calc import _U_cubierta_efectiva, coef_conveccion_interna_local
+from calculos.correlaciones_nusselt import calcular_h_int, nusselt_hollands_inclinada
 from calculos.propiedades_aire import cp_aire, rho_aire
 
 if TYPE_CHECKING:
@@ -1110,7 +1110,9 @@ def _extraer_params_materiales(colector: "Colector") -> dict:
     return {
         "tau_cub": mat_cub["transmitancia_solar"],
         "em_cub": mat_cub["emisividad_ir"],
-        "k_cub": mat_cub["conductividad_termica"],
+        # k efectivo: override del usuario (policarbonato alveolar → k(espesor))
+        # o, en su defecto, el del catálogo.
+        "k_cub": unidad.k_cubierta_efectivo_W_mK or mat_cub["conductividad_termica"],
         "esp_cub_m": unidad.espesor_cubierta_m,
         "alfa_abs": mat_placa["absortancia_solar"],
         "em_abs": mat_placa["emisividad_ir"],

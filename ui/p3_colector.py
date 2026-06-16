@@ -13,35 +13,39 @@ from __future__ import annotations
 import dataclasses
 from datetime import date as _date_type
 
-import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pvlib
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from calculos.colector_calc import calcular_colector_tipo1
-from calculos.solar_geometria import (
-    bin_horario_que_contiene,
-    mediodia_solar_transit,
-)
 from calculos.colector_tipos234_calc import (
     calcular_colector_tipo2,
     calcular_colector_tipo3,
     calcular_colector_tipo4,
 )
+from calculos.solar_geometria import (
+    bin_horario_que_contiene,
+    mediodia_solar_transit,
+)
 from core import catalogo
+from core.advertencias import Severidad
+from core.chimenea import Chimenea
 from core.colector import (
     BancoColectores,
+    CanoMaestro,
     Colector,
     ColectorUnidad,
     advertencias_colector,
 )
-from core.chimenea import Chimenea
-from core.advertencias import Severidad
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
+from ui.componentes.espesores import (
+    ESPESORES_MADERA_MM,
+    MATERIALES_MADERA,
+    selector_espesor_mm,
+)
 from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.graficas import mostrar_plotly
-from ui.componentes.unidades import acimut_duffie_a_pvlib, kelvin_a_celsius
+from ui.componentes.unidades import kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
 # Helpers de UI
@@ -331,6 +335,30 @@ def _resumen_eval_diario(r: dict) -> dict | None:
     }
 
 
+def _resumen_eval_ventana(r: dict) -> dict | None:
+    """Extrae métricas representativas de la evaluación sobre la ventana (S41)."""
+    if not r:
+        return None
+    T_sal = [t for t in r.get("T_salida_C", []) if t is not None]
+    if not T_sal:
+        return None
+    pares_diurnos = [
+        (ts, ta)
+        for ts, ta, p in zip(r.get("T_salida_C", []), r.get("T_amb_C", []), r.get("poa", []))
+        if ts is not None and p > 50.0
+    ]
+    dT_medio = (
+        sum(ts - ta for ts, ta in pares_diurnos) / len(pares_diurnos) if pares_diurnos else None
+    )
+    return {
+        "T_salida_max_C": float(max(T_sal)),
+        "T_salida_min_C": float(min(T_sal)),
+        "delta_T_medio_diurno_C": float(dT_medio) if dT_medio is not None else None,
+        "n_horas_T_sal_40C": sum(1 for t in T_sal if t > 40.0),
+        "n_horas_evaluadas": len(r.get("T_salida_C", [])),
+    }
+
+
 def _resumen_eval_anual(r: dict) -> dict | None:
     """Extrae métricas representativas de la evaluación anual del colector."""
     if not r or not r.get("meses"):
@@ -441,6 +469,32 @@ def _texto_config_colector(
         f"  Caudal total    : {col.caudal_total_m3_s() * 1000:.3f} L/s",
         f"  Camino del aire : {col.largo_camino_aire_m():.2f} m",
     ]
+    if col.banco.cano_maestro is not None:
+        cm = col.banco.cano_maestro
+        lines += [
+            "",
+            "CAÑO MAESTRO (manifold del banco)",
+            f"  Largo           : {cm.largo_m:.1f} m",
+            f"  Sección (vent.) : {cm.ancho_m:.2f} × {cm.alto_m:.2f} m "
+            f"({cm.area_seccion_m2:.2f} m²)",
+            *(
+                [
+                    f"  Sección (inicio): {cm.ancho_inicio_m:.2f} × {cm.alto_inicio_m:.2f} m "
+                    f"({cm.area_seccion_inicio_m2:.2f} m²) — sección creciente"
+                ]
+                if cm.seccion_variable
+                else []
+            ),
+            f"  Aislado         : {'Sí' if cm.aislado else 'No'}"
+            + (f" ({cm.material_aislante})" if cm.material_aislante else ""),
+            f"  Aporte solar    : {'Sí' if cm.aporte_solar else 'No'}"
+            + (f" (α = {cm.absortancia_solar:.2f})" if cm.aporte_solar else ""),
+            *(
+                [f"  Cubierta transl.: {cm.cubierta} (τ = {cm.transmitancia_cubierta:.2f})"]
+                if cm.cubierta
+                else []
+            ),
+        ]
     # Advertencias estáticas activas
     advs = advertencias_colector(col)
     lines += ["", "ADVERTENCIAS ESTÁTICAS DE DISEÑO"]
@@ -462,7 +516,7 @@ def _texto_config_colector(
             label = eval_dict.get("label", "—")
             res = _resumen_eval_diario(r)
             lines += [
-                f"  Modo evaluación   : DIARIO",
+                "  Modo evaluación   : DIARIO",
                 f"  Día representativo: {label}",
             ]
             if res is None:
@@ -480,9 +534,30 @@ def _texto_config_colector(
                     f"  Hora tránsito    : {res['hora_transit'] or '—'}",
                     f"  Horas con sol    : {res['n_horas_con_radiacion']}",
                 ]
+        elif modo == "ventana":
+            label = eval_dict.get("label", "—")
+            res = _resumen_eval_ventana(r)
+            lines += [
+                "  Modo evaluación   : VENTANA DE PRODUCCIÓN",
+                f"  Lapso             : {label}",
+            ]
+            if res is None:
+                lines.append("  (sin horas con radiación suficiente)")
+            else:
+                lines += [
+                    f"  T salida máx     : {res['T_salida_max_C']:.1f} °C",
+                    f"  T salida mín     : {res['T_salida_min_C']:.1f} °C",
+                    (
+                        f"  ΔT medio diurno  : {res['delta_T_medio_diurno_C']:.1f} °C"
+                        if res["delta_T_medio_diurno_C"] is not None
+                        else "  ΔT medio diurno  : —"
+                    ),
+                    f"  Horas T>40 °C    : {res['n_horas_T_sal_40C']}",
+                    f"  Horas evaluadas  : {res['n_horas_evaluadas']}",
+                ]
         elif modo == "anual":
             res = _resumen_eval_anual(r)
-            lines.append(f"  Modo evaluación  : ANUAL (12 meses representativos)")
+            lines.append("  Modo evaluación  : ANUAL (12 meses representativos)")
             if res is None:
                 lines.append("  (sin resultados válidos)")
             else:
@@ -549,10 +624,33 @@ def _from_json_colector(data: dict) -> "Colector":
         espesor_aislante_m=_mat_espesor("aislante"),
         id_fondo=_mat_id("fondo"),
         espesor_fondo_m=_mat_espesor("fondo"),
+        k_cubierta_efectivo_W_mK=u.get("k_cubierta_efectivo_W_mK"),
+    )
+    cano_d = banco.get("cano_maestro")
+    _ancho_ini = cano_d.get("ancho_inicio_m") if cano_d else None
+    _alto_ini = cano_d.get("alto_inicio_m") if cano_d else None
+    cano = (
+        CanoMaestro(
+            largo_m=float(cano_d["largo_m"]),
+            ancho_m=float(cano_d["ancho_m"]),
+            alto_m=float(cano_d["alto_m"]),
+            rugosidad_m=float(cano_d.get("rugosidad_m", 1.5e-4)),
+            aislado=bool(cano_d.get("aislado", False)),
+            espesor_aislante_m=float(cano_d.get("espesor_aislante_m", 0.0)),
+            material_aislante=cano_d.get("material_aislante"),
+            aporte_solar=bool(cano_d.get("aporte_solar", True)),
+            absortancia_solar=float(cano_d.get("absortancia_solar", 0.90)),
+            cubierta=cano_d.get("cubierta"),
+            ancho_inicio_m=float(_ancho_ini) if _ancho_ini is not None else None,
+            alto_inicio_m=float(_alto_ini) if _alto_ini is not None else None,
+        )
+        if cano_d
+        else None
     )
     bco = BancoColectores(
         n_serie=int(banco.get("n_serie", 1)),
         n_paralelo=int(banco.get("n_paralelo", 1)),
+        cano_maestro=cano,
     )
     return Colector(unidad=unidad, banco=bco)
 
@@ -579,6 +677,7 @@ def _json_config_colector(
             "velocidad_diseno_ms": u.velocidad_diseno_ms,
             "tipo_colector": u.tipo_colector,
             "tipo_colector_descripcion": _TIPOS_COLECTOR.get(u.tipo_colector),
+            "k_cubierta_efectivo_W_mK": u.k_cubierta_efectivo_W_mK,
         },
         "materiales": {
             "cubierta": {
@@ -605,6 +704,25 @@ def _json_config_colector(
         "banco": {
             "n_serie": col.banco.n_serie,
             "n_paralelo": col.banco.n_paralelo,
+            "cano_maestro": (
+                {
+                    "largo_m": col.banco.cano_maestro.largo_m,
+                    "ancho_m": col.banco.cano_maestro.ancho_m,
+                    "alto_m": col.banco.cano_maestro.alto_m,
+                    "rugosidad_m": col.banco.cano_maestro.rugosidad_m,
+                    "aislado": col.banco.cano_maestro.aislado,
+                    "espesor_aislante_m": col.banco.cano_maestro.espesor_aislante_m,
+                    "material_aislante": col.banco.cano_maestro.material_aislante,
+                    "aporte_solar": col.banco.cano_maestro.aporte_solar,
+                    "absortancia_solar": col.banco.cano_maestro.absortancia_solar,
+                    "cubierta": col.banco.cano_maestro.cubierta,
+                    "ancho_inicio_m": col.banco.cano_maestro.ancho_inicio_m,
+                    "alto_inicio_m": col.banco.cano_maestro.alto_inicio_m,
+                    "area_seccion_m2": col.banco.cano_maestro.area_seccion_m2,
+                }
+                if col.banco.cano_maestro is not None
+                else None
+            ),
         },
         "derivados": {
             "seccion_canal_m2": u.seccion_canal_m2(),
@@ -640,6 +758,9 @@ def _json_config_colector(
         if modo == "diario":
             bloque["dia_representativo"] = eval_dict.get("label")
             bloque["resumen"] = _resumen_eval_diario(r)
+        elif modo == "ventana":
+            bloque["lapso"] = eval_dict.get("label")
+            bloque["resumen"] = _resumen_eval_ventana(r)
         elif modo == "anual":
             bloque["resumen"] = _resumen_eval_anual(r)
         snapshot["resultados"] = bloque
@@ -870,6 +991,274 @@ def _evaluar_diario(colector, datos_dia, empl):
         "hora_poa_max": hora_poa_max,
         "tipo": tipo,
     }
+
+
+def _evaluar_ventana(colector, datos_vent, empl):
+    """Evalúa el colector hora a hora sobre la ventana de producción (S41, mejora 34).
+
+    Vista previa de P3: corre el solver a la **velocidad de diseño** del
+    módulo. El cálculo de producción de P7 (fuente de verdad) re-corre el
+    colector al caudal real del sistema impuesto por el ventilador.
+
+    Devuelve, además de las series horarias de T_salida / T_ambiente / POA,
+    la serie de T del **absorbedor**, el **perfil T(x)** a mediodía solar del
+    **primer día** de la ventana, y las marcas (POA máx + mediodía solar SPA)
+    de **cada día**. De noche (POA < 50 W/m²) el aire no se calienta:
+    ``T_salida = T_absorbedor = T_amb`` (no ``None``), para reflejar día y noche.
+    """
+    poa = _poa_serie(datos_vent, empl)
+    tipo = colector.unidad.tipo_colector
+
+    horas, T_sal_C, T_amb_C, T_abs_C, poa_list = [], [], [], [], []
+    for ts, row in datos_vent.iterrows():
+        I_g = float(poa.get(ts, 0.0))
+        T_amb = float(row["T_amb_K"])
+        v_w = float(row["WS_ms"])
+        res = _correr_colector(colector, T_amb, I_g, v_w, pendiente_deg=empl.pendiente_colector_deg)
+
+        horas.append(ts)
+        T_amb_C.append(T_amb - 273.15)
+        poa_list.append(I_g)
+        if res is not None:
+            T_sal_C.append(_T_salida_res(res, tipo) - 273.15)
+            T_abs_C.append(float(res.T_abs_K.mean()) - 273.15)
+        else:
+            # Noche / sin sol: el aire pasa sin calentarse (T → T_amb).
+            T_sal_C.append(T_amb - 273.15)
+            T_abs_C.append(T_amb - 273.15)
+
+    # --- Marcas por día (POA máx en bin + mediodía solar SPA) y perfil T(x) ---
+    marcas_poa_max: list = []
+    marcas_mediodia: list = []
+    x_noon = T_perfil_noon_C = None
+    dias = sorted({ts.date() for ts in horas})
+    for dia in dias:
+        poa_dia = poa[poa.index.date == dia]
+        if len(poa_dia) == 0 or float(poa_dia.max()) <= 50.0:
+            continue
+        marcas_poa_max.append((poa_dia.idxmax(), float(poa_dia.max())))
+        transit = mediodia_solar_transit(
+            dia, empl.latitud_deg, empl.longitud_deg, empl.zona_horaria
+        )
+        marcas_mediodia.append(transit)
+        # Perfil T(x) sólo del primer día con sol de la ventana.
+        if x_noon is None:
+            idx_perfil = bin_horario_que_contiene(transit, datos_vent.index)
+            if idx_perfil is not None and idx_perfil in datos_vent.index:
+                fila = datos_vent.loc[idx_perfil]
+                res_p = _correr_colector(
+                    colector,
+                    float(fila["T_amb_K"]),
+                    float(poa.get(idx_perfil, 0.0)),
+                    float(fila["WS_ms"]),
+                    pendiente_deg=empl.pendiente_colector_deg,
+                )
+                if res_p is not None:
+                    xs, T = _perfil_fluido(res_p, tipo)
+                    x_noon, T_perfil_noon_C = xs, T - 273.15
+
+    return {
+        "horas": horas,
+        "T_salida_C": T_sal_C,
+        "T_amb_C": T_amb_C,
+        "T_abs_C": T_abs_C,
+        "poa": poa_list,
+        "x_noon": x_noon,
+        "T_perfil_noon_C": T_perfil_noon_C,
+        "marcas_poa_max": marcas_poa_max,
+        "marcas_mediodia": marcas_mediodia,
+        "tipo": tipo,
+    }
+
+
+def _fig_T_salida_ventana(r, lapso_label):
+    """Series horarias (día y noche) de T salida / T absorbedor / T ambiente / POA.
+
+    Sobre la ventana completa, con marcas por día de POA máxima y de mediodía
+    solar (tránsito SPA). De noche el aire no se calienta → T_salida ≈ T_amb.
+    """
+    horas = list(r["horas"])
+    T_sal = r["T_salida_C"]
+    T_abs = r.get("T_abs_C")
+    T_amb = r["T_amb_C"]
+    poa = r["poa"]
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Scatter(
+            x=horas,
+            y=poa,
+            mode="lines",
+            fill="tozeroy",
+            fillcolor="rgba(245,166,35,0.15)",
+            line=dict(color="rgba(245,166,35,0.5)", width=1),
+            name="POA [W/m²]",
+        ),
+        secondary_y=True,
+    )
+    if T_abs is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=horas,
+                y=T_abs,
+                mode="lines",
+                line=dict(color="#8e44ad", width=1.2),
+                name="T absorbedor [°C]",
+            ),
+            secondary_y=False,
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=horas,
+            y=T_sal,
+            mode="lines",
+            line=dict(color="#e05c2a", width=1.8),
+            name="T salida colector [°C]",
+        ),
+        secondary_y=False,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=horas,
+            y=T_amb,
+            mode="lines",
+            line=dict(color="#1f77b4", width=1.2, dash="dash"),
+            name="T ambiente [°C]",
+        ),
+        secondary_y=False,
+    )
+    # Marcas por día: POA máxima (diamante) y mediodía solar SPA (triángulo).
+    marcas_poa = r.get("marcas_poa_max") or []
+    if marcas_poa:
+        fig.add_trace(
+            go.Scatter(
+                x=[ts for ts, _ in marcas_poa],
+                y=[val for _, val in marcas_poa],
+                mode="markers",
+                marker=dict(color="#f5a623", symbol="diamond", size=7),
+                name="POA máx (día)",
+            ),
+            secondary_y=True,
+        )
+    marcas_md = r.get("marcas_mediodia") or []
+    if marcas_md:
+        fig.add_trace(
+            go.Scatter(
+                x=list(marcas_md),
+                y=[0.0] * len(marcas_md),
+                mode="markers",
+                marker=dict(color="#c0392b", symbol="triangle-up", size=8),
+                name="Mediodía solar",
+            ),
+            secondary_y=True,
+        )
+    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
+    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
+    fig.update_xaxes(tickformat="%d-%b")
+    fig.update_layout(
+        title_text=f"Desempeño del colector sobre la ventana {lapso_label}",
+        height=420,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+def _fig_campo_colectores(rc) -> go.Figure:
+    """Reparto de caudal/T por rama + perfil de velocidad del troncal (S41/S42).
+
+    Panel superior: caudal por rama (barras) y T de salida por rama (línea).
+    Panel inferior (si hay caño maestro): velocidad del aire a lo largo del
+    troncal (extremo lejano → ventilador). Hace visible la compensación de
+    sección — una sección creciente mantiene la velocidad acotada al acumular
+    caudal; una sección chica constante la dispara cerca del ventilador.
+    """
+    n = len(rc.q_ramas_m3_s)
+    bocas = list(range(1, n + 1))
+    _vp = getattr(rc, "v_troncal_perfil_ms", None)
+    tiene_perfil = _vp is not None and len(_vp) > 0
+
+    if tiene_perfil:
+        fig = make_subplots(
+            rows=2,
+            cols=1,
+            shared_xaxes=True,
+            specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
+            row_heights=[0.62, 0.38],
+            vertical_spacing=0.12,
+            subplot_titles=("Reparto de caudal y temperatura por rama", "Velocidad en el troncal"),
+        )
+    else:
+        fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    fig.add_trace(
+        go.Bar(
+            x=bocas,
+            y=[float(q) * 1000.0 for q in rc.q_ramas_m3_s],
+            name="Caudal por rama [L/s]",
+            marker_color="#4caf50",
+            opacity=0.75,
+        ),
+        secondary_y=False,
+        **({"row": 1, "col": 1} if tiene_perfil else {}),
+    )
+    if rc.T_salida_ramas_K is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=bocas,
+                y=[float(t) - 273.15 for t in rc.T_salida_ramas_K],
+                mode="lines+markers",
+                name="T salida rama [°C]",
+                line=dict(color="#e05c2a", width=2),
+                marker=dict(size=6),
+            ),
+            secondary_y=True,
+            **({"row": 1, "col": 1} if tiene_perfil else {}),
+        )
+
+    if tiene_perfil:
+        fig.add_trace(
+            go.Scatter(
+                x=bocas,
+                y=[float(v) for v in _vp],
+                mode="lines+markers",
+                name="v troncal [m/s]",
+                line=dict(color="#1f77b4", width=2),
+                marker=dict(size=6),
+                fill="tozeroy",
+                fillcolor="rgba(31,119,180,0.12)",
+            ),
+            row=2,
+            col=1,
+        )
+        fig.update_yaxes(
+            title_text="v troncal [m/s]", row=2, col=1, rangemode="tozero", color="#1f77b4"
+        )
+        fig.update_xaxes(
+            title_text="Boca / tramo (1 = extremo lejano al ventilador)",
+            tickmode="linear",
+            dtick=1,
+            row=2,
+            col=1,
+        )
+        fig.update_yaxes(title_text="Caudal por rama [L/s]", secondary_y=False, row=1, col=1)
+        fig.update_yaxes(
+            title_text="T salida [°C]", color="#e05c2a", secondary_y=True, row=1, col=1
+        )
+    else:
+        fig.update_xaxes(
+            title_text="Boca (1 = extremo lejano al ventilador)", tickmode="linear", dtick=1
+        )
+        fig.update_yaxes(title_text="Caudal por rama [L/s]", secondary_y=False, rangemode="tozero")
+        fig.update_yaxes(title_text="T salida [°C]", color="#e05c2a", secondary_y=True)
+
+    fig.update_layout(
+        title_text="Campo de colectores — reparto, temperatura y velocidad del troncal",
+        height=560 if tiene_perfil else 400,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
 
 
 def _evaluar_anual(colector, datos_local, empl, anio):
@@ -1313,13 +1702,28 @@ def render() -> None:
                 key="p3_id_cubierta",
             )
         with c2:
-            espesor_cubierta_mm = st.number_input(
+            # Espesor de cubierta. Para el policarbonato alveolar se ofrecen las
+            # medidas de mercado (4/6/8/10/16 mm) del mapa k(espesor) del
+            # catálogo, que además fijan el k efectivo según el espesor elegido.
+            mapa_k_pc = catalogo.CUBIERTAS.get(id_cubierta, {}).get("k_efectivo_por_espesor_mm")
+            opciones_cub_mm = (
+                [(float(mm), f"{float(mm):.0f} mm") for mm in sorted(mapa_k_pc)]
+                if mapa_k_pc
+                else None
+            )
+            espesor_cubierta_mm = selector_espesor_mm(
                 "Espesor [mm]",
-                min_value=1.0,
-                max_value=20.0,
-                value=colector.unidad.espesor_cubierta_m * 1000,
-                step=0.5,
+                colector.unidad.espesor_cubierta_m,
                 key="p3_esp_cubierta",
+                opciones_mm=opciones_cub_mm,
+                min_mm=1.0,
+                max_mm=40.0,
+                step=0.5,
+            )
+            # k efectivo override: solo si el espesor coincide con una medida de
+            # mercado del mapa; para "Otro" o cubiertas sin mapa → None (catálogo).
+            k_cubierta_override = (
+                mapa_k_pc.get(int(round(espesor_cubierta_mm))) if mapa_k_pc else None
             )
             n_cubiertas = st.selectbox(
                 "N° cubiertas",
@@ -1438,13 +1842,18 @@ def render() -> None:
                 key="p3_id_fondo",
             )
         with c2:
-            espesor_fondo_mm = st.number_input(
+            # Fondo de madera → medidas de mercado en pulgadas; chapa/otros →
+            # input libre. Para madera se sube el tope a 100 mm (3/4" = 19 mm no
+            # entraba en el viejo límite de 5 mm).
+            es_madera_fondo = id_fondo in MATERIALES_MADERA
+            espesor_fondo_mm = selector_espesor_mm(
                 "Espesor [mm]",
-                min_value=0.3,
-                max_value=5.0,
-                value=colector.unidad.espesor_fondo_m * 1000,
-                step=0.1,
+                colector.unidad.espesor_fondo_m,
                 key="p3_esp_fondo",
+                opciones_mm=ESPESORES_MADERA_MM if es_madera_fondo else None,
+                min_mm=0.3,
+                max_mm=100.0 if es_madera_fondo else 60.0,
+                step=0.1,
             )
         if id_fondo == _ID_USUARIO:
             catalogo.FONDOS[_ID_USUARIO] = _inputs_fondo_usuario("p3_ufon")
@@ -1550,7 +1959,7 @@ def render() -> None:
             n_serie = st.number_input(
                 "Colectores en serie por rama",
                 min_value=1,
-                max_value=10,
+                max_value=20,
                 value=colector.banco.n_serie,
                 step=1,
                 key="p3_n_serie",
@@ -1560,11 +1969,15 @@ def render() -> None:
             n_paralelo = st.number_input(
                 "Ramas en paralelo",
                 min_value=1,
-                max_value=20,
+                max_value=200,
                 value=colector.banco.n_paralelo,
                 step=1,
                 key="p3_n_paralelo",
-                help="Ramas paralelas. El motor mueve la suma de los caudales de todas las ramas.",
+                help=(
+                    "Ramas paralelas. El motor mueve la suma de los caudales de "
+                    "todas las ramas. En gran escala puede haber decenas de ramas "
+                    "(ej. ADITAL: 26 colectores descargando al caño maestro)."
+                ),
             )
 
         caudal_total = n_paralelo * caudal_unit_m3s
@@ -1583,6 +1996,252 @@ def render() -> None:
             f"{largo_camino:.1f} m",
             help="n_serie × largo de unidad. Longitud total que recorre el aire.",
         )
+
+        # -------------------------------------------------------------------
+        # Caño maestro (manifold del banco) — solo gran escala
+        # -------------------------------------------------------------------
+        cano_maestro_cfg = None
+        if tipologia == Tipologia.GRAN_ESCALA:
+            st.markdown("**Caño maestro (manifold del banco)**")
+            st.caption(
+                "En gran escala las ramas no descargan directo al ventilador: cada "
+                "rama entrega su aire por una **boca** (con campana de reducción y "
+                "llave mariposa de regulación) a un **caño maestro** que corre a lo "
+                "largo del banco y conduce el caudal acumulado hasta el ventilador "
+                "(estilo túnel ADITAL). Trabaja **en depresión** (aguas arriba del "
+                "ventilador) y su sección crece hacia el ventilador para mantener "
+                "la velocidad acotada a medida que suma caudal. Su ΔP se suma a lo "
+                "que ve el ventilador (se muestra en **P6**) y su pérdida/aporte "
+                "térmico entra al pipeline de ventana de producción."
+            )
+            cm_prev = colector.banco.cano_maestro
+            usar_cano = st.checkbox(
+                "Incluir caño maestro",
+                value=cm_prev is not None,
+                key="p3_usar_cano",
+                help=(
+                    "Tildado: el manifold se modela explícitamente (fricción + "
+                    "accesorios de boca + balance térmico con el ambiente). "
+                    "Sin tildar: conexión directa simple (el ΔP de distribución "
+                    "cae en la heurística de ductos del motor en P6)."
+                ),
+            )
+            if usar_cano:
+                cm = cm_prev or CanoMaestro()
+                cc1, cc2, cc3 = st.columns(3)
+                cm_largo = cc1.number_input(
+                    "Largo [m]",
+                    min_value=0.5,
+                    max_value=100.0,
+                    value=cm.largo_m,
+                    step=0.5,
+                    format="%.1f",
+                    key="p3_cm_largo",
+                    help=(
+                        "Longitud total del caño, que recorre el banco juntando "
+                        "las bocas de las ramas (≈ el ancho del campo de "
+                        "colectores). ADITAL: 18 m. La fricción se evalúa sobre "
+                        "este largo."
+                    ),
+                )
+                cm_ancho = cc2.number_input(
+                    "Ancho sección [m]",
+                    min_value=0.1,
+                    max_value=5.0,
+                    value=cm.ancho_m,
+                    step=0.05,
+                    format="%.2f",
+                    key="p3_cm_ancho",
+                    help=(
+                        "Ancho de la sección transversal rectangular en el "
+                        "**extremo del ventilador**, donde ya circula el caudal "
+                        "total del banco (sección representativa del modelo de "
+                        "prediseño). ADITAL: 1.0 m."
+                    ),
+                )
+                cm_alto = cc3.number_input(
+                    "Alto sección [m]",
+                    min_value=0.1,
+                    max_value=5.0,
+                    value=cm.alto_m,
+                    step=0.05,
+                    format="%.2f",
+                    key="p3_cm_alto",
+                    help=(
+                        "Alto de la sección transversal en el extremo del "
+                        "ventilador. Junto con el ancho define la velocidad "
+                        "troncal v = Q_total / (ancho × alto). ADITAL: 0.90 m."
+                    ),
+                )
+                cd1, cd2 = st.columns(2)
+                cm_aislado = cd1.checkbox(
+                    "Aislado térmicamente",
+                    value=cm.aislado,
+                    key="p3_cm_aislado",
+                    help=(
+                        "El caño pierde calor al ambiente por convección externa "
+                        "(viento), pero si su cara superior está al sol también "
+                        "gana radiación: la pérdida neta suele ser chica. "
+                        "ADITAL: no aislado, ΔT neta ≈ −3 °C."
+                    ),
+                )
+                cm_aporte = cd2.checkbox(
+                    "Aporte solar (cara superior expuesta)",
+                    value=cm.aporte_solar,
+                    key="p3_cm_aporte",
+                    help=(
+                        "La cara superior del caño expuesta al cielo colecta "
+                        "radiación solar y compensa parte de la pérdida "
+                        "convectiva. ADITAL: expuesta (chapa galvanizada)."
+                    ),
+                )
+                cm_esp_m = 0.0
+                cm_mat_aisl = None
+                if cm_aislado:
+                    _ops_aisl = _opciones_material(catalogo.AISLANTES)
+                    _ids_aisl = list(_ops_aisl.keys())
+                    _idx_aisl = (
+                        _ids_aisl.index(cm.material_aislante)
+                        if cm.material_aislante in _ids_aisl
+                        else 0
+                    )
+                    cm_mat_aisl = cd1.selectbox(
+                        "Material aislante",
+                        options=_ids_aisl,
+                        index=_idx_aisl,
+                        format_func=lambda i: _ops_aisl[i],
+                        key="p3_cm_mat_aisl",
+                        help=(
+                            "Material del catálogo de aislantes (mismo catálogo "
+                            "que colector y cámara). Define la conductividad k "
+                            "de la capa."
+                        ),
+                    )
+                    cm_esp_m = (
+                        cd1.number_input(
+                            "Espesor aislante [cm]",
+                            min_value=0.5,
+                            max_value=20.0,
+                            value=max(0.5, cm.espesor_aislante_m * 100.0),
+                            step=0.5,
+                            format="%.1f",
+                            key="p3_cm_esp",
+                        )
+                        / 100.0
+                    )
+                cm_absort = cm.absortancia_solar
+                cm_cubierta = None
+                if cm_aporte:
+                    cm_absort = cd2.number_input(
+                        "Absortancia solar de la cara superior [-]",
+                        min_value=0.05,
+                        max_value=1.0,
+                        value=float(cm.absortancia_solar),
+                        step=0.05,
+                        format="%.2f",
+                        key="p3_cm_absort",
+                        help=(
+                            "Absortancia solar de la superficie que recibe el "
+                            "sol. Chapa pintada oscura ≈ 0.90 (default); "
+                            "galvanizado desnudo brillante ≈ 0.35 (caso ADITAL)."
+                        ),
+                    )
+                    _ops_cub = {"(sin cubierta)": "(sin cubierta — chapa desnuda)"}
+                    _ops_cub.update(_opciones_material(catalogo.CUBIERTAS))
+                    _ids_cub = list(_ops_cub.keys())
+                    _idx_cub = _ids_cub.index(cm.cubierta) if cm.cubierta in _ids_cub else 0
+                    _sel_cub = cd2.selectbox(
+                        "Cubierta translúcida (opcional)",
+                        options=_ids_cub,
+                        index=_idx_cub,
+                        format_func=lambda i: _ops_cub[i],
+                        key="p3_cm_cubierta",
+                        help=(
+                            "Cubierta transparente sobre la cara superior "
+                            "(catálogo de cubiertas del colector): la ganancia "
+                            "se afecta por τ y la cavidad de aire reduce la "
+                            "pérdida convectiva (mini-colector)."
+                        ),
+                    )
+                    cm_cubierta = None if _sel_cub == "(sin cubierta)" else _sel_cub
+
+                cm_sec_var = st.checkbox(
+                    "Sección creciente (variable a lo largo del caño)",
+                    value=cm.seccion_variable,
+                    key="p3_cm_sec_var",
+                    help=(
+                        "El caño arranca con sección chica en el extremo lejano "
+                        "y crece hacia el ventilador para mantener la velocidad "
+                        "acotada a medida que acumula caudal (interpolación "
+                        "lineal). Mejora la uniformidad de reparto frente a un "
+                        "caño constante chico, con menos material que uno "
+                        "constante grande."
+                    ),
+                )
+                cm_ancho_ini = cm_alto_ini = None
+                if cm_sec_var:
+                    cv1, cv2 = st.columns(2)
+                    cm_ancho_ini = cv1.number_input(
+                        "Ancho sección inicial [m]",
+                        min_value=0.05,
+                        max_value=5.0,
+                        value=float(cm.ancho_inicio_m or cm.ancho_m / 2.0),
+                        step=0.05,
+                        format="%.2f",
+                        key="p3_cm_ancho_ini",
+                        help="Sección en el extremo lejano al ventilador (primera boca).",
+                    )
+                    cm_alto_ini = cv2.number_input(
+                        "Alto sección inicial [m]",
+                        min_value=0.05,
+                        max_value=5.0,
+                        value=float(cm.alto_inicio_m or cm.alto_m / 2.0),
+                        step=0.05,
+                        format="%.2f",
+                        key="p3_cm_alto_ini",
+                    )
+                try:
+                    cano_maestro_cfg = CanoMaestro(
+                        largo_m=cm_largo,
+                        ancho_m=cm_ancho,
+                        alto_m=cm_alto,
+                        aislado=cm_aislado,
+                        espesor_aislante_m=cm_esp_m,
+                        material_aislante=cm_mat_aisl,
+                        aporte_solar=cm_aporte,
+                        absortancia_solar=float(cm_absort),
+                        cubierta=cm_cubierta,
+                        ancho_inicio_m=cm_ancho_ini,
+                        alto_inicio_m=cm_alto_ini,
+                    )
+                    from calculos.cano_maestro_calc import estimar_delta_P_cano_maestro
+
+                    _dP = estimar_delta_P_cano_maestro(cano_maestro_cfg, caudal_total)
+                    if cano_maestro_cfg.seccion_variable:
+                        _sec_txt = (
+                            f"Sección crece "
+                            f"{cano_maestro_cfg.area_seccion_inicio_m2:.2f} → "
+                            f"{cano_maestro_cfg.area_seccion_m2:.2f} m² · "
+                            f"v acotada a **{_dP['v_max_ms']:.1f} m/s** "
+                            f"(extremo ventilador {_dP['v_fin_ms']:.1f} m/s)"
+                        )
+                    else:
+                        _sec_txt = (
+                            f"Sección constante {cano_maestro_cfg.area_seccion_m2:.2f} m² · "
+                            f"v máx **{_dP['v_max_ms']:.1f} m/s** "
+                            f"(extremo ventilador {_dP['v_fin_ms']:.1f} m/s)"
+                        )
+                    st.caption(
+                        f"{_sec_txt} · "
+                        f"ΔP caño maestro ≈ **{_dP['total']:.0f} Pa** "
+                        f"(fricción {_dP['friccion']:.1f} + accesorios "
+                        f"{_dP['accesorios']:.1f}). Flujo acumulado a lo largo del "
+                        f"caño: la sección creciente mantiene la velocidad acotada "
+                        f"con menos material que un caño grande constante."
+                    )
+                except ValueError as _e:
+                    st.error(f"Caño maestro inválido: {_e}")
+                    cano_maestro_cfg = None
 
     # -----------------------------------------------------------------------
     # Nota: la chimenea solar se configura en P6 (pestaña Motor / Convección
@@ -1612,8 +2271,11 @@ def render() -> None:
             espesor_aislante_m=espesor_aislante_cm / 100,
             id_fondo=id_fondo,
             espesor_fondo_m=espesor_fondo_mm / 1000,
+            k_cubierta_efectivo_W_mK=k_cubierta_override,
         )
-        nuevo_banco = BancoColectores(n_serie=n_serie, n_paralelo=n_paralelo)
+        nuevo_banco = BancoColectores(
+            n_serie=n_serie, n_paralelo=n_paralelo, cano_maestro=cano_maestro_cfg
+        )
 
         nuevo_colector = Colector(
             unidad=nueva_unidad,
@@ -1653,7 +2315,8 @@ def render() -> None:
         st.success("Diseño del colector sin advertencias.")
 
     # -----------------------------------------------------------------------
-    # Sección 6: Evaluación del desempeño del colector
+    # Sección 5b: Evaluación del desempeño del colector unitario
+    # (primero un colector; el campo/banco se evalúa a continuación)
     # -----------------------------------------------------------------------
 
     st.divider()
@@ -1672,7 +2335,10 @@ def render() -> None:
         _prereq_ok = False
 
     if _prereq_ok:
-        _modo_label = "Diario" if _cfg.modo_analisis == ModoAnalisis.DIARIO else "Anual"
+        _modo_label = {
+            ModoAnalisis.DIARIO: "Diario",
+            ModoAnalisis.VENTANA: "Ventana de producción",
+        }.get(_cfg.modo_analisis, "Anual")
         st.caption(
             f"Modo de análisis: **{_modo_label}** (configurado en P1)  |  "
             f"Pendiente: {_empl.pendiente_colector_deg:.0f}°  |  "
@@ -1694,6 +2360,24 @@ def render() -> None:
                     with st.spinner(f"Evaluando colector para el {_fecha_label}..."):
                         _r = _evaluar_diario(proyecto.colector, _datos_dia, _empl)
                     st.session_state["p3_eval"] = {"modo": "diario", "r": _r, "label": _fecha_label}
+            elif _cfg.modo_analisis == ModoAnalisis.VENTANA:
+                from calculos.clima_calc import slice_clima_ventana
+
+                _df_v, _msg_v = slice_clima_ventana(_clima, _cfg.ventana_inicio, _cfg.ventana_fin)
+                if _df_v is None:
+                    st.error(f"No se pudo recortar la ventana: {_msg_v}")
+                else:
+                    _datos_v = _df_v.tz_convert(_empl.zona_horaria)
+                    _lapso_label = f"{_cfg.ventana_inicio} → {_cfg.ventana_fin}"
+                    with st.spinner(
+                        f"Evaluando colector sobre la ventana ({len(_datos_v)} horas)..."
+                    ):
+                        _r = _evaluar_ventana(proyecto.colector, _datos_v, _empl)
+                    st.session_state["p3_eval"] = {
+                        "modo": "ventana",
+                        "r": _r,
+                        "label": _lapso_label,
+                    }
             else:
                 with st.spinner("Evaluando colector para los 12 meses representativos..."):
                     _r = _evaluar_anual(proyecto.colector, _datos_local, _empl, _clima.anio)
@@ -1741,6 +2425,54 @@ def render() -> None:
                 else:
                     st.info("No hay radiación solar suficiente a mediodía para calcular el perfil.")
 
+        elif _modo == "ventana":
+            _lbl = _ev["label"]
+            _T_vals = [t for t in _r["T_salida_C"] if t is not None]
+            if _T_vals:
+                _pares = [
+                    (ts, ta)
+                    for ts, ta, p in zip(_r["T_salida_C"], _r["T_amb_C"], _r["poa"])
+                    if ts is not None and p > 50.0
+                ]
+                c1, c2, c3 = st.columns(3)
+                c1.metric("T salida máx (ventana)", f"{max(_T_vals):.1f} °C")
+                c2.metric(
+                    "ΔT medio diurno (POA > 50)",
+                    f"{sum(ts - ta for ts, ta in _pares) / len(_pares):.1f} °C" if _pares else "—",
+                )
+                c3.metric(
+                    "Horas con T salida > 40 °C",
+                    f"{sum(1 for t in _T_vals if t > 40.0)} h",
+                )
+            _tab_v1, _tab_v2 = st.tabs(
+                ["Series sobre la ventana", "Perfil T fluido (mediodía 1er día)"]
+            )
+            with _tab_v1:
+                mostrar_plotly(_fig_T_salida_ventana(_r, _lbl), nombre="colector_Tsalida_ventana")
+                st.caption(
+                    "Series horarias de **día y noche** (de noche el aire no se "
+                    "calienta → T_salida ≈ T_amb). Marcas: POA máx (◆) y mediodía "
+                    "solar (▲) de cada día."
+                )
+            with _tab_v2:
+                _fig_perfil_v = _fig_T_fluido_dia(_r, f"primer día de {_lbl}")
+                if _fig_perfil_v is not None:
+                    mostrar_plotly(_fig_perfil_v, nombre="colector_Tfluido_ventana")
+                    st.caption(
+                        "⚠️ Esta gráfica representa **sólo el mediodía solar del "
+                        "primer día** de la ventana de producción."
+                    )
+                else:
+                    st.info(
+                        "No hay radiación suficiente a mediodía del primer día para "
+                        "calcular el perfil T(x)."
+                    )
+            st.caption(
+                "Vista previa a **velocidad de diseño** del módulo. El cálculo de "
+                "producción (P7) re-corre el colector al caudal real que impone el "
+                "ventilador del sistema."
+            )
+
         else:  # anual
             if _r["meses"]:
                 c1, c2, c3 = st.columns(3)
@@ -1772,6 +2504,151 @@ def render() -> None:
                 st.warning(
                     "No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente."
                 )
+
+    # -----------------------------------------------------------------------
+    # Sección 5c: Evaluación del campo de colectores (banco, gran escala, S41)
+    # (se evalúa después del colector unitario: usa ese colector en cada rama)
+    # -----------------------------------------------------------------------
+
+    if tipologia == Tipologia.GRAN_ESCALA:
+        st.divider()
+        st.subheader("Evaluación del campo de colectores")
+        st.caption(
+            "Red hidráulica del **banco + caño maestro** (metodología ASHRAE "
+            "cap. 21: fricción Darcy-Weisbach por tramo + pérdidas singulares "
+            "de boca): reparto real de caudal entre ramas, temperatura de "
+            "salida de cada rama a su caudal propio, mezcla en el manifold y "
+            "T del flujo a la salida del caño maestro."
+        )
+
+        _cam_p4 = getattr(proyecto, "camara", None)
+        _rho_ref_campo = 1.05  # kg/m³ ~45 °C — solo para el default del widget
+        if _cam_p4 is not None and _cam_p4.flujo.caudal_masico_kg_s > 0:
+            _q_def_Ls = _cam_p4.flujo.caudal_masico_kg_s / _rho_ref_campo * 1000.0
+            _origen_q = "el caudal del sistema configurado en P4 (caudal único S41)"
+        else:
+            _q_def_Ls = caudal_total * 1000.0
+            _origen_q = "el caudal de diseño del banco (no hay cámara configurada)"
+
+        ci1, ci2, ci3, ci4 = st.columns(4)
+        _q_Ls = ci1.number_input(
+            "Caudal total [L/s]",
+            min_value=1.0,
+            max_value=50000.0,
+            value=float(max(1.0, _q_def_Ls)),
+            step=10.0,
+            key="p3_campo_q",
+            help=f"Caudal que mueve el ventilador. Default: {_origen_q}.",
+        )
+        _T_amb_campo = ci2.number_input(
+            "T ambiente [°C]",
+            min_value=-10.0,
+            max_value=50.0,
+            value=25.0,
+            step=1.0,
+            key="p3_campo_tamb",
+        )
+        _poa_campo = ci3.number_input(
+            "POA [W/m²]",
+            min_value=0.0,
+            max_value=1400.0,
+            value=900.0,
+            step=50.0,
+            key="p3_campo_poa",
+            help="Irradiancia sobre el plano del colector (punto de operación representativo).",
+        )
+        _vw_campo = ci4.number_input(
+            "Viento [m/s]",
+            min_value=0.0,
+            max_value=20.0,
+            value=2.0,
+            step=0.5,
+            key="p3_campo_vw",
+        )
+
+        if st.button("Evaluar campo de colectores", type="primary", key="p3_btn_campo"):
+            from calculos.balance_global import presion_representativa_proyecto
+            from calculos.campo_colectores_calc import evaluar_campo_colectores
+
+            _P_campo, _ = presion_representativa_proyecto(proyecto)
+            _pend_campo = (
+                proyecto.emplazamiento.pendiente_colector_deg
+                if proyecto.emplazamiento is not None
+                else 25.0
+            )
+            _n_ramas = proyecto.colector.banco.n_paralelo
+            with st.spinner(f"Resolviendo red hidráulica + térmica de {_n_ramas} ramas..."):
+                _rc = evaluar_campo_colectores(
+                    proyecto.colector,
+                    Q_total_m3_s=_q_Ls / 1000.0,
+                    T_amb_K=_T_amb_campo + 273.15,
+                    I_g_POA_W_m2=_poa_campo,
+                    v_viento_ms=_vw_campo,
+                    P_Pa=_P_campo,
+                    pendiente_deg=_pend_campo,
+                )
+            st.session_state["p3_campo"] = _rc
+
+        _rc = st.session_state.get("p3_campo")
+        if _rc is not None:
+            for _a in _rc.advertencias:
+                st.warning(f"⚠️ {_a}")
+            cm1, cm2, cm3, cm4 = st.columns(4)
+            cm1.metric(
+                "T salida caño maestro",
+                (
+                    f"{_rc.T_salida_cano_K - 273.15:.1f} °C"
+                    if _rc.T_salida_cano_K is not None
+                    else "—"
+                ),
+                delta=(f"{_rc.dT_cano_K:+.1f} K en el caño" if _rc.dT_cano_K is not None else None),
+            )
+            cm2.metric(
+                "T mezcla del banco",
+                f"{_rc.T_mezcla_K - 273.15:.1f} °C" if _rc.T_mezcla_K is not None else "—",
+            )
+            cm3.metric(
+                "Desuniformidad de reparto",
+                f"{_rc.uniformidad['desviacion_max_pct']:.1f} %",
+                help="(q_máx − q_mín) / q_medio. Bajo 10 % se considera buen reparto.",
+            )
+            cm4.metric(
+                "ΔP del sistema (campo)",
+                f"{_rc.dP_sistema_Pa:.0f} Pa",
+                help="ΔP de trayectoria igualada: rama + troncal del caño maestro.",
+            )
+            # Compensación de sección del caño (mejora 32): el ΔP del troncal
+            # aislado de la rama + el rango de velocidad hacen visible si la
+            # sección creciente acota la velocidad al acumular caudal.
+            _vp = getattr(_rc, "v_troncal_perfil_ms", None)
+            if _vp is not None and len(_vp) > 0:
+                cn1, cn2 = st.columns(2)
+                cn1.metric(
+                    "ΔP troncal del caño",
+                    f"{_rc.dP_troncal_Pa:.1f} Pa",
+                    help=(
+                        "Pérdida del manifold solo (boca 1 lejana → ventilador), "
+                        "aislada de la rama. Es lo que responde a la compensación "
+                        "de sección del caño."
+                    ),
+                )
+                cn2.metric(
+                    "v troncal (mín → máx)",
+                    f"{float(_vp.min()):.2f} → {float(_vp.max()):.2f} m/s",
+                    help=(
+                        "Velocidad del aire a lo largo del caño (extremo lejano → "
+                        "ventilador). Una sección creciente la mantiene acotada al "
+                        "acumular caudal; una sección chica constante la dispara "
+                        "cerca del ventilador."
+                    ),
+                )
+            mostrar_plotly(_fig_campo_colectores(_rc), nombre="campo_colectores")
+            st.caption(
+                f"Reparto resuelto en {_rc.n_iter} iteraciones "
+                f"({'convergió' if _rc.convergio else '**no convergió**'}). "
+                f"q por rama: {_rc.uniformidad['q_min_m3_s']*1000:.1f} – "
+                f"{_rc.uniformidad['q_max_m3_s']*1000:.1f} L/s."
+            )
 
     # --- Guardar configuración (mejora 4) ---
     st.divider()

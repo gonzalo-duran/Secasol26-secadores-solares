@@ -15,10 +15,10 @@ from core.auxiliar import (
     advertencias_auxiliar,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def resistencia_minima():
@@ -46,6 +46,7 @@ def quemador_minimo():
 # ---------------------------------------------------------------------------
 # Auxiliar — errores duros
 # ---------------------------------------------------------------------------
+
 
 class TestAuxiliarErroresDuros:
 
@@ -124,6 +125,7 @@ class TestAuxiliarErroresDuros:
 # Auxiliar — métodos auxiliares
 # ---------------------------------------------------------------------------
 
+
 class TestAuxiliarMetodos:
 
     def test_potencia_efectiva_fraccion_completa(self, resistencia_minima):
@@ -161,13 +163,14 @@ class TestAuxiliarMetodos:
 # Advertencias
 # ---------------------------------------------------------------------------
 
+
 class TestAdvertenciasAuxiliar:
 
     def test_sin_advertencias_resistencia_bien_configurada(self):
         aux = Auxiliar(
             tipo=TipoAuxiliar.RESISTENCIA_ELECTRICA,
             potencia_nominal_W=1000.0,
-            temperatura_maxima_salida_K=333.15,   # 60 °C ≤ 70 °C
+            temperatura_maxima_salida_K=333.15,  # 60 °C ≤ 70 °C
             tension_V=220.0,
         )
         adv = advertencias_auxiliar(aux)
@@ -178,7 +181,7 @@ class TestAdvertenciasAuxiliar:
     def test_advertencia_T_max_alta(self):
         aux = Auxiliar(
             potencia_nominal_W=1000.0,
-            temperatura_maxima_salida_K=363.15,   # 90 °C > 70 °C
+            temperatura_maxima_salida_K=363.15,  # 90 °C > 70 °C
         )
         adv = advertencias_auxiliar(aux)
         codigos = [a.codigo for a in adv]
@@ -208,7 +211,7 @@ class TestAdvertenciasAuxiliar:
             potencia_nominal_W=2000.0,
             temperatura_maxima_salida_K=343.15,
             PCI_MJ_kg=15.0,
-            eficiencia_quemador=0.40,   # < 0.50
+            eficiencia_quemador=0.40,  # < 0.50
         )
         adv = advertencias_auxiliar(aux)
         codigos = [a.codigo for a in adv]
@@ -238,6 +241,7 @@ class TestAdvertenciasAuxiliar:
 # calcular_auxiliar
 # ---------------------------------------------------------------------------
 
+
 class TestCalcularAuxiliar:
 
     def test_resultado_tipo_correcto(self, resistencia_minima):
@@ -251,6 +255,7 @@ class TestCalcularAuxiliar:
     def test_delta_T_formula(self, resistencia_minima):
         """ΔT = Q_eff / (m_dot × cp)."""
         from calculos.auxiliar_calc import CP_AIRE
+
         m_dot = 0.03
         T_ent = 323.15
         res = calcular_auxiliar(resistencia_minima, T_entrada_K=T_ent, caudal_masico_kg_s=m_dot)
@@ -277,13 +282,14 @@ class TestCalcularAuxiliar:
     def test_set_point_limita_potencia(self):
         """Con set point por debajo de lo que daría potencia nominal, Q_eff < Q_nominal."""
         from calculos.auxiliar_calc import CP_AIRE
+
         m_dot = 0.10
-        T_ent = 313.15    # 40 °C
+        T_ent = 313.15  # 40 °C
         set_point = 323.15  # 50 °C — solo necesita 10 K de ΔT
-        Q_para_set = m_dot * CP_AIRE * (set_point - T_ent)   # ≈ 1007 W
+        Q_para_set = m_dot * CP_AIRE * (set_point - T_ent)  # ≈ 1007 W
 
         aux = Auxiliar(
-            potencia_nominal_W=5000.0,   # mucho más de lo necesario
+            potencia_nominal_W=5000.0,  # mucho más de lo necesario
             temperatura_maxima_salida_K=353.15,
             set_point_T_K=set_point,
         )
@@ -297,7 +303,7 @@ class TestCalcularAuxiliar:
         aux = Auxiliar(
             potencia_nominal_W=1000.0,
             temperatura_maxima_salida_K=353.15,
-            set_point_T_K=323.15,   # 50 °C
+            set_point_T_K=323.15,  # 50 °C
         )
         res = calcular_auxiliar(aux, T_entrada_K=333.15, caudal_masico_kg_s=0.03)
         assert res.Q_efectivo_W == pytest.approx(0.0, abs=1e-9)
@@ -317,10 +323,11 @@ class TestCalcularAuxiliar:
     def test_T_salida_no_excede_T_max_genera_advertencia(self):
         """T_salida > T_max debe generar advertencia, no error."""
         from calculos.auxiliar_calc import CP_AIRE
-        m_dot = 0.005   # caudal muy bajo → ΔT muy grande
+
+        m_dot = 0.005  # caudal muy bajo → ΔT muy grande
         aux = Auxiliar(
             potencia_nominal_W=5000.0,
-            temperatura_maxima_salida_K=343.15,   # 70 °C
+            temperatura_maxima_salida_K=343.15,  # 70 °C
         )
         res = calcular_auxiliar(aux, T_entrada_K=313.15, caudal_masico_kg_s=m_dot)
         # ΔT = 5000 / (0.005 × 1007) ≈ 994 K → T_salida >> T_max

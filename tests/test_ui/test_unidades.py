@@ -22,7 +22,6 @@ from ui.componentes.unidades import (
     porcentaje_a_fraccion,
 )
 
-
 # ---------------------------------------------------------------------------
 # Temperatura
 # ---------------------------------------------------------------------------
@@ -103,13 +102,13 @@ def test_hr_ida_vuelta():
 @pytest.mark.parametrize(
     "duffie, pvlib_esperado",
     [
-        (0.0, 180.0),      # Sur
-        (90.0, 270.0),     # Oeste
-        (-90.0, 90.0),     # Este
-        (180.0, 0.0),      # Norte
-        (-180.0, 0.0),     # Norte (equivalente)
-        (45.0, 225.0),     # SO
-        (-45.0, 135.0),    # SE
+        (0.0, 180.0),  # Sur
+        (90.0, 270.0),  # Oeste
+        (-90.0, 90.0),  # Este
+        (180.0, 0.0),  # Norte
+        (-180.0, 0.0),  # Norte (equivalente)
+        (45.0, 225.0),  # SO
+        (-45.0, 135.0),  # SE
     ],
 )
 def test_acimut_duffie_a_pvlib(duffie, pvlib_esperado):
@@ -120,12 +119,12 @@ def test_acimut_duffie_a_pvlib(duffie, pvlib_esperado):
 @pytest.mark.parametrize(
     "pvlib_ang, duffie_esperado",
     [
-        (180.0, 0.0),      # Sur
-        (270.0, 90.0),     # Oeste
-        (90.0, -90.0),     # Este
-        (0.0, 180.0),      # Norte
-        (225.0, 45.0),     # SO
-        (135.0, -45.0),    # SE
+        (180.0, 0.0),  # Sur
+        (270.0, 90.0),  # Oeste
+        (90.0, -90.0),  # Este
+        (0.0, 180.0),  # Norte
+        (225.0, 45.0),  # SO
+        (135.0, -45.0),  # SE
     ],
 )
 def test_acimut_pvlib_a_duffie(pvlib_ang, duffie_esperado):
@@ -161,13 +160,13 @@ def test_acimut_conversiones_son_inversas():
 @pytest.mark.parametrize(
     "duffie, ui360_esperado",
     [
-        (0.0, 0.0),      # Sur
-        (-90.0, 90.0),   # Este
+        (0.0, 0.0),  # Sur
+        (-90.0, 90.0),  # Este
         (180.0, 180.0),  # Norte
-        (-180.0, 180.0), # Norte (equivalente)
-        (90.0, 270.0),   # Oeste
-        (45.0, 315.0),   # SO (Duffie) → NO (UI360)... wait
-        (-45.0, 45.0),   # SE
+        (-180.0, 180.0),  # Norte (equivalente)
+        (90.0, 270.0),  # Oeste
+        (45.0, 315.0),  # SO (Duffie) → NO (UI360)... wait
+        (-45.0, 45.0),  # SE
     ],
 )
 def test_acimut_duffie_a_ui360(duffie, ui360_esperado):
@@ -178,12 +177,12 @@ def test_acimut_duffie_a_ui360(duffie, ui360_esperado):
 @pytest.mark.parametrize(
     "ui360, duffie_esperado",
     [
-        (0.0, 0.0),      # Sur
-        (90.0, -90.0),   # Este
+        (0.0, 0.0),  # Sur
+        (90.0, -90.0),  # Este
         (180.0, 180.0),  # Norte  (la función retorna +180°, equivalente a -180° en Duffie)
-        (270.0, 90.0),   # Oeste
-        (45.0, -45.0),   # SE
-        (315.0, 45.0),   # SO
+        (270.0, 90.0),  # Oeste
+        (45.0, -45.0),  # SE
+        (315.0, 45.0),  # SO
     ],
 )
 def test_acimut_ui360_a_duffie(ui360, duffie_esperado):

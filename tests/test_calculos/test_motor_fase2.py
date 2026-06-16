@@ -14,9 +14,10 @@ from calculos.motor_calc import (
     K_MALLA,
     K_TRANSICION_LECHO,
     TIPOS_MALLA,
+    _C_obstruccion_bloqueo,
+    _delta_P_producto_crossflow,
     _factor_friccion_haaland,
     _K_malla_efectivo,
-    _K_rugosidad_default,
     densidad_aire,
     estimar_delta_P_camara,
     estimar_delta_P_colector,
@@ -297,28 +298,72 @@ def _cam_vertical(caudal_kg_s=0.1):
     )
 
 
-class TestKRugosidadDefault:
+class TestCObstruccionBloqueo:
+    """Coeficiente de obstrucción por bloqueo C_obs(β) (mejora 29)."""
 
-    def test_ratio_bajo_satura_en_K_minimo(self):
-        # Ratio = 0.001 / 0.5 = 0.002 << 0.05 → K = 0.2 (saturado)
-        assert _K_rugosidad_default(d_p=0.001, espacio_libre=0.5) == pytest.approx(0.2)
+    def test_beta_no_positivo_es_cero(self):
+        assert _C_obstruccion_bloqueo(0.0) == 0.0
+        assert _C_obstruccion_bloqueo(-0.1) == 0.0
 
-    def test_ratio_alto_satura_en_K_maximo(self):
-        # Ratio = 0.5 / 0.5 = 1.0 >> 0.50 → K = 2.0 (saturado)
-        assert _K_rugosidad_default(d_p=0.5, espacio_libre=0.5) == pytest.approx(2.0)
+    def test_crece_monotonamente_con_beta(self):
+        vals = [_C_obstruccion_bloqueo(b) for b in (0.1, 0.2, 0.4, 0.6, 0.8)]
+        assert all(prev < nxt for prev, nxt in zip(vals, vals[1:]))
 
-    def test_ratio_en_punto_tabulado(self):
-        # Ratio = 0.015 / 0.10 = 0.15 → exactamente K = 0.5 de la tabla
-        assert _K_rugosidad_default(d_p=0.015, espacio_libre=0.10) == pytest.approx(0.5)
+    def test_valor_borda_carnot(self):
+        # β=0.5 → σ = β/(1−β) = 1.0 → C = 0.5·1 + 1² = 1.5
+        assert _C_obstruccion_bloqueo(0.5) == pytest.approx(1.5)
 
-    def test_interpolacion_lineal_entre_puntos(self):
-        # Ratio = 0.10 → entre 0.05 (K=0.2) y 0.15 (K=0.5), centro → K = 0.35
-        K = _K_rugosidad_default(d_p=0.010, espacio_libre=0.10)
-        assert K == pytest.approx(0.35, abs=1e-6)
+    def test_acotado_en_beta_alto(self):
+        # β≥0.95 se satura (cota numérica), no diverge a infinito
+        assert _C_obstruccion_bloqueo(0.999) == pytest.approx(_C_obstruccion_bloqueo(0.95))
 
-    def test_d_p_o_espacio_no_positivo_devuelve_cero(self):
-        assert _K_rugosidad_default(d_p=0.0, espacio_libre=0.1) == 0.0
-        assert _K_rugosidad_default(d_p=0.01, espacio_libre=0.0) == 0.0
+
+class TestDeltaPProductoCrossflow:
+    """Modelo combinado fricción rugosa + obstrucción por bloqueo (mejora 29)."""
+
+    @staticmethod
+    def _base(**kw):
+        params = dict(
+            v_canal=1.0,
+            Dh=0.1,
+            L=1.0,
+            rho=1.1,
+            mu=1.9e-5,
+            d_p=0.008,
+            espesor_capa=0.02,
+            separacion=0.10,
+        )
+        params.update(kw)
+        return _delta_P_producto_crossflow(**params)
+
+    def test_desglose_suma_total(self):
+        r = self._base()
+        assert r["total"] == pytest.approx(r["friccion_rugosa"] + r["obstruccion"])
+        assert r["friccion_rugosa"] > 0 and r["obstruccion"] > 0
+
+    def test_obstruccion_escala_con_v_cuadrado(self):
+        r1 = self._base(v_canal=1.0)
+        r2 = self._base(v_canal=2.0)
+        assert r2["obstruccion"] / r1["obstruccion"] == pytest.approx(4.0, rel=1e-6)
+
+    def test_friccion_crece_con_d_p(self):
+        r_liso = self._base(d_p=1e-4)
+        r_rugoso = self._base(d_p=0.02)
+        assert r_rugoso["friccion_rugosa"] > r_liso["friccion_rugosa"]
+
+    def test_obstruccion_crece_con_bloqueo(self):
+        r_fino = self._base(espesor_capa=0.01)
+        r_grueso = self._base(espesor_capa=0.05)
+        assert r_grueso["obstruccion"] > r_fino["obstruccion"]
+
+    def test_override_reemplaza_obstruccion(self):
+        r_auto = self._base()
+        r_over = self._base(K_obstruccion_override=5.0)
+        assert r_over["obstruccion"] > r_auto["obstruccion"]
+        assert r_over["friccion_rugosa"] == pytest.approx(r_auto["friccion_rugosa"])
+
+    def test_v_canal_cero_devuelve_cero(self):
+        assert self._base(v_canal=0.0)["total"] == 0.0
 
 
 class TestKRugosidadEnCamara:
@@ -359,3 +404,65 @@ class TestKRugosidadEnCamara:
     def test_validacion_K_negativo_lanza_error(self):
         with pytest.raises(ValueError, match="BAND_K_RUGOSIDAD_INVALIDO"):
             ConfiguracionBandejas(K_rugosidad_producto=-0.5)
+
+
+class TestCamaraTunelSerie:
+    """En túnel (carros), la obstrucción del producto se acumula en serie y la
+    velocidad del canal sube (paralelo dentro del carro) — mejora 29."""
+
+    @staticmethod
+    def _cam(con_carros: bool):
+        from core.camara import ConfiguracionCarros
+
+        rho = 1.1
+        kwargs = dict(
+            geometria=GeometriaCamara(largo_m=6.0, ancho_m=3.0, alto_m=1.85),
+            bandejas=ConfiguracionBandejas(
+                n_bandejas=16,
+                area_bandeja_m2=1.0,
+                espesor_capa_m=0.04,
+                separacion_entre_bandejas_m=0.10,
+                tipo_malla="alambre_grueso",
+            ),
+            flujo=ConfiguracionFlujo(
+                caudal_masico_kg_s=rho * 2.0,
+                direccion_flujo=DireccionFlujo.HORIZONTAL,
+            ),
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=200.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
+                modelo_capa_fina="logaritmico",
+            ),
+        )
+        if con_carros:
+            kwargs["carros"] = ConfiguracionCarros(n_carros=4, bandejas_por_carro=4)
+        return Camara(**kwargs)
+
+    def test_tunel_da_mas_dP_que_todo_paralelo(self):
+        # Mismas 16 bandejas: como túnel (4 carros × 4) vs todas en paralelo.
+        dP_tunel = estimar_delta_P_camara(self._cam(con_carros=True))
+        dP_plano = estimar_delta_P_camara(self._cam(con_carros=False))
+        assert dP_tunel > dP_plano
+
+
+class TestSingularesDifusor:
+    """El difusor de entrada a cámara entra en las pérdidas singulares (mejora 29)."""
+
+    def test_difusor_presente_y_positivo(self):
+        from calculos.motor_calc import estimar_delta_P_singulares
+
+        sing = estimar_delta_P_singulares(Q_vol_m3_s=0.25, v_ducto_m_s=6.0, n_paralelo=1, n_codos=2)
+        assert "difusor" in sing and sing["difusor"] > 0.0
+
+    def test_difusor_suma_al_total(self):
+        from calculos.motor_calc import estimar_delta_P_singulares
+
+        sin_dif = estimar_delta_P_singulares(
+            Q_vol_m3_s=0.25, v_ducto_m_s=6.0, n_paralelo=1, n_codos=2, K_difusor=0.0
+        )
+        con_dif = estimar_delta_P_singulares(
+            Q_vol_m3_s=0.25, v_ducto_m_s=6.0, n_paralelo=1, n_codos=2, K_difusor=0.3
+        )
+        assert con_dif["total"] > sin_dif["total"]

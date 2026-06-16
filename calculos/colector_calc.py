@@ -701,7 +701,7 @@ def calcular_colector_tipo1(
 
     # Propiedades ópticas y térmicas de materiales
     # (acceso directo a los catálogos ya cargados en ColectorUnidad)
-    from core.catalogo import CUBIERTAS, PLACAS, AISLANTES
+    from core.catalogo import AISLANTES, CUBIERTAS, PLACAS
 
     mat_cub = CUBIERTAS[unidad.id_cubierta]
     mat_placa = PLACAS[unidad.id_placa]
@@ -709,7 +709,9 @@ def calcular_colector_tipo1(
 
     tau_cub: float = mat_cub["transmitancia_solar"]
     em_cub: float = mat_cub["emisividad_ir"]
-    k_cub: float = mat_cub["conductividad_termica"]
+    # k efectivo de la cubierta: override del usuario (p. ej. policarbonato
+    # alveolar, cuyo k depende del espesor) o, en su defecto, el del catálogo.
+    k_cub: float = unidad.k_cubierta_efectivo_W_mK or mat_cub["conductividad_termica"]
     esp_cub_m: float = unidad.espesor_cubierta_m
 
     alfa_abs: float = mat_placa["absortancia_solar"]

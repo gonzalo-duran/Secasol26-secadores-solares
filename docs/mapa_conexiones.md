@@ -441,6 +441,7 @@ graph LR
 | P3 | N° cubiertas ⚑ | `colector.unidad.n_cubiertas` + `espaciado_entre_cubiertas_m` | `colector_calc`, `tipos234_calc` (vía `_U_cubierta_efectiva`) |
 | **P3** | **Espesor placa** ⚑ | `colector.unidad.espesor_placa_m` | **⚠️ ninguno** |
 | P3 | id_cubierta/espesor_cubierta | `colector.unidad.*` | `colector_calc`, `tipos234_calc` |
+| P3 | espesor cubierta (policarbonato → k según espesor) | `colector.unidad.k_cubierta_efectivo_W_mK` | `colector_calc`, `tipos234_calc` (override de `k_cub`; default None = catálogo). Mapa `k_efectivo_por_espesor_mm` en `cubiertas.yaml`. Selector `ui/componentes/espesores.py`. |
 | P3 | id_placa | `colector.unidad.id_placa` | `colector_calc`, `tipos234_calc`, `motor_calc` (rugosidad) |
 | P3 | id_aislante/espesor_aislante | `colector.unidad.*` | `colector_calc`, `tipos234_calc` |
 | P3 | id_fondo | `colector.unidad.id_fondo` | `tipos234_calc` (no Tipo 1) |
@@ -468,6 +469,20 @@ graph LR
 | (interno) | POA representativa anual (sugerido P7) | — | `ui/p7_resultados._sugerir_condiciones` → `calcular_POA_horizonte` (quantile 90) |
 | P7 (S35) | barrido: parámetro / rango / N / KPIs avanzados | **ningún campo `Proyecto`** (estado efímero `session_state['p7_barridos_{modo}']`) | `barrido_parametrico.correr_barrido` lee el `path` del `ParametroBarrido` seleccionado sobre una **copia** del proyecto (`dataclasses.replace`, sin mutar el persistente). KPIs vía `catalogo_kpis_barrido` + `balance_global.resumen_camara` |
 | (interno, S35) | base de tiempo de cálculo para estimar barrido | — (`session_state['p7_t_calc_base_s_{constantes,transitorio}']`) | `ui/p7_resultados` stash tras cada `calcular_todo(_transitorio)` normal |
+| **P1** (S40) | subtipo de gran escala (radio Batch/Semicontinuo, solo `GRAN_ESCALA`) | `configuracion.subtipo_gran_escala` (`SubtipoGranEscala`) | `simulacion_ventana.simular_ventana` (despacho batch↔cascada), `camara_calc.calcular_camara_cascada`, `ui/p4_camara` (gate de la sección túnel) |
+| **P1** (S40) | ventana de análisis (date_input inicio/fin + presets 1 sem/1 mes/campaña) | `configuracion.{ventana_inicio, ventana_fin}` + `ModoAnalisis.VENTANA` | `ui/p7_resultados._slice_clima_ventana` → `balance_global.calcular_todo_ventana` → `armar_forzantes_ventana` |
+| **P3** (S40) | caño maestro (checkbox + largo/sección/aislado/aporte solar, solo `GRAN_ESCALA`) | `colector.banco.cano_maestro` (`CanoMaestro`) | `cano_maestro_calc.{estimar_delta_P_cano_maestro, delta_T_cano_maestro}` vía `balance_global.armar_forzantes_ventana` (ΔT al aire) y `ui/p6_motor` (ΔP a ductos) |
+| **P4** (S40) | topología del túnel (n_zonas + cadencia de avance, solo `SEMICONTINUO`) | `camara.tunel` (`ConfiguracionTunel`) | `camara_calc.calcular_camara_cascada` → `camara_termodinamica.simular_cascada` |
+| **P5** (S40) | calendario de arranque (checkbox + N cargas hora_inicio/duración) | `auxiliar.cargas_arranque` (`list[CargaArranque]`) | `auxiliar_calc.calcular_auxiliar_transitorio` (vía `_mascara_calendario`) → consumido por `balance_global` transitorio **y** ventana |
+| **P6** (S40) | ΔP del caño maestro (derivado, no widget) | — (lee `colector.banco.cano_maestro`) | `ui/p6_motor` suma `estimar_delta_P_cano_maestro(Q_total)` a `motor.delta_P_ductos_Pa` (explícito → entra al total del `Motor`) |
+| **P7** (S40) | botón "Calcular ventana de producción" (solo `VENTANA`) | `st.session_state["p7_resultado_ventana"]` (`ResultadoVentana`) | `ui/p7_resultados._render_resultados_ventana` (dashboard producción + perfil túnel) |
+| **P4** (S44) | espesor del techo translúcido (`selector_espesor_mm`, solo si hay cubierta translúcida) | `camara.construccion.cubierta_translucida_espesor_m` | `camara_calc._construir_params_termodinamico` (computa `U_techo=k_efectivo/espesor`, descuenta la cara del techo de `A_cuerpo`) → `camara_termodinamica.resolver_estado_camara` (suma `UA_techo` al balance de `T_flujo`) |
+| **P4** (S44) | modo Ventana en CAJA/ARMARIO (sin widget propio; deriva de `ModoAnalisis.VENTANA` + tipología ≠ GRAN_ESCALA) | `st.session_state["p4_horizonte_*"]` (vía `_construir_forzantes_ventana`) | `ui/p7_resultados` rama transitoria → `balance_global.calcular_todo_transitorio` (el `_render_ventana` gran-escala queda gateado a `GRAN_ESCALA`) |
+| **P3** (S44) | botón "Evaluar colector" en modo Ventana (sin campo nuevo) | `st.session_state["p3_eval"]` (`{"modo": "ventana", ...}` enriquecido: `T_abs_C`, `x_noon`, `marcas_*`) | `ui/p3_colector._evaluar_ventana` (día y noche) → `_fig_T_salida_ventana` + `_fig_T_fluido_dia` |
+
+> **S40 (modo industrial / gran escala):** todos los widgets de arriba están cableados extremo a extremo (UI → core → cálculo) y verificados con AppTest. La cadena térmica completa (colector → caño maestro → cámara) está validada contra datos de campo de ADITAL en `validacion/validacion_adital.py`.
+>
+> **S44 (techo translúcido + ventana CAJA/ARMARIO):** el espesor del techo translúcido entra al balance como conducción del vidriado; el modo Ventana se generaliza a CAJA/ARMARIO como multidía real (el pipeline de producción `_render_ventana` queda solo para gran escala).
 
 ---
 

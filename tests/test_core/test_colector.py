@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.advertencias import Severidad
 from core.chimenea import Chimenea, advertencias_chimenea
 from core.colector import (
     BancoColectores,
@@ -16,8 +17,6 @@ from core.colector import (
     ColectorUnidad,
     advertencias_colector,
 )
-from core.advertencias import Severidad
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -316,3 +315,35 @@ def test_adv_chimenea_altura_pequena():
 def test_adv_chimenea_none_sin_advertencias():
     """Si no hay chimenea, advertencias_chimenea(None) devuelve []."""
     assert advertencias_chimenea(None) == []
+
+
+# ---------------------------------------------------------------------------
+# k_cubierta_efectivo_W_mK — override de conductividad de cubierta (mejora 26)
+# ---------------------------------------------------------------------------
+
+
+def test_k_cubierta_override_default_none():
+    """Por defecto el override de k de cubierta es None (usa el catálogo)."""
+    assert _unidad_valida().k_cubierta_efectivo_W_mK is None
+
+
+def test_k_cubierta_override_valido():
+    """Un override positivo se acepta sin error."""
+    u = _unidad_valida(k_cubierta_efectivo_W_mK=0.06)
+    assert u.k_cubierta_efectivo_W_mK == pytest.approx(0.06)
+
+
+def test_MAT_K_CUBIERTA_NO_POSITIVA():
+    """Un override de k de cubierta ≤ 0 debe levantar ValueError."""
+    with pytest.raises(ValueError, match="MAT_K_CUBIERTA_NO_POSITIVA"):
+        _unidad_valida(k_cubierta_efectivo_W_mK=0.0)
+
+
+def test_catalogo_policarbonato_k_por_espesor():
+    """El catálogo del policarbonato alveolar trae el mapa k(espesor) de mercado."""
+    from core.catalogo import CUBIERTAS
+
+    mapa = CUBIERTAS["policarbonato_alveolar"].get("k_efectivo_por_espesor_mm")
+    assert mapa is not None
+    assert set(mapa.keys()) == {4, 6, 8, 10, 16}
+    assert all(v > 0 for v in mapa.values())

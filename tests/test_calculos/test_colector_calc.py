@@ -30,20 +30,19 @@ import numpy as np
 import pytest
 
 from calculos.colector_calc import (
-    _T_cielo_K,
-    _h_viento_W_m2K,
-    _diametro_hidraulico_m,
-    _T_bot_K,
-    _em_efectiva_paralelas,
-    _sistema_nodo,
     CP_AIRE,
     K_AIRE,
     MU_AIRE,
     PR_AIRE,
     R_AIRE,
     RHO_AIRE_REF,
-    SIGMA_SB,
     V_VIENTO_LIMITE_MCADAMS,
+    _diametro_hidraulico_m,
+    _em_efectiva_paralelas,
+    _h_viento_W_m2K,
+    _sistema_nodo,
+    _T_bot_K,
+    _T_cielo_K,
 )
 from calculos.correlaciones_nusselt import calcular_h_int
 
@@ -620,7 +619,7 @@ class TestDobleCubierta:
         id_cub: str = "vidrio_comun",
         id_pla: str = "aluminio_tinox",
     ):
-        from core.colector import Colector, ColectorUnidad, BancoColectores
+        from core.colector import BancoColectores, Colector, ColectorUnidad
 
         return Colector(
             unidad=ColectorUnidad(
@@ -712,7 +711,7 @@ class TestCoefConveccionLocal:
     """h_int local (S36): realce de entrada + convección mixta, y continuidad."""
 
     def _col(self, v, largo):
-        from core.colector import Colector, ColectorUnidad, BancoColectores
+        from core.colector import BancoColectores, Colector, ColectorUnidad
 
         u = ColectorUnidad(ancho_m=1.0, largo_m=largo, espaciado_m=0.025, velocidad_diseno_ms=v)
         return Colector(unidad=u, banco=BancoColectores())
@@ -760,3 +759,50 @@ class TestCoefConveccionLocal:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+# ---------------------------------------------------------------------------
+# Override de k efectivo de cubierta (mejora 26)
+# ---------------------------------------------------------------------------
+
+
+class TestKCubiertaEfectivoOverride:
+    """k_cubierta_efectivo_W_mK reemplaza el k del catálogo en el balance."""
+
+    @staticmethod
+    def _correr(k_override):
+        from calculos.colector_calc import calcular_colector_tipo1
+        from core.colector import BancoColectores, Colector, ColectorUnidad
+
+        col = Colector(
+            unidad=ColectorUnidad(
+                ancho_m=1.0,
+                largo_m=2.0,
+                id_cubierta="policarbonato_alveolar",
+                espesor_cubierta_m=0.006,
+                k_cubierta_efectivo_W_mK=k_override,
+            ),
+            banco=BancoColectores(),
+        )
+        T_amb = 293.15
+        return calcular_colector_tipo1(
+            colector=col,
+            T_amb_K=T_amb,
+            I_g_W_m2=800.0,
+            v_viento_ms=2.0,
+            P_amb_Pa=101325.0,
+            T_entrada_K=T_amb,
+            pendiente_deg=30.0,
+        )
+
+    def test_override_igual_a_catalogo_no_cambia(self):
+        """Override con el mismo k del catálogo (0.05) → η idéntica al base."""
+        r_base = self._correr(None)
+        r_igual = self._correr(0.05)
+        assert r_base.eta_termica == pytest.approx(r_igual.eta_termica, rel=1e-9)
+
+    def test_override_k_mayor_reduce_eta(self):
+        """Cubierta más conductiva (k mayor) → más pérdidas superiores → menor η."""
+        r_base = self._correr(None)  # catálogo: 0.05
+        r_alta_k = self._correr(0.20)
+        assert r_alta_k.eta_termica < r_base.eta_termica

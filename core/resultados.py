@@ -21,12 +21,11 @@ from typing import Optional
 
 from core.advertencias import BloqueResultados
 
-
 # ---------------------------------------------------------------------------
 # Constantes físicas para el balance global
 # ---------------------------------------------------------------------------
 
-LV_AGUA_MJ_KG: float = 2.450    # calor latente de vaporización a ~20°C [MJ/kg]
+LV_AGUA_MJ_KG: float = 2.450  # calor latente de vaporización a ~20°C [MJ/kg]
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +46,7 @@ class ResultadosClima(BloqueResultados):
     T_ambiente_min_K: Optional[float] = None
     irradiancia_GHI_media_W_m2: Optional[float] = None
     energia_GHI_total_MJ_m2: Optional[float] = None
-    horas_sol_efectivas: Optional[float] = None   # horas con GHI > 50 W/m²
+    horas_sol_efectivas: Optional[float] = None  # horas con GHI > 50 W/m²
     velocidad_viento_media_ms: Optional[float] = None
     HR_media_fraccion: Optional[float] = None
     fraccion_datos_validos: Optional[float] = None
@@ -80,7 +79,7 @@ class ResultadosColector(BloqueResultados):
     regimen_flujo: Optional[str] = None
 
     # Globales estimados para la sesión completa
-    Q_util_total_MJ: Optional[float] = None    # Q_util × t_secado
+    Q_util_total_MJ: Optional[float] = None  # Q_util × t_secado
     area_total_m2: Optional[float] = None
 
 
@@ -149,7 +148,7 @@ class ResultadosMotor(BloqueResultados):
     potencia_electrica_W: Optional[float] = None
     potencia_a_instalar_W: Optional[float] = None
     corriente_nominal_A: Optional[float] = None
-    eficiencia_sistema: Optional[float] = None    # η_vent × η_motor
+    eficiencia_sistema: Optional[float] = None  # η_vent × η_motor
 
     # Energía del motor para la sesión completa
     energia_electrica_motor_kWh: Optional[float] = None
@@ -168,12 +167,12 @@ class ResultadosGlobal(BloqueResultados):
     """
 
     # Balance energético
-    energia_solar_util_MJ: Optional[float] = None     # Q_util_col × t_secado
-    energia_auxiliar_MJ: Optional[float] = None       # Q_aux × t_secado (0 si None)
-    energia_motor_MJ: Optional[float] = None          # P_elec_motor × t_secado
-    energia_total_MJ: Optional[float] = None          # solar + auxiliar + motor
-    energia_secado_MJ: Optional[float] = None         # masa_agua × Lv (calor latente)
-    fraccion_solar: Optional[float] = None            # solar / (solar + auxiliar)
+    energia_solar_util_MJ: Optional[float] = None  # Q_util_col × t_secado
+    energia_auxiliar_MJ: Optional[float] = None  # Q_aux × t_secado (0 si None)
+    energia_motor_MJ: Optional[float] = None  # P_elec_motor × t_secado
+    energia_total_MJ: Optional[float] = None  # solar + auxiliar + motor
+    energia_secado_MJ: Optional[float] = None  # masa_agua × Lv (calor latente)
+    fraccion_solar: Optional[float] = None  # solar / (solar + auxiliar)
 
     # Indicadores de desempeño
     COP_secado: Optional[float] = None
@@ -188,7 +187,7 @@ class ResultadosGlobal(BloqueResultados):
     masa_producto_fresco_kg: Optional[float] = None
     masa_producto_seco_kg: Optional[float] = None
     masa_agua_evaporada_kg: Optional[float] = None
-    rendimiento_masa: Optional[float] = None          # kg_seco / kg_fresco
+    rendimiento_masa: Optional[float] = None  # kg_seco / kg_fresco
 
     # Resumen del sistema
     area_colectores_m2: Optional[float] = None

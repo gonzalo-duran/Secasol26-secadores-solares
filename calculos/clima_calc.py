@@ -26,14 +26,14 @@ from typing import Optional
 
 import numpy as np  # noqa: F401  (requerido por pvlib internamente)
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pvlib.iotools
 import pvlib.irradiance
 import pvlib.solarposition
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from calculos.conversiones_angulo import acimut_duffie_a_pvlib
-from core.clima import CalidadClima, Clima, COLUMNAS_SI
+from core.clima import COLUMNAS_SI, CalidadClima, Clima
 from core.emplazamiento import Emplazamiento
 
 # Parámetros solicitados a NASA POWER (mezcla de nombres pvlib y nativos NASA).
@@ -446,3 +446,44 @@ def slice_n_dias_consecutivos(
     n_dias_efectivo = len(set(datos_slice.index.date))
     truncado = n_dias_efectivo < n_dias
     return datos_slice, n_dias_efectivo, truncado
+
+
+def slice_clima_ventana(
+    clima,
+    inicio: date,
+    fin: date,
+) -> tuple[Optional[pd.DataFrame], str]:
+    """Recorta ``clima.datos`` al lapso [inicio, fin] (mapeado al año del clima).
+
+    Compartido por P2 (series del lapso), P3 (evaluación de colector sobre la
+    ventana) y P7 (producción en modo VENTANA). El lapso se mapea por mes/día
+    al año de la serie climática descargada; si los años no coinciden, el
+    llamador es responsable de avisar al usuario (ver sincronización P1→P2).
+
+    Args:
+        clima: Objeto ``core.clima.Clima`` (o None).
+        inicio, fin: Fechas de la ventana de producción.
+
+    Returns:
+        ``(df, msg)``: ``df`` es el slice horario (DatetimeIndex, COLUMNAS_SI)
+        o ``None`` si no hay datos o el lapso no intersecta. ``msg`` describe
+        el motivo cuando ``df is None``.
+    """
+    if clima is None or clima.datos is None or len(clima.datos) == 0:
+        return None, "Sin datos de clima descargados (P2)."
+    datos = clima.datos
+    idx = datos.index
+    anio = clima.anio or idx[0].year
+    tz = idx.tz
+    try:
+        ini_ts = pd.Timestamp(year=anio, month=inicio.month, day=inicio.day, hour=0, tz=tz)
+        fin_ts = pd.Timestamp(year=anio, month=fin.month, day=fin.day, hour=23, minute=59, tz=tz)
+    except (ValueError, TypeError) as exc:
+        return None, f"No se pudo construir el lapso: {exc}"
+    df = datos.loc[(idx >= ini_ts) & (idx <= fin_ts)]
+    if len(df) < 2:
+        return None, (
+            f"El lapso [{inicio} → {fin}] no intersecta los datos de clima "
+            f"(año {anio}). Descargá el año correspondiente en P2."
+        )
+    return df, ""

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from core.advertencias import Severidad
 from core.camara import (
     Camara,
     CapaPared,
@@ -20,12 +21,10 @@ from core.camara import (
     ConfiguracionBandejas,
     ConfiguracionFlujo,
     ConstruccionCamara,
-    DireccionFlujo,
     GeometriaCamara,
     ParedCamara,
     advertencias_camara,
 )
-from core.advertencias import Severidad
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -457,3 +456,94 @@ class TestCargaProductoTInicial:
     def test_demasiado_caliente_lanza(self):
         with pytest.raises(ValueError, match="PROD_T_INICIAL_FUERA_RANGO"):
             CargaProducto(T_prod_inicial_K=373.15)  # 100 °C
+
+
+# ---------------------------------------------------------------------------
+# ConfiguracionCarros (S41) — carros con bandejas en gran escala
+# ---------------------------------------------------------------------------
+
+from core.camara import ConfiguracionCarros, ConfiguracionTunel  # noqa: E402
+
+
+def _camara_industrial(**kwargs):
+    """Cámara grande estilo túnel con masa acorde para los tests de carros."""
+    defaults = dict(
+        geometria=GeometriaCamara(largo_m=18.0, ancho_m=3.0, alto_m=1.85),
+        bandejas=ConfiguracionBandejas(
+            n_bandejas=336,  # lo pisa la coerción si hay carros
+            area_bandeja_m2=0.95,
+            espesor_capa_m=0.04,
+            separacion_entre_bandejas_m=0.10,
+        ),
+        carga_producto=CargaProducto(
+            producto_id="manzana",
+            masa_total_kg=3000.0,
+            humedad_inicial_X=4.6,
+            humedad_objetivo_X=0.15,
+        ),
+    )
+    defaults.update(kwargs)
+    return Camara(**defaults)
+
+
+class TestConfiguracionCarros:
+
+    def test_carros_n_no_positivo(self):
+        with pytest.raises(ValueError, match="CARROS_N_NO_POSITIVO"):
+            ConfiguracionCarros(n_carros=0)
+
+    def test_carros_bandejas_no_positivas(self):
+        with pytest.raises(ValueError, match="CARROS_BANDEJAS_NO_POSITIVAS"):
+            ConfiguracionCarros(bandejas_por_carro=0)
+
+    def test_carros_largo_no_positivo(self):
+        with pytest.raises(ValueError, match="CARROS_LARGO_NO_POSITIVO"):
+            ConfiguracionCarros(largo_carro_m=0.0)
+
+    def test_n_bandejas_total_derivado(self):
+        carros = ConfiguracionCarros(n_carros=24, bandejas_por_carro=14)
+        assert carros.n_bandejas_total == 336
+
+    def test_camara_coacciona_n_bandejas_desde_carros(self):
+        """Con carros, bandejas.n_bandejas queda sincronizado al total derivado."""
+        cam = _camara_industrial(carros=ConfiguracionCarros(n_carros=24, bandejas_por_carro=14))
+        assert cam.bandejas.n_bandejas == 336
+
+    def test_pila_por_carro_no_total(self):
+        """336 bandejas × 0.10 m no caben apiladas, pero 14 por carro sí."""
+        cam = _camara_industrial(carros=ConfiguracionCarros(n_carros=24, bandejas_por_carro=14))
+        assert cam.carros.bandejas_por_carro * cam.bandejas.separacion_entre_bandejas_m <= 1.85
+
+    def test_pila_por_carro_excede_alto(self):
+        with pytest.raises(ValueError, match="COHE_BANDEJAS_NO_CABEN_EN_CAMARA"):
+            _camara_industrial(carros=ConfiguracionCarros(n_carros=24, bandejas_por_carro=20))
+
+    def test_cam_carros_zonas_inconsistentes(self):
+        with pytest.raises(ValueError, match="CAM_CARROS_ZONAS_INCONSISTENTES"):
+            _camara_industrial(
+                carros=ConfiguracionCarros(n_carros=24, bandejas_por_carro=14),
+                tunel=ConfiguracionTunel(n_zonas=6, intervalo_avance_h=5.0),
+            )
+
+    def test_carros_y_tunel_consistentes(self):
+        cam = _camara_industrial(
+            carros=ConfiguracionCarros(n_carros=24, bandejas_por_carro=14),
+            tunel=ConfiguracionTunel(n_zonas=24, intervalo_avance_h=5.0),
+        )
+        assert cam.tunel.n_zonas == cam.carros.n_carros
+
+    def test_cohe_carros_no_caben_en_largo(self):
+        with pytest.raises(ValueError, match="COHE_CARROS_NO_CABEN_EN_LARGO"):
+            _camara_industrial(
+                carros=ConfiguracionCarros(
+                    n_carros=24, bandejas_por_carro=14, largo_carro_m=1.0
+                )  # 24 m > 18 m
+            )
+
+    def test_cohe_carro_excede_ancho(self):
+        with pytest.raises(ValueError, match="COHE_CARRO_EXCEDE_ANCHO"):
+            _camara_industrial(
+                carros=ConfiguracionCarros(
+                    n_carros=18, bandejas_por_carro=14, largo_carro_m=0.9, ancho_carro_m=3.5
+                )
+            )

@@ -15,8 +15,8 @@ from typing import Optional
 
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from calculos.balance_global import (
     armar_forzantes_aire,
@@ -24,20 +24,22 @@ from calculos.balance_global import (
 )
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
-from calculos.motor_calc import _D_P_DEFAULT_M, _K_rugosidad_default
-from calculos.psicrometria import humedad_absoluta
-from core import catalogo
-from core.advertencias import Severidad
+from calculos.motor_calc import _D_P_DEFAULT_M, _C_obstruccion_bloqueo
 from calculos.operacion_anual_camara import (
     ResultadosAnualCamara,
     calcular_operacion_anual_camara,
 )
+from calculos.psicrometria import humedad_absoluta
+from core import catalogo
+from core.advertencias import Severidad
 from core.camara import (
     Camara,
     CapaPared,
     CargaProducto,
     ConfiguracionBandejas,
+    ConfiguracionCarros,
     ConfiguracionFlujo,
+    ConfiguracionTunel,
     ConstruccionCamara,
     DireccionFlujo,
     ForzantesAire,
@@ -48,8 +50,13 @@ from core.camara import (
     advertencias_camara,
 )
 from core.proyecto import ModoAnalisis
+from ui.componentes.espesores import (
+    ESPESORES_MADERA_MM,
+    MATERIALES_MADERA,
+    selector_espesor_mm,
+)
 from ui.componentes.esquemas import mostrar_esquema
-from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
+from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -540,6 +547,80 @@ def _construir_forzantes_reales_caja(
     )
 
 
+def _construir_forzantes_ventana(
+    *,
+    proyecto,
+    caudal_kg_s: float,
+    P_Pa: float = 101325.0,
+) -> ForzantesAire:
+    """Construye ForzantesAire sobre la ventana de producción de P1 (mejora 35).
+
+    En tipología CAJA/ARMARIO, el modo VENTANA es un **multidía real**: el
+    horizonte es el lapso ``[ventana_inicio, ventana_fin]`` con clima horario
+    real de NASA POWER. Reusa ``_forzantes_desde_slice`` (mismo camino que
+    "días reales consecutivos"): corre el colector hora a hora sobre el slice
+    para ARMARIO (día y noche; las horas sin sol caen a T_amb) o toma
+    ``T_sal_col(t) = T_amb(t)`` para CAJA.
+
+    Raises:
+        RuntimeError: Si la ventana no está definida, el clima no está cargado,
+            o no hay datos para el lapso en el año climático descargado.
+    """
+    from datetime import date as _date
+
+    from core.proyecto import Tipologia
+
+    cfg = proyecto.configuracion
+    inicio = getattr(cfg, "ventana_inicio", None)
+    fin = getattr(cfg, "ventana_fin", None)
+    if inicio is None or fin is None:
+        raise RuntimeError("Definí la ventana de producción [inicio, fin] en P1.")
+    if proyecto.clima is None or proyecto.clima.datos is None:
+        raise RuntimeError(
+            "La ventana de producción necesita clima real cargado en P2 (NASA POWER)."
+        )
+
+    empl = proyecto.emplazamiento
+    anio = proyecto.clima.anio
+    datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
+    datos_local = datos_local[datos_local.index.year == anio]
+    n_dias = max(1, (fin - inicio).days)
+    # La ventana se mapea al año climático descargado (mismo criterio que P7).
+    inicio_anio = _date(anio, inicio.month, inicio.day)
+
+    from calculos.clima_calc import slice_n_dias_consecutivos
+
+    datos_slice, _, _ = slice_n_dias_consecutivos(datos_local, inicio_anio, n_dias)
+    if len(datos_slice) == 0:
+        raise RuntimeError(
+            f"Sin datos climáticos para la ventana desde {inicio_anio} en el año {anio}."
+        )
+
+    T_amb_slice = np.asarray(datos_slice["T_amb_K"], dtype=float)
+    es_caja = getattr(cfg, "tipologia", None) == Tipologia.CAJA
+    if es_caja or proyecto.colector is None:
+        T_sal_col_K = T_amb_slice
+    else:
+        from ui.p3_colector import _evaluar_diario
+
+        ev = _evaluar_diario(proyecto.colector, datos_slice, empl)
+        T_sal_col_K = np.array(
+            [
+                (float(t) + 273.15) if t is not None else T_amb_slice[i]
+                for i, t in enumerate(ev["T_salida_C"])
+            ],
+            dtype=float,
+        )
+
+    return _forzantes_desde_slice(
+        datos_slice=datos_slice,
+        empl=empl,
+        caudal_kg_s=caudal_kg_s,
+        T_sal_col_K=T_sal_col_K,
+        P_Pa=P_Pa,
+    )
+
+
 def _disponibilidad_forzantes_reales(p3_eval, proyecto) -> tuple[bool, str]:
     """Verifica si hay datos suficientes para construir forzantes reales.
 
@@ -787,10 +868,12 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         f"  Volumen interno   : {g.largo_m * g.ancho_m * g.alto_m:.3f} m³",
         "",
         "CONSTRUCCIÓN",
-        f"  Techo translúcido : " + (cn.cubierta_translucida_id or "(opaca)"),
+        "  Techo translúcido : " + (cn.cubierta_translucida_id or "(opaca)"),
     ]
     if cn.cubierta_translucida_id is not None and cn.A_rad_m2 is not None:
         lines.append(f"  A_rad             : {cn.A_rad_m2:.4f} m²")
+    if cn.cubierta_translucida_id is not None and cn.cubierta_translucida_espesor_m is not None:
+        lines.append(f"  Espesor techo     : {cn.cubierta_translucida_espesor_m * 1000:.1f} mm")
     lines.append(
         f"  Pared             : {'compuesta' if cn.pared.es_compuesta else 'simple'} "
         f"({len(cn.pared.capas)} capa(s))"
@@ -821,6 +904,23 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         lines.append(f"  d_eq partícula      : {b.diametro_eq_particula_m * 1000:.2f} mm")
     if b.K_rugosidad_producto is not None:
         lines.append(f"  K rugosidad (forzado): {b.K_rugosidad_producto:.2f}")
+    if cam.carros is not None:
+        lines += [
+            "",
+            "CARROS (disposición industrial)",
+            f"  N° carros           : {cam.carros.n_carros}",
+            f"  Bandejas por carro  : {cam.carros.bandejas_por_carro}",
+            f"  Bandejas totales    : {cam.carros.n_bandejas_total} (derivado)",
+        ]
+    if cam.tunel is not None:
+        lines += [
+            "",
+            "TÚNEL SEMICONTINUO (contracorriente)",
+            f"  N° columnas (zonas) : {cam.tunel.n_zonas}",
+            f"  Cadencia de avance  : {cam.tunel.intervalo_avance_h:.1f} h",
+            f"  Residencia total    : {cam.tunel.residencia_total_h:.1f} h "
+            f"(≈ {cam.tunel.residencia_total_h / 24.0:.1f} días)",
+        ]
     lines += [
         "",
         "PRODUCTO Y CARGA",
@@ -887,7 +987,7 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         lines += [
             f"  Status             : {resumen['status']}",
             f"  Tiempo simulación  : {resumen.get('t_simulacion_h', 0):.2f} h",
-            f"  Tiempo de secado   : "
+            "  Tiempo de secado   : "
             + (f"{resumen['t_secado_h']:.2f} h" if resumen["t_secado_h"] else "no alcanzado"),
             f"  Agua evaporada     : {resumen['masa_evaporada_total_kg']:.3f} kg",
             f"  X inicial          : {resumen.get('X_prod_inicial', 0):.4f} kg/kg",
@@ -942,6 +1042,11 @@ def _from_json_camara(data: dict) -> "Camara":
     construccion = ConstruccionCamara(
         cubierta_translucida_id=cn_d.get("cubierta_translucida_id"),
         A_rad_m2=(float(cn_d["A_rad_m2"]) if cn_d.get("A_rad_m2") is not None else None),
+        cubierta_translucida_espesor_m=(
+            float(cn_d["cubierta_translucida_espesor_m"])
+            if cn_d.get("cubierta_translucida_espesor_m") is not None
+            else None
+        ),
         pared=pared,
     )
 
@@ -988,6 +1093,34 @@ def _from_json_camara(data: dict) -> "Camara":
         ),
     )
 
+    # Túnel semicontinuo (opcional; back-compat: ausente → None).
+    tun_d = data.get("tunel")
+    tunel = (
+        ConfiguracionTunel(
+            n_zonas=int(tun_d["n_zonas"]),
+            intervalo_avance_h=float(tun_d["intervalo_avance_h"]),
+        )
+        if tun_d
+        else None
+    )
+
+    # Carros con bandejas (S41; back-compat: ausente → None).
+    car_d = data.get("carros")
+    carros = (
+        ConfiguracionCarros(
+            n_carros=int(car_d["n_carros"]),
+            bandejas_por_carro=int(car_d["bandejas_por_carro"]),
+            largo_carro_m=(
+                float(car_d["largo_carro_m"]) if car_d.get("largo_carro_m") is not None else None
+            ),
+            ancho_carro_m=(
+                float(car_d["ancho_carro_m"]) if car_d.get("ancho_carro_m") is not None else None
+            ),
+        )
+        if car_d
+        else None
+    )
+
     return Camara(
         geometria=geometria,
         construccion=construccion,
@@ -995,12 +1128,15 @@ def _from_json_camara(data: dict) -> "Camara":
         flujo=flujo,
         carga_producto=carga,
         modo_calculo=data.get("modo_calculo", "termodinamico"),
+        tunel=tunel,
+        carros=carros,
     )
 
 
 def _json_config_camara(cam: "Camara", session_state=None) -> dict:
     """Snapshot reconstruible (dict) de la cámara con resultados."""
     from datetime import date
+
     from core import catalogo as _cat
     from core.camara import advertencias_camara as _advs_cam
 
@@ -1029,6 +1165,7 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
                 else None
             ),
             "A_rad_m2": cn.A_rad_m2,
+            "cubierta_translucida_espesor_m": cn.cubierta_translucida_espesor_m,
             "pared": {
                 "es_compuesta": cn.pared.es_compuesta,
                 "espesor_total_m": cn.pared.espesor_total_m,
@@ -1075,6 +1212,26 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "fraccion_recirculacion": f.fraccion_recirculacion,
             "HR_entrada_fraccion": f.HR_entrada_fraccion,
         },
+        "tunel": (
+            {
+                "n_zonas": cam.tunel.n_zonas,
+                "intervalo_avance_h": cam.tunel.intervalo_avance_h,
+                "tiempo_residencia_total_h": cam.tunel.residencia_total_h,
+            }
+            if cam.tunel is not None
+            else None
+        ),
+        "carros": (
+            {
+                "n_carros": cam.carros.n_carros,
+                "bandejas_por_carro": cam.carros.bandejas_por_carro,
+                "largo_carro_m": cam.carros.largo_carro_m,
+                "ancho_carro_m": cam.carros.ancho_carro_m,
+                "n_bandejas_total": cam.carros.n_bandejas_total,
+            }
+            if cam.carros is not None
+            else None
+        ),
         "advertencias_diseno": [
             {
                 "codigo": a.codigo,
@@ -1249,15 +1406,33 @@ def render() -> None:
     proyecto = st.session_state.proyecto
 
     # Detectar tipología temprano: condiciona defaults de cubierta y T_op.
-    from core.proyecto import Tipologia
+    from core.proyecto import SubtipoGranEscala, Tipologia
 
-    _tipologia_actual = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
+    _cfg_actual = getattr(proyecto, "configuracion", None)
+    _tipologia_actual = getattr(_cfg_actual, "tipologia", None)
     es_caja_pre = _tipologia_actual == Tipologia.CAJA
     if es_caja_pre:
         st.info(
             "📦 **Tipología CAJA**: la cámara actúa como secador directo. "
             "El techo translúcido es obligatorio (única fuente de energía) "
             "y la temperatura de operación es la del aire ambiente."
+        )
+
+    # Subtipo de gran escala: SEMICONTINUO habilita la topología de túnel a
+    # contracorriente (N columnas con avance por cadencia). BATCH (y las demás
+    # tipologías) usan la topología de bandejas clásica.
+    _subtipo_actual = getattr(_cfg_actual, "subtipo_gran_escala", SubtipoGranEscala.BATCH)
+    es_gran_escala = _tipologia_actual == Tipologia.GRAN_ESCALA
+    es_semicontinuo = (
+        _tipologia_actual == Tipologia.GRAN_ESCALA
+        and _subtipo_actual == SubtipoGranEscala.SEMICONTINUO
+    )
+    if es_semicontinuo:
+        st.info(
+            "🏭 **Gran escala — Semicontinuo (túnel a contracorriente)**: la carga "
+            "total y la geometría de abajo se reparten en N columnas en serie; el "
+            "aire entra caliente por la columna seca y sale húmedo por la fresca. "
+            "Configurá la topología del túnel en su sección."
         )
 
     # -----------------------------------------------------------------------
@@ -1480,9 +1655,37 @@ def render() -> None:
         cubierta_id_sel: Optional[str] = (
             None if cubierta_sel == opciones_cubierta[0] else cubierta_sel
         )
+        espesor_techo_m_sel: Optional[float] = None
         if cubierta_id_sel is not None:
             tau_info = catalogo.CUBIERTAS[cubierta_id_sel].get("transmitancia_solar", 0.85)
             st.caption(f"τ_solar = {float(tau_info):.2f} (del catálogo)")
+            # Espesor del techo translúcido (mejora 33). Para el alveolar se
+            # ofrecen las medidas de mercado del mapa k(espesor) del catálogo;
+            # el espesor entra al balance como pérdida conductiva del vidriado
+            # (U_techo = k_efectivo/espesor en serie con films), ver camara_calc.
+            mapa_k_techo = catalogo.CUBIERTAS.get(cubierta_id_sel, {}).get(
+                "k_efectivo_por_espesor_mm"
+            )
+            opciones_techo_mm = (
+                [(float(mm), f"{float(mm):.0f} mm") for mm in sorted(mapa_k_techo)]
+                if mapa_k_techo
+                else None
+            )
+            esp_techo_prev_m = cons_prev.cubierta_translucida_espesor_m or 0.006
+            espesor_techo_mm = selector_espesor_mm(
+                "Espesor del techo [mm]",
+                esp_techo_prev_m,
+                key="p4_esp_techo",
+                opciones_mm=opciones_techo_mm,
+                min_mm=1.0,
+                max_mm=40.0,
+                step=0.5,
+            )
+            espesor_techo_m_sel = espesor_techo_mm / 1000.0
+            if mapa_k_techo:
+                k_techo_eff = mapa_k_techo.get(int(round(espesor_techo_mm)))
+                if k_techo_eff:
+                    st.caption(f"k_efectivo = {float(k_techo_eff):.3f} W/(m·K) (del catálogo)")
         elif es_caja_pre:
             st.error(
                 "❌ Tipología CAJA requiere techo translúcido. Sin colector externo "
@@ -1501,11 +1704,6 @@ def render() -> None:
 
         # Estado previo: detectar si era simple o compuesta
         es_compuesta_prev = cons_prev.pared.es_compuesta
-        tipo_pared_default = (
-            "Compuesta (cara externa + aislante + cara interna)"
-            if es_compuesta_prev
-            else "Simple (1 material + espesor)"
-        )
         tipo_pared = st.radio(
             "Tipo de pared",
             options=[
@@ -1555,18 +1753,20 @@ def render() -> None:
                 format_func=lambda k: _cat_dict.get(k, {}).get("descripcion", k),
                 key="p4_pared_simple_mat",
             )
-            esp_sel = (
-                c_esp.number_input(
-                    "Espesor [mm]",
-                    min_value=1.0,
-                    max_value=500.0,
-                    value=float(esp_prev) * 1000.0,
-                    step=5.0,
-                    format="%.1f",
-                    key="p4_pared_simple_esp",
+            with c_esp:
+                _es_madera_simple = cat_sel == "fondos" and mat_sel in MATERIALES_MADERA
+                esp_sel = (
+                    selector_espesor_mm(
+                        "Espesor [mm]",
+                        float(esp_prev),
+                        key="p4_pared_simple_esp",
+                        opciones_mm=ESPESORES_MADERA_MM if _es_madera_simple else None,
+                        min_mm=1.0,
+                        max_mm=500.0,
+                        step=5.0,
+                    )
+                    / 1000.0
                 )
-                / 1000.0
-            )
             pared_widget = ParedCamara(
                 capas=[
                     CapaPared(material_id=mat_sel, espesor_m=esp_sel, catalogo=cat_sel),
@@ -1606,18 +1806,19 @@ def render() -> None:
                 format_func=lambda k: catalogo.FONDOS.get(k, {}).get("descripcion", k),
                 key="p4_pared_comp_mat_ext",
             )
-            esp_ext = (
-                c2.number_input(
-                    "Espesor externa [mm]",
-                    min_value=0.1,
-                    max_value=200.0,
-                    value=float(cap_ext_prev.espesor_m) * 1000.0,
-                    step=0.5,
-                    format="%.1f",
-                    key="p4_pared_comp_esp_ext",
+            with c2:
+                esp_ext = (
+                    selector_espesor_mm(
+                        "Espesor externa [mm]",
+                        float(cap_ext_prev.espesor_m),
+                        key="p4_pared_comp_esp_ext",
+                        opciones_mm=(ESPESORES_MADERA_MM if mat_ext in MATERIALES_MADERA else None),
+                        min_mm=0.1,
+                        max_mm=200.0,
+                        step=0.5,
+                    )
+                    / 1000.0
                 )
-                / 1000.0
-            )
 
             st.caption("**Aislante**")
             c3, c4 = st.columns([2, 1])
@@ -1666,18 +1867,19 @@ def render() -> None:
                 format_func=lambda k: catalogo.FONDOS.get(k, {}).get("descripcion", k),
                 key="p4_pared_comp_mat_int",
             )
-            esp_int = (
-                c6.number_input(
-                    "Espesor interna [mm]",
-                    min_value=0.1,
-                    max_value=200.0,
-                    value=float(cap_int_prev.espesor_m) * 1000.0,
-                    step=0.5,
-                    format="%.1f",
-                    key="p4_pared_comp_esp_int",
+            with c6:
+                esp_int = (
+                    selector_espesor_mm(
+                        "Espesor interna [mm]",
+                        float(cap_int_prev.espesor_m),
+                        key="p4_pared_comp_esp_int",
+                        opciones_mm=(ESPESORES_MADERA_MM if mat_int in MATERIALES_MADERA else None),
+                        min_mm=0.1,
+                        max_mm=200.0,
+                        step=0.5,
+                    )
+                    / 1000.0
                 )
-                / 1000.0
-            )
 
             pared_widget = ParedCamara(
                 capas=[
@@ -1705,14 +1907,60 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección C: Bandejas
     # -----------------------------------------------------------------------
-    with st.expander("Configuración de bandejas", expanded=False):
+    with st.expander(
+        "Configuración de carros y bandejas" if es_gran_escala else "Configuración de bandejas",
+        expanded=False,
+    ):
         band_prev = (
             proyecto.camara.bandejas if proyecto.camara is not None else ConfiguracionBandejas()
         )
+        carros_cfg: Optional[ConfiguracionCarros] = None
         c1, c2 = st.columns(2)
-        n_bandejas = c1.number_input(
-            "Número de bandejas", min_value=1, max_value=100, value=band_prev.n_bandejas, step=1
-        )
+        if es_gran_escala:
+            # Disposición industrial (S41): carros móviles con pila de bandejas.
+            # En semicontinuo el carro es la unidad que avanza por el túnel
+            # (cada zona aloja un carro); en batch los carros son estáticos.
+            carros_prev = (
+                proyecto.camara.carros
+                if proyecto.camara is not None and proyecto.camara.carros is not None
+                else ConfiguracionCarros()
+            )
+            n_carros = c1.number_input(
+                "Número de carros",
+                min_value=1,
+                max_value=200,
+                value=int(carros_prev.n_carros),
+                step=1,
+                key="p4_n_carros",
+                help=(
+                    "Carros móviles con bandejas dentro de la cámara/túnel. "
+                    "ADITAL: 24 carros. En semicontinuo define también el "
+                    "número de zonas del túnel (1 carro por zona)."
+                ),
+            )
+            bandejas_por_carro = c1.number_input(
+                "Bandejas por carro",
+                min_value=1,
+                max_value=50,
+                value=int(carros_prev.bandejas_por_carro),
+                step=1,
+                key="p4_band_por_carro",
+                help="Pila vertical de bandejas de cada carro. ADITAL: ~14.",
+            )
+            n_bandejas = int(n_carros) * int(bandejas_por_carro)
+            c1.caption(f"Bandejas totales: **{n_bandejas}** (= carros × bandejas/carro)")
+            carros_cfg = ConfiguracionCarros(
+                n_carros=int(n_carros),
+                bandejas_por_carro=int(bandejas_por_carro),
+            )
+        else:
+            n_bandejas = c1.number_input(
+                "Número de bandejas",
+                min_value=1,
+                max_value=100,
+                value=band_prev.n_bandejas,
+                step=1,
+            )
         area_bandeja = c2.number_input(
             "Área por bandeja [m²]",
             min_value=0.01,
@@ -1740,8 +1988,10 @@ def render() -> None:
             format="%.3f",
             help="Distancia libre entre superficies de bandejas consecutivas.",
         )
+        _n_pila = carros_cfg.bandejas_por_carro if carros_cfg is not None else n_bandejas
         st.caption(
-            f"Altura total ocupada por bandejas: {n_bandejas * sep_bandejas:.2f} m  |  "
+            f"Altura de la pila{' por carro' if carros_cfg is not None else ''}: "
+            f"{_n_pila * sep_bandejas:.2f} m  |  "
             f"Área total de bandeja: {n_bandejas * area_bandeja:.2f} m²  |  "
             f"Carga estimada: {masa_kg / n_bandejas / area_bandeja:.1f} kg/m²/bandeja"
         )
@@ -1749,52 +1999,111 @@ def render() -> None:
         # -------------------------------------------------------------------
         # Pérdida de carga por rugosidad del producto sobre la bandeja
         # -------------------------------------------------------------------
-        st.markdown("**Pérdida de carga por rugosidad del producto**")
+        st.markdown("**Pérdida de carga por el producto (cross-flow)**")
         _forma = (catalogo.PRODUCTOS.get(prod_id) or {}).get("forma_geometrica") or {}
         _d_p_auto = float(_forma.get("diametro_eq_m") or _D_P_DEFAULT_M)
-        _espacio_libre_auto = max(0.0, sep_bandejas - espesor_capa)
-        _K_auto = _K_rugosidad_default(_d_p_auto, _espacio_libre_auto)
-        _ratio = _d_p_auto / _espacio_libre_auto if _espacio_libre_auto > 0 else 0.0
+        _beta_auto = espesor_capa / sep_bandejas if sep_bandejas > 0 else 0.0
+        _K_auto = _C_obstruccion_bloqueo(_beta_auto)
 
         K_rug_help = (
-            "Coeficiente K de pérdida de forma aplicado como K·ρv²/2 una vez "
-            "por bandeja para capturar la rugosidad del lecho de producto en "
-            "cross-flow (HORIZONTAL). Darcy-Weisbach de pared lisa subestima "
-            "esta pérdida porque el aire no encuentra una superficie pulida "
-            "sino partículas que sobresalen y generan estelas locales.\n\n"
-            "**Fundamento del default automático** (sin correlación específica "
-            "en literatura): tabla de anclajes inspirada en Idelchik / Crane "
-            "TP-410, interpolada linealmente sobre el ratio d_p/espacio_libre:\n"
-            "• ratio < 0.05  →  K = 0.2  (casi liso)\n"
-            "• 0.05–0.15     →  K = 0.2–0.5  (rugosidad significativa)\n"
-            "• 0.15–0.30     →  K = 0.5–1.0  (obstrucción parcial)\n"
-            "• 0.30–0.50     →  K = 1.0–2.0  (cuasi-bloqueo)\n\n"
-            "En VERTICAL_ASCENDENTE este término no se aplica porque la "
-            "ecuación de Ergun ya captura la rugosidad del producto vía la "
-            "esfericidad Φ_s y el diámetro de partícula d_p."
+            "Coeficiente de obstrucción por bloqueo C_obs, aplicado como C·ρv²/2 "
+            "sobre el canal entre bandejas, para capturar la pérdida de forma del "
+            "lecho de producto en cross-flow (HORIZONTAL). Se combina con la "
+            "fricción de pared rugosa (Colebrook con ε = tamaño del producto), que "
+            "captura el roce sobre la superficie del lecho.\n\n"
+            "**Default automático** (mejora 29, modelo general): contracción + "
+            "expansión Borda-Carnot con β = espesor_capa/separación (fracción del "
+            "gap ocupada por el producto):\n"
+            "• C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²\n"
+            "• Crece con β y diverge cuando el gap se bloquea (β→1).\n\n"
+            "En VERTICAL_ASCENDENTE este término no aplica: la ecuación de Ergun "
+            "ya captura la resistencia del lecho atravesado vía Φ_s y d_p."
         )
 
         forzar_K_rug = st.checkbox(
-            "Forzar K_rugosidad (override del default automático)",
+            "Forzar C_obstrucción (override del default automático)",
             value=band_prev.K_rugosidad_producto is not None,
             help=K_rug_help,
         )
         K_rugosidad_val: Optional[float] = None
         if forzar_K_rug:
             K_rugosidad_val = st.number_input(
-                "K_rugosidad [adim]",
+                "C_obstrucción [adim]",
                 min_value=0.0,
                 max_value=10.0,
                 value=float(band_prev.K_rugosidad_producto or _K_auto),
                 step=0.1,
                 format="%.2f",
-                help="Se aplica como K·ρv²/2 una vez por bandeja.",
+                help="Se aplica como C·ρv²/2 sobre la velocidad del canal entre bandejas.",
             )
         else:
             st.caption(
-                f"K_rugosidad estimado automáticamente: **{_K_auto:.2f}**  "
-                f"(d_p = {_d_p_auto * 1000:.1f} mm, espacio libre = "
-                f"{_espacio_libre_auto * 100:.1f} cm, ratio = {_ratio:.3f})"
+                f"C_obstrucción estimado automáticamente: **{_K_auto:.2f}**  "
+                f"(β = espesor/separación = {_beta_auto:.2f}; "
+                f"rugosidad del lecho d_p = {_d_p_auto * 1000:.1f} mm)"
+            )
+
+    # -----------------------------------------------------------------------
+    # Sección C2: Topología del túnel (solo gran escala semicontinuo)
+    # -----------------------------------------------------------------------
+    tunel_cfg: Optional[ConfiguracionTunel] = None
+    if es_semicontinuo:
+        with st.expander("🏭 Topología del túnel (semicontinuo)", expanded=True):
+            tun_prev = (
+                proyecto.camara.tunel
+                if proyecto.camara is not None and proyecto.camara.tunel is not None
+                else ConfiguracionTunel()
+            )
+            t1, t2 = st.columns(2)
+            if carros_cfg is not None:
+                # Con carros (S41) las zonas quedan derivadas: 1 carro por zona.
+                n_zonas = carros_cfg.n_carros
+                t1.metric(
+                    "Zonas del túnel (= carros)",
+                    f"{n_zonas}",
+                    help=(
+                        "Cada zona del túnel aloja exactamente un carro: el "
+                        "número de zonas queda definido por el número de "
+                        "carros de la sección 'Carros y bandejas'."
+                    ),
+                )
+            else:
+                n_zonas = t1.number_input(
+                    "Número de columnas (zonas en serie)",
+                    min_value=1,
+                    max_value=50,
+                    value=int(tun_prev.n_zonas),
+                    step=1,
+                    help=(
+                        "Columnas de carros en serie a lo largo del túnel. El aire "
+                        "circula a contracorriente: entra caliente por la columna "
+                        "seca (zona N) y sale húmedo por la fresca (zona 1)."
+                    ),
+                )
+            intervalo_avance_h = t2.number_input(
+                "Cadencia de avance [h]",
+                min_value=0.5,
+                max_value=240.0,
+                value=float(tun_prev.intervalo_avance_h),
+                step=1.0,
+                format="%.1f",
+                help=(
+                    "Cada cuántas horas avanza una columna una posición. La "
+                    "columna seca se descarga y entra una fresca. La sequedad de "
+                    "salida es emergente (no se fuerza X_objetivo)."
+                ),
+            )
+            tunel_cfg = ConfiguracionTunel(
+                n_zonas=int(n_zonas),
+                intervalo_avance_h=float(intervalo_avance_h),
+            )
+            _ciclo_dias = tunel_cfg.residencia_total_h / 24.0
+            st.caption(
+                f"⏱️ Residencia total de un carro: "
+                f"**{tunel_cfg.residencia_total_h:.1f} h** "
+                f"(≈ {_ciclo_dias:.1f} días)  |  "
+                f"Carga por columna: **{masa_kg / int(n_zonas):.1f} kg**  |  "
+                f"Un carro descargado cada **{intervalo_avance_h:.1f} h**."
             )
 
     # -----------------------------------------------------------------------
@@ -1939,6 +2248,12 @@ def render() -> None:
 
     tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
     es_caja = tipologia == Tipologia.CAJA
+    es_gran_escala = tipologia == Tipologia.GRAN_ESCALA
+    # Modo Ventana de producción para CAJA/ARMARIO (mejora 35): el horizonte es
+    # el lapso [inicio, fin] de P1 con clima real horario (multidía real). El
+    # túnel de gran escala tiene su propio pipeline (P7 _render_ventana).
+    _modo_analisis_p4 = getattr(getattr(proyecto, "configuracion", None), "modo_analisis", None)
+    usar_ventana = _modo_analisis_p4 == ModoAnalisis.VENTANA and not es_gran_escala
 
     with st.expander("Forzantes del aire y horizonte de simulación", expanded=False):
 
@@ -1952,7 +2267,28 @@ def render() -> None:
         n_dias = 1
         dias_consecutivos = False
         I_g_max_W_m2 = 0.0
-        if modo_calculo == "termodinamico":
+        if usar_ventana:
+            # Ventana de producción: horizonte = lapso de P1, forzantes reales.
+            tipo_forzantes = "real"
+            _vi = getattr(proyecto.configuracion, "ventana_inicio", None)
+            _vf = getattr(proyecto.configuracion, "ventana_fin", None)
+            _ndias_vent = (_vf - _vi).days if (_vi and _vf) else 0
+            st.info(
+                f"🗓️ **Ventana de producción**: el horizonte es el lapso definido en "
+                f"P1 ({_vi} → {_vf}, {_ndias_vent} días) con clima real horario "
+                "(multidía). "
+                + (
+                    "T_entrada = T_amb(t) (la cámara actúa como colector)."
+                    if es_caja
+                    else "Forzantes = colector hora a hora (día y noche) + clima NASA POWER."
+                )
+            )
+            if proyecto.clima is None or proyecto.clima.datos is None:
+                st.warning(
+                    "⚠️ La ventana de producción necesita clima real cargado en "
+                    "**P2 · Emplazamiento**."
+                )
+        elif modo_calculo == "termodinamico":
             real_ok, real_motivo = _disponibilidad_forzantes_reales(
                 st.session_state.get("p3_eval"),
                 proyecto,
@@ -2143,6 +2479,7 @@ def render() -> None:
         geo = GeometriaCamara(largo_m=largo, ancho_m=ancho, alto_m=alto)
         cons = ConstruccionCamara(
             cubierta_translucida_id=cubierta_id_sel,
+            cubierta_translucida_espesor_m=espesor_techo_m_sel,
             pared=pared_widget,
         )
         band = ConfiguracionBandejas(
@@ -2174,6 +2511,8 @@ def render() -> None:
             flujo=flujo,
             carga_producto=carga,
             modo_calculo=modo_calculo_override or modo_calculo,
+            tunel=tunel_cfg,
+            carros=carros_cfg,
         )
 
     # -----------------------------------------------------------------------
@@ -2213,6 +2552,7 @@ def render() -> None:
             geo = GeometriaCamara(largo_m=largo, ancho_m=ancho, alto_m=alto)
             cons = ConstruccionCamara(
                 cubierta_translucida_id=cubierta_id_sel,
+                cubierta_translucida_espesor_m=espesor_techo_m_sel,
                 pared=pared_widget,
             )
             band = ConfiguracionBandejas(
@@ -2244,6 +2584,8 @@ def render() -> None:
                 flujo=flujo,
                 carga_producto=carga,
                 modo_calculo=modo_calculo,
+                tunel=tunel_cfg,
+                carros=carros_cfg,
             )
             proyecto.camara = camara
 
@@ -2274,19 +2616,26 @@ def render() -> None:
 
         try:
             if modo_calculo == "termodinamico":
-                fz_aire = _construir_forzantes_termodinamico(
-                    tipo_forzantes=tipo_forzantes,
-                    T_op_K=T_op_K,
-                    HR_op=HR_op,
-                    caudal_kg_s=camara.flujo.caudal_masico_kg_s,
-                    T_amb_K=T_amb_calc_K,
-                    n_dias=n_dias,
-                    proyecto=proyecto,
-                    p3_eval=st.session_state.get("p3_eval"),
-                    I_g_max_W_m2=I_g_max_W_m2,
-                    P_Pa=P_proyecto_Pa,
-                    dias_consecutivos=dias_consecutivos,
-                )
+                if usar_ventana:
+                    fz_aire = _construir_forzantes_ventana(
+                        proyecto=proyecto,
+                        caudal_kg_s=camara.flujo.caudal_masico_kg_s,
+                        P_Pa=P_proyecto_Pa,
+                    )
+                else:
+                    fz_aire = _construir_forzantes_termodinamico(
+                        tipo_forzantes=tipo_forzantes,
+                        T_op_K=T_op_K,
+                        HR_op=HR_op,
+                        caudal_kg_s=camara.flujo.caudal_masico_kg_s,
+                        T_amb_K=T_amb_calc_K,
+                        n_dias=n_dias,
+                        proyecto=proyecto,
+                        p3_eval=st.session_state.get("p3_eval"),
+                        I_g_max_W_m2=I_g_max_W_m2,
+                        P_Pa=P_proyecto_Pa,
+                        dias_consecutivos=dias_consecutivos,
+                    )
                 t_max_efectivo = (
                     float(fz_aire.t_s[-1]) if fz_aire is not None else float(n_dias) * 24.0 * 3600.0
                 )
@@ -2320,9 +2669,13 @@ def render() -> None:
                         "n_dias": int(n_dias_efectivo),
                         "modo_forzantes": tipo_forzantes,
                         "horizonte_tipo": (
-                            "días reales consecutivos"
-                            if dias_consecutivos and n_dias > 1
-                            else ("día típico repetido" if n_dias > 1 else "1 día")
+                            "ventana de producción"
+                            if usar_ventana
+                            else (
+                                "días reales consecutivos"
+                                if dias_consecutivos and n_dias > 1
+                                else ("día típico repetido" if n_dias > 1 else "1 día")
+                            )
                         ),
                     }
                 else:

@@ -10,21 +10,23 @@ ingresan manualmente o se sugieren desde los datos NASA POWER de P2.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from calculos.balance_global import (
     ResultadosCompletos,
     ResultadosCompletosTransitorio,
     calcular_todo,
     calcular_todo_transitorio,
+    calcular_todo_ventana,
     resumen_camara,
 )
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
-from core.advertencias import Severidad
-from core.proyecto import ModoAnalisis
+from core.proyecto import ModoAnalisis, Tipologia
 from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
@@ -618,11 +620,11 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
         )
         lines += [
             f"  Año fuente          : {clima.anio}",
-            f"  Altitud NASA grid   : "
+            "  Altitud NASA grid   : "
             + (f"{clima.altitud_nasa_m:.1f} m" if clima.altitud_nasa_m is not None else "—"),
             f"  Horas disponibles   : {n_total}",
-            f"  T_amb media anual   : " + (f"{T_media_C:.1f} °C" if T_media_C is not None else "—"),
-            f"  GHI media anual     : "
+            "  T_amb media anual   : " + (f"{T_media_C:.1f} °C" if T_media_C is not None else "—"),
+            "  GHI media anual     : "
             + (f"{GHI_media:.0f} W/m²" if GHI_media is not None else "—"),
             f"  Calidad — huecos originales : {clima.calidad.n_huecos_originales}",
             f"  Calidad — interpoladas (h) : {clima.calidad.n_horas_interpoladas}",
@@ -663,6 +665,7 @@ def _texto_resultados_completo(
     HR_cam_pct: float,
 ) -> str:
     from datetime import date
+
     from core import catalogo
 
     def desc(cat_dict: dict, id_mat: str) -> str:
@@ -817,8 +820,8 @@ def _texto_resultados_completo(
                 float(_cam_show.T_prod_K[-1]) - 273.15 if len(_cam_show.T_prod_K) else 0.0
             )
             lines += [
-                f"  Modo cálculo  : termodinámico",
-                f"  Tiempo secado : "
+                "  Modo cálculo  : termodinámico",
+                "  Tiempo secado : "
                 + (f"{t_h_cam:.2f} h" if t_h_cam is not None else "no convergió"),
                 f"  Agua evap.    : {masa_cam:.3f} kg",
                 f"  X final       : {X_final:.4f} kg/kg ms",
@@ -923,6 +926,7 @@ def _json_resultados_completo(
 ) -> dict:
     """Snapshot completo reconstruible (dict) del prediseño."""
     from datetime import date
+
     from ui.p3_colector import _json_config_colector
     from ui.p4_camara import _json_config_camara
     from ui.p5_auxiliar import _json_config_auxiliar
@@ -1381,6 +1385,208 @@ def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> N
 
 
 # ---------------------------------------------------------------------------
+# Ventana de producción (gran escala)
+# ---------------------------------------------------------------------------
+
+
+def _slice_clima_ventana(clima, inicio, fin):
+    """Recorta el clima al lapso de la ventana (delegado a clima_calc, S41)."""
+    from calculos.clima_calc import slice_clima_ventana
+
+    return slice_clima_ventana(clima, inicio, fin)
+
+
+def _fig_perfil_tunel(res) -> go.Figure:
+    """Perfil espacial del túnel: X del producto y T del aire por zona."""
+    n = len(res.perfil_X_zonas)
+    zonas = list(range(1, n + 1))
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_trace(
+        go.Scatter(
+            x=zonas,
+            y=[float(x) for x in res.perfil_X_zonas],
+            name="X producto [kg/kg ms]",
+            mode="lines+markers",
+            line=dict(color="#1f77b4"),
+        ),
+        secondary_y=False,
+    )
+    if res.perfil_T_aire_zonas_K is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=zonas,
+                y=[float(t) - 273.15 for t in res.perfil_T_aire_zonas_K],
+                name="T aire [°C]",
+                mode="lines+markers",
+                line=dict(color="#d62728", dash="dot"),
+            ),
+            secondary_y=True,
+        )
+    fig.update_xaxes(title_text="Zona  (1 = fresco/entrada producto → N = seco/salida)")
+    fig.update_yaxes(title_text="X producto [kg/kg ms]", secondary_y=False)
+    fig.update_yaxes(title_text="T aire [°C]", secondary_y=True)
+    fig.update_layout(
+        title="Perfil espacial del túnel (régimen)",
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    return fig
+
+
+def _render_resultados_ventana(res, proyecto) -> None:
+    """Dashboard de producción del secador de gran escala sobre la ventana."""
+    if res.status == "error":
+        _mostrar_errores(res.advertencias)
+        return
+
+    dias = res.horizonte_s / 86400.0
+    st.subheader(f"Producción en la ventana — {res.subtipo.capitalize()}")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Producto seco", f"{res.masa_seca_producida_kg:,.0f} kg")
+    c2.metric(
+        "Tasa de régimen",
+        f"{res.tasa_regimen_kg_dia:,.1f} kg/día" if res.tasa_regimen_kg_dia else "—",
+    )
+    c3.metric("Agua evaporada", f"{res.masa_evaporada_kg:,.0f} kg")
+    c4.metric("Leña consumida", f"{res.lena_consumida_kg:,.0f} kg")
+    st.caption(f"Ventana simulada: {dias:.1f} días ({res.horizonte_s / 3600:.0f} h).")
+
+    if res.subtipo == "BATCH":
+        b1, b2, b3 = st.columns(3)
+        b1.metric("Lotes completos", f"{res.n_batches_completos}")
+        b2.metric(
+            "Tiempo medio / lote",
+            f"{res.t_secado_medio_s / 3600:.1f} h" if res.t_secado_medio_s else "—",
+        )
+        b3.metric("Lote en progreso", "Sí" if res.batch_en_progreso else "No")
+    else:  # SEMICONTINUO
+        s1, s2, s3 = st.columns(3)
+        s1.metric("Columnas descargadas", f"{res.n_avances}")
+        s2.metric(
+            "X salida (régimen)",
+            f"{res.X_salida_regimen:.3f}" if res.X_salida_regimen is not None else "—",
+        )
+        s3.metric(
+            "Throughput fresco",
+            f"{res.throughput_fresco_kg_dia:,.0f} kg/día" if res.throughput_fresco_kg_dia else "—",
+        )
+        if res.perfil_X_zonas is not None and len(res.perfil_X_zonas) > 0:
+            mostrar_plotly(_fig_perfil_tunel(res), nombre="perfil_tunel")
+
+    _render_carta_psicrometrica(res, proyecto)
+
+    if res.advertencias:
+        _mostrar_advertencias(res.advertencias)
+
+
+def _render_ventana(proyecto) -> None:
+    """Rama de P7 para tipología gran escala en modo VENTANA de producción."""
+    cfg = proyecto.configuracion
+    st.subheader("Ventana de producción (gran escala)")
+
+    inicio = getattr(cfg, "ventana_inicio", None)
+    fin = getattr(cfg, "ventana_fin", None)
+    subtipo = getattr(cfg, "subtipo_gran_escala", None)
+    if inicio is None or fin is None:
+        st.warning(
+            "⚠️ Configurá la **ventana de análisis** (fechas inicio/fin) en **P1** "
+            "antes de calcular la producción."
+        )
+        return
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Lapso", f"{(fin - inicio).days} días")
+    c2.metric("Desde → Hasta", f"{inicio} → {fin}")
+    c3.metric("Subtipo", subtipo.value.capitalize() if subtipo else "—")
+
+    clima = getattr(proyecto, "clima", None)
+    df_ventana, msg = _slice_clima_ventana(clima, inicio, fin)
+    if df_ventana is None:
+        st.info(
+            f"ℹ️ Para correr la ventana hace falta clima real horario. {msg} "
+            "Descargalo en **P2 · Emplazamiento**."
+        )
+        return
+
+    st.caption(
+        f"Clima del lapso: **{len(df_ventana)} horas** reales (NASA POWER, año {clima.anio})."
+    )
+    if clima.anio is not None and inicio.year != clima.anio:
+        st.warning(
+            f"⚠️ La ventana está definida en **{inicio.year}** pero el clima "
+            f"descargado es de **{clima.anio}**: se usan los datos de "
+            f"{clima.anio} mapeados por mes/día. Para el clima correcto, "
+            f"descargá el año {inicio.year} en P2."
+        )
+
+    st.divider()
+    if st.button("▶ Calcular ventana de producción", type="primary", key="p7_btn_ventana"):
+        import time as _time
+
+        _t0 = _time.perf_counter()
+        with st.spinner("Corriendo colector(t) + caño maestro + auxiliar(t) + cámara..."):
+            res = calcular_todo_ventana(proyecto, df_ventana)
+        st.session_state["p7_resultado_ventana"] = res
+        st.session_state["p7_t_calc_ventana_s"] = _time.perf_counter() - _t0
+
+    res = st.session_state.get("p7_resultado_ventana")
+    if res is None:
+        st.info("ℹ️ Presioná **Calcular** para evaluar la producción sobre la ventana.")
+        return
+
+    t_calc = st.session_state.get("p7_t_calc_ventana_s")
+    if t_calc is not None:
+        st.caption(f"⏱️ Cálculo en {t_calc:.1f} s.")
+    _render_resultados_ventana(res, proyecto)
+
+
+def _omega_amb_constantes(res, proyecto) -> Optional[float]:
+    """ω de entrada [kg/kg] en modo Constantes, desde HR_cam (P7) + T_ent + P.
+
+    En Constantes no hay forzantes con ω; la HR del aire de entrada la fija el
+    slider de P7 a la temperatura de entrada a la cámara.
+    """
+    from calculos.balance_global import presion_representativa_proyecto
+    from calculos.psicrometria import humedad_absoluta
+
+    T_in = getattr(res, "T_entrada_camara_K", None)
+    if T_in is None:
+        return None
+    try:
+        P_Pa, _ = presion_representativa_proyecto(proyecto)
+    except Exception:
+        P_Pa = 101325.0
+    HR = st.session_state.get("p7_HR_cam", _HR_CAMARA_DEFAULT_PCT) / 100.0
+    try:
+        return humedad_absoluta(HR, float(T_in), P_Pa)
+    except ValueError:
+        return None
+
+
+def _render_carta_psicrometrica(res, proyecto, *, omega_amb: Optional[float] = None) -> None:
+    """Carta psicrométrica del proceso (mejora 27). Silenciosa si no aplica."""
+    from ui.componentes.carta_psicrometrica import fig_carta_psicrometrica
+
+    fig = fig_carta_psicrometrica(res, proyecto, omega_amb=omega_amb)
+    if fig is None:
+        return
+    st.divider()
+    st.subheader("Carta psicrométrica del proceso")
+    st.caption(
+        "Estados del aire húmedo a lo largo del proceso, corregidos a la presión "
+        "del emplazamiento. El calentamiento en colector y auxiliar es **sensible** "
+        "(ω constante → tramos horizontales); en la cámara el aire **gana humedad**. "
+        "La isentálpica punteada es la referencia adiabática desde la entrada de "
+        "cámara: si la salida cae sobre ella el secado fue ≈ adiabático (cámara "
+        "indirecta); por encima, hubo aporte de calor (cámara directa con techo "
+        "translúcido). En modos con evolución temporal el estado mostrado es el de "
+        "máxima irradiancia (≈ mediodía solar)."
+    )
+    mostrar_plotly(fig, nombre="carta_psicrometrica")
+
+
+# ---------------------------------------------------------------------------
 # Render principal
 # ---------------------------------------------------------------------------
 
@@ -1406,9 +1612,21 @@ def render() -> None:
         return
 
     # -----------------------------------------------------------------------
+    # Rama gran escala: ventana de producción (autocontenida)
+    # -----------------------------------------------------------------------
+    # Solo GRAN_ESCALA usa el pipeline de producción (banco + caño maestro +
+    # túnel). Para CAJA/ARMARIO en modo VENTANA, el horizonte es un multidía
+    # real (mejora 35): cae al flujo transitorio normal de abajo, que levanta
+    # el horizonte persistido por P4 (p4_horizonte_resultado).
+    modo_analisis = getattr(proyecto.configuracion, "modo_analisis", None)
+    tipologia = getattr(proyecto.configuracion, "tipologia", None)
+    if modo_analisis == ModoAnalisis.VENTANA and tipologia == Tipologia.GRAN_ESCALA:
+        _render_ventana(proyecto)
+        return
+
+    # -----------------------------------------------------------------------
     # Panel anual prominente (modo ANUAL): vista principal arriba
     # -----------------------------------------------------------------------
-    modo_analisis = getattr(proyecto.configuracion, "modo_analisis", None)
     if modo_analisis == ModoAnalisis.ANUAL:
         res_anual = st.session_state.get("p4_resultado_anual")
         if res_anual is not None:
@@ -1515,6 +1733,7 @@ def render() -> None:
 
         res_tr = st.session_state["p7_resultados_tr"]
         _render_resultados_transitorios(res_tr, proyecto)
+        _render_carta_psicrometrica(res_tr, proyecto)
 
         # Botones de guardado para modo transitorio
         # (mismo bloque que en constantes, con condiciones representativas
@@ -1770,6 +1989,9 @@ def render() -> None:
         fig_bal = _fig_sankey_simplificado(res)
         if fig_bal:
             mostrar_plotly(fig_bal, nombre="balance_energetico")
+
+    # --- Carta psicrométrica del proceso (mejora 27) ---
+    _render_carta_psicrometrica(res, proyecto, omega_amb=_omega_amb_constantes(res, proyecto))
 
     # --- Resumen del ciclo ---
     st.subheader("Resumen del ciclo de secado")

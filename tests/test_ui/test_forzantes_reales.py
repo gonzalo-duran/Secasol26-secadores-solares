@@ -8,6 +8,7 @@ El refactor que permite estos tests: `_construir_forzantes_reales` y
 `_disponibilidad_forzantes_reales` reciben `p3_eval` como argumento explícito
 en vez de leer `st.session_state`.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -16,8 +17,15 @@ import pytest
 
 from calculos.psicrometria import humedad_absoluta
 from core.camara import (
-    Camara, CapaPared, CargaProducto, ConfiguracionBandejas, ConfiguracionFlujo,
-    ConstruccionCamara, GeometriaCamara, ForzantesAire, ParedCamara,
+    Camara,
+    CapaPared,
+    CargaProducto,
+    ConfiguracionBandejas,
+    ConfiguracionFlujo,
+    ConstruccionCamara,
+    GeometriaCamara,
+    ForzantesAire,
+    ParedCamara,
 )
 from core.clima import Clima
 from core.emplazamiento import Emplazamiento
@@ -27,10 +35,10 @@ from ui.p4_camara import (
     _disponibilidad_forzantes_reales,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 def _proyecto_con_clima_diario(anio: int = 2023) -> tuple[Proyecto, list[pd.Timestamp]]:
     """Proyecto mínimo con Emplazamiento Salta + 24 h de clima sintético.
@@ -41,7 +49,9 @@ def _proyecto_con_clima_diario(anio: int = 2023) -> tuple[Proyecto, list[pd.Time
     """
     empl = Emplazamiento()  # defaults: Salta
     horas_local = pd.date_range(
-        start=f"{anio}-06-15 00:00", periods=24, freq="h",
+        start=f"{anio}-06-15 00:00",
+        periods=24,
+        freq="h",
         tz=empl.zona_horaria,
     )
     # GHI sintético: semicampana positiva centrada al mediodía (h=12 → seno positivo).
@@ -85,6 +95,7 @@ def _p3_eval_diario(horas: list[pd.Timestamp]) -> dict:
 # Test: _disponibilidad_forzantes_reales
 # ---------------------------------------------------------------------------
 
+
 class TestDisponibilidad:
 
     def test_sin_p3_eval_falso(self):
@@ -103,7 +114,8 @@ class TestDisponibilidad:
         proy = Proyecto()
         proy.emplazamiento = Emplazamiento()
         ok, msg = _disponibilidad_forzantes_reales(
-            {"modo": "diario", "r": {}}, proy,
+            {"modo": "diario", "r": {}},
+            proy,
         )
         assert not ok
         assert "P2" in msg
@@ -119,13 +131,16 @@ class TestDisponibilidad:
 # Test: _construir_forzantes_reales
 # ---------------------------------------------------------------------------
 
+
 class TestConstruirForzantesReales:
 
     def test_diario_estructura_basica(self):
         proy, horas = _proyecto_con_clima_diario()
         fz = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
         assert isinstance(fz, ForzantesAire)
         assert len(fz.t_s) == 24
@@ -141,8 +156,10 @@ class TestConstruirForzantesReales:
         """Donde T_sal_col es None (noche) se rellena con T_amb local."""
         proy, horas = _proyecto_con_clima_diario()
         fz = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
         for i, ts in enumerate(horas):
             if ts.hour < 7 or ts.hour >= 19:
@@ -152,8 +169,10 @@ class TestConstruirForzantesReales:
         """Al pico solar (mediodía), T_ent > T_amb: el colector aporta calor."""
         proy, horas = _proyecto_con_clima_diario()
         fz = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
         # Buscamos la hora local con T_sal_col más alto del p3_eval (mediodía sintético).
         T_sal_C = _p3_eval_diario(horas)["r"]["T_salida_C"]
@@ -166,12 +185,16 @@ class TestConstruirForzantesReales:
     def test_multi_dia_replica_serie(self):
         proy, horas = _proyecto_con_clima_diario()
         fz1 = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
         fz3 = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=3,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=3,
         )
         assert len(fz3.t_s) == 3 * len(fz1.t_s)
         np.testing.assert_allclose(fz3.T_ent_K[:24], fz3.T_ent_K[24:48])
@@ -181,20 +204,22 @@ class TestConstruirForzantesReales:
         """ω(t) = humedad_absoluta(HR_NASA, T_amb_NASA(t), P_atm)."""
         proy, horas = _proyecto_con_clima_diario()
         fz = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
-        omega_esperado = np.array([
-            humedad_absoluta(0.40, float(T), 101325.0) for T in fz.T_amb_K
-        ])
+        omega_esperado = np.array([humedad_absoluta(0.40, float(T), 101325.0) for T in fz.T_amb_K])
         np.testing.assert_allclose(fz.omega_ent, omega_esperado, rtol=1e-9)
 
     def test_p3_anual_levanta(self):
         proy, _ = _proyecto_con_clima_diario()
         with pytest.raises(RuntimeError, match="P3"):
             _construir_forzantes_reales(
-                p3_eval={"modo": "anual", "r": {}}, proyecto=proy,
-                caudal_kg_s=0.060, n_dias=1,
+                p3_eval={"modo": "anual", "r": {}},
+                proyecto=proy,
+                caudal_kg_s=0.060,
+                n_dias=1,
             )
 
     def test_sin_clima_levanta(self):
@@ -203,13 +228,16 @@ class TestConstruirForzantesReales:
         with pytest.raises(RuntimeError, match="P2|clima"):
             _construir_forzantes_reales(
                 p3_eval={"modo": "diario", "r": {"horas": [], "T_salida_C": []}},
-                proyecto=proy, caudal_kg_s=0.060, n_dias=1,
+                proyecto=proy,
+                caudal_kg_s=0.060,
+                n_dias=1,
             )
 
 
 # ---------------------------------------------------------------------------
 # Smoke test end-to-end: forzantes reales alimentan al motor TD
 # ---------------------------------------------------------------------------
+
 
 class TestSmokeMotorTD:
     """Verifica que las forzantes reales sean consumibles por el motor
@@ -220,31 +248,44 @@ class TestSmokeMotorTD:
 
         proy, horas = _proyecto_con_clima_diario()
         fz = _construir_forzantes_reales(
-            p3_eval=_p3_eval_diario(horas), proyecto=proy,
-            caudal_kg_s=0.060, n_dias=1,
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proy,
+            caudal_kg_s=0.060,
+            n_dias=1,
         )
         cam = Camara(
             geometria=GeometriaCamara(largo_m=1.2, ancho_m=0.8, alto_m=1.5),
             construccion=ConstruccionCamara(
-                pared=ParedCamara(capas=[
-                    CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
-                ]),
+                pared=ParedCamara(
+                    capas=[
+                        CapaPared(
+                            material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"
+                        ),
+                    ]
+                ),
             ),
             bandejas=ConfiguracionBandejas(
-                n_bandejas=5, area_bandeja_m2=0.5,
-                espesor_capa_m=0.020, separacion_entre_bandejas_m=0.15,
+                n_bandejas=5,
+                area_bandeja_m2=0.5,
+                espesor_capa_m=0.020,
+                separacion_entre_bandejas_m=0.15,
             ),
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.060),
             carga_producto=CargaProducto(
-                producto_id="yacon", masa_total_kg=5.0,
-                humedad_inicial_X=9.0, humedad_objetivo_X=0.5,
+                producto_id="yacon",
+                masa_total_kg=5.0,
+                humedad_inicial_X=9.0,
+                humedad_objetivo_X=0.5,
                 modelo_capa_fina="page",
             ),
             modo_calculo="termodinamico",
         )
         res = calcular_camara(
-            cam, T_operacion_K=333.15, HR_operacion=0.15,
-            T_amb_K=298.15, t_max_s=float(fz.t_s[-1]),
+            cam,
+            T_operacion_K=333.15,
+            HR_operacion=0.15,
+            T_amb_K=298.15,
+            t_max_s=float(fz.t_s[-1]),
             forzantes_aire=fz,
         )
         assert res is not None

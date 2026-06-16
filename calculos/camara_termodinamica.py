@@ -52,8 +52,8 @@ from calculos.psicrometria import (
 from core.camara import ForzantesAire
 
 # Constantes físicas
-_CP_AGUA_LIQ_J_KGK: float = 4186.0   # cp del agua líquida (para cp_prod variable)
-_HR_SAT_UMBRAL: float = 0.95          # umbral para advertencia HR_flujo alta
+_CP_AGUA_LIQ_J_KGK: float = 4186.0  # cp del agua líquida (para cp_prod variable)
+_HR_SAT_UMBRAL: float = 0.95  # umbral para advertencia HR_flujo alta
 
 
 @dataclass(frozen=True)
@@ -108,6 +108,8 @@ def resolver_estado_camara(
     T_amb_K: float,
     P_Pa: float,
     aw_func: Callable[[float], float],
+    R_cond_techo_m2K_W: float = 0.0,
+    A_techo_m2: float = 0.0,
 ) -> EstadoCamara:
     """Resuelve el sistema algebraico de cámara (CSTR, cuasi-estacionario).
 
@@ -158,6 +160,13 @@ def resolver_estado_camara(
         T_amb_K: Temperatura ambiente externa [K].
         P_Pa: Presión total [Pa].
         aw_func: Función X → a_w (típicamente inversión GAB).
+        R_cond_techo_m2K_W: Resistencia conductiva del techo translúcido
+            (vidriado) = espesor / k_efectivo [m²·K/W]. Default 0 → sin techo
+            translúcido (la cara del techo ya está en A_cuerpo como opaca).
+        A_techo_m2: Área del techo translúcido [m²]. Default 0 → techo opaco.
+            Cuando > 0, suma al balance una pérdida UA_techo = A_techo /
+            (1/h_conv + R_cond_techo + 1/h_w), sin afectar la reconstrucción
+            de los nodos de la pared opaca.
 
     Returns:
         EstadoCamara con T_flujo, ω_flujo, ṁ_w, q_prod, q_pared, T_cam_int,
@@ -169,37 +178,21 @@ def resolver_estado_camara(
     """
     # --- Validación dura ---
     if m_dot_as_kg_s <= 0:
-        raise ValueError(
-            f"CAM_TD_M_DOT_NO_POSITIVO: ṁ_as={m_dot_as_kg_s:.4f} kg/s ≤ 0."
-        )
+        raise ValueError(f"CAM_TD_M_DOT_NO_POSITIVO: ṁ_as={m_dot_as_kg_s:.4f} kg/s ≤ 0.")
     if A_prod_m2 < 0:
-        raise ValueError(
-            f"CAM_TD_A_PROD_NEGATIVA: A_prod={A_prod_m2:.3f} m² < 0."
-        )
+        raise ValueError(f"CAM_TD_A_PROD_NEGATIVA: A_prod={A_prod_m2:.3f} m² < 0.")
     if A_cuerpo_m2 < 0:
-        raise ValueError(
-            f"CAM_TD_A_CUERPO_NEGATIVA: A_cuerpo={A_cuerpo_m2:.3f} m² < 0."
-        )
+        raise ValueError(f"CAM_TD_A_CUERPO_NEGATIVA: A_cuerpo={A_cuerpo_m2:.3f} m² < 0.")
     if h_conv_W_m2K < 0:
-        raise ValueError(
-            f"CAM_TD_H_CONV_NEGATIVO: h_conv={h_conv_W_m2K:.2f} W/(m²·K) < 0."
-        )
+        raise ValueError(f"CAM_TD_H_CONV_NEGATIVO: h_conv={h_conv_W_m2K:.2f} W/(m²·K) < 0.")
     if K_m_kg_m2s < 0:
-        raise ValueError(
-            f"CAM_TD_KM_NEGATIVO: K_m={K_m_kg_m2s:.4f} kg/(m²·s) < 0."
-        )
+        raise ValueError(f"CAM_TD_KM_NEGATIVO: K_m={K_m_kg_m2s:.4f} kg/(m²·s) < 0.")
     if h_w_W_m2K < 0:
-        raise ValueError(
-            f"CAM_TD_H_W_NEGATIVO: h_w={h_w_W_m2K:.2f} W/(m²·K) < 0."
-        )
+        raise ValueError(f"CAM_TD_H_W_NEGATIVO: h_w={h_w_W_m2K:.2f} W/(m²·K) < 0.")
     if k_aisl_W_mK < 0:
-        raise ValueError(
-            f"CAM_TD_K_AISL_NEGATIVA: k_aisl={k_aisl_W_mK:.4f} W/(m·K) < 0."
-        )
+        raise ValueError(f"CAM_TD_K_AISL_NEGATIVA: k_aisl={k_aisl_W_mK:.4f} W/(m·K) < 0.")
     if esp_cam_m <= 0:
-        raise ValueError(
-            f"CAM_TD_ESP_CAM_NO_POSITIVO: esp_cam={esp_cam_m:.4f} m ≤ 0."
-        )
+        raise ValueError(f"CAM_TD_ESP_CAM_NO_POSITIVO: esp_cam={esp_cam_m:.4f} m ≤ 0.")
     if P_Pa <= 0:
         raise ValueError(f"CAM_TD_P_NO_POSITIVA: P={P_Pa:.1f} Pa ≤ 0.")
 
@@ -214,9 +207,7 @@ def resolver_estado_camara(
     # ṁ_as·(ω_flujo − ω_ent) = K_A·(ω_sup − ω_flujo)
     # ⇒ ω_flujo·(ṁ_as + K_A) = ṁ_as·ω_ent + K_A·ω_sup
     K_A = K_m_kg_m2s * A_prod_m2  # [kg/s]
-    omega_flujo = (
-        m_dot_as_kg_s * omega_ent_kg_kg + K_A * omega_sup
-    ) / (m_dot_as_kg_s + K_A)
+    omega_flujo = (m_dot_as_kg_s * omega_ent_kg_kg + K_A * omega_sup) / (m_dot_as_kg_s + K_A)
 
     # --- 3) Caudal de evaporación (signo: + evap, − condensación) ---
     m_dot_w = m_dot_as_kg_s * (omega_flujo - omega_ent_kg_kg)
@@ -228,11 +219,7 @@ def resolver_estado_camara(
     if k_aisl_W_mK == 0.0 or h_conv_W_m2K == 0.0 or h_w_W_m2K == 0.0:
         U_total = 0.0
     else:
-        R_total = (
-            1.0 / h_conv_W_m2K
-            + esp_cam_m / k_aisl_W_mK
-            + 1.0 / h_w_W_m2K
-        )
+        R_total = 1.0 / h_conv_W_m2K + esp_cam_m / k_aisl_W_mK + 1.0 / h_w_W_m2K
         U_total = 1.0 / R_total
 
     # --- 5) Resolución de (b) — lineal en T_flujo ---
@@ -248,17 +235,31 @@ def resolver_estado_camara(
     UA_c = U_total * A_cuerpo_m2
     hA_p = h_conv_W_m2K * A_prod_m2
 
+    # Pérdida conductiva del techo translúcido (vidriado): U_techo en serie con
+    # los mismos films interior (h_conv) y exterior (h_w McAdams) que la pared.
+    # A_techo=0 (techo opaco, ya contado en A_cuerpo) → UA_techo=0, sin efecto.
+    if A_techo_m2 > 0.0 and R_cond_techo_m2K_W > 0.0 and h_conv_W_m2K > 0.0 and h_w_W_m2K > 0.0:
+        U_techo = 1.0 / (1.0 / h_conv_W_m2K + R_cond_techo_m2K_W + 1.0 / h_w_W_m2K)
+        UA_techo = U_techo * A_techo_m2
+    else:
+        UA_techo = 0.0
+    # Pérdida total al ambiente (pared opaca + techo vidriado) en el balance.
+    UA_loss = UA_c + UA_techo
+
     numerador = (
         m_dot_as_kg_s * cp_hum_flujo * _T_REF
         + m_dot_as_kg_s * (h_ent - omega_flujo * _LV_0)
-        + UA_c * T_amb_K
+        + UA_loss * T_amb_K
         + hA_p * T_prod_K
         + m_dot_w * h_v_prod
     )
-    denominador = m_dot_as_kg_s * cp_hum_flujo + UA_c + hA_p
+    denominador = m_dot_as_kg_s * cp_hum_flujo + UA_loss + hA_p
     T_flujo = numerador / denominador
 
     # --- Diagnósticos ---
+    # q_pared = flujo por la pared OPACA (reconstruye los nodos T_cam_int/ext con
+    # la geometría opaca). La pérdida del techo entra al balance vía UA_loss pero
+    # no a esta reconstrucción.
     q_prod = hA_p * (T_flujo - T_prod_K)
     q_pared = UA_c * (T_flujo - T_amb_K)
 
@@ -401,6 +402,10 @@ def simular_secado(
     tau_cubierta_solar: float = 0.0,
     alfa_producto_solar: float = 0.6,
     A_rad_m2: float = 0.0,
+    # Pérdida conductiva del techo translúcido (vidriado). Defaults 0 → techo
+    # opaco (su cara ya está contada en A_cuerpo_m2 como pared opaca).
+    R_cond_techo_m2K_W: float = 0.0,
+    A_techo_m2: float = 0.0,
     # Límite térmico del producto (None → sin evento de daño)
     T_max_admisible_K: float | None = None,
     # Solver
@@ -450,35 +455,22 @@ def simular_secado(
     """
     # --- Validación de inputs propios del motor ---
     if m_seco_prod_kg <= 0:
-        raise ValueError(
-            f"MOTOR_TD_M_SECO_NO_POSITIVA: m_seco={m_seco_prod_kg:.3f} kg ≤ 0."
-        )
+        raise ValueError(f"MOTOR_TD_M_SECO_NO_POSITIVA: m_seco={m_seco_prod_kg:.3f} kg ≤ 0.")
     if c_ps_J_kgK <= 0:
-        raise ValueError(
-            f"MOTOR_TD_CP_PROD_NO_POSITIVA: c_ps={c_ps_J_kgK:.1f} "
-            "J/(kg·K) ≤ 0."
-        )
+        raise ValueError(f"MOTOR_TD_CP_PROD_NO_POSITIVA: c_ps={c_ps_J_kgK:.1f} " "J/(kg·K) ≤ 0.")
     if T_prod_inicial_K <= 0:
-        raise ValueError(
-            f"MOTOR_TD_T_INICIAL_NO_POSITIVA: T_inicial={T_prod_inicial_K:.2f} K ≤ 0."
-        )
+        raise ValueError(f"MOTOR_TD_T_INICIAL_NO_POSITIVA: T_inicial={T_prod_inicial_K:.2f} K ≤ 0.")
     if X_prod_inicial_kg_kg < 0:
-        raise ValueError(
-            f"MOTOR_TD_X_INICIAL_NEGATIVA: X_inicial={X_prod_inicial_kg_kg:.4f} < 0."
-        )
+        raise ValueError(f"MOTOR_TD_X_INICIAL_NEGATIVA: X_inicial={X_prod_inicial_kg_kg:.4f} < 0.")
     if X_prod_objetivo_kg_kg < 0:
-        raise ValueError(
-            f"MOTOR_TD_X_OBJ_NEGATIVA: X_obj={X_prod_objetivo_kg_kg:.4f} < 0."
-        )
+        raise ValueError(f"MOTOR_TD_X_OBJ_NEGATIVA: X_obj={X_prod_objetivo_kg_kg:.4f} < 0.")
     # Determinar horizonte
     t_max_forz = float(forzantes.t_s[-1])
     if t_max_s is None:
         t_max_s_eff = t_max_forz
     else:
         if t_max_s <= 0:
-            raise ValueError(
-                f"MOTOR_TD_T_MAX_NO_POSITIVO: t_max={t_max_s:.1f} s ≤ 0."
-            )
+            raise ValueError(f"MOTOR_TD_T_MAX_NO_POSITIVO: t_max={t_max_s:.1f} s ≤ 0.")
         t_max_s_eff = min(float(t_max_s), t_max_forz)
 
     advertencias: list[str] = []
@@ -507,7 +499,7 @@ def simular_secado(
         m_dot = _interp(m_dot_fz, t)
         T_amb = _interp(T_amb_fz, t)
         v_w = _interp(v_viento_fz, t)
-        h_w = 5.7 + 3.8 * v_w   # McAdams
+        h_w = 5.7 + 3.8 * v_w  # McAdams
         return T_ent, omega_ent, m_dot, T_amb, h_w
 
     def _Q_rad_t(t: float) -> float:
@@ -574,6 +566,8 @@ def simular_secado(
             T_amb_K=T_amb,
             P_Pa=P_Pa,
             aw_func=aw_func,
+            R_cond_techo_m2K_W=R_cond_techo_m2K_W,
+            A_techo_m2=A_techo_m2,
         )
 
     # --- Estado mutable para diagnóstico de política B y HR alta ---
@@ -641,6 +635,7 @@ def simular_secado(
     eventos: list = [_event_X_obj]
 
     if T_max_admisible_K is not None:
+
         def _event_T_max(t: float, y: np.ndarray) -> float:
             return y[0] - float(T_max_admisible_K)
 
@@ -684,7 +679,8 @@ def simular_secado(
     # --- Determinar status y t_secado ---
     eventos_X_obj_t = sol.t_events[0] if len(sol.t_events) > 0 else np.array([])
     eventos_T_max_t = (
-        sol.t_events[1] if (T_max_admisible_K is not None and len(sol.t_events) > 1)
+        sol.t_events[1]
+        if (T_max_admisible_K is not None and len(sol.t_events) > 1)
         else np.array([])
     )
 
@@ -786,5 +782,435 @@ def simular_secado(
         horas_clipeo_nocturno_s=horas_clipeo,
         horas_HR_alta_s=horas_hr_alta,
         T_max_alcanzada_K=float(np.max(sol.y[0])) if n > 0 else float(T_prod_inicial_K),
+        advertencias=advertencias,
+    )
+
+
+# ===========================================================================
+# S40 — Motor de cámara semicontinuo: cascada de N zonas a contracorriente
+# ===========================================================================
+#
+# Túnel de secado tipo ADITAL: N columnas de carros en serie. El aire marcha
+# de la zona N−1 (extremo seco/caliente, recibe el aire del colector+auxiliar)
+# hacia la zona 0 (extremo fresco/húmedo, descarga el aire al ambiente). El
+# producto avanza en sentido OPUESTO: entra fresco por la zona 0 y se descarga
+# seco por la zona N−1. Cada `intervalo_avance_s` las columnas avanzan una
+# posición (cadencia fija → sequedad de salida emergente).
+#
+# Reutiliza `resolver_estado_camara` (CSTR de una zona) intacto: para la zona i
+# el aire de entrada es la salida de la zona i+1 (la vecina más caliente). Solo
+# la zona N−1 recibe el aire de las forzantes (colector/auxiliar).
+#
+# Estado integrado: y = [T_0, X_0, T_1, X_1, ..., T_{N-1}, X_{N-1}] (2N vars).
+# Por evaluación del RHS se marcha el aire N−1 → 0 (N solves algebraicos
+# secuenciales, SIN Picard: el producto está dado en cada instante), y cada
+# zona integra su EDO de producto. Los avances de columna son saltos discretos
+# del estado: se integra un tramo de `intervalo_avance_s` con solve_ivp y luego
+# se reinicializa (zona i ← producto de zona i−1; zona 0 ← carga fresca; zona
+# N−1 → descarga). Decisiones de diseño S40: ver bitácora y plan industrial.
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class ResultadoCascada:
+    """Salida del motor semicontinuo (túnel a contracorriente).
+
+    Atributos:
+        n_zonas: Número de zonas (columnas) de la cascada.
+        intervalo_avance_s: Cadencia de avance de columnas [s] = residencia por
+            zona. La residencia total de un carro es n_zonas × intervalo.
+        n_avances: Número de avances (columnas descargadas) simulados.
+        X_salida_por_avance: X del producto descargado en cada avance
+            [kg/kg seco], shape (n_avances,). Sequedad emergente.
+        T_prod_salida_por_avance_K: T del producto descargado en cada avance [K].
+        masa_evaporada_por_avance_kg: Agua evaporada de cada columna descargada
+            [kg] = m_seco·(X_inicial − X_salida).
+        X_salida_regimen: X de salida en régimen estacionario (promedio del
+            último ciclo completo) [kg/kg seco]. ``None`` si no se alcanzó el
+            régimen (n_avances < n_zonas, túnel aún llenándose).
+        throughput_fresco_kg_s: Caudal de producto fresco procesado [kg/s] =
+            masa_fresca_columna / intervalo_avance.
+        masa_seca_producida_total_kg: Σ masa de producto descargado (a su X de
+            salida) sobre todos los avances [kg].
+        masa_evaporada_total_kg: Agua total evaporada (columnas descargadas +
+            residual en el túnel al final) [kg].
+        X_perfil_zonas: Perfil espacial de X por zona al final [kg/kg seco],
+            shape (n_zonas,). Zona 0 = fresco, zona N−1 = seco.
+        T_prod_perfil_zonas_K: Perfil de T de producto por zona al final [K].
+        T_aire_perfil_zonas_K: Perfil de T del aire por zona al final [K]
+            (reconstruido del último estado). Zona N−1 = más caliente.
+        omega_aire_perfil_zonas: Perfil de ω del aire por zona al final [kg/kg as].
+        status: 'regimen_alcanzado' | 'llenando' | 'error'.
+        T_max_alcanzada_K: Máxima T_prod registrada en cualquier zona/instante [K].
+        advertencias: Lista de códigos/mensajes.
+    """
+
+    n_zonas: int
+    intervalo_avance_s: float
+    n_avances: int
+    X_salida_por_avance: np.ndarray
+    T_prod_salida_por_avance_K: np.ndarray
+    masa_evaporada_por_avance_kg: np.ndarray
+    X_salida_regimen: float | None
+    throughput_fresco_kg_s: float
+    masa_seca_producida_total_kg: float
+    masa_evaporada_total_kg: float
+    X_perfil_zonas: np.ndarray
+    T_prod_perfil_zonas_K: np.ndarray
+    T_aire_perfil_zonas_K: np.ndarray
+    omega_aire_perfil_zonas: np.ndarray
+    status: str
+    T_max_alcanzada_K: float = 0.0
+    advertencias: list[str] = field(default_factory=list)
+
+
+def simular_cascada(
+    *,
+    n_zonas: int,
+    intervalo_avance_s: float,
+    n_avances: int | None = None,
+    # Estado inicial del producto fresco (idéntico para cada carga nueva)
+    T_prod_inicial_K: float,
+    X_prod_inicial_kg_kg: float,
+    X_prod_objetivo_kg_kg: float,
+    # Propiedades del producto (por columna)
+    m_seco_por_zona_kg: float,
+    c_ps_J_kgK: float,
+    # Boundary del aire (colector/auxiliar) — entra a la zona N−1
+    forzantes: ForzantesAire,
+    # Geometría por zona
+    A_prod_por_zona_m2: float,
+    A_cuerpo_por_zona_m2: float,
+    # Coeficientes de transporte interior (escalares congelados por defecto)
+    h_conv_W_m2K: float,
+    K_m_kg_m2s: float,
+    k_aisl_W_mK: float,
+    esp_cam_m: float,
+    P_Pa: float,
+    aw_func: Callable[[float], float],
+    coef_transporte_func: Callable[[float, float, float, float], tuple[float, float]] | None = None,
+    # Radiación solar directa (túnel translúcido — normalmente opaco → 0)
+    tau_cubierta_solar: float = 0.0,
+    alfa_producto_solar: float = 0.6,
+    A_rad_por_zona_m2: float = 0.0,
+    # Pérdida conductiva del techo translúcido por zona (normalmente opaco → 0)
+    R_cond_techo_m2K_W: float = 0.0,
+    A_techo_por_zona_m2: float = 0.0,
+    T_max_admisible_K: float | None = None,
+    rtol: float = 1e-6,
+    atol: float = 1e-9,
+) -> ResultadoCascada:
+    """Simula el túnel semicontinuo a contracorriente (cascada de N zonas).
+
+    Cadencia fija: cada ``intervalo_avance_s`` las columnas avanzan una
+    posición; la sequedad de salida es emergente (no se ajusta la cadencia
+    para alcanzar X_objetivo — X_objetivo solo sirve para avisar sub/sobre-secado).
+
+    El túnel arranca **lleno de producto fresco** (condición realista al inicio
+    de campaña). Tras ~n_zonas avances se alcanza el régimen estacionario.
+
+    Para ``n_zonas == 1`` se reduce a un único CSTR de un solo paso de aire
+    (equivalente a un batch que se descarga/recarga cada intervalo), lo que
+    permite verificar consistencia con ``simular_secado``.
+
+    Args:
+        n_zonas: Número de columnas en serie (≥ 1).
+        intervalo_avance_s: Cadencia de avance = residencia por zona [s] (> 0).
+        n_avances: Número de avances a simular. Si None, se deriva del horizonte
+            de las forzantes: floor(t_max_forz / intervalo_avance_s), mínimo 1.
+        T_prod_inicial_K, X_prod_inicial_kg_kg: Estado del producto fresco.
+        X_prod_objetivo_kg_kg: Humedad objetivo (solo para avisos sub/sobre-seco).
+        m_seco_por_zona_kg: Masa seca de producto por columna [kg].
+        c_ps_J_kgK: Calor específico del sólido seco [J/(kg·K)].
+        forzantes: Serie horaria del aire que entra a la zona N−1 (salida del
+            colector/auxiliar): T_ent, ω_ent, ṁ_as, T_amb, v_viento, I_g.
+        A_prod_por_zona_m2, A_cuerpo_por_zona_m2: Áreas por zona.
+        h_conv_W_m2K, K_m_kg_m2s: Coeficientes interiores (escalares congelados;
+            se recalculan por paso si se pasa coef_transporte_func).
+        k_aisl_W_mK, esp_cam_m, P_Pa, aw_func: Idénticos a simular_secado.
+        coef_transporte_func: Coeficientes variables en t (opcional).
+        T_max_admisible_K: Si se da, se avisa (no se detiene) si alguna zona
+            supera ese umbral.
+
+    Returns:
+        ResultadoCascada con la sequedad emergente por avance, el throughput de
+        régimen, totales de producción/evaporación y el perfil espacial final.
+
+    Raises:
+        ValueError: Para parámetros físicamente inválidos.
+    """
+    # --- Validación ---
+    if n_zonas < 1:
+        raise ValueError(f"CASCADA_N_ZONAS_INVALIDO: n_zonas={n_zonas} < 1.")
+    if intervalo_avance_s <= 0:
+        raise ValueError(
+            f"CASCADA_INTERVALO_NO_POSITIVO: intervalo_avance_s={intervalo_avance_s:.1f} s ≤ 0."
+        )
+    if m_seco_por_zona_kg <= 0:
+        raise ValueError(
+            f"CASCADA_M_SECO_NO_POSITIVA: m_seco_por_zona={m_seco_por_zona_kg:.3f} kg ≤ 0."
+        )
+    if c_ps_J_kgK <= 0:
+        raise ValueError(f"CASCADA_CP_NO_POSITIVA: c_ps={c_ps_J_kgK:.1f} ≤ 0.")
+    if X_prod_inicial_kg_kg < 0 or X_prod_objetivo_kg_kg < 0:
+        raise ValueError("CASCADA_X_NEGATIVA: X_inicial/X_objetivo deben ser ≥ 0.")
+
+    t_max_forz = float(forzantes.t_s[-1])
+    if n_avances is None:
+        n_avances = max(1, int(np.floor(t_max_forz / intervalo_avance_s)))
+    elif n_avances < 1:
+        raise ValueError(f"CASCADA_N_AVANCES_INVALIDO: n_avances={n_avances} < 1.")
+
+    advertencias: list[str] = []
+
+    # --- Interpoladores de forzantes (idéntico a simular_secado) ---
+    t_fz = np.asarray(forzantes.t_s, dtype=float)
+    T_ent_fz = np.asarray(forzantes.T_ent_K, dtype=float)
+    omega_ent_fz = np.asarray(forzantes.omega_ent, dtype=float)
+    m_dot_fz = np.asarray(forzantes.m_dot_aire_seco_kg_s, dtype=float)
+    T_amb_fz = np.asarray(forzantes.T_amb_K, dtype=float)
+    v_viento_fz = np.asarray(forzantes.v_viento_ms, dtype=float)
+    I_g_fz = np.asarray(forzantes.I_g_W_m2, dtype=float)
+
+    _Q_rad_factor = tau_cubierta_solar * alfa_producto_solar * A_rad_por_zona_m2
+
+    def _interp(arr: np.ndarray, t: float) -> float:
+        t_clip = max(t_fz[0], min(t_fz[-1], t))
+        return float(np.interp(t_clip, t_fz, arr))
+
+    def _boundary_t(t: float) -> tuple[float, float, float, float, float]:
+        T_ent = _interp(T_ent_fz, t)
+        omega_ent = _interp(omega_ent_fz, t)
+        m_dot = _interp(m_dot_fz, t)
+        T_amb = _interp(T_amb_fz, t)
+        v_w = _interp(v_viento_fz, t)
+        h_w = 5.7 + 3.8 * v_w
+        return T_ent, omega_ent, m_dot, T_amb, h_w
+
+    def _Q_rad_t(t: float) -> float:
+        if _Q_rad_factor == 0.0:
+            return 0.0
+        return _Q_rad_factor * max(0.0, _interp(I_g_fz, t))
+
+    def _resolver_zona(
+        T_prod: float,
+        X_prod: float,
+        T_ent_zona: float,
+        omega_ent_zona: float,
+        m_dot: float,
+        T_amb: float,
+        h_w: float,
+        K_m_override: float | None = None,
+    ) -> EstadoCamara:
+        """Resuelve el CSTR de una zona dado el aire que le entra (de la vecina
+        más caliente o, para la zona N−1, de las forzantes)."""
+        X_safe = max(X_prod, 0.0)
+        if coef_transporte_func is not None:
+            h_conv_local, K_m_base = coef_transporte_func(T_ent_zona, T_prod, omega_ent_zona, m_dot)
+        else:
+            h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
+        K_m_usado = K_m_override if K_m_override is not None else K_m_base
+        return resolver_estado_camara(
+            T_prod_K=T_prod,
+            X_prod_kg_kg=X_safe,
+            T_ent_K=T_ent_zona,
+            omega_ent_kg_kg=omega_ent_zona,
+            A_prod_m2=A_prod_por_zona_m2,
+            A_cuerpo_m2=A_cuerpo_por_zona_m2,
+            m_dot_as_kg_s=m_dot,
+            h_conv_W_m2K=h_conv_local,
+            K_m_kg_m2s=K_m_usado,
+            h_w_W_m2K=h_w,
+            k_aisl_W_mK=k_aisl_W_mK,
+            esp_cam_m=esp_cam_m,
+            T_amb_K=T_amb,
+            P_Pa=P_Pa,
+            aw_func=aw_func,
+            R_cond_techo_m2K_W=R_cond_techo_m2K_W,
+            A_techo_m2=A_techo_por_zona_m2,
+        )
+
+    def _march_aire(y: np.ndarray, t: float, aplicar_politica_B: bool) -> list[EstadoCamara]:
+        """Marcha el aire de la zona N−1 → 0 y devuelve el EstadoCamara de cada
+        zona (índice de lista = índice de zona)."""
+        T_ent0, omega_ent0, m_dot, T_amb, h_w = _boundary_t(t)
+        estados: list[EstadoCamara | None] = [None] * n_zonas
+        T_ent_i, omega_ent_i = T_ent0, omega_ent0  # aire que entra a la zona N−1
+        for i in range(n_zonas - 1, -1, -1):
+            T_prod_i, X_prod_i = y[2 * i], y[2 * i + 1]
+            est = _resolver_zona(T_prod_i, X_prod_i, T_ent_i, omega_ent_i, m_dot, T_amb, h_w)
+            if aplicar_politica_B and est.m_dot_w_kg_s < 0.0:
+                est = _resolver_zona(
+                    T_prod_i,
+                    X_prod_i,
+                    T_ent_i,
+                    omega_ent_i,
+                    m_dot,
+                    T_amb,
+                    h_w,
+                    K_m_override=0.0,
+                )
+            estados[i] = est
+            # el aire que sale de la zona i entra a la zona i−1
+            T_ent_i, omega_ent_i = est.T_flujo_K, est.omega_flujo_kg_kg
+        return estados  # type: ignore[return-value]
+
+    diag = {"T_max": float(T_prod_inicial_K)}
+
+    def _rhs(t: float, y: np.ndarray) -> np.ndarray:
+        estados = _march_aire(y, t, aplicar_politica_B=True)
+        Q_rad = _Q_rad_t(t)
+        dydt = np.zeros(2 * n_zonas)
+        for i in range(n_zonas):
+            T_prod_i, X_prod_i = y[2 * i], y[2 * i + 1]
+            est = estados[i]
+            X_safe = max(X_prod_i, 0.0)
+            C_thermal = m_seco_por_zona_kg * (c_ps_J_kgK + _CP_AGUA_LIQ_J_KGK * X_safe)
+            T_prod_safe = min(373.0, max(250.0, T_prod_i))
+            L_v = calor_latente_vaporizacion(T_prod_safe)
+            dydt[2 * i] = (est.q_prod_W + Q_rad - est.m_dot_w_kg_s * L_v) / C_thermal
+            dydt[2 * i + 1] = -est.m_dot_w_kg_s / m_seco_por_zona_kg
+            if T_prod_i > diag["T_max"]:
+                diag["T_max"] = float(T_prod_i)
+        return dydt
+
+    # --- Estado inicial: túnel lleno de producto fresco ---
+    y = np.tile([float(T_prod_inicial_K), float(X_prod_inicial_kg_kg)], n_zonas)
+
+    X_salida: list[float] = []
+    T_salida: list[float] = []
+    m_evap_avance: list[float] = []
+    status = "error"
+
+    for k in range(n_avances):
+        t0 = k * intervalo_avance_s
+        t1 = (k + 1) * intervalo_avance_s
+        if t0 >= t_max_forz:
+            # Sin más clima disponible; detener el llenado.
+            break
+        t1_eff = min(t1, t_max_forz)
+        sol = solve_ivp(
+            _rhs,
+            t_span=(t0, t1_eff),
+            y0=y,
+            method="LSODA",
+            rtol=rtol,
+            atol=atol,
+            max_step=3600.0,
+        )
+        if not sol.success:
+            advertencias.append(f"CASCADA_SOLVE_IVP_FALLO (avance {k}): {sol.message}")
+            return ResultadoCascada(
+                n_zonas=n_zonas,
+                intervalo_avance_s=intervalo_avance_s,
+                n_avances=len(X_salida),
+                X_salida_por_avance=np.asarray(X_salida),
+                T_prod_salida_por_avance_K=np.asarray(T_salida),
+                masa_evaporada_por_avance_kg=np.asarray(m_evap_avance),
+                X_salida_regimen=None,
+                throughput_fresco_kg_s=0.0,
+                masa_seca_producida_total_kg=0.0,
+                masa_evaporada_total_kg=0.0,
+                X_perfil_zonas=y[1::2].copy(),
+                T_prod_perfil_zonas_K=y[0::2].copy(),
+                T_aire_perfil_zonas_K=np.array([]),
+                omega_aire_perfil_zonas=np.array([]),
+                status="error",
+                T_max_alcanzada_K=diag["T_max"],
+                advertencias=advertencias,
+            )
+        y = sol.y[:, -1].copy()
+
+        # --- Descarga de la zona N−1 (extremo seco) ---
+        X_desc = max(0.0, float(y[2 * (n_zonas - 1) + 1]))
+        T_desc = float(y[2 * (n_zonas - 1)])
+        X_salida.append(X_desc)
+        T_salida.append(T_desc)
+        m_evap_avance.append(m_seco_por_zona_kg * max(0.0, X_prod_inicial_kg_kg - X_desc))
+
+        # --- Avance de columnas: zona i ← zona i−1; zona 0 ← carga fresca ---
+        if n_zonas >= 2:
+            for i in range(n_zonas - 1, 0, -1):
+                y[2 * i] = y[2 * (i - 1)]
+                y[2 * i + 1] = y[2 * (i - 1) + 1]
+        y[0] = float(T_prod_inicial_K)
+        y[1] = float(X_prod_inicial_kg_kg)
+
+    n_av_real = len(X_salida)
+    if n_av_real == 0:
+        raise ValueError(
+            "CASCADA_HORIZONTE_INSUFICIENTE: el horizonte de forzantes "
+            f"({t_max_forz:.0f} s) no cubre un intervalo de avance "
+            f"({intervalo_avance_s:.0f} s)."
+        )
+
+    # --- Régimen: estado estacionario tras n_zonas avances ---
+    X_salida_arr = np.asarray(X_salida)
+    if n_av_real >= n_zonas:
+        X_salida_regimen = float(np.mean(X_salida_arr[n_zonas - 1 :]))
+        status = "regimen_alcanzado"
+    else:
+        X_salida_regimen = None
+        status = "llenando"
+        advertencias.append(
+            f"CASCADA_REGIMEN_NO_ALCANZADO: se simularon {n_av_real} avances pero el "
+            f"túnel necesita ≥ {n_zonas} para llenarse. La sequedad de salida aún "
+            "está en transitorio."
+        )
+
+    # --- Avisos de sub/sobre-secado (sobre el régimen, si existe) ---
+    X_ref = X_salida_regimen if X_salida_regimen is not None else float(X_salida_arr[-1])
+    if X_ref > X_prod_objetivo_kg_kg * 1.10:
+        advertencias.append(
+            f"CASCADA_SUBSECADO: el producto de salida (X={X_ref:.3f}) supera el "
+            f"objetivo (X_obj={X_prod_objetivo_kg_kg:.3f}). Reducí la cadencia "
+            "(intervalo de avance mayor) o agregá zonas."
+        )
+    elif X_ref < X_prod_objetivo_kg_kg * 0.90:
+        advertencias.append(
+            f"CASCADA_SOBRESECADO: el producto de salida (X={X_ref:.3f}) está por "
+            f"debajo del objetivo (X_obj={X_prod_objetivo_kg_kg:.3f}). Podés acelerar "
+            "la cadencia (intervalo menor) para mayor throughput."
+        )
+    if T_max_admisible_K is not None and diag["T_max"] > T_max_admisible_K:
+        advertencias.append(
+            f"CASCADA_DANO_TERMICO: T_prod alcanzó {diag['T_max'] - 273.15:.1f} °C "
+            f"(> T_max={T_max_admisible_K - 273.15:.1f} °C) en alguna zona."
+        )
+
+    # --- Producción y throughput ---
+    m_fresca_columna = m_seco_por_zona_kg * (1.0 + X_prod_inicial_kg_kg)
+    throughput_fresco = m_fresca_columna / intervalo_avance_s
+    masa_seca_producida = float(np.sum(m_seco_por_zona_kg * (1.0 + X_salida_arr)))
+    # Evaporado: columnas descargadas + residual aún en el túnel al final.
+    m_evap_descargado = float(np.sum(m_evap_avance))
+    X_residual = np.clip(y[1::2], 0.0, None)
+    m_evap_residual = float(
+        np.sum(m_seco_por_zona_kg * np.maximum(0.0, X_prod_inicial_kg_kg - X_residual))
+    )
+    masa_evap_total = m_evap_descargado + m_evap_residual
+
+    # --- Perfil espacial final + reconstrucción del aire ---
+    estados_final = _march_aire(y, min((n_av_real) * intervalo_avance_s, t_max_forz), True)
+    T_aire_perfil = np.array([e.T_flujo_K for e in estados_final])
+    omega_perfil = np.array([e.omega_flujo_kg_kg for e in estados_final])
+
+    return ResultadoCascada(
+        n_zonas=n_zonas,
+        intervalo_avance_s=intervalo_avance_s,
+        n_avances=n_av_real,
+        X_salida_por_avance=X_salida_arr,
+        T_prod_salida_por_avance_K=np.asarray(T_salida),
+        masa_evaporada_por_avance_kg=np.asarray(m_evap_avance),
+        X_salida_regimen=X_salida_regimen,
+        throughput_fresco_kg_s=throughput_fresco,
+        masa_seca_producida_total_kg=masa_seca_producida,
+        masa_evaporada_total_kg=masa_evap_total,
+        X_perfil_zonas=y[1::2].copy(),
+        T_prod_perfil_zonas_K=y[0::2].copy(),
+        T_aire_perfil_zonas_K=T_aire_perfil,
+        omega_aire_perfil_zonas=omega_perfil,
+        status=status,
+        T_max_alcanzada_K=diag["T_max"],
         advertencias=advertencias,
     )

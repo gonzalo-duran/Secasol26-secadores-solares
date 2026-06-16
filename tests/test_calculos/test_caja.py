@@ -36,7 +36,6 @@ from core.proyecto import (
     Tipologia,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -48,13 +47,19 @@ def _camara_caja(*, cubierta_id: str | None = "vidrio_comun") -> Camara:
         geometria=GeometriaCamara(largo_m=0.6, ancho_m=0.4, alto_m=0.3),
         construccion=ConstruccionCamara(
             cubierta_translucida_id=cubierta_id,
-            pared=ParedCamara(capas=[
-                CapaPared(material_id="lana_vidrio_media", espesor_m=0.040, catalogo="aislantes"),
-            ]),
+            pared=ParedCamara(
+                capas=[
+                    CapaPared(
+                        material_id="lana_vidrio_media", espesor_m=0.040, catalogo="aislantes"
+                    ),
+                ]
+            ),
         ),
         bandejas=ConfiguracionBandejas(
-            n_bandejas=1, area_bandeja_m2=0.20,
-            espesor_capa_m=0.01, separacion_entre_bandejas_m=0.15,
+            n_bandejas=1,
+            area_bandeja_m2=0.20,
+            espesor_capa_m=0.01,
+            separacion_entre_bandejas_m=0.15,
         ),
         flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.005),  # convección natural baja
         carga_producto=CargaProducto(
@@ -121,13 +126,14 @@ class TestMotorTDConCaja:
         omega_amb = humedad_absoluta(0.40, T_amb_K)
         fz = construir_serie_sintetica_dia_tipo(
             T_sal_col_promedio_K=T_amb_K,
-            T_sal_col_amplitud_K=0.0,        # sin colector → T_ent constante a T_amb
+            T_sal_col_amplitud_K=0.0,  # sin colector → T_ent constante a T_amb
             omega_amb=omega_amb,
             m_dot_aire_seco_kg_s=camara.flujo.caudal_masico_kg_s,
             T_amb_promedio_K=T_amb_K,
             T_amb_amplitud_K=5.0,
             I_g_max_W_m2=800.0,
-            n_horas=24, n_dias=2,
+            n_horas=24,
+            n_dias=2,
         )
 
         res = calcular_camara(
@@ -161,7 +167,8 @@ class TestMotorTDConCaja:
             T_amb_promedio_K=T_amb_K,
             T_amb_amplitud_K=0.0,
             I_g_max_W_m2=0.0,
-            n_horas=24, n_dias=1,
+            n_horas=24,
+            n_dias=1,
         )
 
         res = calcular_camara(

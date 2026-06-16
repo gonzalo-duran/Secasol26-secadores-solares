@@ -30,9 +30,12 @@ from core.camara import (
 from core.colector import Colector
 from core.motor import Motor, TipoAccionamiento
 from core.proyecto import (
-    Configuracion, Meta, ModoAnalisis, Proyecto, Tipologia,
+    Configuracion,
+    Meta,
+    ModoAnalisis,
+    Proyecto,
+    Tipologia,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -59,9 +62,13 @@ def _forzantes_dia_sintetico(n_horas: int = 24):
     )
 
 
-def _proyecto_armario(*, con_auxiliar: bool = False, con_motor: bool = True,
-                       set_point_aux_C: float | None = None,
-                       disponible_nocturno: bool = True) -> Proyecto:
+def _proyecto_armario(
+    *,
+    con_auxiliar: bool = False,
+    con_motor: bool = True,
+    set_point_aux_C: float | None = None,
+    disponible_nocturno: bool = True,
+) -> Proyecto:
     p = Proyecto(
         meta=Meta(nombre="Test P7 TR", autor="pytest"),
         configuracion=Configuracion(
@@ -73,8 +80,10 @@ def _proyecto_armario(*, con_auxiliar: bool = False, con_motor: bool = True,
     p.camara = Camara(
         geometria=GeometriaCamara(largo_m=1.5, ancho_m=1.0, alto_m=1.5),
         bandejas=ConfiguracionBandejas(
-            n_bandejas=3, area_bandeja_m2=0.5,
-            espesor_capa_m=0.02, separacion_entre_bandejas_m=0.15,
+            n_bandejas=3,
+            area_bandeja_m2=0.5,
+            espesor_capa_m=0.02,
+            separacion_entre_bandejas_m=0.15,
         ),
         flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.030),
         carga_producto=CargaProducto(
@@ -120,7 +129,8 @@ class TestSinAuxiliar:
         assert res.auxiliar is None
         assert res.energia_auxiliar_MJ == 0.0
         np.testing.assert_allclose(
-            res.forzantes_aplicadas.T_ent_K, res.forzantes_base.T_ent_K,
+            res.forzantes_aplicadas.T_ent_K,
+            res.forzantes_base.T_ent_K,
         )
 
     def test_motor_electrico_se_integra(self):
@@ -167,7 +177,9 @@ class TestConAuxiliar:
     def test_disponible_nocturno_false_apaga_de_noche(self):
         """Con disponible_nocturno=False, ΔT_aux=0 cuando I_g=0."""
         proy = _proyecto_armario(
-            con_auxiliar=True, set_point_aux_C=70.0, disponible_nocturno=False,
+            con_auxiliar=True,
+            set_point_aux_C=70.0,
+            disponible_nocturno=False,
         )
         fz = _forzantes_dia_sintetico()
         res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
@@ -281,14 +293,27 @@ class TestChimeneaTransitoria:
         res = calcular_todo_transitorio(proy, forzantes_base=fz, n_dias=1)
         ch = res.chimenea
         assert ch is not None
-        for k in ("iteraciones", "convergio", "delta_T_chim_final_K",
-                  "m_promedio_kgs", "m_max_kgs", "horas_sin_tiro"):
+        for k in (
+            "iteraciones",
+            "convergio",
+            "delta_T_chim_final_K",
+            "m_promedio_kgs",
+            "m_max_kgs",
+            "horas_sin_tiro",
+        ):
             assert k in ch, f"falta {k!r}"
         # Series horarias del mismo largo que t_s
         N = len(fz.t_s)
-        for k in ("m_punto_kgs", "v_chim_ms", "delta_P_tiro_Pa",
-                  "delta_P_chimenea_Pa", "delta_P_resto_Pa",
-                  "Re_chimenea", "T_chim_K", "t_s"):
+        for k in (
+            "m_punto_kgs",
+            "v_chim_ms",
+            "delta_P_tiro_Pa",
+            "delta_P_chimenea_Pa",
+            "delta_P_resto_Pa",
+            "Re_chimenea",
+            "T_chim_K",
+            "t_s",
+        ):
             assert len(ch[k]) == N, f"{k!r} tiene shape {len(ch[k])}, esperado {N}"
 
     def test_picard_converge(self):
@@ -333,9 +358,7 @@ class TestChimeneaTransitoria:
         # T_ent es T_sal_col; con colector re-corrido cambia).
         assert res.auxiliar is None
         Δ = np.abs(res.forzantes_aplicadas.T_ent_K - fz.T_ent_K)
-        assert Δ.max() > 1.0, (
-            f"T_sal_col no se re-calculó (Δ máx = {Δ.max():.2f} K)"
-        )
+        assert Δ.max() > 1.0, f"T_sal_col no se re-calculó (Δ máx = {Δ.max():.2f} K)"
 
     def test_picard_con_POA_difiere_de_picard_con_GHI(self):
         """El acople con POA distinto a GHI debe dar T_sal_col distinto y, por
@@ -348,6 +371,7 @@ class TestChimeneaTransitoria:
         # Fz "con POA inflada 25%": simula un caso donde POA > GHI (típico
         # de colector con tilt en invierno hemisferio Sur).
         from core.camara import ForzantesAire as _FZA
+
         fz_con_poa = _FZA(
             t_s=fz_base.t_s.copy(),
             T_ent_K=fz_base.T_ent_K.copy(),
@@ -387,22 +411,28 @@ class TestChimeneaTransitoria:
     def test_caja_con_chimenea_transitoria_funciona(self):
         """CAJA (sin colector) + chimenea + TD: lazo se resuelve sin colector."""
         from core.camara import ConstruccionCamara
+
         proy = Proyecto(
             configuracion=Configuracion(
-                tipologia=Tipologia.CAJA, modo_analisis=ModoAnalisis.DIARIO,
+                tipologia=Tipologia.CAJA,
+                modo_analisis=ModoAnalisis.DIARIO,
             ),
         )
         proy.camara = Camara(
             geometria=GeometriaCamara(largo_m=1.0, ancho_m=0.8, alto_m=1.2),
             bandejas=ConfiguracionBandejas(
-                n_bandejas=3, area_bandeja_m2=0.20,
-                espesor_capa_m=0.015, separacion_entre_bandejas_m=0.06,
+                n_bandejas=3,
+                area_bandeja_m2=0.20,
+                espesor_capa_m=0.015,
+                separacion_entre_bandejas_m=0.06,
             ),
             construccion=ConstruccionCamara(cubierta_translucida_id="vidrio_comun"),
             flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.020),
             carga_producto=CargaProducto(
-                producto_id="manzana", masa_total_kg=3.0,
-                humedad_inicial_X=4.6, humedad_objetivo_X=0.15,
+                producto_id="manzana",
+                masa_total_kg=3.0,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
                 modelo_capa_fina="logaritmico",
             ),
             modo_calculo="termodinamico",

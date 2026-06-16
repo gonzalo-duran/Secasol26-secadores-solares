@@ -378,3 +378,43 @@ def test_slice_consecutivo_trunca_en_borde_de_anio():
     assert n_ef == 2  # solo 30 y 31 de diciembre disponibles
     assert trunc is True
     assert len(sl) == 48
+
+
+# ---------------------------------------------------------------------------
+# slice_clima_ventana (S41 — compartido por P2/P3/P7)
+# ---------------------------------------------------------------------------
+
+from calculos.clima_calc import slice_clima_ventana  # noqa: E402
+from core.clima import Clima  # noqa: E402
+
+
+def test_slice_ventana_normal():
+    """Ventana interior al año: devuelve el lapso completo con df no-None."""
+    clima = Clima(datos=_df_multidia_dic(2022), anio=2022)
+    df, msg = slice_clima_ventana(clima, date(2022, 12, 5), date(2022, 12, 12))
+    assert df is not None
+    assert msg == ""
+    assert len(df) == 8 * 24  # 5 al 12 inclusive
+
+
+def test_slice_ventana_mapea_anio_del_clima():
+    """Ventana definida en otro año: se mapea por mes/día al año del clima."""
+    clima = Clima(datos=_df_multidia_dic(2022), anio=2022)
+    df, msg = slice_clima_ventana(clima, date(2023, 12, 5), date(2023, 12, 8))
+    assert df is not None
+    assert df.index[0].year == 2022
+
+
+def test_slice_ventana_sin_clima():
+    """Sin clima descargado → (None, mensaje)."""
+    df, msg = slice_clima_ventana(None, date(2022, 12, 5), date(2022, 12, 8))
+    assert df is None
+    assert "Sin datos" in msg
+
+
+def test_slice_ventana_lapso_fuera_de_datos():
+    """Lapso que no intersecta los datos (clima solo de diciembre) → None."""
+    clima = Clima(datos=_df_multidia_dic(2022), anio=2022)
+    df, msg = slice_clima_ventana(clima, date(2022, 3, 1), date(2022, 3, 8))
+    assert df is None
+    assert "no intersecta" in msg

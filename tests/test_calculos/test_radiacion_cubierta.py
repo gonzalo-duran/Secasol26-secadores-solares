@@ -21,7 +21,6 @@ from calculos.camara_termodinamica import simular_secado
 from calculos.psicrometria import humedad_absoluta
 from core.camara import ConstruccionCamara, ForzantesAire
 
-
 # ---------------------------------------------------------------------------
 # Fixture: kwargs nominales para simular_secado
 # ---------------------------------------------------------------------------
@@ -84,9 +83,7 @@ class TestConstruccionCubierta:
 
     def test_A_rad_no_positiva_falla(self):
         with pytest.raises(ValueError, match="CONS_A_RAD_NO_POSITIVA"):
-            ConstruccionCamara(
-                cubierta_translucida_id="vidrio_comun", A_rad_m2=-1.0
-            )
+            ConstruccionCamara(cubierta_translucida_id="vidrio_comun", A_rad_m2=-1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +160,7 @@ class TestMotorConRadiacion:
         Q_rad_teorico_W = 0.85 * 0.6 * 1.0 * I_g
         assert res_trans.Q_rad_W[0] == pytest.approx(Q_rad_teorico_W, rel=1e-6)
         # El secado debe acelerarse (puede saltar el evento X_obj antes).
-        if (res_opaco.t_secado_s is not None and res_trans.t_secado_s is not None):
+        if res_opaco.t_secado_s is not None and res_trans.t_secado_s is not None:
             assert res_trans.t_secado_s < res_opaco.t_secado_s
         # T_max del producto debe ser mayor con radiación.
         assert res_trans.T_max_alcanzada_K > res_opaco.T_max_alcanzada_K
@@ -195,8 +192,7 @@ class TestMotorConRadiacion:
         media_sin = float(np.mean(res_sin.T_prod_K[:n_min]))
         media_con = float(np.mean(res_con.T_prod_K[:n_min]))
         assert media_con > media_sin, (
-            f"T_prod no se elevó con radiación (sin={media_sin:.2f} K, "
-            f"con={media_con:.2f} K)."
+            f"T_prod no se elevó con radiación (sin={media_sin:.2f} K, " f"con={media_con:.2f} K)."
         )
 
 
@@ -244,7 +240,8 @@ class TestSinteticoIg:
             omega_amb=0.01,
             m_dot_aire_seco_kg_s=0.03,
             I_g_max_W_m2=I_g_max,
-            n_horas=24, n_dias=3,
+            n_horas=24,
+            n_dias=3,
         )
         assert len(fz.I_g_W_m2) == 72
         # Pico de cada día (índices 12, 36, 60) ≈ I_g_max

@@ -16,6 +16,7 @@ from calculos.auxiliar_calc import calcular_auxiliar
 from core.advertencias import Severidad
 from core.auxiliar import (
     Auxiliar,
+    CargaArranque,
     ModoOperacionAuxiliar,
     TipoAuxiliar,
     advertencias_auxiliar,
@@ -132,6 +133,14 @@ def _texto_config_auxiliar(aux: "Auxiliar") -> str:
         if aux.tension_V:
             i_aprox = aux.potencia_efectiva_W() / aux.tension_V
             lines.append(f"  Corriente estimada : {i_aprox:.2f} A (P_efec / V, cos φ = 1)")
+    if aux.cargas_arranque:
+        lines += ["", "CALENDARIO DE ARRANQUE (híbrido mañana/tarde)"]
+        for i, c in enumerate(aux.cargas_arranque, start=1):
+            lines.append(
+                f"  Carga {i}: inicio {c.hora_inicio_h:.1f} h · duración {c.duracion_h:.1f} h"
+            )
+        cobertura = sum(c.duracion_h for c in aux.cargas_arranque)
+        lines.append(f"  Cobertura total    : {cobertura:.1f} h/día")
     if aux.notas:
         lines += ["", "NOTAS", f"  {aux.notas}"]
 
@@ -186,6 +195,13 @@ def _from_json_auxiliar(data: dict) -> "Auxiliar":
             if re_dict.get("corriente_maxima_A") is not None
             else None
         ),
+        cargas_arranque=[
+            CargaArranque(
+                hora_inicio_h=float(c["hora_inicio_h"]),
+                duracion_h=float(c["duracion_h"]),
+            )
+            for c in (data.get("cargas_arranque") or [])
+        ],
         notas=data.get("notas") or "",
     )
 
@@ -206,6 +222,10 @@ def _json_config_auxiliar(aux: "Auxiliar") -> dict:
         "temperatura_maxima_salida_K": aux.temperatura_maxima_salida_K,
         "set_point_T_K": aux.set_point_T_K,
         "disponible_nocturno": aux.disponible_nocturno,
+        "cargas_arranque": [
+            {"hora_inicio_h": c.hora_inicio_h, "duracion_h": c.duracion_h}
+            for c in aux.cargas_arranque
+        ],
         "notas": aux.notas,
     }
     if aux.tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
@@ -567,6 +587,65 @@ def render() -> None:
                     )
 
     # -----------------------------------------------------------------------
+    # Calendario de arranque (híbrido mañana/tarde) — opcional
+    # -----------------------------------------------------------------------
+    cargas_list: list[CargaArranque] = []
+    with st.expander("🌅 Calendario de arranque (híbrido mañana/tarde)", expanded=False):
+        st.caption(
+            "Por defecto el auxiliar opera **de día** (cuando hay sol, según I_g) "
+            "salvo que habilites operación nocturna. Si en cambio cargás un "
+            "**calendario de arranque**, el quemador opera **solo en esas ventanas "
+            "horarias** (mañana y/o atardecer), independiente del sol — el patrón del "
+            "secador híbrido solar-biomasa estilo ADITAL, donde el colector cubre el "
+            "mediodía y la leña arranca/refuerza en los bordes del día. Aplica a los "
+            "modos transitorios (Día real, multi-día y ventana de producción)."
+        )
+        cargas_prev = aux_prev.cargas_arranque if aux_prev is not None else []
+        usar_cal = st.checkbox(
+            "Usar calendario de arranque",
+            value=bool(cargas_prev),
+            help="Sin tildar: el auxiliar opera por irradiancia (comportamiento por defecto).",
+        )
+        if usar_cal:
+            n_def = len(cargas_prev) if cargas_prev else 2
+            n_cargas = st.number_input(
+                "Número de cargas diarias",
+                min_value=1,
+                max_value=6,
+                value=int(n_def),
+                step=1,
+            )
+            _def = [(6.0, 3.0), (18.0, 3.0)]  # mañana / atardecer
+            for i in range(int(n_cargas)):
+                h_prev = cargas_prev[i].hora_inicio_h if i < len(cargas_prev) else _def[i % 2][0]
+                d_prev = cargas_prev[i].duracion_h if i < len(cargas_prev) else _def[i % 2][1]
+                cc1, cc2 = st.columns(2)
+                hi = cc1.number_input(
+                    f"Carga {i + 1} — hora de inicio [h]",
+                    min_value=0.0,
+                    max_value=23.5,
+                    value=float(h_prev),
+                    step=0.5,
+                    format="%.1f",
+                    key=f"p5_carga_hi_{i}",
+                )
+                du = cc2.number_input(
+                    f"Carga {i + 1} — duración [h]",
+                    min_value=0.5,
+                    max_value=24.0,
+                    value=float(d_prev),
+                    step=0.5,
+                    format="%.1f",
+                    key=f"p5_carga_du_{i}",
+                )
+                cargas_list.append(CargaArranque(hora_inicio_h=float(hi), duracion_h=float(du)))
+            horas_cubiertas = sum(c.duracion_h for c in cargas_list)
+            st.caption(
+                f"⏱️ Cobertura total: **{horas_cubiertas:.1f} h/día** en "
+                f"{len(cargas_list)} ventana(s). Fuera de ellas el auxiliar queda apagado."
+            )
+
+    # -----------------------------------------------------------------------
     # Botón: aplicar configuración del auxiliar
     # -----------------------------------------------------------------------
     st.divider()
@@ -586,6 +665,7 @@ def render() -> None:
                 PCI_MJ_kg=PCI_val,
                 eficiencia_quemador=eta_quemador_val,
                 tension_V=tension_val,
+                cargas_arranque=cargas_list,
             )
             proyecto.auxiliar = auxiliar
         except (ValueError, NotImplementedError) as exc:

@@ -37,37 +37,37 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 # Condiciones del aire (representativas de secado solar en Salta, día típico)
-T_OP_K      = 333.15   # 60 °C — temperatura de operación en cámara
-HR_OP       = 0.15     # 15 % HR — aire caliente y seco
-T_AMB_K     = 298.15   # 25 °C — temperatura ambiente exterior
-P_PA        = 87000.0  # Pa — presión atmosférica Salta (~1187 m snm)
+T_OP_K = 333.15  # 60 °C — temperatura de operación en cámara
+HR_OP = 0.15  # 15 % HR — aire caliente y seco
+T_AMB_K = 298.15  # 25 °C — temperatura ambiente exterior
+P_PA = 87000.0  # Pa — presión atmosférica Salta (~1187 m snm)
 
 # Geometría de la cámara (armario estándar de referencia)
-LARGO_M     = 1.2
-ANCHO_M     = 0.8
-ALTO_M      = 1.5
-N_BANDEJAS  = 5
-AREA_BAND   = 0.50      # m² por bandeja
-ESP_CAPA    = 0.020     # m espesor de capa de producto
-SEP_BAND    = 0.15      # m separación entre bandejas
-U_MUROS     = 0.5       # W/m²K conductancia muros
+LARGO_M = 1.2
+ANCHO_M = 0.8
+ALTO_M = 1.5
+N_BANDEJAS = 5
+AREA_BAND = 0.50  # m² por bandeja
+ESP_CAPA = 0.020  # m espesor de capa de producto
+SEP_BAND = 0.15  # m separación entre bandejas
+U_MUROS = 0.5  # W/m²K conductancia muros
 
 # Flujo de aire
-M_DOT_KG_S  = 0.060     # kg/s aire seco
+M_DOT_KG_S = 0.060  # kg/s aire seco
 
 # Producto — yacón
-MASA_KG     = 5.0       # kg totales (fresco)
-X_0         = 9.0       # kg agua / kg ms  (90 % bh)
-X_OBJ       = 0.50      # kg agua / kg ms  (~33 % bh — objetivo secado solar)
+MASA_KG = 5.0  # kg totales (fresco)
+X_0 = 9.0  # kg agua / kg ms  (90 % bh)
+X_OBJ = 0.50  # kg agua / kg ms  (~33 % bh — objetivo secado solar)
 
 # Horizonte de simulación
-HORIZONTE_H = 96        # horas (4 días)
-N_DIAS_C    = 4         # Motor C: cuántos días replicar el sintético
+HORIZONTE_H = 96  # horas (4 días)
+N_DIAS_C = 4  # Motor C: cuántos días replicar el sintético
 
 # Amplitudes del día sintético (Motor C)
-T_SAL_COL_AMP_K  = 15.0  # ±15 K en T_sal_col (pico al mediodía)
-T_AMB_AMP_K      = 5.0   # ±5 K en T_amb
-V_VIENTO_MS      = 2.0   # constante en el sintético
+T_SAL_COL_AMP_K = 15.0  # ±15 K en T_sal_col (pico al mediodía)
+T_AMB_AMP_K = 5.0  # ±5 K en T_amb
+V_VIENTO_MS = 2.0  # constante en el sintético
 
 # ---------------------------------------------------------------------------
 # Imports del proyecto
@@ -86,13 +86,16 @@ from core.camara import (
     ParedCamara,
 )
 
-PARED_AISLADA = ParedCamara(capas=[
-    CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
-])  # U_cond ≈ 0.5 W/(m²·K)
+PARED_AISLADA = ParedCamara(
+    capas=[
+        CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
+    ]
+)  # U_cond ≈ 0.5 W/(m²·K)
 
 # ---------------------------------------------------------------------------
 # Helper: construir objeto Camara yacón
 # ---------------------------------------------------------------------------
+
 
 def _camara_yacon(modo: str) -> Camara:
     return Camara(
@@ -120,6 +123,7 @@ def _camara_yacon(modo: str) -> Camara:
 # Motor A — capa fina estático
 # ---------------------------------------------------------------------------
 
+
 def correr_motor_A():
     print("  [A] Motor capa fina estático...")
     cam = _camara_yacon("capa_fina")
@@ -129,6 +133,7 @@ def correr_motor_A():
 # ---------------------------------------------------------------------------
 # Motor B — termodinámico TD con forzantes constantes
 # ---------------------------------------------------------------------------
+
 
 def correr_motor_B():
     print("  [B] Motor termodinámico — forzantes constantes...")
@@ -147,6 +152,7 @@ def correr_motor_B():
 # ---------------------------------------------------------------------------
 # Motor C — termodinámico TD con forzantes sintéticas día/noche
 # ---------------------------------------------------------------------------
+
 
 def correr_motor_C():
     print("  [C] Motor termodinámico — forzantes sintéticas día/noche...")
@@ -176,6 +182,7 @@ def correr_motor_C():
 # ---------------------------------------------------------------------------
 # Extraer métricas comparables
 # ---------------------------------------------------------------------------
+
 
 def extraer_metricas(res_A, res_B, res_C) -> dict:
     """Devuelve dict con métricas clave de cada motor."""
@@ -230,18 +237,20 @@ def extraer_metricas(res_A, res_B, res_C) -> dict:
 # Formatear reporte
 # ---------------------------------------------------------------------------
 
+
 def formatear_reporte(m: dict) -> str:
-    def fh(v): return f"{v:.2f} h" if v is not None else "NO CONVERGIÓ"
-    def fc(v): return f"{v:.3f} kg/kg ms" if v is not None else "—"
+    def fh(v):
+        return f"{v:.2f} h" if v is not None else "NO CONVERGIÓ"
 
-    diff_BA = ((m["t_B_h"] - m["t_A_h"]) / m["t_A_h"] * 100
-               if m["t_B_h"] and m["t_A_h"] else None)
-    diff_CA = ((m["t_C_h"] - m["t_A_h"]) / m["t_A_h"] * 100
-               if m["t_C_h"] and m["t_A_h"] else None)
-    diff_CB = ((m["t_C_h"] - m["t_B_h"]) / m["t_B_h"] * 100
-               if m["t_C_h"] and m["t_B_h"] else None)
+    def fc(v):
+        return f"{v:.3f} kg/kg ms" if v is not None else "—"
 
-    def fp(v): return f"{v:+.1f}%" if v is not None else "—"
+    diff_BA = (m["t_B_h"] - m["t_A_h"]) / m["t_A_h"] * 100 if m["t_B_h"] and m["t_A_h"] else None
+    diff_CA = (m["t_C_h"] - m["t_A_h"]) / m["t_A_h"] * 100 if m["t_C_h"] and m["t_A_h"] else None
+    diff_CB = (m["t_C_h"] - m["t_B_h"]) / m["t_B_h"] * 100 if m["t_C_h"] and m["t_B_h"] else None
+
+    def fp(v):
+        return f"{v:+.1f}%" if v is not None else "—"
 
     adv_A_str = "\n      ".join(m["adv_A"]) if m["adv_A"] else "(ninguna)"
     adv_B_str = "\n      ".join(m["adv_B"]) if m["adv_B"] else "(ninguna)"
@@ -269,16 +278,22 @@ def formatear_reporte(m: dict) -> str:
         "DETALLES MOTOR B (termodinámico, constantes):",
         f"  status                : {m['status_B']}",
         f"  masa evaporada        : {m['masa_evap_B']:.3f} kg",
-        (f"  T_prod final          : {m['T_prod_fin_B']-273.15:.1f} °C"
-         if m["T_prod_fin_B"] else "  T_prod final          : —"),
+        (
+            f"  T_prod final          : {m['T_prod_fin_B']-273.15:.1f} °C"
+            if m["T_prod_fin_B"]
+            else "  T_prod final          : —"
+        ),
         f"  T_max alcanzada       : {m['T_max_B']-273.15:.1f} °C",
         f"  horas clipeo (pol. B) : {m['horas_clipeo_B']:.1f} h",
         "",
         "DETALLES MOTOR C (termodinámico, día sintético):",
         f"  status                : {m['status_C']}",
         f"  masa evaporada        : {m['masa_evap_C']:.3f} kg",
-        (f"  T_prod final          : {m['T_prod_fin_C']-273.15:.1f} °C"
-         if m["T_prod_fin_C"] else "  T_prod final          : —"),
+        (
+            f"  T_prod final          : {m['T_prod_fin_C']-273.15:.1f} °C"
+            if m["T_prod_fin_C"]
+            else "  T_prod final          : —"
+        ),
         f"  T_max alcanzada       : {m['T_max_C']-273.15:.1f} °C",
         f"  horas clipeo (pol. B) : {m['horas_clipeo_C']:.1f} h",
         f"  horas HR > 95 %       : {m['horas_HR_alta_C']:.1f} h",
@@ -338,6 +353,7 @@ def formatear_reporte(m: dict) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     print("\nValidación cruzada — Yacón (motor termodinámico consolidado)")

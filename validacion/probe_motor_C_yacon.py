@@ -37,9 +37,11 @@ from core.camara import (
 LARGO_M, ANCHO_M, ALTO_M = 1.2, 0.8, 1.5
 N_BANDEJAS, AREA_BAND = 5, 0.50
 ESP_CAPA, SEP_BAND = 0.020, 0.15
-PARED_AISLADA = ParedCamara(capas=[
-    CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
-])  # R = 0.080/0.040 = 2.0 m²K/W → U_cond = 0.5 W/(m²·K)
+PARED_AISLADA = ParedCamara(
+    capas=[
+        CapaPared(material_id="lana_vidrio_media", espesor_m=0.080, catalogo="aislantes"),
+    ]
+)  # R = 0.080/0.040 = 2.0 m²K/W → U_cond = 0.5 W/(m²·K)
 M_DOT = 0.060
 P_PA = 87000.0
 T_AMB_K = 298.15
@@ -54,8 +56,10 @@ def _camara(masa_kg: float, X_obj: float) -> Camara:
         geometria=GeometriaCamara(largo_m=LARGO_M, ancho_m=ANCHO_M, alto_m=ALTO_M),
         construccion=ConstruccionCamara(pared=PARED_AISLADA),
         bandejas=ConfiguracionBandejas(
-            n_bandejas=N_BANDEJAS, area_bandeja_m2=AREA_BAND,
-            espesor_capa_m=ESP_CAPA, separacion_entre_bandejas_m=SEP_BAND,
+            n_bandejas=N_BANDEJAS,
+            area_bandeja_m2=AREA_BAND,
+            espesor_capa_m=ESP_CAPA,
+            separacion_entre_bandejas_m=SEP_BAND,
         ),
         flujo=ConfiguracionFlujo(caudal_masico_kg_s=M_DOT),
         carga_producto=CargaProducto(
@@ -98,8 +102,10 @@ def correr_TD(T_op_C, HR, masa_kg, X_obj, horizonte_h=96, n_dias=4):
 
 
 def main():
-    print(f"{'T_op':>5} {'HR':>5} {'masa':>5} {'X_obj':>6} {'conv':>5} "
-          f"{'t_h':>7} {'X_fin':>7} {'h_clip':>6} {'adv':>5} status")
+    print(
+        f"{'T_op':>5} {'HR':>5} {'masa':>5} {'X_obj':>6} {'conv':>5} "
+        f"{'t_h':>7} {'X_fin':>7} {'h_clip':>6} {'adv':>5} status"
+    )
     print("-" * 85)
 
     grid = [
@@ -127,8 +133,10 @@ def main():
         h_clip = res.horas_clipeo_nocturno_s / 3600.0
         n_adv = len(res.advertencias)
         status = res.status
-        print(f"{T_op:>5} {HR:>5.2f} {masa:>5.1f} {X_obj:>6.2f} "
-              f"{conv:>5} {t_h:>7.2f} {X_fin:>7.3f} {h_clip:>6.1f} {n_adv:>5} {status}")
+        print(
+            f"{T_op:>5} {HR:>5.2f} {masa:>5.1f} {X_obj:>6.2f} "
+            f"{conv:>5} {t_h:>7.2f} {X_fin:>7.3f} {h_clip:>6.1f} {n_adv:>5} {status}"
+        )
 
 
 if __name__ == "__main__":

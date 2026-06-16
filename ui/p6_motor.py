@@ -71,6 +71,7 @@ def _mostrar_advertencias(adv_list: list) -> None:
 def _texto_config_motor(motor: "Motor") -> str:
     """Snapshot .txt del motor con desglose completo de ΔP y potencias."""
     from datetime import date
+
     from core.motor import TipoAccionamiento
 
     sep = "=" * 60
@@ -109,7 +110,7 @@ def _texto_config_motor(motor: "Motor") -> str:
         lines += [
             "",
             "MOTOR ELÉCTRICO",
-            f"  Tensión            : "
+            "  Tensión            : "
             + (f"{motor.tension_V:.0f} V" if motor.tension_V else "(no especificada)"),
         ]
     lines += [
@@ -1164,7 +1165,7 @@ def render() -> None:
             )
             dP_singulares_val = sing["total"]
             with st.expander(
-                f"ΔP singulares (entrada, salida, codos, manifold): "
+                f"ΔP singulares (entrada, salida, codos, manifold, difusor): "
                 f"**{dP_singulares_val:.1f} Pa**",
                 expanded=False,
             ):
@@ -1194,22 +1195,48 @@ def render() -> None:
                     dP_singulares_val = sing["total"]
                     v_ducto = v_ducto_input
                 st.caption(
-                    f"n_paralelo = {n_paralelo} · n_codos asumidos = 2\n\n"
-                    f"- Entrada (K=0.5): {sing['entrada']:.1f} Pa\n"
-                    f"- Salida descarga libre (K=1.0): {sing['salida']:.1f} Pa\n"
-                    f"- 2 codos 90° (K=0.9 c/u): {sing['codos']:.1f} Pa\n"
-                    f"- Manifold banco paralelo (K=1.5): {sing['manifold']:.1f} Pa"
+                    f"n_paralelo = {n_paralelo} · n_codos asumidos = 2 "
+                    "· coeficientes C de ASHRAE cap. 21 / Idelchik\n\n"
+                    f"- Entrada (C=0.5): {sing['entrada']:.1f} Pa\n"
+                    f"- Salida descarga libre (C=1.0): {sing['salida']:.1f} Pa\n"
+                    f"- 2 codos 90° (C=0.9 c/u): {sing['codos']:.1f} Pa\n"
+                    f"- Manifold banco→caño, confluencia (C=1.5): {sing['manifold']:.1f} Pa\n"
+                    f"- Difusor de entrada a cámara (C=0.3): {sing['difusor']:.1f} Pa"
                 )
 
             dP_ductos_efectivo = (
                 dP_ductos_val if dP_ductos_val is not None else 0.20 * (dP_col_input + dP_cam_input)
             )
+
+            # Caño maestro (manifold del banco, gran escala): su ΔP es lo que el
+            # ventilador ve aguas arriba de las ramas. Se suma a ductos de forma
+            # explícita para que entre al total del Motor (que con ductos=None
+            # usaría solo el 20% heurístico).
+            dP_cano = 0.0
+            if proyecto.colector is not None and proyecto.colector.banco.cano_maestro is not None:
+                from calculos.cano_maestro_calc import estimar_delta_P_cano_maestro
+
+                dP_cano = estimar_delta_P_cano_maestro(
+                    proyecto.colector.banco.cano_maestro,
+                    Q_vol_m3s,
+                    T_K=_T_MEDIA_DEFAULT_K,
+                    P_Pa=P_proyecto_Pa,
+                )["total"]
+            if dP_cano > 0:
+                dP_ductos_efectivo += dP_cano
+                dP_ductos_val = dP_ductos_efectivo  # explícito → entra al total del Motor
+
             dP_tot_preview = dP_col_input + dP_cam_input + dP_ductos_efectivo + dP_singulares_val
             st.caption(
                 f"**ΔP total estimada: {dP_tot_preview:.1f} Pa** "
                 f"(col={dP_col_input:.1f} + cam={dP_cam_input:.1f} + "
                 f"duc={dP_ductos_efectivo:.1f} + sing={dP_singulares_val:.1f})"
             )
+            if dP_cano > 0:
+                st.caption(
+                    f"↳ ΔP ductos incluye el **caño maestro** (P3): {dP_cano:.1f} Pa "
+                    "del manifold del banco."
+                )
 
     # -----------------------------------------------------------------------
     # Sección D: Parámetros del ventilador / motor

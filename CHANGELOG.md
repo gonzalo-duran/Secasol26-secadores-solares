@@ -10,7 +10,123 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Modo secador industrial (`Tipologia.GRAN_ESCALA`): banco de colectores, distribución del flujo, sectorización de cámara.
+- Manual de usuario estilo SAM (mejora 36) e internacionalización (idiomas).
+
+---
+
+## [0.14.0] — 2026-06-16
+
+Tanda de mejoras de UX/física a partir del modo industrial (mejoras 25–35 de
+`docs/notas/mejoras.md`; sesiones S41–S44).
+
+### Added
+
+- **Espesores de mercado** (mejoras 25 y 26): nuevo helper `ui/componentes/espesores.py`
+  (`selector_espesor_mm`) que ofrece medidas estándar de mercado en lugar de un campo numérico
+  libre. Maderas (`pino`/`contrachapado_fenolico`) en pulgadas + mm (1/4"…2") en P3 (fondo) y P4
+  (paredes); policarbonato alveolar en 4/6/8/10/16 mm en P3 (cubierta). Ambos con escape
+  "Otro (personalizado)…".
+- **k efectivo del policarbonato según espesor** (mejora 26): mapa `k_efectivo_por_espesor_mm` en
+  `cubiertas.yaml` (4→0.05 … 16→0.08 W/m·K) y nuevo campo `ColectorUnidad.k_cubierta_efectivo_W_mK`
+  (override opcional, default None) consumido por los motores de colector. Elegir un espesor de
+  mercado fija el k efectivo correspondiente sin mutar el catálogo global.
+- **Carta psicrométrica del proceso** (mejora 27): nueva carta del proceso completo del secador
+  (Ambiente → Salida colector → Entrada cámara → Salida cámara) en P7 (modos Constantes,
+  Transitorio y Ventana) y en el reporte PDF. Sin dependencia externa: se construye sobre
+  `calculos/psicrometria.py` (parametrizado por `P_Pa` → corrección por altitud). Nuevos
+  `calculos/carta_psicrometrica.py` (puro) + `ui/componentes/carta_psicrometrica.py` (Plotly).
+  Adiabático (cámara indirecta) vs no adiabático (cámara directa) emerge del balance; valor
+  representativo = mediodía solar (POA máx).
+- **Espesor del techo translúcido con pérdida conductiva al balance** (mejora 33): nuevo campo
+  `ConstruccionCamara.cubierta_translucida_espesor_m` + selector de espesor en P4 (espejo de P3,
+  medidas de mercado del alveolar). El techo translúcido ya no solo aporta `Q_rad`: su conducción
+  `U_techo = k_efectivo/espesor` (en serie con films interior/McAdams) entra al balance térmico de
+  cámara, descontando la cara del techo de la envolvente opaca para no doble-contar
+  (`camara_calc` + `camara_termodinamica.resolver_estado_camara`/`simular_secado`/`simular_cascada`).
+- **Ventana de producción para CAJA/ARMARIO como multidía real** (mejora 35): el modo
+  `ModoAnalisis.VENTANA` deja de ser exclusivo de gran escala. Para CAJA/ARMARIO se comporta como un
+  multidía real sobre el lapso `[ventana_inicio, ventana_fin]` con clima horario; P7 enruta el
+  pipeline de producción (`_render_ventana`) solo en GRAN_ESCALA y el resto cae al transitorio normal,
+  con forzantes construidas por `_construir_forzantes_ventana` (P4).
+- **Resultados de colector sobre la ventana en P3** (mejora 34): `_evaluar_ventana` ahora resuelve día
+  y noche (sin sol, T_salida ≈ T_amb), expone la serie de T del absorbedor, el perfil T(x) a mediodía
+  solar del primer día y las marcas de POA máx + mediodía solar por día; render en dos tabs.
+
+### Changed
+
+- **Gráfica climática de la ventana de producción** (mejora 30): las figuras de P2 ahora cubren el
+  dominio temporal completo de la ventana (1 semana, 1 mes, …) en vez de encimar todos los días sobre
+  un "día imaginario de 24 h". Helper `_eje_x_temporal` que auto-detecta multi-día y usa eje datetime;
+  el día de diseño (DIARIO) conserva las etiquetas de hora.
+- **Modelo hidrodinámico de pérdidas de carga** (mejora 29, auditoría con ASHRAE cap. 3/21):
+  - ΔP del **producto en cross-flow** ahora usa un modelo combinado general (`_delta_P_producto_crossflow`):
+    fricción de pared rugosa (Colebrook con ε = tamaño del producto) + obstrucción por bloqueo
+    `C_obs(β)`. Reemplaza la tabla heurística `_K_rugosidad_default`.
+  - **Fricción unificada en Colebrook/Haaland** en todo el circuito (se retiró el Blasius del canal
+    horizontal de cámara); rugosidad de galvanizado ε≈0.15 mm (ASHRAE Tabla 1).
+  - **Pérdidas singulares ampliadas** (taxonomía ASHRAE cap. 21): se agregó el difusor de entrada a
+    cámara (`estimar_delta_P_singulares` ahora devuelve `'difusor'`) y se documentó el manifold
+    banco→caño como confluencia (Junction).
+  - El campo `Camara.bandejas.K_rugosidad_producto` pasa a ser override del coeficiente de obstrucción.
+- **Orden de evaluación en la pestaña colectores** (mejora 31): "Evaluación del desempeño del colector
+  unitario" aparece antes que "Evaluación del campo de colectores" (gateada a GRAN_ESCALA), reflejando
+  el flujo correcto colector → banco.
+
+### Fixed
+
+- **Persistencia de la ventana/año al navegar** (mejora 28): en modo industrial, navegar P1↔P2 varias
+  veces ya no pierde la referencia de la ventana de producción ni revierte el año de descarga al
+  default 2022. Re-touch curado de widget-keys en `Secasol.py` (antes del dispatch) + sembrado robusto
+  del año desde P1 (`_resolver_anio_descarga`).
+- **Tope de espesor de fondo de colector** (mejora 25): el espesor de fondo en P3 estaba limitado a
+  5 mm, imposible para tableros de madera (3/4" = 19 mm). Ahora hasta 100 mm en madera.
+- **Sobreconteo del ΔP de cámara horizontal** (mejora 29): los canales entre bandejas están en
+  paralelo, así que el ΔP del sistema es el de un canal (antes se multiplicaba por `n_canales` y
+  `n_bandejas`). En túnel con carros, la obstrucción ahora se acumula en serie × n_carros (antes se
+  tomaban todas las bandejas como paralelas, subestimando la pérdida por producto industrial).
+- **Compensación de presiones del caño maestro** (mejora 32): el preview `estimar_delta_P_cano_maestro`
+  metía el caudal total por toda la sección creciente, invirtiendo la compensación al activar el toggle.
+  Ahora usa el modelo de flujo acumulado `Q(f)=Q_total·f` con sección local (coincide con la eval de
+  campo); `ResultadoCampoColectores` expone `dP_troncal_Pa` + `v_troncal_perfil_ms` y P3 muestra el
+  perfil de velocidad del troncal. Física unificada en todos los consumidores (incl. sizing del
+  ventilador en P6).
+
+---
+
+## [0.13.0] — 2026-06-10
+
+**Modo secador industrial / gran escala (`Tipologia.GRAN_ESCALA`)** — último hito hacia v1.0.
+Hasta ahora `GRAN_ESCALA` era cosmético (idéntico a `ARMARIO`). Se implementó por completo,
+con dos subtipos de igual jerarquía: **Batch** (lotes) y **Semicontinuo** (túnel a
+contracorriente, estilo ADITAL). Suite: 942 tests.
+
+### Added
+
+- **Ventana de producción** (`ModoAnalisis.VENTANA`): el período de análisis pasa a ser un lapso
+  `[inicio, fin]` libre con presets (1 semana / 1 mes / campaña), simulado con clima real horario.
+  Subsume el binario DIARIO/ANUAL (que se mantiene para tipologías chicas). Configurable en **P1**.
+- **Motor de cámara multi-etapa** (`camara_termodinamica.simular_cascada`): el túnel semicontinuo
+  es una cascada de N zonas a contracorriente con avance de columnas por cadencia fija; la sequedad
+  de salida es emergente. Batch = caso N=1. Reusa intacto el núcleo físico (evaporación difusiva +
+  GAB + coeficientes variables en t de S39). Punto de entrada `camara_calc.calcular_camara_cascada`.
+- **Orquestador de ventana** (`simulacion_ventana.simular_ventana` + `balance_global.calcular_todo_ventana`):
+  arma forzantes horarias desde clima real (colector hora a hora + caño maestro + auxiliar) y acumula
+  producción sobre el lapso. Métrica: kg seco + tasa de régimen (kg/día) + leña consumida.
+- **Caño maestro** (`core.colector.CanoMaestro` + `calculos/cano_maestro_calc.py`): manifold de
+  sección creciente que colecta el aire de las ramas; modelos de ΔP (fricción Haaland + accesorios),
+  ΔT térmica (pérdida convectiva + aporte solar) y uniformidad de distribución. Configurable en **P3**.
+- **Híbrido con calendario de arranque** (`core.auxiliar.CargaArranque` + `auxiliar.cargas_arranque`):
+  el quemador opera en ventanas horarias de mañana/atardecer (independiente de la irradiancia) en vez
+  de potencia constante; acumula leña consumida. Configurable en **P5**. Aplica a todos los modos
+  transitorios.
+- **UI completa**: P1 (subtipo + ventana), P3 (caño maestro), P4 (topología del túnel: n_zonas +
+  cadencia), P5 (calendario de arranque), P6 (ΔP del sistema incluye el caño maestro), P7 (dashboard
+  de producción sobre la ventana: producto seco, tasa de régimen, leña + perfil espacial del túnel).
+  Serialización JSON + `.txt` con back-compat en todas.
+- **Validación de campo** (`validacion/validacion_adital.py`): la cadena térmica del modo industrial
+  se contrasta contra las mediciones del secador ADITAL (tesis doctoral, San Carlos, marzo 2009).
+  4/4 checks térmicos OK (salida colector 55/78 °C, caño maestro ΔT −2.8 °C, cámara 57 °C) y campaña
+  de 5000 kg en ~5 días, todos dentro de los rangos medidos en campo.
 
 ---
 
