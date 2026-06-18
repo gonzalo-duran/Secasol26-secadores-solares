@@ -1039,7 +1039,7 @@ def render() -> None:
             dP_total_override = st.number_input(
                 "ΔP total del sistema [Pa]",
                 min_value=1.0,
-                max_value=5000.0,
+                max_value=100000.0,
                 value=float(
                     mot_prev.perdida_carga_total_Pa
                     if (mot_prev is not None and mot_prev.perdida_carga_total_Pa)
@@ -1070,7 +1070,7 @@ def render() -> None:
                 dP_col_input = st.number_input(
                     "ΔP colector [Pa]",
                     min_value=0.0,
-                    max_value=2000.0,
+                    max_value=50000.0,
                     value=dP_col_default,
                     step=1.0,
                     format="%.1f",
@@ -1104,7 +1104,7 @@ def render() -> None:
                 dP_cam_input = st.number_input(
                     "ΔP cámara [Pa]",
                     min_value=0.0,
-                    max_value=2000.0,
+                    max_value=50000.0,
                     value=dP_cam_default,
                     step=1.0,
                     format="%.1f",
@@ -1131,7 +1131,7 @@ def render() -> None:
                     dP_duc_input = st.number_input(
                         "ΔP ductos [Pa]",
                         min_value=0.0,
-                        max_value=500.0,
+                        max_value=10000.0,
                         value=(
                             float(mot_prev.delta_P_ductos_Pa or 10.0)
                             if mot_prev is not None
