@@ -49,6 +49,14 @@ _PARAMETROS_NASA: list[str] = [
 ]
 
 # Mapeo columnas pvlib/NASA → nombres SI del proyecto (COLUMNAS_SI)
+#
+# Para HR y presión incluimos AMBOS nombres posibles: el crudo de NASA
+# (`RH2M`, `PS`) y el mapeado por pvlib (`relative_humidity`, `pressure`).
+# Hasta pvlib 0.15.1 esos dos parámetros NO estaban en VARIABLE_MAP, así que
+# con map_variables=True quedaban con su nombre crudo; desde 0.15.2 pvlib los
+# mapea. Como una versión dada solo produce uno de cada par, tener ambas claves
+# es inocuo (_columnas_presentes filtra a lo que exista) y evita el error
+# CLIMA_COLUMNAS_FALTANTES al desplegar contra una versión distinta de pvlib.
 _RENOMBRES: dict[str, str] = {
     "temp_air": "T_amb_K",
     "ghi": "GHI_Wm2",
@@ -56,7 +64,9 @@ _RENOMBRES: dict[str, str] = {
     "dhi": "DHI_Wm2",
     "wind_speed_2m": "WS_ms",
     "PS": "presion_Pa",
+    "pressure": "presion_Pa",
     "RH2M": "HR",
+    "relative_humidity": "HR",
 }
 
 # Rutas de caché
