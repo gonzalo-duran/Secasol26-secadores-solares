@@ -450,6 +450,14 @@ def _seccion_config(proyecto) -> None:
     for col, (label, ok) in zip(cols, items):
         col.metric(label, _estado(ok))
 
+    st.caption(
+        "✅ configurado · ❌ pendiente. **Mínimo para calcular:** la **Cámara (P4)**. "
+        "El **Clima (P2)** es obligatorio en modos multidía/anual/ventana (en Constantes "
+        "se sugieren valores por defecto). El **Colector (P3)** es obligatorio salvo "
+        "tipología Caja. **Auxiliar (P5)** y **Motor/Chimenea (P6)** son opcionales "
+        "(sin motor → convección natural)."
+    )
+
 
 def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
     """Devuelve (T_amb_C, I_g, v_viento) sugeridos desde datos de clima.

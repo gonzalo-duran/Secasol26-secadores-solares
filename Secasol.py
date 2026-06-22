@@ -58,6 +58,21 @@ _rotulo = st.sidebar.radio(
     key="nav_seccion",
 )
 
+with st.sidebar.expander("👋 Cómo empezar", expanded=False):
+    st.markdown(
+        "**Secasol** predimensiona secadores solares paso a paso. Recorré las "
+        "secciones en orden:\n\n"
+        "1. **Tipología** — tipo de secador y modo de análisis.\n"
+        "2. **Emplazamiento** — coordenadas del sitio y descarga del clima (NASA POWER).\n"
+        "3. **Colector** — materiales, geometría y velocidad de aire.\n"
+        "4. **Cámara** — geometría, producto a secar y carga.\n"
+        "5. **Auxiliar** — calentamiento de respaldo (opcional).\n"
+        "6. **Motor** — ventilador o chimenea solar para mover el aire.\n"
+        "7. **Resultados** — corre el prediseño completo y exporta el reporte.\n\n"
+        "**Tené a mano:** latitud/longitud del sitio y el producto a secar.\n\n"
+        "ℹ️ Es una herramienta de **prediseño** (orden de magnitud), no de certificación."
+    )
+
 # Persistencia de widget-keys entre secciones (mejora 28). En esta arquitectura
 # de render condicional, Streamlit purga al fin del run las widget-keys de la
 # sección no montada (las plain-keys sí sobreviven). Eso hacía que, al navegar

@@ -222,4 +222,11 @@ if __name__ == "__main__":
 
     print("-" * 110)
     print(f"Discrepancia media: {np.mean(discrepancias):.1f}%   máx: {max(discrepancias):.1f}%")
-    print("(Klein es empírica; discrepancias <20% son aceptables. >30% sugieren bug.)")
+    print("(Klein es empírica; <20% sería aceptable para colectores de cavidad estanca.)")
+    print(
+        "NOTA: una discrepancia grande (~3×, Klein > modelo) es ESPERADA y NO indica bug.\n"
+        "Klein (1979) asume cavidad estanca absorbedor-cubierta, pero en un air heater de\n"
+        "canal único el aire pasa por encima del absorbedor y enfría la cubierta interna,\n"
+        "reduciendo U_top real. La validación válida para air heaters es HWB (linealidad de\n"
+        "η vs (T_in-T_amb)/G, R²>=0.99 en validacion_hwb.py). Ver bitacora_sesion30.md §91.5."
+    )

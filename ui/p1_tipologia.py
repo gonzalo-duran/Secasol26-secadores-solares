@@ -125,6 +125,23 @@ def render() -> None:
     # -----------------------------------------------------------------------
     st.subheader("Tipología del secador")
 
+    with st.expander("¿Qué tipología elegir?", expanded=False):
+        st.markdown(
+            "La tipología define la arquitectura del secador y qué subsistemas se "
+            "habilitan en el prediseño:\n\n"
+            "| Tipología | Qué es | Cuándo | Subsistemas |\n"
+            "|---|---|---|---|\n"
+            "| **Caja** | Colector y cámara integrados; el sol entra directo a la "
+            "cámara (techo translúcido). Suele ir por convección natural. | Escala "
+            "chica, baja inversión (frutas, hierbas). | Cámara (+ chimenea opcional) |\n"
+            "| **Armario** | Colector externo + cámara con bandejas; aire forzado o "
+            "natural. | Escala media, mejor control de temperatura. | Colector + cámara "
+            "+ motor/chimenea (+ auxiliar) |\n"
+            "| **Gran escala** | Banco de colectores + cámara industrial (lotes o túnel "
+            "semicontinuo). | Producción comercial (cientos–miles de kg). | Banco de "
+            "colectores + caño maestro + cámara + motor + auxiliar |"
+        )
+
     tipo_lista = list(_ETIQUETAS_TIPOLOGIA.keys())
     tipo_labels = [_ETIQUETAS_TIPOLOGIA[t] for t in tipo_lista]
     idx_tipo = tipo_lista.index(cfg.tipologia)

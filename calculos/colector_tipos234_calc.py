@@ -38,7 +38,12 @@ Hipótesis
 - Factor de forma radiativo = 1 en todos los intercambios radiativos internos
   (cubierta↔absorbedor, absorbedor↔fondo interior).
 - Absortividad de la cubierta despreciable.
-- Propiedades del aire constantes a 323 K (50 °C).
+- Coeficiente convectivo interno del canal activo con propiedades del aire LOCALES
+  evaluadas en T_f(x) (Re y Nu locales, flotación; vía
+  ``coef_conveccion_interna_local``, S36), y cp(T) local en los balances de energía;
+  el caudal másico se fija con rho_aire(T_entrada). Quedan constantes a 323 K (50 °C)
+  las propiedades del aire estanco (correlación de cavidad Hollands) y las de los
+  evaluadores simplificados de campo/banco (preview de P3).
 - En Tipo 2: ambos canales comparten T_entrada_K. Los caudales se especifican
   por la velocidad de diseño de cada canal independientemente.
 

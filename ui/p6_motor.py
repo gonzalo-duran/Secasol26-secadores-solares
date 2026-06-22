@@ -888,6 +888,15 @@ def render() -> None:
     """Renderiza la Pestaña 6 — Motor / Ventilador."""
     st.header("6 · Motor / Ventilador")
 
+    st.caption(
+        "El aire se mueve por **convección forzada** (motor/ventilador) o **natural** "
+        "(chimenea solar, sin consumo eléctrico). Forzada: mayor control del caudal y "
+        "capacidad para vencer pérdidas de carga altas (lechos gruesos, banco de "
+        "colectores, escala industrial), a costa de energía. Natural: sin electricidad, "
+        "caudal menor y variable con el sol y el viento — requiere chimenea para inducir "
+        "tiraje. Elegí con el toggle de abajo."
+    )
+
     proyecto = st.session_state.proyecto
 
     # Presión atmosférica representativa del emplazamiento (corregida por

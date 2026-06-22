@@ -1781,6 +1781,12 @@ def render() -> None:
                 value=colector.unidad.espesor_placa_m * 1000,
                 step=0.1,
                 key="p3_esp_placa",
+                help=(
+                    "Dato geométrico/diagnóstico: el modelo es cuasi-estacionario y "
+                    "asume capacitancia térmica de la placa despreciable, así que este "
+                    "espesor **no entra al balance térmico** ni cambia el rendimiento "
+                    "calculado."
+                ),
             )
         if id_placa == _ID_USUARIO:
             catalogo.PLACAS[_ID_USUARIO] = _inputs_placa_usuario("p3_upla")
@@ -1874,7 +1880,11 @@ def render() -> None:
                 step=0.05,
                 format="%.2f",
                 key="p3_ancho",
-                help="Ancho interior del canal de flujo (dimensión perpendicular al flujo).",
+                help=(
+                    "Ancho interior del canal de flujo de un módulo unitario "
+                    "(perpendicular al flujo). En un banco, el ancho total resulta "
+                    "de los módulos en paralelo."
+                ),
             )
             largo_m = st.number_input(
                 "Largo del colector [m]",
@@ -1884,7 +1894,12 @@ def render() -> None:
                 step=0.1,
                 format="%.2f",
                 key="p3_largo",
-                help="Variable de diseño para la optimización del largo óptimo.",
+                help=(
+                    "Largo del módulo en la dirección del flujo. Es la principal "
+                    "variable de diseño: a mayor largo, mayor salto térmico del aire "
+                    "pero también más pérdida de carga. La evaluación gráfica de abajo "
+                    "ayuda a encontrar el largo óptimo."
+                ),
             )
         with c2:
             _label_esp = (
@@ -2298,6 +2313,19 @@ def render() -> None:
         criticas = [a for a in adv_list if a.severidad == Severidad.CRITICAL]
         warnings = [a for a in adv_list if a.severidad == Severidad.WARNING]
         infos = [a for a in adv_list if a.severidad == Severidad.INFO]
+
+        # Resumen visible de un vistazo antes del expander, para que las
+        # advertencias importantes no pasen desapercibidas si queda colapsado.
+        if criticas:
+            st.error(
+                f"🚨 El diseño del colector tiene **{len(criticas)} advertencia(s) "
+                "crítica(s)**. Revisá el detalle abajo antes de calcular."
+            )
+        elif warnings:
+            st.warning(
+                f"⚠️ El diseño del colector tiene **{len(warnings)} advertencia(s)**. "
+                "Conviene revisar el detalle abajo."
+            )
 
         with st.expander(
             f"Advertencias de diseño ({len(criticas)} críticas, {len(warnings)} warnings, {len(infos)} info)",

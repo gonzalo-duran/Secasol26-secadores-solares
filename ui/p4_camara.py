@@ -1500,7 +1500,12 @@ def render() -> None:
         "Producto",
         options=labels_disponibles,
         index=idx_default,
-        help="Solo se muestran productos con datos de secado calibrados en el catálogo.",
+        help=(
+            "Producto a secar. Al elegirlo se cargan su isoterma de sorción (GAB), "
+            "propiedades básicas y humedad de equilibrio, que alimentan el balance "
+            "acoplado calor-masa de la cámara. Solo aparecen productos con datos "
+            "calibrados en el catálogo; si falta el tuyo, hay que calibrarlo antes de usarlo."
+        ),
     )
     prod_id = ids_disponibles[labels_disponibles.index(prod_sel_label)]
     datos_prod = catalogo.PRODUCTOS[prod_id]
