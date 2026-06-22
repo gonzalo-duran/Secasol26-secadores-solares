@@ -161,6 +161,20 @@ Decisiones:
 - **El commit lo hace el usuario** (working tree por defecto); push a `main`
   dispara deploy a HF Spaces. Suite 1042 passed verificada antes de entregar.
 
+### Cierre — commit + push + deploy (verificado)
+
+- **Commit `c5f180b`** ("feat: release 0.14.0 — modo industrial (gran escala) +
+  mejoras UX/física 25–35") pusheado a `origin/main`; working tree limpio.
+- Antes del commit se **eliminó** `validacion/diagnostico_s41_ventana.py` (script
+  de debug de S41 ya resuelto, atado a APIs internas, sin tests — decisión del
+  usuario).
+- **Deploy a HF Spaces OK**: el GitHub Action `deploy_hf.yml` sincronizó el código
+  (commit "Auto-deploy desde GitHub" 2026-06-16 20:57 UTC en el repo del Space);
+  el Space quedó `stage: RUNNING` sin errores; la app responde **HTTP 200** en
+  `https://gonzalojduran-secasol26.hf.space/` con `VERSION_SOFTWARE = "0.14.0"`.
+- Verificación post-deploy hecha vía API pública de HF (sin `gh`, que no está
+  instalado en el entorno).
+
 ## Pendientes
 
 - **Mejora 36** (manual estilo SAM): sesión propia.
