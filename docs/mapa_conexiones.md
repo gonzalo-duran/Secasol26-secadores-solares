@@ -1,19 +1,21 @@
 # Mapa de conexiones — Secasol
 
-> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01).
+> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01, **S36–S45 2026-06-23**).
 > Objetivo: detectar **widgets UI sin consumidor en `calculos/`** y **campos consumidos sin widget UI** (toggles/inputs huérfanos).
 >
 > S33 (deploy a HF Spaces) no introdujo cableado widget→campo→consumidor: ver `docs/bitacora/bitacora_sesion33.md`.
+> El detalle histórico S36→S45 está consolidado al final (sección "Resueltos"); la **tabla maestra** ya refleja S40 (modo industrial) y S44 (techo translúcido + ventana CAJA/ARMARIO).
 
 ---
 
 ## Resumen ejecutivo
 
-Una desconexión real (eran 3 a inicio de S30):
+Desconexiones / atenuaciones reales vigentes (eran 3 a inicio de S30):
 
 | # | Widget UI | Campo escrito | Estado |
 |---|-----------|---------------|--------|
 | 1 | "Espesor placa absorbedora [mm]" (P3) | `proyecto.colector.unidad.espesor_placa_m` | ⚠️ No es leído por ningún cálculo térmico (se asume capacitancia despreciable). Decisión consciente de no incorporar capacitancia de placa por ahora. |
+| 2 | Sliders **T_op / HR_op** del aire de entrada (P4) | (condición de borde, no campo persistente) | ⚠️ **Atenuados desde S39.** Con coeficientes de transporte variables en t (`coef_transporte_func` recalculado por paso), en modos **Sintético / Día real / Anual** el borde y los coeficientes salen del clima/colector → los sliders **no influyen** en el resultado. **Solo** son condición de borde efectiva en modo **Constantes**. Decisión consciente (ver `bitacora_sesion39.md`). |
 
 **Corregido en S30 (2026-05-19):**
 
@@ -426,6 +428,85 @@ graph LR
 
 ---
 
+## Diagrama 7 — Modo industrial / gran escala (pipeline VENTANA, S40)
+
+Patrón **propio** del modo industrial: cuando `tipologia == GRAN_ESCALA` y `modo_analisis == VENTANA`, P7 enruta a `balance_global.calcular_todo_ventana` (no a `calcular_todo`/`calcular_todo_transitorio`). La cadena térmica completa se arma hora a hora sobre el lapso `[ventana_inicio, ventana_fin]` y la producción es **emergente** (no se fuerza `X_objetivo`).
+
+```mermaid
+graph TD
+  subgraph UIIND["ui/ (widgets gran escala)"]
+    P1S["P1 · subtipo (Batch/Semicontinuo) + ventana inicio/fin"]
+    P3S["P3 · caño maestro (manifold)"]
+    P4S["P4 · topología túnel (n_zonas + cadencia)"]
+    P5S["P5 · calendario de arranque (híbrido)"]
+    P7BTN["P7 · botón Calcular ventana de producción"]
+  end
+
+  subgraph COREIND["core/"]
+    CFGv["configuracion.{subtipo_gran_escala, ventana_inicio/fin, ModoAnalisis.VENTANA}"]
+    CANO["colector.banco.cano_maestro (CanoMaestro)"]
+    TUNEL["camara.tunel (ConfiguracionTunel)"]
+    ARRQ["auxiliar.cargas_arranque (list[CargaArranque])"]
+  end
+
+  subgraph BGV["balance_global.calcular_todo_ventana"]
+    PRPv["presion_representativa_proyecto → P_Pa"]
+    AFV["armar_forzantes_ventana"]
+    POAv["clima_calc.calcular_POA_horizonte → POA(t)"]
+    COLv["_correr_colector_horizonte_forzado → T_sal_col(t)"]
+    DTCANO["cano_maestro_calc.delta_T_cano_maestro → ΔT(t) al aire"]
+    AUXv["auxiliar_calc.calcular_auxiliar_transitorio (máscara calendario) → Q_aux(t)"]
+    FZAV["ForzantesAire (ventana): T_ent(t), ω_ent(t), ṁ(t), POA(t), GHI(t)"]
+  end
+
+  subgraph SIMV["simulacion_ventana.simular_ventana — despacho por subtipo"]
+    BATCH["BATCH → calcular_camara (encadena lotes; descarga al alcanzar X_obj)"]
+    SEMI["SEMICONTINUO → calcular_camara_cascada → camara_termodinamica.simular_cascada (túnel N zonas a contracorriente, avance por cadencia)"]
+    RESV["ResultadoVentana: kg seco, tasa kg/día, leña, perfil X/T/ω por zona"]
+  end
+
+  P1S --> CFGv
+  P3S --> CANO
+  P4S --> TUNEL
+  P5S --> ARRQ
+
+  CFGv --> AFV
+  P7BTN --> PRPv
+  PRPv --> AFV
+  AFV --> POAv
+  POAv -->|"POA(t)"| COLv
+  CANO --> DTCANO
+  COLv --> DTCANO
+  ARRQ --> AUXv
+  DTCANO --> FZAV
+  AUXv --> FZAV
+  COLv --> FZAV
+
+  FZAV --> BATCH
+  FZAV --> SEMI
+  CFGv -.subtipo.-> BATCH
+  CFGv -.subtipo.-> SEMI
+  TUNEL --> SEMI
+  BATCH --> RESV
+  SEMI --> RESV
+
+  RESV -->|session_state p7_resultado_ventana| P7R["P7 · _render_resultados_ventana (dashboard producción + perfil túnel)"]
+
+  classDef ind fill:#d4edda,stroke:#155724
+  classDef s40 fill:#cfe2ff,stroke:#084298
+  class AFV,POAv,COLv,DTCANO,AUXv,FZAV ind
+  class BATCH,SEMI,RESV s40
+```
+
+**Hallazgos modo industrial (S40, validado S42/S44)**:
+
+- **Despacho único batch↔cascada**: `simular_ventana` decide por `configuracion.subtipo_gran_escala`. Batch = cascada de N=1 zona (encadena lotes con `calcular_camara`, descarga al alcanzar `X_objetivo`); semicontinuo = `simular_cascada` (N zonas en serie, aire a contracorriente, columnas avanzan por `intervalo_avance_h`). Reusan intacto el núcleo físico (evaporación difusiva + GAB + coeficientes variables en t de S39).
+- **Cadena térmica hora a hora**: `armar_forzantes_ventana` encadena POA(t) → colector forzado `_correr_colector_horizonte_forzado` → ΔT del caño maestro (`delta_T_cano_maestro`, resta/suma al aire) → aporte auxiliar con calendario (`calcular_auxiliar_transitorio` + `_mascara_calendario`). Validada contra ADITAL (`validacion/validacion_adital.py`, 4/4 → 7/7 en S45).
+- **Caño maestro — gotcha de compensación (fix S42)**: la distribución usa **flujo acumulado** de las ramas del banco, no caudal uniforme. El default `CanoMaestro.absortancia_solar=0.90` es de chapa pintada; galvanizado desnudo ≈ 0.35.
+- **Ventana ≠ solo gran escala (S44)**: `ModoAnalisis.VENTANA` también aplica a CAJA/ARMARIO, pero ahí P7 cae al transitorio normal (`calcular_todo_transitorio`) con forzantes del lapso (`p4_camara._construir_forzantes_ventana`). El pipeline de producción de este diagrama (`_render_ventana` con banco/caño/túnel) queda **gateado a `GRAN_ESCALA`**.
+
+---
+
 ## Tabla maestra — widget → campo → consumidor
 
 | Pestaña | Widget UI | Campo `Proyecto.*` | Leído por |
@@ -479,6 +560,8 @@ graph LR
 | **P4** (S44) | espesor del techo translúcido (`selector_espesor_mm`, solo si hay cubierta translúcida) | `camara.construccion.cubierta_translucida_espesor_m` | `camara_calc._construir_params_termodinamico` (computa `U_techo=k_efectivo/espesor`, descuenta la cara del techo de `A_cuerpo`) → `camara_termodinamica.resolver_estado_camara` (suma `UA_techo` al balance de `T_flujo`) |
 | **P4** (S44) | modo Ventana en CAJA/ARMARIO (sin widget propio; deriva de `ModoAnalisis.VENTANA` + tipología ≠ GRAN_ESCALA) | `st.session_state["p4_horizonte_*"]` (vía `_construir_forzantes_ventana`) | `ui/p7_resultados` rama transitoria → `balance_global.calcular_todo_transitorio` (el `_render_ventana` gran-escala queda gateado a `GRAN_ESCALA`) |
 | **P3** (S44) | botón "Evaluar colector" en modo Ventana (sin campo nuevo) | `st.session_state["p3_eval"]` (`{"modo": "ventana", ...}` enriquecido: `T_abs_C`, `x_noon`, `marcas_*`) | `ui/p3_colector._evaluar_ventana` (día y noche) → `_fig_T_salida_ventana` + `_fig_T_fluido_dia` |
+| **P4** (S39) | sliders T_op / HR_op del aire de entrada | (condición de borde) | `camara_calc._calcular_termodinamico` → `simular_secado`. **Atenuados:** con `coef_transporte_func` variable en t solo pesan en modo **Constantes**; en Sintético/Día real/Anual el borde sale del clima/colector (ver Resumen ejecutivo #2). |
+| **P7** (S43) | carta psicrométrica del proceso (sin widget de entrada; se dibuja de los resultados) | — (lee `res`/`res_tr`/ventana + `omega_amb`) | `ui/p7_resultados._render_carta_psicrometrica` y `ui/reporte.py` → `ui/componentes/carta_psicrometrica.fig_carta_psicrometrica` (sobre `calculos/psicrometria.py`; adiabático/no-adiabático **emerge** del balance; representativo = mediodía solar; en túnel semicontinuo traza el path del aire por zonas a contracorriente) |
 
 > **S40 (modo industrial / gran escala):** todos los widgets de arriba están cableados extremo a extremo (UI → core → cálculo) y verificados con AppTest. La cadena térmica completa (colector → caño maestro → cámara) está validada contra datos de campo de ADITAL en `validacion/validacion_adital.py`.
 >
@@ -557,6 +640,22 @@ Ver `docs/bitacora/bitacora_sesion36.md` (§155-§158). Suite al cierre de S36: 
 - **Mejoras 23–24**: helper `ui/componentes/graficas.mostrar_plotly` (chokepoint de los 22 gráficos) agrega descarga PNG (vista del navegador) y CSV de datos (`_fig_a_dataframe`, server-side).
 
 Ver `docs/bitacora/bitacora_sesion37.md` (§159-§164). Suite al cierre de S37: **919 + 2 xfailed** (+5: extractor de datos de gráficos + regresión del fix). Versión local 0.10.0. Sin commitear (working tree puro).
+
+✓ **S38 (2026-06) — motor de cámara único (termodinámico):** se **eliminó** el motor de capa fina (MR(t) empíricos). `Camara.modo_calculo` quedó **vestigial** (`__post_init__` coacciona `"capa_fina"`→`"termodinamico"`); `modelo_capa_fina` es vestigial puro; `modelo_isoterma` es semi-vestigial (lo lee la validación de `core/camara.py`, el TD hardcodea `"gab"`). **Ojo:** los bloques `capa_fina:` de los catálogos **no son inertes** — `_modelos_disponibles()` los lee para filtrar qué productos aparecen en el selector de P4. La fila del radio `modo_calculo` en la tabla maestra ya refleja esto. Ver `bitacora_sesion38.md` §170.
+
+✓ **S39 (2026-06) — coeficientes de transporte variables en t:** `h_conv`/`K_m` dejan de congelarse; `simular_secado` acepta `coef_transporte_func(T_ent, T_prod, ω_ent, ṁ) → (h_conv, K_m)` (closure en `camara_calc._calcular_termodinamico`, película en `(T_ent+T_prod)/2`), evaluado por paso. **Hallazgo de cableado:** los sliders **T_op/HR_op** de P4 quedan **atenuados** (solo borde efectivo en modo Constantes) — ver Resumen ejecutivo #2 y la fila P4(S39) de la tabla. Ver `bitacora_sesion39.md`.
+
+✓ **S40 (2026-06) — modo industrial / gran escala (cerrado y validado):** tipología `GRAN_ESCALA` funcional con subtipos BATCH/SEMICONTINUO, `ModoAnalisis.VENTANA`, motor de cámara multi-etapa (`simular_cascada`), caño maestro (`CanoMaestro`), híbrido con calendario de arranque. **Todos los widgets cableados extremo a extremo y verificados con AppTest** — ver las 7 filas marcadas **(S40)** en la tabla maestra. Cadena térmica validada contra ADITAL (`validacion/validacion_adital.py`). Ver `bitacora_sesion40.md`.
+
+✓ **S41 (2026-06) — espesores + persistencia + hidrodinámica ASHRAE:** selectores de espesor en mm (`ui/componentes/espesores.selector_espesor_mm`) reusados en P3/P4; persistencia de ventana/año; red hidráulica del caño maestro y ΔP con métodos ASHRAE/Idelchik (mejora 29). Sin huérfanos nuevos. Ver `bitacora_sesion41.md`.
+
+✓ **S42 (2026-06) — colectores industrial:** reorden de la UI colector→banco en P3; **fix de la compensación del caño maestro** (flujo acumulado de las ramas del banco). Cableado sin cambios estructurales. Ver `bitacora_sesion42.md`.
+
+✓ **S43 (2026-06) — carta psicrométrica del proceso:** nuevo `ui/componentes/carta_psicrometrica.py` sobre `calculos/psicrometria.py` (sin librería externa). Se dibuja de los **resultados** (no escribe en `Proyecto`) en P7 y en el reporte PDF, completa incl. modo Ventana; adiabático/no-adiabático **emerge** del balance; representativo = mediodía solar; túnel semicontinuo = path del aire por zonas a contracorriente. Ver la fila P7(S43) de la tabla maestra. Ver `bitacora_sesion43.md`.
+
+✓ **S44 (2026-06) — techo translúcido al balance + ventana CAJA/ARMARIO:** el espesor del techo translúcido (`cubierta_translucida_espesor_m`) entra como conducción del vidriado (`U_techo` al balance de `T_flujo`, se descuenta la cara del techo de `A_cuerpo`); el modo Ventana se generaliza a CAJA/ARMARIO como **multidía real** (`_render_ventana` de producción queda solo para gran escala). Ver las filas **(S44)** de la tabla maestra. Ver `bitacora_sesion44.md`.
+
+✓ **S45 (2026-06-23) — auditoría integral pre-seminario INENCO:** quick-wins de UX (onboarding + ayudas para usuario nuevo), fix de docstring de Tipos234 y nota Klein. **Sin cambios de cableado** widget→campo→consumidor. Validación HWB 4/4 + ADITAL 7/7. Suite **1042 tests**. v0.14.0 en producción (HF Spaces). Ver `bitacora_sesion45.md`.
 
 ---
 
