@@ -2,7 +2,7 @@
 
 Software de prediseño de secadores solares de alimentos, desarrollado por el Grupo de Eficiencia Energética y Desarrollo Socio-Productivo (GEEDSP) — INENCO UNSa CONICET.
 
-**Licencia:** MIT &nbsp;|&nbsp; **Idioma:** Español &nbsp;|&nbsp; **Stack:** Python 3.11+ · Streamlit · NumPy · SciPy · pvlib
+**Licencia:** GPLv3 &nbsp;|&nbsp; **Idioma:** Español &nbsp;|&nbsp; **Stack:** Python 3.11+ · Streamlit · NumPy · SciPy · pvlib
 
 ---
 
@@ -194,6 +194,22 @@ secador_solar/
 
 Desarrollado por Gonzalo Durán. GEEDSP INENCO — Instituto de Investigación en Energías No Convencionales,
 Universidad Nacional de Salta – CONICET.
+
+## Licencia
+
+Secasol 26 — Herramienta de prediseño de secadores solares.
+Copyright (C) 2025-2026 INENCO — Instituto de Investigación en Energías No Convencionales
+(Universidad Nacional de Salta – CONICET).
+
+Este programa es software libre: usted puede redistribuirlo y/o modificarlo bajo los
+términos de la **Licencia Pública General de GNU (GNU GPL)** publicada por la Free
+Software Foundation, en su **versión 3**.
+
+Este programa se distribuye con la esperanza de que sea útil, pero **SIN NINGUNA
+GARANTÍA**; ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN
+PROPÓSITO PARTICULAR. Véase la Licencia Pública General de GNU para más detalles.
+
+El texto completo de la licencia está en el archivo [LICENSE](LICENSE).
 
 ## Ver también (Obsidian)
 
