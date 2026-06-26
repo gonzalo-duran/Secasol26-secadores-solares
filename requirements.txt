@@ -1,27 +1,37 @@
 # === Interfaz ===
-streamlit>=1.35.0
+streamlit==1.57.0
 
 # === Cálculo científico ===
-numpy>=1.26.0
-scipy>=1.13.0
-pandas>=2.2.0
+# Versiones PINNEADAS (==) a las del entorno local de referencia. El deploy a
+# Hugging Face Spaces construye una imagen Docker nueva con `pip install -r
+# requirements.txt`; con rangos `>=` pip resolvía a lo más nuevo disponible la
+# fecha del build, produciendo un entorno DISTINTO al local y, por lo tanto,
+# resultados numéricos distintos (solver de cámara/colector y transposición POA
+# son sensibles a la versión). Pinnear garantiza que local y el Space corran el
+# mismo stack. Base de HF: python:3.13.5-slim (soporta estas versiones).
+numpy==2.4.4
+scipy==1.17.1
+pandas==3.0.2
 
 # === Gráficas interactivas (Plotly reemplazó a matplotlib durante el ciclo S23-S29).
 # kaleido (más abajo, pin a 0.2.x) se usa para exportar Plotly → PNG en el reporte PDF.
-plotly>=6.0.0
+plotly==6.7.0
 
 # === Datos solares ===
-pvlib>=0.11.0
+# pvlib 0.15.2 cambió nombres de columnas de NASA POWER (RH2M/PS → relative_humidity/
+# pressure); el código ya es agnóstico (ver clima_calc._RENOMBRES), pero pinnear evita
+# cualquier deriva de versión entre local y el Space.
+pvlib==0.15.1
 
 # === Caché de datos climáticos ===
-pyarrow>=16.0.0
+pyarrow==24.0.0
 
 # === Catálogo de productos y materiales ===
-pyyaml>=6.0.1
+pyyaml==6.0.3
 
 # === Reporte PDF ===
 # kaleido pinned a la rama 0.2.x: la 1.x requiere Chrome instalado en el sistema,
 # que no está disponible en Streamlit Community Cloud por defecto. La 0.2.x trae
 # Chromium embebido (~50 MB) y no necesita dependencias del sistema.
-reportlab>=4.0.0
+reportlab==4.5.1
 kaleido==0.2.1

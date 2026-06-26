@@ -6,16 +6,41 @@ Entry point de Streamlit.
 from __future__ import annotations
 
 import importlib
+import importlib.metadata
+import platform
 
 import streamlit as st
 
 from core.proyecto import Proyecto
+from ui.componentes.header import render_header
+
+
+def _diagnostico_entorno() -> str:
+    """Devuelve un resumen del entorno de ejecución (Python + librerías clave).
+
+    Se usa para diagnosticar discrepancias entre el repo local y el despliegue
+    remoto (Hugging Face Spaces): si dos entornos corren versiones distintas de
+    Python o de las librerías de cálculo, los resultados numéricos pueden diferir
+    aunque el código y los datos sean idénticos. Mostrarlo en la UI hace visible
+    "qué está corriendo realmente" en cada lado.
+
+    Returns:
+        Texto markdown con la versión de Python y de cada librería relevante.
+    """
+    libs = ["numpy", "scipy", "pandas", "pvlib", "streamlit", "plotly", "pyarrow"]
+    lineas = [f"**Python** `{platform.python_version()}`"]
+    for nombre in libs:
+        try:
+            ver = importlib.metadata.version(nombre)
+        except importlib.metadata.PackageNotFoundError:
+            ver = "no instalado"
+        lineas.append(f"**{nombre}** `{ver}`")
+    return "  \n".join(lineas)
+
 
 # ---------------------------------------------------------------------------
 # Configuración de página
 # ---------------------------------------------------------------------------
-from ui.componentes.header import render_header
-
 st.set_page_config(
     page_title="Secasol26 - Prediseño de Secadores Solares",
     page_icon="☀️",
@@ -72,6 +97,14 @@ with st.sidebar.expander("👋 Cómo empezar", expanded=False):
         "**Tené a mano:** latitud/longitud del sitio y el producto a secar.\n\n"
         "ℹ️ Es una herramienta de **prediseño** (orden de magnitud), no de certificación."
     )
+
+with st.sidebar.expander("🔧 Entorno", expanded=False):
+    st.caption(
+        "Versión de Python y de las librerías de cálculo que está corriendo "
+        "esta instancia. Útil para comparar el repo local con el despliegue "
+        "remoto: mismos números requieren el mismo entorno."
+    )
+    st.markdown(_diagnostico_entorno())
 
 # Persistencia de widget-keys entre secciones (mejora 28). En esta arquitectura
 # de render condicional, Streamlit purga al fin del run las widget-keys de la
