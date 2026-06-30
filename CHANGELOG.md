@@ -14,6 +14,34 @@ Hoja de ruta a 1.0 (sin orden estricto):
 
 ---
 
+## [0.14.1] — 2026-06-26
+
+Correcciones de **infraestructura de despliegue** (no de física ni de lógica de cálculo)
+detectadas al probar la app en producción tras el seminario. Ver `docs/bitacora/bitacora_sesion46.md`.
+
+### Fixed
+
+- **Discrepancia local ↔ Hugging Face en resultados de cámara**: un mismo prediseño daba agua
+  evaporada muy distinta entre el repo local y el Space (0.26 vs 4.77 kg; producto a 92 °C sin
+  secar en el remoto), con código, clima e inputs idénticos. Causa: `requirements.txt` con
+  rangos `>=` dejaba que cada rebuild de HF instalara versiones de librería distintas a las del
+  entorno local; el solver de cámara convergía a una solución basura. Se **pinnea** todo el stack
+  con `==` (numpy/scipy/pandas/pvlib/streamlit/plotly/pyarrow/pyyaml/reportlab/kaleido) a las
+  versiones del entorno de referencia. Confirmado en producción.
+- **Carga de `.json` en Hugging Face fallaba con `AxiosError: 403`**: la protección XSRF de
+  Streamlit, tras el reverse-proxy de HF, rechazaba la subida del `file_uploader`. Se agregó
+  `--server.enableXsrfProtection=false` al `ENTRYPOINT` del Dockerfile del Space (lado HF; el
+  deploy desde GitHub preserva ese Dockerfile, por lo que el cambio persiste). No es un cambio
+  del repo, pero queda documentado.
+
+### Added
+
+- **Panel "🔧 Entorno"** en el sidebar (`Secasol.py`): muestra la versión de Python y de las
+  librerías de cálculo que corre la instancia, para diagnosticar de un vistazo discrepancias
+  entre el repo local y el despliegue remoto.
+
+---
+
 ## [0.14.0] — 2026-06-16
 
 Tanda de mejoras de UX/física a partir del modo industrial (mejoras 25–35 de

@@ -37,6 +37,10 @@ El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). 
 
 Implicancia operativa: **un push a `main` actualiza la app en producción**. Si hay que pushear cambios que no deberían llegar a producción todavía, usar rama distinta de `main`. El secreto `HF_TOKEN` está en GitHub → Settings → Secrets and variables → Actions. La carpeta `Secasol26/` en raíz es el clon local del Space (gitignoreada) — históricamente se usaba para deploy manual; el Action volvió obsoleto el push manual.
 
+**El deploy NO es hermético — dos gotchas críticos (S46):**
+- **`requirements.txt` debe estar pinneado con `==`.** El Dockerfile del Space corre `pip install -r requirements.txt` en cada rebuild; con rangos `>=` HF resolvía a versiones distintas de las del entorno local → **mismos código/clima/inputs daban resultados numéricos distintos** (el solver de cámara convergía a basura). Pin a las versiones del `.venv` local. El panel **"🔧 Entorno"** en el sidebar (`Secasol.py::_diagnostico_entorno`) muestra Python + versiones para comparar local vs remoto de un vistazo. (Nota: el pin fija las librerías, NO el Python — HF usa el del Dockerfile, `python:3.13.5-slim`.)
+- **El `file_uploader` (carga de `.json`) requiere XSRF desactivado en HF.** Detrás del proxy de HF Spaces, la protección XSRF de Streamlit rechaza la subida con `AxiosError: 403`. El `ENTRYPOINT` del **Dockerfile del Space** (lado HF, NO en el repo) lleva `--server.enableXsrfProtection=false` (todo en una sola línea). El deploy desde GitHub **preserva** ese Dockerfile, así que el flag persiste; el Dockerfile no se versiona en el repo.
+
 ## Arquitectura
 
 La aplicación es un **prediseñador de secadores solares** (Streamlit). El usuario configura el sistema pestaña a pestaña; cada pestaña escribe en un objeto `Proyecto` central guardado en `st.session_state.proyecto`.
