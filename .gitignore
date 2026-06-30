@@ -32,5 +32,11 @@ htmlcov/
 docs/notas/papers/*.pdf
 docs/notas/Saravia2007.pdf
 
+# Presentaciones del seminario (binarios pesados — no se versionan ni se distribuyen)
+*.pptx
+
+# Artefactos de pruebas manuales de coincidencia local↔HF (snapshots JSON + reportes PDF)
+docs/pruebas_coincidencia/
+
 # Clon local del Hugging Face Space (deploy automatizado vía GitHub Action — ver S33)
 Secasol26/
