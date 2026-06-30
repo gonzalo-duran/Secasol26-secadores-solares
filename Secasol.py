@@ -106,6 +106,24 @@ with st.sidebar.expander("🔧 Entorno", expanded=False):
     )
     st.markdown(_diagnostico_entorno())
 
+# Contacto institucional (S46) — visible en todas las secciones porque el sidebar
+# es persistente. Pensado para los usuarios que llegan por el despliegue público
+# de Hugging Face Spaces, que de otro modo no tienen ningún punto de contacto con
+# el autor ni con el grupo.
+_CONTACTO_MAIL = "gonzalo.jose.duran@gmail.com"
+
+with st.sidebar.expander("📬 Contacto", expanded=False):
+    st.markdown(
+        "**Gonzalo J. Durán**  \n"
+        "GEEDSP · INENCO · CONICET-UNSa  \n"
+        f"✉️ [{_CONTACTO_MAIL}](mailto:{_CONTACTO_MAIL})\n\n"
+        "Escribime para **citar** el programa en un trabajo, **reportar un "
+        "problema** o acercar **sugerencias**. ¡Todo feedback es bienvenido!"
+    )
+
+# Pie discreto del sidebar: mail siempre a la vista sin desplegar el expander.
+st.sidebar.caption(f"✉️ [{_CONTACTO_MAIL}](mailto:{_CONTACTO_MAIL})")
+
 # Persistencia de widget-keys entre secciones (mejora 28). En esta arquitectura
 # de render condicional, Streamlit purga al fin del run las widget-keys de la
 # sección no montada (las plain-keys sí sobreviven). Eso hacía que, al navegar
