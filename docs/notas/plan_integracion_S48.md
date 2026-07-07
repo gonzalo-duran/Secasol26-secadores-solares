@@ -12,7 +12,7 @@ Existen **tres estados** del código:
 |---|---|---|
 | **Dell G15 (working tree local)** | Ampliación grande del modo de funcionamiento de la cámara de secado (sesión de ayer) | **Sin commitear ni pushear** |
 | **`main` (GitHub)** | Versión estable v0.14.1 | = producción en HF Space (deploy automático en cada push) |
-| **`claude/hola-code-vs-local-cli-vjvre6` (GitHub)** | Manual de usuario completo (mejora 36): 21 capítulos + visor `?manual=` + 142 tests. Commit `a5f4093`, 42 archivos | Pusheada, **no mergeada** |
+| **`claude/hola-code-vs-local-cli-vjvre6` (GitHub)** | Manual de usuario completo (mejora 36): **22 capítulos** + visor `?manual=` + **148 tests**; además dos docs de planificación (`plan_integracion_S48.md`, `plan_i18n.md`). **4 commits** (`a5f4093`..`2909631`), HEAD en `2909631` | Pusheada, **no mergeada** |
 
 **Regla de oro:** un push a `main` deploya a producción al instante. Nada llega a
 `main` sin suite verde. Una feature = un merge = un deploy verificable.
@@ -98,17 +98,22 @@ Con Claude Code local, revisar y actualizar contra el código nuevo:
       controles/modos nuevos? ¿cambió el flujo de trabajo?
 - [ ] `manual/capitulos/32_tec_camara.md` — referencia técnica: ¿cambiaron
       ecuaciones, hipótesis, coeficientes, modos de operación?
+- [ ] `manual/capitulos/24_catalogo_productos.md` — describe el modelo de
+      producto (humedades, isoterma GAB, rol vestigial de las cinéticas de capa
+      fina). Si la ampliación tocó el catálogo de productos, rehabilitó cinéticas
+      o agregó campos, revisar este capítulo (en especial el bloque "En
+      profundidad" sobre capa fina y la tabla de estado de calibración).
 - [ ] Si hay funcionalidad nueva visible en resultados:
       `16_resultados.md` / `36_tec_resultados.md`.
 - [ ] `90_apendice_codigo.md` §cámara — si cambiaron módulos/funciones.
 - [ ] Si un capítulo nuevo o un heading con ancla cambia: correr
-      `pytest tests/test_ui/test_manual.py` — los 142 tests validan que todos
+      `pytest tests/test_ui/test_manual.py` — los 148 tests validan que todos
       los enlaces/anclas/esquemas sigan resolviendo.
 
 ### Cerrar la fase
 
 ```bash
-.venv/bin/python -m pytest            # suite completa verde (≥1184 + lo de cámara)
+.venv/bin/python -m pytest            # suite completa verde (≥1190 + lo de cámara)
 .venv/bin/python -m black . && .venv/bin/python -m ruff check .
 git commit                            # el merge + actualizaciones del manual
 git push origin claude/hola-code-vs-local-cli-vjvre6

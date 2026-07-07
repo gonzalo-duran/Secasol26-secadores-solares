@@ -16,7 +16,7 @@ Hoja de ruta a 1.0 (sin orden estricto):
 
 - **Manual de usuario estilo SAM (mejora 36)**: manual autocontenido que se abre en una
   pestaña paralela del navegador (`?manual=<slug>`), sin perder la sesión de diseño.
-  21 capítulos markdown en `manual/capitulos/` organizados en 4 partes + apéndices:
+  22 capítulos markdown en `manual/capitulos/` organizados en 4 partes + apéndices:
   guía operativa por sección (P1–P7), fundamentos transversales (radiación y plano
   orientado, psicrometría, física del secado, convenciones de unidades/ángulos),
   referencia técnica completa por subsistema (adaptada del material del seminario
@@ -27,8 +27,10 @@ Hoja de ruta a 1.0 (sin orden estricto):
   enlace global en el sidebar. Infraestructura: TOC declarativo
   (`ui/componentes/manual_contenido.py`), parser puro testeable
   (`ui/componentes/manual_render.py`), vista stateless (`ui/manual.py`) interceptada
-  en `Secasol.py` antes de inicializar el proyecto. 142 tests de integridad de
-  contenido (`tests/test_ui/test_manual.py`).
+  en `Secasol.py` antes de inicializar el proyecto. 148 tests de integridad de
+  contenido (`tests/test_ui/test_manual.py`). Incluye un capítulo de fundamentos
+  "El catálogo de productos" (los 19 productos, humedades típicas, estado de
+  calibración GAB y rol vestigial de las cinéticas de capa fina).
 
 ---
 

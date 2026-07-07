@@ -10,7 +10,7 @@ Secasol es 100% monolingüe español, sin ninguna infraestructura de traducción
 Censo del volumen traducible: **~817 strings de UI** (80% en p3–p7), **~280 del
 PDF**, **~115 de gráficas Plotly**, **39 advertencias** (mensaje+sugerencia),
 **~206 errores técnicos**, **39 descripciones de catálogo**, **~40 etiquetas de
-enums**, y el **manual (21 capítulos, ~3.000 líneas)**.
+enums**, y el **manual (22 capítulos, ~3.100 líneas)**.
 
 Decisiones tomadas con el usuario (no re-discutir):
 
@@ -25,7 +25,7 @@ Decisiones tomadas con el usuario (no re-discutir):
    quedan en español.
 3. **Manual: solo infraestructura multiidioma ahora** (carpetas
    `manual/capitulos/es|en|pt/` + fallback a ES con aviso); la traducción de
-   los 21 capítulos es la fase final, capítulo a capítulo.
+   los 22 capítulos es la fase final, capítulo a capítulo.
 4. **Selector: 🌐 en sidebar + query param `?lang=`** (session_state; el query
    param permite que el manual —pestaña aparte, stateless— herede el idioma y
    que se compartan URLs pre-configuradas del Space). Default ES.
@@ -141,7 +141,7 @@ ruff + e2e (§7) + bitácora.
 | **F6** | PDF: `generar_reporte_pdf(..., idioma)`, `tr` enhebrado a las `_seccion_*` | ~280 |
 | **F7** | Catálogos: `descripcion_en`/`descripcion_pt` en los YAML (39 items) + `campo_i18n` en los format_func. `notas`/`fuente` quedan ES en v1. No tocar bloques `capa_fina:` | 78 campos |
 | **F8** | Manual multiidioma (infra): mover a `manual/capitulos/es/`, `ruta_capitulo(cap, lang)` + fallback con aviso, TOC vía `traducir(..., default=cap.titulo)`, enlaces internos y `boton_manual` propagan `&lang=`, tests parametrizados por idioma en disco | ~50 |
-| **F9+** | Traducción de los 21 capítulos del manual a EN y PT (capítulo a capítulo, revisable) | ~3.000 líneas ×2 |
+| **F9+** | Traducción de los 22 capítulos del manual a EN y PT (capítulo a capítulo, revisable) | ~3.100 líneas ×2 |
 
 ## 4. Advertencias traducidas (detalle F5)
 

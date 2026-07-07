@@ -64,7 +64,7 @@ previa de `docs/notas/seminario/` y de la UI.
   renderizadas en la UI del proyecto). Regla editorial: `aligned`, nunca
   `align`; sin `$` literal.
 
-### Contenido — 21 capítulos en `manual/capitulos/`
+### Contenido — 22 capítulos en `manual/capitulos/`
 
 - **Parte I**: `01_introduccion` (qué es, público, flujo P1→P7, cómo usar el
   manual, límites honestos del modelo).
@@ -76,7 +76,12 @@ previa de `docs/notas/seminario/` y de la UI.
 - **Parte III** (fundamentos): `20_radiacion` (piloto; componentes GHI/DNI/DHI,
   SPA, incidencia, Liu-Jordan), `21_psicrometria` (ω/HR, carta, bulbo húmedo),
   `22_fisica_secado` (base seca, a_w, GAB, períodos de secado emergentes),
-  `23_convenciones` (SI estricto + tres convenciones de acimut con fórmulas).
+  `24_catalogo_productos` (los 19 productos, humedades típicas, estado de
+  calibración GAB 4/19, rol vestigial de las cinéticas de capa fina — agregado
+  al final de la sesión a pedido del usuario), `23_convenciones` (SI estricto +
+  tres convenciones de acimut con fórmulas). Orden de navegación por la tupla
+  `CAPITULOS`: el catálogo va entre "secado" y "convenciones" aunque el número
+  de archivo sea 24 (los números de archivo son cosméticos).
 - **Parte IV** (técnica, seminario adaptado): `30_tec_emplazamiento`,
   `31_tec_colector`, `32_tec_camara`, `33_tec_industrial`,
   `34_tec_chimenea_motor`, `35_tec_auxiliar`, `36_tec_resultados`. Ecuaciones
@@ -88,7 +93,7 @@ previa de `docs/notas/seminario/` y de la UI.
 
 ### Tests
 
-`tests/test_ui/test_manual.py` — **142 tests** (funciones puras, sin servidor):
+`tests/test_ui/test_manual.py` — **148 tests** (funciones puras, sin servidor):
 TOC↔disco (declarados existen, sin huérfanos, slugs kebab-case únicos), sintaxis
 de profundidad (parsea + errores esperados), **enlaces internos resuelven**
 (slug y ancla contra el capítulo destino), ningún capítulo queda aislado,
@@ -98,7 +103,7 @@ hardcodeadas.
 
 ## Verificación
 
-- **Suite completa: 1184 passed** (1042 previas + 142 del manual). black + ruff
+- **Suite completa: 1190 passed** (1042 previas + 148 del manual). black + ruff
   limpios.
 - E2E visual con Playwright sobre `streamlit run` (contenedor remoto):
   `?manual=indice` (índice por partes), `?manual=colector` (tabla de tipos +
@@ -119,6 +124,27 @@ hardcodeadas.
 - `docs/tareas.md` — estado general S47 + hito completado.
 - `docs/mapa_conexiones.md` — nota S47 (el manual no agrega cableado
   widget→campo; vista stateless).
+
+## Adiciones posteriores en la misma sesión (misma rama)
+
+Después de cerrar el manual, la sesión sumó a la rama
+`claude/hola-code-vs-local-cli-vjvre6` (commits `11cbd82`, `b4966c1`,
+`2909631`):
+
+- **`docs/notas/plan_integracion_S48.md`** — guía operativa para el merge del
+  día siguiente: la Dell tiene una ampliación grande de cámara sin pushear;
+  orden acordado (cámara → main → producción; después manual → main), conflictos
+  esperados archivo por archivo, y verificaciones post-deploy. El merge de la
+  i18n arranca sobre `main` ya integrado.
+- **`docs/notas/plan_i18n.md`** — plan de internacionalización ES/EN/PT en fases
+  (mecanismo `t()`+YAML sin gettext, advertencias por código en la UI con core
+  intacto, manual multiidioma solo-infra ahora + contenido después, selector
+  sidebar + `?lang=`). A ejecutar post-S48.
+- **`manual/capitulos/24_catalogo_productos.md`** — capítulo nuevo de la
+  Parte III "El catálogo de productos" (a pedido del usuario): los 19 productos,
+  humedades típicas, estado de calibración GAB (4/19), y aclaración del rol
+  vestigial de las cinéticas de capa fina (S38). Manual 21→22 capítulos, tests
+  142→148, suite 1184→1190.
 
 ## Pendientes que deja la sesión
 

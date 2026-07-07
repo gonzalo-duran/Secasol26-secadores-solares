@@ -5,7 +5,7 @@ está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
 > Estado general (S47): v0.14.1 · 7 pestañas funcionales + manual de usuario ·
-> suite pytest 1184. Hoja de ruta a 1.0: **modo industrial completo y validado**
+> suite pytest 1190. Hoja de ruta a 1.0: **modo industrial completo y validado**
 > + mejoras 25–36 implementadas. Resta solo i18n y refinamiento del análisis
 > anual.
 
@@ -17,11 +17,11 @@ decisiones de diseño en [[docs/decisiones]].
 ## Completado (hitos recientes)
 
 - **Manual de usuario estilo SAM (S47, mejora 36)** — manual autocontenido en
-  pestaña paralela (`?manual=<slug>`): 21 capítulos markdown en
+  pestaña paralela (`?manual=<slug>`): 22 capítulos markdown en
   `manual/capitulos/` (guía por sección, fundamentos, referencia técnica del
   seminario adaptada, apéndices), dos niveles de lectura (texto + expanders
   "En profundidad"), ecuaciones KaTeX, enlaces cruzados, esquemas SVG. Visor
-  stateless (`ui/manual.py`) + TOC declarativo + parser puro con 142 tests de
+  stateless (`ui/manual.py`) + TOC declarativo + parser puro con 148 tests de
   integridad. Botón "📖 Manual" en P1–P7 y sidebar.
 - **Tanda de mejoras UX/física (S41–S44, mejoras 25–35)** — espesores de mercado
   (madera/policarbonato) con k efectivo por espesor; auditoría hidrodinámica

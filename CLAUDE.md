@@ -55,7 +55,7 @@ ui/p{1-7}_*.py            ← UI por pestaña, llaman a core/ y calculos/
 ui/componentes/           ← widgets reutilizables (header, gráficas, unidades, serialización)
 ui/reporte.py             ← generación de reporte PDF (P7)
 ui/manual.py              ← vista del manual de usuario (?manual=<slug>, estilo SAM)
-manual/capitulos/*.md     ← contenido del manual (21 capítulos markdown)
+manual/capitulos/*.md     ← contenido del manual (22 capítulos markdown)
 core/                     ← dataclasses del modelo de datos (sin Streamlit)
 calculos/                 ← motores numéricos puros (sin Streamlit)
 catalogo/materiales/*.yaml ← catálogos de materiales (cubiertas, placas, aislantes, fondos)
@@ -189,7 +189,7 @@ Desde **S40** la tipología `GRAN_ESCALA` es funcional (antes era cosmética, id
 
 Con `?manual=<slug>` en la URL, `Secasol.py` intercepta **antes** de inicializar `proyecto` y renderiza `ui/manual.py` (con `st.stop()` al final). **La vista manual es stateless: nunca toca `st.session_state.proyecto`.** Los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py::boton_manual`) y el enlace del sidebar abren SIEMPRE con `target=_blank` — un clic sin `_blank` desde la vista de diseño recargaría la app y perdería el proyecto.
 
-- Contenido: `manual/capitulos/*.md` (21 capítulos). TOC declarativo (slug → archivo → parte) en `ui/componentes/manual_contenido.py` (sin imports de streamlit, testeable).
+- Contenido: `manual/capitulos/*.md` (22 capítulos). TOC declarativo (slug → archivo → parte) en `ui/componentes/manual_contenido.py` (sin imports de streamlit, testeable). El **orden de navegación lo fija la tupla `CAPITULOS`**, no el número de archivo (ej. `24_catalogo_productos.md` se navega dentro de la Parte III entre "secado" y "convenciones"). Al agregar un capítulo: crear el .md + declararlo en `CAPITULOS` + enlazarlo desde algún capítulo (los tests exigen que ninguno quede aislado).
 - Sintaxis propia de los .md (parseada por `ui/componentes/manual_render.py`, funciones puras + `render_bloques`): bloques `<!-- profundidad: Título -->…<!-- /profundidad -->` → `st.expander` (segundo nivel de lectura); `<!-- esquema: nombre | caption -->` → `mostrar_esquema`; anclas explícitas `## Título {#ancla}` → `st.header(anchor=)`; enlaces internos `[texto](?manual=slug#ancla)`; ecuaciones KaTeX `$`/`$$` nativas de `st.markdown`.
 - `tests/test_ui/test_manual.py` valida integridad: TOC↔disco, sintaxis de profundidad, que todo enlace/ancla/esquema resuelva, `$$` balanceado, higiene de URLs. Al agregar un capítulo: crear el .md + declararlo en `CAPITULOS`.
 
