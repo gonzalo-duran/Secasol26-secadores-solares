@@ -27,6 +27,8 @@ from core.proyecto import (
     Tipologia,
 )
 from ui.componentes.esquemas import mostrar_esquema
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 
 # ---------------------------------------------------------------------------
 # Descripciones de tipología
@@ -81,6 +83,7 @@ _ETIQUETAS_DIA = {
 def render() -> None:
     """Renderiza la Pestaña 1 — Tipología y Configuración."""
     st.header("1 · Tipología y Configuración del Análisis")
+    boton_manual(SLUG_POR_SECCION["p1"])
 
     proyecto = st.session_state.proyecto
     meta: Meta = proyecto.meta

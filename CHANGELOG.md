@@ -10,7 +10,25 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Manual de usuario estilo SAM (mejora 36) e internacionalización (idiomas).
+- Internacionalización (idiomas).
+
+### Added
+
+- **Manual de usuario estilo SAM (mejora 36)**: manual autocontenido que se abre en una
+  pestaña paralela del navegador (`?manual=<slug>`), sin perder la sesión de diseño.
+  21 capítulos markdown en `manual/capitulos/` organizados en 4 partes + apéndices:
+  guía operativa por sección (P1–P7), fundamentos transversales (radiación y plano
+  orientado, psicrometría, física del secado, convenciones de unidades/ángulos),
+  referencia técnica completa por subsistema (adaptada del material del seminario
+  INENCO, con ecuaciones KaTeX), mapa de implementación en código, glosario y
+  bibliografía. Dos niveles de lectura por capítulo (idea general + bloques
+  desplegables "🔬 En profundidad"), enlaces cruzados entre conceptos, esquemas SVG
+  y navegación por índice/anterior/siguiente. Botón "📖 Manual" en cada sección y
+  enlace global en el sidebar. Infraestructura: TOC declarativo
+  (`ui/componentes/manual_contenido.py`), parser puro testeable
+  (`ui/componentes/manual_render.py`), vista stateless (`ui/manual.py`) interceptada
+  en `Secasol.py` antes de inicializar el proyecto. 142 tests de integridad de
+  contenido (`tests/test_ui/test_manual.py`).
 
 ---
 

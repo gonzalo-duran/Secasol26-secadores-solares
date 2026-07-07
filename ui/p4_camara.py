@@ -57,6 +57,8 @@ from ui.componentes.espesores import (
 )
 from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.graficas import mostrar_plotly
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -1402,6 +1404,7 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
 def render() -> None:
     """Renderiza la Pestaña 4 — Cámara de Secado."""
     st.header("4 · Cámara de Secado")
+    boton_manual(SLUG_POR_SECCION["p4"])
 
     proyecto = st.session_state.proyecto
 

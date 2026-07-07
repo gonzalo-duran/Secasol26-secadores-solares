@@ -10,6 +10,8 @@
 
 ## Resumen ejecutivo
 
+> Nota S47: el **manual de usuario** (mejora 36) no introduce cableado widget→campo→consumidor: la vista `?manual=<slug>` (`ui/manual.py`, intercept en `Secasol.py`) es **stateless** (no toca `st.session_state.proyecto`) y los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py`) solo emiten un anchor `target=_blank`.
+
 Desconexiones / atenuaciones reales vigentes (eran 3 a inicio de S30):
 
 | # | Widget UI | Campo escrito | Estado |

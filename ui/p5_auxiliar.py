@@ -21,6 +21,8 @@ from core.auxiliar import (
     TipoAuxiliar,
     advertencias_auxiliar,
 )
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -274,6 +276,7 @@ def _json_config_auxiliar(aux: "Auxiliar") -> dict:
 def render() -> None:
     """Renderiza la Pestaña 5 — Calentamiento Auxiliar."""
     st.header("5 · Calentamiento Auxiliar")
+    boton_manual(SLUG_POR_SECCION["p5"])
 
     proyecto = st.session_state.proyecto
 

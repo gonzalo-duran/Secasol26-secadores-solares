@@ -35,6 +35,8 @@ El entorno virtual está en `.venv/`. Siempre prefijá los comandos de Python co
 
 El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada y sin ver el código.
 
+El workflow copia una **whitelist** de carpetas (`Secasol.py`, `ui/`, `calculos/`, `core/`, `assets/`, `catalogo/`, `manual/`) — al agregar una carpeta top-level nueva que la app necesite en runtime, hay que sumarla al `deploy_hf.yml` (así se agregó `manual/` para el manual de usuario; `docs/` NO se deploya).
+
 Implicancia operativa: **un push a `main` actualiza la app en producción**. Si hay que pushear cambios que no deberían llegar a producción todavía, usar rama distinta de `main`. El secreto `HF_TOKEN` está en GitHub → Settings → Secrets and variables → Actions. La carpeta `Secasol26/` en raíz es el clon local del Space (gitignoreada) — históricamente se usaba para deploy manual; el Action volvió obsoleto el push manual.
 
 **El deploy NO es hermético — dos gotchas críticos (S46):**
@@ -52,6 +54,8 @@ Secasol.py                ← entry point Streamlit, construye las pestañas
 ui/p{1-7}_*.py            ← UI por pestaña, llaman a core/ y calculos/
 ui/componentes/           ← widgets reutilizables (header, gráficas, unidades, serialización)
 ui/reporte.py             ← generación de reporte PDF (P7)
+ui/manual.py              ← vista del manual de usuario (?manual=<slug>, estilo SAM)
+manual/capitulos/*.md     ← contenido del manual (21 capítulos markdown)
 core/                     ← dataclasses del modelo de datos (sin Streamlit)
 calculos/                 ← motores numéricos puros (sin Streamlit)
 catalogo/materiales/*.yaml ← catálogos de materiales (cubiertas, placas, aislantes, fondos)
@@ -180,6 +184,14 @@ Desde **S40** la tipología `GRAN_ESCALA` es funcional (antes era cosmética, id
 - **P7** `p7_resultados.py` — orquesta `calcular_todo`, `calcular_todo_transitorio` o **`calcular_todo_ventana`** (modo VENTANA, S40), muestra dashboard integrado, exporta JSON/TXT/PDF del proyecto. Sugerencia automática de irradiancia: quantile 90 de POA representativa. Si P4 calculó operación anual, agrega panel detalle mensual. En modo VENTANA (gran escala): **dashboard de producción** (producto seco, tasa de régimen, leña + perfil espacial del túnel en semicontinuo).
 
 `Secasol.py` es el entry point que monta `st.set_page_config`, llama a `ui.componentes.header.render_header()`, inicializa `st.session_state.proyecto`, y construye las 7 pestañas con `st.tabs([...])`.
+
+### Manual de usuario (mejora 36, estilo SAM)
+
+Con `?manual=<slug>` en la URL, `Secasol.py` intercepta **antes** de inicializar `proyecto` y renderiza `ui/manual.py` (con `st.stop()` al final). **La vista manual es stateless: nunca toca `st.session_state.proyecto`.** Los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py::boton_manual`) y el enlace del sidebar abren SIEMPRE con `target=_blank` — un clic sin `_blank` desde la vista de diseño recargaría la app y perdería el proyecto.
+
+- Contenido: `manual/capitulos/*.md` (21 capítulos). TOC declarativo (slug → archivo → parte) en `ui/componentes/manual_contenido.py` (sin imports de streamlit, testeable).
+- Sintaxis propia de los .md (parseada por `ui/componentes/manual_render.py`, funciones puras + `render_bloques`): bloques `<!-- profundidad: Título -->…<!-- /profundidad -->` → `st.expander` (segundo nivel de lectura); `<!-- esquema: nombre | caption -->` → `mostrar_esquema`; anclas explícitas `## Título {#ancla}` → `st.header(anchor=)`; enlaces internos `[texto](?manual=slug#ancla)`; ecuaciones KaTeX `$`/`$$` nativas de `st.markdown`.
+- `tests/test_ui/test_manual.py` valida integridad: TOC↔disco, sintaxis de profundidad, que todo enlace/ancla/esquema resuelva, `$$` balanceado, higiene de URLs. Al agregar un capítulo: crear el .md + declararlo en `CAPITULOS`.
 
 ### Convención de unidades (crítico)
 
