@@ -132,6 +132,13 @@ CAPITULOS: tuple[CapituloManual, ...] = (
         descripcion="Actividad de agua, isotermas de sorción y la dinámica del producto.",
     ),
     CapituloManual(
+        slug="catalogo-productos",
+        titulo="El catálogo de productos",
+        archivo="24_catalogo_productos.md",
+        parte=_PARTE_III,
+        descripcion="Qué productos trae Secasol, cómo se eligieron, humedades típicas y estado de calibración.",
+    ),
+    CapituloManual(
         slug="convenciones",
         titulo="Convenciones de unidades y ángulos",
         archivo="23_convenciones.md",

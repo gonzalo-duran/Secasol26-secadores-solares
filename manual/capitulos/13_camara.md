@@ -65,10 +65,12 @@ la $\Delta P$ respecto de un lecho de trozos gruesos.
 ## Producto y carga {#producto}
 
 El producto se elige del **catálogo** (con sus propiedades de sorción y
-constantes térmicas ya cargadas) y se define la **carga**: masa fresca,
-humedad inicial $X_0$ y humedad objetivo $X_{obj}$, ambas en **base seca**
-(kg de agua por kg de materia seca — la diferencia con la base húmeda está
-explicada en [Física del secado](?manual=secado#base-seca)).
+constantes térmicas ya cargadas — ver
+[El catálogo de productos](?manual=catalogo-productos) para qué trae cada uno y
+su estado de calibración) y se define la **carga**: masa fresca, humedad inicial
+$X_0$ y humedad objetivo $X_{obj}$, ambas en **base seca** (kg de agua por kg de
+materia seca — la diferencia con la base húmeda está explicada en
+[Física del secado](?manual=secado#base-seca)).
 
 El corazón del modelo de producto es la **isoterma de sorción GAB**: a medida
 que el producto se seca, su actividad de agua cae y el secado se frena solo —

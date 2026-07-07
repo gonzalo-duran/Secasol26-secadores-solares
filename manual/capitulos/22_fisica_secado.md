@@ -114,7 +114,8 @@ que limita la temperatura de operación del secador.
 
 ---
 
-**Ver también:** [Psicrometría](?manual=psicrometria) (el lado del aire),
-[4 · Cámara](?manual=camara#producto) (dónde se configura el producto),
-[Técnico · Cámara](?manual=tec-camara#isotermas) (las ecuaciones completas del
-balance).
+**Ver también:** [El catálogo de productos](?manual=catalogo-productos) (los
+productos disponibles y sus datos), [Psicrometría](?manual=psicrometria) (el
+lado del aire), [4 · Cámara](?manual=camara#producto) (dónde se configura el
+producto), [Técnico · Cámara](?manual=tec-camara#isotermas) (las ecuaciones
+completas del balance).
