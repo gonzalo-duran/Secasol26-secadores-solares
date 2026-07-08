@@ -1,6 +1,6 @@
 # Mapa de conexiones — Secasol
 
-> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01, **S36–S45 2026-06-23**, **S47 2026-07-06**).
+> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01, **S36–S45 2026-06-23**, **S47 2026-07-06**, **S48 2026-07-07**).
 > Objetivo: detectar **widgets UI sin consumidor en `calculos/`** y **campos consumidos sin widget UI** (toggles/inputs huérfanos).
 >
 > S33 (deploy a HF Spaces) no introdujo cableado widget→campo→consumidor: ver `docs/bitacora/bitacora_sesion33.md`.
@@ -9,6 +9,8 @@
 ---
 
 ## Resumen ejecutivo
+
+> Nota S48: el **manual de usuario** (mejora 36) no introduce cableado widget→campo→consumidor: la vista `?manual=<slug>` (`ui/manual.py`, intercept en `Secasol.py`) es **stateless** (no toca `st.session_state.proyecto`) y los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py`) solo emiten un anchor `target=_blank`.
 
 Desconexiones / atenuaciones reales vigentes (eran 3 a inicio de S30):
 

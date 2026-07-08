@@ -10,9 +10,46 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Manual de usuario estilo SAM (mejora 36) e internacionalización (idiomas).
+- Internacionalización (idiomas).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+---
+
+## [0.16.0] — 2026-07-08
+
+**Manual de usuario** (S48, integrado a la cámara radiativa en S49). Ver
+`docs/bitacora/bitacora_sesion48.md`.
+
+### Added
+
+- **Manual de usuario estilo SAM (mejora 36)**: manual autocontenido que se abre en una
+  pestaña paralela del navegador (`?manual=<slug>`), sin perder la sesión de diseño.
+  22 capítulos markdown en `manual/capitulos/` organizados en 4 partes + apéndices:
+  guía operativa por sección (P1–P7), fundamentos transversales (radiación y plano
+  orientado, psicrometría, física del secado, convenciones de unidades/ángulos),
+  referencia técnica completa por subsistema (adaptada del material del seminario
+  INENCO, con ecuaciones KaTeX), mapa de implementación en código, glosario y
+  bibliografía. Dos niveles de lectura por capítulo (idea general + bloques
+  desplegables "🔬 En profundidad"), enlaces cruzados entre conceptos, esquemas SVG
+  y navegación por índice/anterior/siguiente. Botón "📖 Manual" en cada sección y
+  enlace global en el sidebar. Infraestructura: TOC declarativo
+  (`ui/componentes/manual_contenido.py`), parser puro testeable
+  (`ui/componentes/manual_render.py`), vista stateless (`ui/manual.py`) interceptada
+  en `Secasol.py` antes de inicializar el proyecto. 148 tests de integridad de
+  contenido (`tests/test_ui/test_manual.py`). Incluye un capítulo de fundamentos
+  "El catálogo de productos" (los 19 productos, humedades típicas, estado de
+  calibración GAB y rol vestigial de las cinéticas de capa fina).
+- Sidebar del manual: enlace **"⬅ Volver al diseñador"** (navega en la misma pestaña a la
+  vista de diseño; el proyecto de la pestaña original no se toca).
+
+### Changed
+
+- Capítulos del manual actualizados a la **cámara radiativa orientada** (0.15.0): `13_camara`
+  gana "Orientación y techo a un agua" y "Superficies translúcidas"; `32_tec_camara` documenta
+  el reparto producto/aire ($I_{eq,prod}$, $Q_{rad,aire}$, factores de intercepción) y el
+  término nuevo del balance del aire; menciones ajustadas en tipología, emplazamiento,
+  resultados, psicrometría, glosario y apéndice de código.
 
 ---
 

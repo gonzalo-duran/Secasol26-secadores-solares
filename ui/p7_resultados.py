@@ -28,6 +28,8 @@ from calculos.balance_global import (
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.proyecto import ModoAnalisis, Tipologia
 from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -1683,6 +1685,7 @@ def _render_carta_psicrometrica(res, proyecto, *, omega_amb: Optional[float] = N
 def render() -> None:
     """Renderiza la Pestaña 7 — Resultados del Prediseño."""
     st.header("7 · Resultados del Prediseño")
+    boton_manual(SLUG_POR_SECCION["p7"])
 
     proyecto = st.session_state.proyecto
 

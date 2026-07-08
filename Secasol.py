@@ -50,6 +50,22 @@ st.set_page_config(
 render_header()  # header full-width, antes de la navegación lateral
 
 # ---------------------------------------------------------------------------
+# Manual de usuario (mejora 36) — vista paralela estilo SAM
+# ---------------------------------------------------------------------------
+# Con ?manual=<slug> en la URL la app renderiza el manual en vez del diseñador.
+# El intercept va ANTES de inicializar `proyecto`: la vista manual es stateless
+# (nunca toca st.session_state.proyecto) y st.stop() evita montar la navegación
+# y las secciones. La pestaña de diseño nunca lleva ?manual= en su URL, así que
+# no hay interferencia entre ambas vistas.
+
+_slug_manual = st.query_params.get("manual")
+if _slug_manual is not None:
+    from ui.manual import render_manual
+
+    render_manual(_slug_manual)
+    st.stop()
+
+# ---------------------------------------------------------------------------
 # Inicialización del estado de sesión
 # ---------------------------------------------------------------------------
 
@@ -77,6 +93,12 @@ _SECCIONES = [
 
 st.sidebar.title("Secasol26")
 st.sidebar.caption("Prediseño de secadores solares")
+# Punto de entrada global al manual: siempre en pestaña nueva (target=_blank)
+# para no recargar la app y perder el proyecto en curso.
+st.sidebar.markdown(
+    '<a href="?manual=indice" target="_blank" rel="noopener">📖 Manual del usuario</a>',
+    unsafe_allow_html=True,
+)
 _rotulo = st.sidebar.radio(
     "Secciones del proyecto",
     options=[r for r, _ in _SECCIONES],

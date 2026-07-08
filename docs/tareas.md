@@ -4,10 +4,10 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S44): v0.14.0 · 7 pestañas funcionales · suite pytest 1042.
-> Hoja de ruta a 1.0: **modo industrial completo y validado** + tanda de mejoras
-> UX/física (mejoras 25–35). Resta solo pulido: manual de usuario estilo SAM
-> (mejora 36) e i18n.
+> Estado general (S48): v0.15.0 · 7 pestañas funcionales + manual de usuario ·
+> suite pytest 1221. Hoja de ruta a 1.0: **modo industrial completo y validado**
+> + mejoras 25–36 implementadas + cámara radiativa orientada. Resta solo i18n y
+> refinamiento del análisis anual.
 
 ## En progreso
 
@@ -16,6 +16,18 @@ decisiones de diseño en [[docs/decisiones]].
 
 ## Completado (hitos recientes)
 
+- **Cámara radiativa orientada (S47, v0.15.0)** — la cámara gana orientación
+  propia (acimut) y techo a un agua independientes del banco de colectores;
+  hasta 5 caras translúcidas con transposición POA por cara y reparto de la
+  radiación producto/aire (`calculos/radiacion_camara.py`). Barridos de
+  pendiente/acimut de cámara. Ver `docs/bitacora/bitacora_sesion47.md`.
+- **Manual de usuario estilo SAM (S48, mejora 36)** — manual autocontenido en
+  pestaña paralela (`?manual=<slug>`): 22 capítulos markdown en
+  `manual/capitulos/` (guía por sección, fundamentos, referencia técnica del
+  seminario adaptada, apéndices), dos niveles de lectura (texto + expanders
+  "En profundidad"), ecuaciones KaTeX, enlaces cruzados, esquemas SVG. Visor
+  stateless (`ui/manual.py`) + TOC declarativo + parser puro con 148 tests de
+  integridad. Botón "📖 Manual" en P1–P7 y sidebar.
 - **Tanda de mejoras UX/física (S41–S44, mejoras 25–35)** — espesores de mercado
   (madera/policarbonato) con k efectivo por espesor; auditoría hidrodinámica
   ASHRAE (ΔP producto cross-flow, paralelos/serie); carta psicrométrica del

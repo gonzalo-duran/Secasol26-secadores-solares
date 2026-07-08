@@ -32,6 +32,8 @@ from core import catalogo
 from core.advertencias import Severidad
 from core.chimenea import Chimenea, advertencias_chimenea
 from core.motor import Motor, TipoAccionamiento
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 
 # ---------------------------------------------------------------------------
 # Constantes de UI
@@ -887,6 +889,7 @@ def _render_chimenea_section(proyecto) -> None:
 def render() -> None:
     """Renderiza la Pestaña 6 — Motor / Ventilador."""
     st.header("6 · Motor / Ventilador")
+    boton_manual(SLUG_POR_SECCION["p6"])
 
     st.caption(
         "El aire se mueve por **convección forzada** (motor/ventilador) o **natural** "

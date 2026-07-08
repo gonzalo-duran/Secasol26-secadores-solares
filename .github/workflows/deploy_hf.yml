@@ -40,6 +40,7 @@ jobs:
           cp -r ../core/ src/core/
           cp -r ../assets/ src/assets/
           cp -r ../catalogo/ src/catalogo/
+          cp -r ../manual/ src/manual/
           mkdir -p src/data
           cp ../requirements.txt requirements.txt
 

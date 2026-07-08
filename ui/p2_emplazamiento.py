@@ -24,6 +24,8 @@ from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.graficas import mostrar_plotly
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
@@ -577,6 +579,7 @@ def render() -> None:
     """Renderiza la pestaña 2: Emplazamiento y Recursos Climáticos."""
 
     st.header("Emplazamiento y Recursos Climáticos")
+    boton_manual(SLUG_POR_SECCION["p2"])
 
     proyecto = st.session_state.proyecto
 

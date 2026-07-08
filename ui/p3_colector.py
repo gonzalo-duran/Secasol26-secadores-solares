@@ -45,6 +45,8 @@ from ui.componentes.espesores import (
 )
 from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.graficas import mostrar_plotly
+from ui.componentes.manual_contenido import SLUG_POR_SECCION
+from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import kelvin_a_celsius
 
 # ---------------------------------------------------------------------------
@@ -1577,6 +1579,7 @@ def render() -> None:
     """Renderiza la pestaña 3: Colector Solar."""
 
     st.header("Colector Solar de Aire")
+    boton_manual(SLUG_POR_SECCION["p3"])
 
     proyecto = st.session_state.proyecto
     tipologia = proyecto.configuracion.tipologia
