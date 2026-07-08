@@ -137,7 +137,17 @@ class BarridoConfig:
         kpis_extra: Ids de KPIs avanzados opt-in a extraer además de los fijos.
         condiciones_constantes: Kwargs de ``calcular_todo`` (T_amb_K, I_g_W_m2,
             v_viento_ms, T_entrada_K, HR_camara). Requerido en modo Constantes.
-        forzantes_base: ``ForzantesAire`` del horizonte. Requerido en Transitorio.
+        forzantes_base: ``ForzantesAire`` del horizonte. Requerido en Transitorio
+            salvo que se provea ``forzantes_builder``.
+        forzantes_builder: Si se provee, se invoca con el **proyecto clonado y
+            ya mutado** en cada punto del barrido para reconstruir las
+            forzantes desde cero, en vez de reutilizar ``forzantes_base``
+            congelada. Necesario para parámetros cuyo efecto pasa por las
+            forzantes en vez de por un campo directo del solver (ej.
+            ``acimut_camara``/``pendiente_techo_camara``: la irradiancia
+            equivalente de la cámara se computa al armar las forzantes, no
+            en el motor). ``None`` (default) → usa ``forzantes_base`` tal
+            cual, comportamiento histórico.
         n_dias: Días simulados en Transitorio.
     """
 
@@ -148,6 +158,7 @@ class BarridoConfig:
     kpis_extra: tuple[str, ...] = ()
     condiciones_constantes: Optional[dict] = None
     forzantes_base: Any = None
+    forzantes_builder: Optional[Callable[[Any], Any]] = None
     n_dias: Optional[int] = None
 
 
@@ -242,9 +253,14 @@ def _despachar_motor(proyecto: Any, config: BarridoConfig, override: dict | None
             _aplicar_forzante_a_condiciones(condiciones, override)
         return calcular_todo(proyecto=proyecto, **condiciones)
     if config.modo == "transitorio":
+        forzantes = (
+            config.forzantes_builder(proyecto)
+            if config.forzantes_builder is not None
+            else config.forzantes_base
+        )
         return calcular_todo_transitorio(
             proyecto,
-            forzantes_base=config.forzantes_base,
+            forzantes_base=forzantes,
             n_dias=config.n_dias or 1,
         )
     if config.modo == "anual":

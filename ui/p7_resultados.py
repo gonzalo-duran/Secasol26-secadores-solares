@@ -462,10 +462,12 @@ def _seccion_config(proyecto) -> None:
 def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
     """Devuelve (T_amb_C, I_g, v_viento) sugeridos desde datos de clima.
 
-    Para ``I_g`` (POA representativa) calcula la transposición horaria
-    GHI/DNI/DHI → POA con el tilt/azimut del emplazamiento (helper
-    ``calcular_POA_horizonte``) y toma el quantile 90 de la serie. Si la
-    transposición falla (falta de DNI/DHI o sin emplazamiento), cae a
+    Para ``I_g`` calcula una serie representativa y toma el quantile 90:
+    en tipología CAJA, la irradiancia equivalente al producto sobre las
+    caras translúcidas de la cámara (``series_radiacion_camara`` — la
+    cámara opera como colector, con su propia orientación); en el resto,
+    la POA sobre el plano del colector (``calcular_POA_horizonte``). Si el
+    cálculo falla (falta de DNI/DHI, sin emplazamiento/cámara), cae a
     ``GHI_Wm2.quantile(0.90)`` como aproximación conservadora.
     """
     T_sug = _T_AMB_DEFAULT_C
@@ -476,8 +478,18 @@ def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
         d = proyecto.clima.datos
         T_sug = round(kelvin_a_celsius(float(d["T_amb_K"].quantile(0.75))), 1)
         v_sug = round(float(d["WS_ms"].mean()), 1)
-        # I_g representativa: POA si hay emplazamiento + DNI/DHI; sino GHI.
-        if proyecto.emplazamiento is not None:
+        es_caja = getattr(getattr(proyecto, "configuracion", None), "tipologia", None) == (
+            Tipologia.CAJA
+        )
+        if es_caja and proyecto.emplazamiento is not None and proyecto.camara is not None:
+            try:
+                from calculos.radiacion_camara import series_radiacion_camara
+
+                i_eq, _ = series_radiacion_camara(d, proyecto.emplazamiento, proyecto.camara)
+                I_sug = round(float(i_eq.quantile(0.90)), 0)
+            except Exception:
+                I_sug = round(float(d["GHI_Wm2"].quantile(0.90)), 0)
+        elif proyecto.emplazamiento is not None:
             try:
                 from calculos.clima_calc import calcular_POA_horizonte
 
@@ -591,14 +603,20 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
 
     lines += ["", "EMPLAZAMIENTO (P2)"]
     json_empl: dict = {}
+    _es_caja_p7 = cfg is not None and cfg.tipologia == Tipologia.CAJA
     if empl is not None:
         lines += [
             f"  Latitud             : {empl.latitud_deg:.4f}°",
             f"  Longitud            : {empl.longitud_deg:.4f}°",
             f"  Altitud             : {empl.altitud_m:.1f} m",
-            f"  Acimut colector     : {empl.acimut_colector_deg:.1f}° "
-            "(convención Duffie: 0°=Sur)",
-            f"  Pendiente colector  : {empl.pendiente_colector_deg:.1f}°",
+        ]
+        if not _es_caja_p7:
+            lines += [
+                f"  Acimut colector     : {empl.acimut_colector_deg:.1f}° "
+                "(convención Duffie: 0°=Sur)",
+                f"  Pendiente colector  : {empl.pendiente_colector_deg:.1f}°",
+            ]
+        lines += [
             f"  Albedo del suelo    : {empl.albedo_suelo:.2f}",
             f"  Zona horaria        : {empl.zona_horaria}",
         ]
@@ -606,11 +624,12 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             "latitud_deg": empl.latitud_deg,
             "longitud_deg": empl.longitud_deg,
             "altitud_m": empl.altitud_m,
-            "acimut_colector_deg_duffie": empl.acimut_colector_deg,
-            "pendiente_colector_deg": empl.pendiente_colector_deg,
             "albedo_suelo": empl.albedo_suelo,
             "zona_horaria": empl.zona_horaria,
         }
+        if not _es_caja_p7:
+            json_empl["acimut_colector_deg_duffie"] = empl.acimut_colector_deg
+            json_empl["pendiente_colector_deg"] = empl.pendiente_colector_deg
     else:
         lines.append("  (sin configurar)")
 
@@ -720,6 +739,7 @@ def _texto_resultados_completo(
     # --- Cámara ---
     if proyecto.camara is not None:
         g = proyecto.camara.geometria
+        cn = proyecto.camara.construccion
         bj = proyecto.camara.bandejas
         c = proyecto.camara.carga_producto
         f = proyecto.camara.flujo
@@ -727,10 +747,14 @@ def _texto_resultados_completo(
             "",
             "CÁMARA DE SECADO",
             f"  Geometría  : {g.largo_m:.2f} m × {g.ancho_m:.2f} m × {g.alto_m:.2f} m",
+            f"  Orientación: acimut {g.acimut_camara_deg:.1f}° Duffie | "
+            f"techo {g.pendiente_techo_deg:.1f}° (cae hacia {g.cara_caida_techo})",
             f"  Bandejas   : {bj.n_bandejas} | e capa = {bj.espesor_capa_m * 100:.1f} cm",
             f"  Producto   : {c.producto_id} | masa = {c.masa_total_kg:.1f} kg",
             f"  Caudal     : {f.caudal_masico_kg_s:.4f} kg/s | {f.direccion_flujo.value}",
         ]
+        if cn.cubierta_translucida_id is not None:
+            lines.append(f"  Caras translúcidas: {', '.join(cn.caras_translucidas_activas())}")
 
     # --- Auxiliar ---
     if proyecto.auxiliar is not None:
@@ -1166,12 +1190,68 @@ def _valor_actual_si_barrido(proyecto, parametro, condiciones):
         return None
 
 
+def _construir_forzantes_builder_desde_meta(horizonte_meta: dict, p3_eval):
+    """Cierra un ``forzantes_builder`` que reconstruye las forzantes desde un
+    proyecto (posiblemente clonado y mutado por un barrido paramétrico), con
+    los mismos kwargs que armaron la forzante congelada de P4.
+
+    Sin esto, un barrido en modo Transitorio sobre un parámetro que solo
+    afecta a las forzantes (ej. orientación de la cámara, que entra vía
+    ``calculos.radiacion_camara`` al armar ``I_g_W_m2``/``Q_rad_aire_W``, no
+    al motor) no tendría ningún efecto: se seguiría reutilizando la forzante
+    ya calculada con la orientación original.
+
+    Returns:
+        Callable ``proyecto -> ForzantesAire``, o ``None`` si el meta no trae
+        los kwargs necesarios (horizontes viejos persistidos antes de S47).
+    """
+    requeridos = (
+        "usar_ventana",
+        "tipo_forzantes",
+        "T_op_K",
+        "HR_op",
+        "T_amb_calc_K",
+        "n_dias_solicitado",
+        "I_g_max_W_m2",
+        "P_proyecto_Pa",
+        "dias_consecutivos",
+    )
+    if not all(k in horizonte_meta for k in requeridos):
+        return None
+
+    from ui.p4_camara import _construir_forzantes_termodinamico, _construir_forzantes_ventana
+
+    def _builder(proy):
+        if horizonte_meta["usar_ventana"]:
+            return _construir_forzantes_ventana(
+                proyecto=proy,
+                caudal_kg_s=proy.camara.flujo.caudal_masico_kg_s,
+                P_Pa=horizonte_meta["P_proyecto_Pa"],
+            )
+        return _construir_forzantes_termodinamico(
+            tipo_forzantes=horizonte_meta["tipo_forzantes"],
+            T_op_K=horizonte_meta["T_op_K"],
+            HR_op=horizonte_meta["HR_op"],
+            caudal_kg_s=proy.camara.flujo.caudal_masico_kg_s,
+            T_amb_K=horizonte_meta["T_amb_calc_K"],
+            n_dias=horizonte_meta["n_dias_solicitado"],
+            proyecto=proy,
+            p3_eval=p3_eval,
+            I_g_max_W_m2=horizonte_meta["I_g_max_W_m2"],
+            P_Pa=horizonte_meta["P_proyecto_Pa"],
+            dias_consecutivos=horizonte_meta["dias_consecutivos"],
+        )
+
+    return _builder
+
+
 def _render_barridos_parametricos(
     proyecto,
     modo: str,
     *,
     condiciones: dict | None = None,
     forzantes_base=None,
+    forzantes_builder=None,
     n_dias: int | None = None,
 ) -> None:
     """Sección de corridas paramétricas para un modo de cálculo dado.
@@ -1288,6 +1368,7 @@ def _render_barridos_parametricos(
                 kpis_extra=tuple(kpis_extra),
                 condiciones_constantes=condiciones,
                 forzantes_base=forzantes_base,
+                forzantes_builder=forzantes_builder,
                 n_dias=n_dias,
             )
             prog = st.progress(0.0)
@@ -1760,6 +1841,9 @@ def render() -> None:
             proyecto,
             "transitorio",
             forzantes_base=fz_horizonte,
+            forzantes_builder=_construir_forzantes_builder_desde_meta(
+                horizonte_meta, st.session_state.get("p3_eval")
+            ),
             n_dias=n_dias_hor,
         )
         return  # no caer en el flujo de constantes representativas

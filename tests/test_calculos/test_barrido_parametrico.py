@@ -326,6 +326,48 @@ def test_correr_barrido_transitorio(proyecto_td):
     assert proyecto_td.camara.flujo.caudal_masico_kg_s == pytest.approx(0.030)
 
 
+def test_forzantes_builder_recibe_proyecto_mutado_por_punto(proyecto_td):
+    """Con forzantes_builder, cada punto reconstruye las forzantes desde el
+    proyecto YA mutado (no reutiliza forzantes_base congelada) — necesario
+    para parámetros como la orientación de la cámara, cuyo efecto pasa por
+    el armado de forzantes y no por un campo que lea el motor directamente."""
+    caudales_recibidos: list[float] = []
+
+    def _builder(proy):
+        caudales_recibidos.append(proy.camara.flujo.caudal_masico_kg_s)
+        return _forzantes_dia_sintetico()
+
+    cfg = BarridoConfig(
+        parametro_id="caudal_masico",
+        valores_si=(0.02, 0.03, 0.04),
+        modo="transitorio",
+        nombre="caudal_tr_builder",
+        forzantes_base=_forzantes_dia_sintetico(),  # no debería usarse
+        forzantes_builder=_builder,
+        n_dias=1,
+    )
+    res = correr_barrido(proyecto_td, cfg)
+    assert len(res.puntos) == 3
+    assert all(pt.error is None for pt in res.puntos)
+    assert caudales_recibidos == [pytest.approx(v) for v in (0.02, 0.03, 0.04)]
+
+
+def test_sin_forzantes_builder_usa_forzantes_base(proyecto_td):
+    """Back-compat: forzantes_builder=None (default) reutiliza forzantes_base."""
+    cfg = BarridoConfig(
+        parametro_id="caudal_masico",
+        valores_si=(0.03,),
+        modo="transitorio",
+        nombre="caudal_tr_sin_builder",
+        forzantes_base=_forzantes_dia_sintetico(),
+        n_dias=1,
+    )
+    assert cfg.forzantes_builder is None
+    res = correr_barrido(proyecto_td, cfg)
+    assert len(res.puntos) == 1
+    assert res.puntos[0].error is None
+
+
 # ===========================================================================
 # correr_barrido — modo Anual (etapa 7)
 # ===========================================================================

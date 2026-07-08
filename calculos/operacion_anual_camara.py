@@ -153,6 +153,7 @@ def _calcular_punto_mensual(
     """Para un mes: arma forzantes mensuales y corre el motor TD vía dispatcher."""
     from calculos.balance_global import armar_forzantes_aire, presion_representativa_proyecto
     from calculos.camara_calc import calcular_camara
+    from calculos.radiacion_camara import series_radiacion_camara
 
     cfg = proyecto.camara.operacion_anual
     cam = proyecto.camara
@@ -171,9 +172,19 @@ def _calcular_punto_mensual(
     )
 
     T_amb_dia = df_dia["T_amb_K"].to_numpy()
-    GHI_dia = df_dia["GHI_Wm2"].to_numpy()
     WS_dia = df_dia["WS_ms"].to_numpy()
     HR_dia = df_dia["HR"].to_numpy() / 100.0  # NASA da en %
+
+    # Irradiancia equivalente al producto sobre las caras translúcidas de la
+    # cámara (fase 2: orientación propia, independiente del banco de
+    # colectores). Fallback a GHI horizontal (sin aporte al aire) si falla.
+    try:
+        I_eq_serie, Q_rad_aire_dia = series_radiacion_camara(df_dia, proyecto.emplazamiento, cam)
+        I_eq_dia = np.asarray(I_eq_serie, dtype=float)
+        Q_rad_aire_dia = np.asarray(Q_rad_aire_dia, dtype=float)
+    except Exception:
+        I_eq_dia = df_dia["GHI_Wm2"].to_numpy()
+        Q_rad_aire_dia = np.zeros(len(df_dia))
 
     # 3. T_salida del colector con modelo lineal
     T_sal_col_dia = _T_salida_colector_lineal(
@@ -199,8 +210,9 @@ def _calcular_punto_mensual(
         m_dot_aire_seco_kg_s=m_dot,
         v_viento_ms=WS_dia,
         T_amb_K=T_amb_dia,
-        I_g_W_m2=GHI_dia,
+        I_g_W_m2=I_eq_dia,
         I_g_POA_W_m2=POA_dia,
+        Q_rad_aire_W=Q_rad_aire_dia,
     )
 
     # 6. Correr motor TD vía dispatcher. calcular_camara arma todos los

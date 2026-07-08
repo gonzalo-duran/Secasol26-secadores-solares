@@ -22,7 +22,7 @@ from plotly.subplots import make_subplots
 from calculos.clima_calc import obtener_clima
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
-from core.proyecto import DiaAnalisis, ModoAnalisis
+from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
@@ -670,65 +670,74 @@ def render() -> None:
     # Sección 2: Orientación del colector
     # -----------------------------------------------------------------------
 
-    with st.expander("Orientación del colector", expanded=False):
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            # Mostrar en convención UI360 (0=S, 90=E, 180=N, 270=O)
-            acimut_ui360 = st.number_input(
-                "Acimut del colector [°]  —  0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste",
-                min_value=0.0,
-                max_value=360.0,
-                value=float(acimut_duffie_a_ui360(empl.acimut_colector_deg)),
-                step=1.0,
-                format="%.1f",
-                help=(
-                    "Convención: 0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste.\n"
-                    "En el hemisferio sur, un colector óptimo apunta al Norte (180°)."
-                ),
+    _tipologia_p2 = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
+    if _tipologia_p2 == Tipologia.CAJA:
+        with st.expander("Orientación del colector", expanded=False):
+            st.info(
+                "🧊 Tipología **Caja**: no hay colector externo — la cámara actúa "
+                "como colector. Su orientación, pendiente de techo y superficies "
+                "translúcidas se configuran en **P4 · Cámara**."
             )
-            pendiente = st.number_input(
-                "Pendiente / inclinación [°]  —  0° = horizontal, 90° = vertical",
-                min_value=0.0,
-                max_value=90.0,
-                value=float(empl.pendiente_colector_deg),
-                step=1.0,
-                format="%.1f",
-                help="Ángulo entre el plano del colector y la horizontal.",
-            )
-        with c2:
-            st.caption("Orientación del colector")
-            _puntos_ui360 = {
-                0.0: "Sur",
-                45.0: "SE",
-                90.0: "Este",
-                135.0: "NE",
-                180.0: "Norte",
-                225.0: "NO",
-                270.0: "Oeste",
-                315.0: "SO",
-                360.0: "Sur",
-            }
-            referencia = min(_puntos_ui360.keys(), key=lambda k: abs(k - acimut_ui360))
-            acimut_duffie = acimut_ui360_a_duffie(acimut_ui360)
-            acimut_pvlib = acimut_duffie_a_pvlib(acimut_duffie)
-            st.metric("Orientación aproximada", _puntos_ui360[referencia])
-            st.caption(f"Acimut pvlib (interno): {acimut_pvlib:.1f}°")
-            st.caption(f"Inclinación: {pendiente:.1f}°")
+    else:
+        with st.expander("Orientación del colector", expanded=False):
+            c1, c2 = st.columns([2, 1])
+            with c1:
+                # Mostrar en convención UI360 (0=S, 90=E, 180=N, 270=O)
+                acimut_ui360 = st.number_input(
+                    "Acimut del colector [°]  —  0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste",
+                    min_value=0.0,
+                    max_value=360.0,
+                    value=float(acimut_duffie_a_ui360(empl.acimut_colector_deg)),
+                    step=1.0,
+                    format="%.1f",
+                    help=(
+                        "Convención: 0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste.\n"
+                        "En el hemisferio sur, un colector óptimo apunta al Norte (180°)."
+                    ),
+                )
+                pendiente = st.number_input(
+                    "Pendiente / inclinación [°]  —  0° = horizontal, 90° = vertical",
+                    min_value=0.0,
+                    max_value=90.0,
+                    value=float(empl.pendiente_colector_deg),
+                    step=1.0,
+                    format="%.1f",
+                    help="Ángulo entre el plano del colector y la horizontal.",
+                )
+            with c2:
+                st.caption("Orientación del colector")
+                _puntos_ui360 = {
+                    0.0: "Sur",
+                    45.0: "SE",
+                    90.0: "Este",
+                    135.0: "NE",
+                    180.0: "Norte",
+                    225.0: "NO",
+                    270.0: "Oeste",
+                    315.0: "SO",
+                    360.0: "Sur",
+                }
+                referencia = min(_puntos_ui360.keys(), key=lambda k: abs(k - acimut_ui360))
+                acimut_duffie = acimut_ui360_a_duffie(acimut_ui360)
+                acimut_pvlib = acimut_duffie_a_pvlib(acimut_duffie)
+                st.metric("Orientación aproximada", _puntos_ui360[referencia])
+                st.caption(f"Acimut pvlib (interno): {acimut_pvlib:.1f}°")
+                st.caption(f"Inclinación: {pendiente:.1f}°")
 
-        # Actualizar emplazamiento con orientación (almacenamiento en Duffie)
-        try:
-            # replace() preserva lat/lon/alt/zona/albedo y cualquier campo futuro.
-            nuevo_empl = dataclasses.replace(
-                empl,
-                acimut_colector_deg=acimut_duffie,
-                pendiente_colector_deg=pendiente,
-            )
-            if nuevo_empl != empl:
-                proyecto.emplazamiento = nuevo_empl
-                empl = nuevo_empl
-        except ValueError as err:
-            codigo = str(err).split(":")[0]
-            st.error(f"Error de validación ({codigo}): {err}")
+            # Actualizar emplazamiento con orientación (almacenamiento en Duffie)
+            try:
+                # replace() preserva lat/lon/alt/zona/albedo y cualquier campo futuro.
+                nuevo_empl = dataclasses.replace(
+                    empl,
+                    acimut_colector_deg=acimut_duffie,
+                    pendiente_colector_deg=pendiente,
+                )
+                if nuevo_empl != empl:
+                    proyecto.emplazamiento = nuevo_empl
+                    empl = nuevo_empl
+            except ValueError as err:
+                codigo = str(err).split(":")[0]
+                st.error(f"Error de validación ({codigo}): {err}")
 
     # -----------------------------------------------------------------------
     # Sección 3: Datos climáticos NASA POWER
@@ -897,14 +906,24 @@ def render() -> None:
 
         # Calcular POA anual aquí (fuera de tabs) para reutilizarlo
         # tanto en la sección anual como en la sección diaria.
-        acimut_pvlib_actual = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
-        with st.spinner("Calculando irradiancia sobre el plano del colector..."):
+        # En CAJA no hay colector: se usa la orientación propia de la cámara
+        # (techo a un agua) si está configurada; si no, GHI horizontal.
+        _poa_label = "el plano del colector"
+        if _tipologia_p2 == Tipologia.CAJA and getattr(proyecto, "camara", None) is not None:
+            _geo_cam = proyecto.camara.geometria
+            pendiente_poa = _geo_cam.pendiente_techo_deg
+            acimut_pvlib_actual = acimut_duffie_a_pvlib(_geo_cam.acimut_camara_deg)
+            _poa_label = "el techo de la cámara"
+        else:
+            pendiente_poa = empl.pendiente_colector_deg
+            acimut_pvlib_actual = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
+        with st.spinner(f"Calculando irradiancia sobre {_poa_label}..."):
             poa_horaria = _calcular_poa_horaria(
                 datos_local,
                 lat=empl.latitud_deg,
                 lon=empl.longitud_deg,
                 altitud_m=empl.altitud_m,
-                pendiente_deg=empl.pendiente_colector_deg,
+                pendiente_deg=pendiente_poa,
                 acimut_pvlib_deg=acimut_pvlib_actual,
                 albedo=empl.albedo_suelo,
             )
