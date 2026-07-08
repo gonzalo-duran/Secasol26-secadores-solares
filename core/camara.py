@@ -25,6 +25,7 @@ Convención de unidades (SI estricto):
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal, Optional
@@ -68,24 +69,75 @@ class DireccionFlujo(Enum):
     VERTICAL_ASCENDENTE = "VERTICAL_ASCENDENTE"
 
 
+_CARAS_CAIDA_VALIDAS: tuple[str, ...] = ("frente", "atras", "lateral_izq", "lateral_der")
+_PENDIENTE_TECHO_MAX_DEG: float = 60.0
+_ALTO_MENOR_MIN_M: float = 0.05
+
+
+def _normalizar_acimut_duffie(acimut_deg: float) -> float:
+    """Envuelve un acimut Duffie arbitrario al rango canónico (−180, +180].
+
+    Duplica la fórmula de ``calculos/conversiones_angulo.py`` (misma
+    matemática pura) para no introducir una dependencia de ``core/`` hacia
+    ``calculos/`` — la separación de capas del proyecto es estricta.
+    """
+    resultado = float(acimut_deg) % 360.0
+    if resultado > 180.0:
+        resultado -= 360.0
+    return resultado
+
+
 # ---------------------------------------------------------------------------
 # Sub-dataclasses
 # ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CaraCamara:
+    """Una cara captadora de la cámara (techo o pared vertical).
+
+    Attributes:
+        area_m2: Área geométrica de la cara [m²].
+        tilt_deg: Inclinación respecto a la horizontal [°]. 90° = vertical.
+        acimut_duffie_deg: Acimut de la normal exterior, convención Duffie
+            (0°=Sur, +90°=Oeste, −90°=Este, ±180°=Norte).
+    """
+
+    area_m2: float
+    tilt_deg: float
+    acimut_duffie_deg: float
 
 
 @dataclass
 class GeometriaCamara:
     """Dimensiones internas de la cámara de secado.
 
+    El techo es a un agua: cae desde ``alto_mayor_m`` hasta ``alto_menor_m``
+    en la dirección de ``cara_caida_techo`` (esa cara es la de menor altura).
+    ``alto_m`` es la altura MEDIA de la cámara — el volumen
+    ``largo_m·ancho_m·alto_m`` y el área transversal de flujo
+    ``ancho_m·alto_m`` son exactos con techo inclinado, sin cambios respecto
+    al caso histórico de techo plano (``pendiente_techo_deg=0``).
+
     Attributes:
         largo_m: Dimensión horizontal en la dirección del flujo [m].
         ancho_m: Dimensión horizontal transversal al flujo [m].
-        alto_m: Altura libre interna [m].
+        alto_m: Altura libre interna MEDIA [m].
+        pendiente_techo_deg: Inclinación del techo a un agua respecto a la
+            horizontal [°]. 0° = techo plano (comportamiento histórico).
+        acimut_camara_deg: Acimut de la normal exterior de la cara "frente"
+            de la cámara, convención Duffie (0°=Sur, +90°=Oeste, −90°=Este,
+            ±180°=Norte). Define la orientación de todas las caras.
+        cara_caida_techo: Cara hacia la que cae el techo (la de menor
+            altura). El acimut del techo coincide con el de esa cara.
     """
 
     largo_m: float = 1.2
     ancho_m: float = 0.8
     alto_m: float = 1.5
+    pendiente_techo_deg: float = 0.0
+    acimut_camara_deg: float = 180.0
+    cara_caida_techo: Literal["frente", "atras", "lateral_izq", "lateral_der"] = "frente"
 
     def __post_init__(self) -> None:
         if self.largo_m <= 0 or self.ancho_m <= 0 or self.alto_m <= 0:
@@ -98,6 +150,122 @@ class GeometriaCamara:
             raise ValueError(
                 f"GEO_VOLUMEN_MINIMO: volumen {vol:.4f} m³ < {_VOL_MIN_M3} m³ mínimo operativo."
             )
+        if not (0.0 <= self.pendiente_techo_deg <= _PENDIENTE_TECHO_MAX_DEG):
+            raise ValueError(
+                f"GEO_PENDIENTE_TECHO_INVALIDA: pendiente_techo_deg={self.pendiente_techo_deg:.2f}° "
+                f"fuera del rango válido [0, {_PENDIENTE_TECHO_MAX_DEG:.0f}]°."
+            )
+        if not (-180.0 <= self.acimut_camara_deg <= 180.0):
+            raise ValueError(
+                f"GEO_ACIMUT_CAMARA_INVALIDO: acimut_camara_deg={self.acimut_camara_deg:.2f}° "
+                "fuera del rango válido [-180, 180]°."
+            )
+        if self.cara_caida_techo not in _CARAS_CAIDA_VALIDAS:
+            raise ValueError(
+                f"GEO_CARA_CAIDA_INVALIDA: cara_caida_techo='{self.cara_caida_techo}' "
+                f"no es válida. Opciones: {_CARAS_CAIDA_VALIDAS}."
+            )
+        if self.alto_menor_m <= _ALTO_MENOR_MIN_M:
+            raise ValueError(
+                f"GEO_ALTO_MENOR_INSUFICIENTE: con pendiente {self.pendiente_techo_deg:.1f}° "
+                f"el alto menor del techo ({self.alto_menor_m:.3f} m) queda por debajo del "
+                f"mínimo operativo ({_ALTO_MENOR_MIN_M} m). Reducir la pendiente o aumentar alto_m."
+            )
+
+    @property
+    def area_planta_m2(self) -> float:
+        """Área de planta (huella horizontal) de la cámara [m²]."""
+        return self.largo_m * self.ancho_m
+
+    @property
+    def _profundidad_caida_m(self) -> float:
+        """Dimensión en la dirección en que corre la pendiente del techo [m]."""
+        if self.cara_caida_techo in ("frente", "atras"):
+            return self.largo_m
+        return self.ancho_m
+
+    @property
+    def alto_menor_m(self) -> float:
+        """Altura de la cara hacia la que cae el techo [m]."""
+        return self.alto_m - (self._profundidad_caida_m / 2.0) * math.tan(
+            math.radians(self.pendiente_techo_deg)
+        )
+
+    @property
+    def alto_mayor_m(self) -> float:
+        """Altura de la cara opuesta a la caída del techo [m]."""
+        return self.alto_m + (self._profundidad_caida_m / 2.0) * math.tan(
+            math.radians(self.pendiente_techo_deg)
+        )
+
+    @property
+    def A_techo_geom_m2(self) -> float:
+        """Área real del techo inclinado (planta / cos β) [m²]."""
+        return self.area_planta_m2 / math.cos(math.radians(self.pendiente_techo_deg))
+
+    def caras(self) -> dict[str, CaraCamara]:
+        """Geometría (área, tilt, acimut) de las 5 caras captadoras.
+
+        El piso no se incluye (siempre opaco). Las caras rectangulares
+        (frente/atrás o laterales, según el eje de caída) tienen alturas
+        ``alto_menor_m``/``alto_mayor_m``; las trapezoidales (el otro par)
+        usan la altura media ``alto_m``, exacta para su área real.
+
+        Returns:
+            Diccionario con claves "techo", "frente", "atras",
+            "lateral_izq", "lateral_der".
+        """
+        g_acimut = self.acimut_camara_deg
+        ac_frente = g_acimut
+        ac_atras = _normalizar_acimut_duffie(g_acimut + 180.0)
+        ac_der = _normalizar_acimut_duffie(g_acimut + 90.0)
+        ac_izq = _normalizar_acimut_duffie(g_acimut - 90.0)
+
+        if self.cara_caida_techo in ("frente", "atras"):
+            rect_dim = self.ancho_m
+            trap_dim = self.largo_m
+            rect_acimut = {"frente": ac_frente, "atras": ac_atras}
+            trap_acimut = {"lateral_izq": ac_izq, "lateral_der": ac_der}
+        else:
+            rect_dim = self.largo_m
+            trap_dim = self.ancho_m
+            rect_acimut = {"lateral_izq": ac_izq, "lateral_der": ac_der}
+            trap_acimut = {"frente": ac_frente, "atras": ac_atras}
+
+        cara_baja = self.cara_caida_techo
+        cara_alta = next(nombre for nombre in rect_acimut if nombre != cara_baja)
+
+        caras: dict[str, CaraCamara] = {
+            cara_baja: CaraCamara(
+                area_m2=rect_dim * self.alto_menor_m,
+                tilt_deg=90.0,
+                acimut_duffie_deg=rect_acimut[cara_baja],
+            ),
+            cara_alta: CaraCamara(
+                area_m2=rect_dim * self.alto_mayor_m,
+                tilt_deg=90.0,
+                acimut_duffie_deg=rect_acimut[cara_alta],
+            ),
+        }
+        for nombre, acimut in trap_acimut.items():
+            caras[nombre] = CaraCamara(
+                area_m2=trap_dim * self.alto_m, tilt_deg=90.0, acimut_duffie_deg=acimut
+            )
+        caras["techo"] = CaraCamara(
+            area_m2=self.A_techo_geom_m2,
+            tilt_deg=self.pendiente_techo_deg,
+            acimut_duffie_deg=caras[cara_baja].acimut_duffie_deg,
+        )
+        return caras
+
+    @property
+    def A_cuerpo_total_m2(self) -> float:
+        """Área total de la envolvente: 6 caras (piso + 5 captadoras) [m²].
+
+        Con ``pendiente_techo_deg=0`` es idéntica a la fórmula histórica de
+        caja con techo plano: ``2·(largo·alto + ancho·alto + largo·ancho)``.
+        """
+        return self.area_planta_m2 + sum(c.area_m2 for c in self.caras().values())
 
 
 _CATALOGOS_PARED: tuple[str, ...] = ("fondos", "aislantes")
@@ -213,29 +381,69 @@ def _default_pared_camara() -> ParedCamara:
     )
 
 
+@dataclass(frozen=True)
+class CarasTranslucidas:
+    """Qué caras de la cámara llevan la cubierta translúcida (vs. opacas).
+
+    El material y espesor de la cubierta son únicos para toda la cámara
+    (``ConstruccionCamara.cubierta_translucida_id``); esto solo decide en
+    qué caras se monta. El piso no se incluye: siempre es opaco. Default
+    (solo techo) reproduce el comportamiento histórico.
+
+    Attributes:
+        techo: Techo translúcido.
+        frente: Pared frontal translúcida.
+        atras: Pared trasera translúcida.
+        lateral_izq: Pared lateral izquierda translúcida.
+        lateral_der: Pared lateral derecha translúcida.
+    """
+
+    techo: bool = True
+    frente: bool = False
+    atras: bool = False
+    lateral_izq: bool = False
+    lateral_der: bool = False
+
+    def activas(self) -> tuple[str, ...]:
+        """Nombres de las caras marcadas como translúcidas."""
+        return tuple(
+            nombre for nombre in _CARAS_CAIDA_VALIDAS + ("techo",) if getattr(self, nombre)
+        )
+
+
 @dataclass
 class ConstruccionCamara:
     """Propiedades constructivas de la cámara.
 
     Attributes:
         cubierta_translucida_id: Identificador del material de la cubierta
-            superior en el catálogo ``catalogo/materiales/cubiertas.yaml``.
-            ``None`` → cubierta opaca (el techo forma parte del cuerpo opaco
-            con la composición de ``pared``). Cualquier string válido del
-            catálogo activa el término radiativo Q_rad = I_g·τ·α·A_rad en el
-            motor termodinámico.
-        A_rad_m2: Área expuesta a la radiación solar directa a través del
-            techo translúcido [m²]. ``None`` → toma ``area_bandeja_m2`` de la
-            bandeja superior (sólo la primera "ve" el sol). Ignorado si
-            ``cubierta_translucida_id is None``.
+            translúcida en el catálogo ``catalogo/materiales/cubiertas.yaml``.
+            ``None`` → todas las caras opacas (envolvente completa con la
+            composición de ``pared``), y ``caras_translucidas`` se ignora.
+            Cualquier string válido activa el término radiativo en las caras
+            marcadas por ``caras_translucidas`` (mismo material y espesor
+            para todas — ver ``calculos/radiacion_camara.py``).
+        A_rad_m2: Área expuesta a la radiación solar directa que intercepta
+            el producto [m²]. ``None`` → toma ``area_bandeja_m2`` de la
+            bandeja superior (sólo la primera "ve" el sol directamente).
+            Ignorado si ``cubierta_translucida_id is None``.
         cubierta_translucida_espesor_m: Espesor de la cubierta translúcida
-            [m]. ``None`` → el motor usa un default razonable (6 mm). El
-            espesor entra al balance térmico de la cámara como conducción del
-            vidriado ``R_cond = espesor / k_efectivo`` (la cara del techo deja
-            de modelarse como pared opaca; ver ``camara_calc``). Ignorado si
+            [m], único para todas las caras vidriadas. ``None`` → el motor
+            usa un default razonable (6 mm). El espesor entra al balance
+            térmico como conducción del vidriado ``R_cond = espesor /
+            k_efectivo`` (esas caras dejan de modelarse como pared opaca;
+            ver ``camara_calc``). Ignorado si ``cubierta_translucida_id is
+            None``.
+        caras_translucidas: Qué caras llevan la cubierta (default: solo
+            techo, comportamiento histórico). Ignorado si
             ``cubierta_translucida_id is None``.
-        pared: Composición de la envolvente opaca (paredes + piso + techo
-            cuando es opaco). 1 capa = pared simple; 3 capas = pared compuesta
+        absortancia_interior: Absortancia solar de las superficies internas
+            opacas (paredes, piso) para la fracción de radiación que no
+            intercepta el producto directamente [0–1]. Alimenta el término
+            ``Q_rad_aire`` (radiación que calienta el aire vía las paredes
+            internas — efecto invernadero de la caja).
+        pared: Composición de la envolvente opaca (paredes + piso + caras
+            no vidriadas). 1 capa = pared simple; 3 capas = pared compuesta
             cara externa + aislante + cara interna.
 
     Properties:
@@ -246,6 +454,8 @@ class ConstruccionCamara:
     cubierta_translucida_id: Optional[str] = None
     A_rad_m2: Optional[float] = None
     cubierta_translucida_espesor_m: Optional[float] = None
+    caras_translucidas: CarasTranslucidas = field(default_factory=CarasTranslucidas)
+    absortancia_interior: float = 0.85
     pared: ParedCamara = field(default_factory=_default_pared_camara)
 
     def __post_init__(self) -> None:
@@ -266,6 +476,17 @@ class ConstruccionCamara:
                 "CONS_ESPESOR_CUBIERTA_NO_POSITIVO: cubierta_translucida_espesor_m="
                 f"{self.cubierta_translucida_espesor_m} m ≤ 0. Si se especifica debe ser > 0."
             )
+        if not (0.0 < self.absortancia_interior <= 1.0):
+            raise ValueError(
+                f"CONS_ABSORTANCIA_INTERIOR_INVALIDA: absortancia_interior="
+                f"{self.absortancia_interior:.3f} fuera del rango válido (0, 1]."
+            )
+
+    def caras_translucidas_activas(self) -> tuple[str, ...]:
+        """Caras efectivamente translúcidas (vacía si no hay cubierta)."""
+        if self.cubierta_translucida_id is None:
+            return ()
+        return self.caras_translucidas.activas()
 
     @property
     def U_muros_W_m2K(self) -> float:
@@ -723,14 +944,18 @@ class Camara:
             n_pila = b.n_bandejas
             etiqueta_pila = f"{n_pila} bandejas"
         alto_requerido = n_pila * b.separacion_entre_bandejas_m
-        if alto_requerido > g.alto_m:
+        # Se compara contra el alto MENOR (la cara más baja del techo a un
+        # agua) para que la pila quepa en todo punto de la cámara; con
+        # pendiente_techo_deg=0 alto_menor_m == alto_m (comportamiento
+        # histórico sin cambios).
+        if alto_requerido > g.alto_menor_m:
             raise ValueError(
                 f"COHE_BANDEJAS_NO_CABEN_EN_CAMARA: {etiqueta_pila} × "
                 f"{b.separacion_entre_bandejas_m:.3f} m = {alto_requerido:.3f} m > "
-                f"alto cámara {g.alto_m:.3f} m."
+                f"alto menor de cámara {g.alto_menor_m:.3f} m."
             )
 
-        area_planta = g.largo_m * g.ancho_m
+        area_planta = g.area_planta_m2
         if b.area_bandeja_m2 > area_planta:
             raise ValueError(
                 f"COHE_AREA_BANDEJA_EXCEDE_CAMARA: área bandeja {b.area_bandeja_m2:.3f} m² > "
@@ -789,7 +1014,7 @@ def _modelos_disponibles(datos_producto: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def advertencias_camara(camara: Camara) -> list[Advertencia]:
+def advertencias_camara(camara: Camara, latitud_deg: Optional[float] = None) -> list[Advertencia]:
     """Genera la lista de advertencias estáticas de diseño para la cámara.
 
     Las advertencias no bloquean la instanciación pero deben mostrarse al usuario
@@ -797,6 +1022,10 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
 
     Args:
         camara: Objeto Camara completamente instanciado.
+        latitud_deg: Latitud del emplazamiento [°], convención Duffie/estándar
+            (negativa = hemisferio sur). ``None`` → se omiten las
+            advertencias que requieren conocer el hemisferio (orientación
+            de caras verticales translúcidas).
 
     Returns:
         Lista de Advertencia, posiblemente vacía si el diseño es correcto.
@@ -844,6 +1073,90 @@ def advertencias_camara(camara: Camara) -> list[Advertencia]:
                 contexto={"alto_m": g.alto_m},
             )
         )
+
+    # --- GEO: pendiente de techo extrema ---
+    if g.pendiente_techo_deg > 45.0:
+        adv.append(
+            Advertencia(
+                codigo="CAM_PENDIENTE_TECHO_EXTREMA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Pendiente del techo {g.pendiente_techo_deg:.1f}° > 45°. "
+                    "Poco habitual en secadores de caja; verificar constructibilidad "
+                    "y el alto menor resultante."
+                ),
+                campo="geometria.pendiente_techo_deg",
+                sugerencia="Revisar que la pendiente sea constructivamente razonable.",
+                contexto={"pendiente_techo_deg": g.pendiente_techo_deg},
+            )
+        )
+
+    # --- CAM: cubierta definida pero sin ninguna cara activa (equivale a opaca) ---
+    if c.cubierta_translucida_id is not None and not c.caras_translucidas_activas():
+        adv.append(
+            Advertencia(
+                codigo="CAM_VIDRIADO_SIN_CARAS",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Cubierta translúcida '{c.cubierta_translucida_id}' definida pero "
+                    "ninguna cara está marcada como translúcida: la cámara queda "
+                    "térmicamente opaca (sin ganancia radiativa)."
+                ),
+                campo="construccion.caras_translucidas",
+                sugerencia="Activar al menos una cara (techo, frente, atrás o lateral).",
+                contexto={"cubierta_id": c.cubierta_translucida_id},
+            )
+        )
+
+    # --- CAM: A_rad mayor que el área real del techo ---
+    if (
+        c.cubierta_translucida_id is not None
+        and c.A_rad_m2 is not None
+        and c.A_rad_m2 > g.A_techo_geom_m2
+    ):
+        adv.append(
+            Advertencia(
+                codigo="CAM_A_RAD_MAYOR_QUE_TECHO",
+                severidad=Severidad.INFO,
+                mensaje=(
+                    f"A_rad_m2={c.A_rad_m2:.2f} m² > área real del techo "
+                    f"({g.A_techo_geom_m2:.2f} m²). La cota física de la ganancia "
+                    "radiativa (Q_rad ≤ potencia interceptada) deja de estar garantizada."
+                ),
+                campo="construccion.A_rad_m2",
+                sugerencia="Verificar que A_rad_m2 no exceda el área geométrica del techo.",
+                contexto={"A_rad_m2": c.A_rad_m2, "A_techo_geom_m2": g.A_techo_geom_m2},
+            )
+        )
+
+    # --- CAM: cara vertical translúcida orientada al polo (desfavorable) ---
+    if latitud_deg is not None and c.cubierta_translucida_id is not None:
+        acimut_ecuador = 180.0 if latitud_deg < 0 else 0.0
+        caras_geom = g.caras()
+        for nombre in ("frente", "atras", "lateral_izq", "lateral_der"):
+            if not getattr(c.caras_translucidas, nombre):
+                continue
+            diff = abs(
+                _normalizar_acimut_duffie(caras_geom[nombre].acimut_duffie_deg - acimut_ecuador)
+            )
+            if diff > 135.0:
+                adv.append(
+                    Advertencia(
+                        codigo="CAM_CARA_ORIENTACION_DESFAVORABLE",
+                        severidad=Severidad.INFO,
+                        mensaje=(
+                            f"Cara '{nombre}' translúcida orientada hacia el polo "
+                            f"(acimut {caras_geom[nombre].acimut_duffie_deg:.0f}°). "
+                            "Recibirá poca radiación directa en la mayor parte del año."
+                        ),
+                        campo="geometria.acimut_camara_deg",
+                        sugerencia="Reorientar la cámara o desactivar esa cara.",
+                        contexto={
+                            "cara": nombre,
+                            "acimut_deg": caras_geom[nombre].acimut_duffie_deg,
+                        },
+                    )
+                )
 
     # --- CONS: cubierta translúcida + producto fotosensible ---
     if c.cubierta_translucida_id is not None and datos.get("fotosensible", False):
@@ -1070,6 +1383,12 @@ class ForzantesAire:
             que documenten — típicamente ``I_g_W_m2`` con aviso). Calcúlese
             en el armado de forzantes con ``calcular_POA_horizonte`` cuando
             haya DNI/GHI/DHI de NASA POWER + tilt/azimut del emplazamiento.
+        Q_rad_aire_W: Potencia radiativa [W] que calienta el aire de la
+            cámara directamente (radiación transmitida por caras
+            translúcidas que no intercepta el producto y calienta
+            paredes/piso internos — efecto invernadero de la caja). ``None``
+            → rellena con ceros (comportamiento histórico: sin este término).
+            Calcúlese con ``calculos/radiacion_camara.py::series_radiacion_camara``.
     """
 
     t_s: np.ndarray
@@ -1080,11 +1399,14 @@ class ForzantesAire:
     v_viento_ms: np.ndarray
     I_g_W_m2: Optional[np.ndarray] = None
     I_g_POA_W_m2: Optional[np.ndarray] = None
+    Q_rad_aire_W: Optional[np.ndarray] = None
 
     def __post_init__(self):
         n = len(self.t_s)
         if self.I_g_W_m2 is None:
             self.I_g_W_m2 = np.zeros(n, dtype=float)
+        if self.Q_rad_aire_W is None:
+            self.Q_rad_aire_W = np.zeros(n, dtype=float)
         # I_g_POA queda None si no se provee (señal de "no calculado");
         # el balance global decide el fallback con aviso explícito.
         _campos_validar = [
@@ -1094,6 +1416,7 @@ class ForzantesAire:
             ("T_amb_K", self.T_amb_K),
             ("v_viento_ms", self.v_viento_ms),
             ("I_g_W_m2", self.I_g_W_m2),
+            ("Q_rad_aire_W", self.Q_rad_aire_W),
         ]
         if self.I_g_POA_W_m2 is not None:
             _campos_validar.append(("I_g_POA_W_m2", self.I_g_POA_W_m2))

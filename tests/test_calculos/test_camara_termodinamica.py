@@ -235,6 +235,42 @@ class TestBalancesCierran:
 
 
 # ---------------------------------------------------------------------------
+# Q_rad_aire_W — reparto producto/aire (cámara radiativa orientada)
+# ---------------------------------------------------------------------------
+
+
+class TestQRadAireEnBalance:
+    """Q_rad_aire_W es una fuente de calor adicional al aire (efecto invernadero)."""
+
+    def test_default_cero_no_cambia_nada(self):
+        """Q_rad_aire_W=0.0 (default) → idéntico al comportamiento histórico."""
+        base = resolver_estado_camara(**_kwargs_base())
+        con_default = resolver_estado_camara(**_kwargs_base(Q_rad_aire_W=0.0))
+        assert con_default.T_flujo_K == pytest.approx(base.T_flujo_K, rel=1e-12)
+
+    def test_positivo_sube_T_flujo(self):
+        sin_aporte = resolver_estado_camara(**_kwargs_base())
+        con_aporte = resolver_estado_camara(**_kwargs_base(Q_rad_aire_W=200.0))
+        assert con_aporte.T_flujo_K > sin_aporte.T_flujo_K
+
+    def test_balance_energia_residuo_cero_con_Q_rad_aire(self):
+        """La ecuación (b) sigue cerrando exactamente con el término nuevo."""
+        kw = _kwargs_base(Q_rad_aire_W=150.0)
+        est = resolver_estado_camara(**kw)
+        h_ent = entalpia_aire_humedo(kw["T_ent_K"], kw["omega_ent_kg_kg"])
+        h_sal = entalpia_aire_humedo(est.T_flujo_K, est.omega_flujo_kg_kg)
+        h_v_prod = _LV_0 + _CP_VAPOR * (kw["T_prod_K"] - _T_REF)
+        LHS = kw["m_dot_as_kg_s"] * (h_sal - h_ent)
+        RHS = (
+            -est.q_pared_W
+            - kw["h_conv_W_m2K"] * kw["A_prod_m2"] * (est.T_flujo_K - kw["T_prod_K"])
+            + est.m_dot_w_kg_s * h_v_prod
+            + kw["Q_rad_aire_W"]
+        )
+        assert abs(LHS - RHS) < 1e-6
+
+
+# ---------------------------------------------------------------------------
 # Validación de entradas (errores duros)
 # ---------------------------------------------------------------------------
 
@@ -673,6 +709,34 @@ class TestForzantesVariables:
         assert np.mean(res_alto.U_pared_W_m2K) > np.mean(res_bajo.U_pared_W_m2K)
         # Y las pérdidas |q_pared| también mayores (en magnitud)
         assert np.mean(np.abs(res_alto.q_pared_W)) > np.mean(np.abs(res_bajo.q_pared_W))
+
+    def test_Q_rad_aire_forzante_calienta_T_flujo(self):
+        """forzantes.Q_rad_aire_W > 0 debe reflejarse en T_flujo y en el
+        resultado reconstruido (Q_rad_aire_W, energia_rad_aire_total_J)."""
+        t = np.array([0.0, 3600.0, 7200.0])
+        base_kwargs = dict(
+            T_ent_K=np.full(3, 323.15),
+            omega_ent=np.full(3, humedad_absoluta(0.20, 323.15)),
+            m_dot_aire_seco_kg_s=np.full(3, 0.030),
+            T_amb_K=np.full(3, 298.15),
+            v_viento_ms=np.full(3, _V_VIENTO_TEST_MS),
+        )
+        fz_sin = ForzantesAire(t_s=t, **base_kwargs)
+        fz_con = ForzantesAire(t_s=t, Q_rad_aire_W=np.full(3, 300.0), **base_kwargs)
+
+        kw_sin = _kwargs_motor(t_max_s=7200.0)
+        kw_sin["forzantes"] = fz_sin
+        kw_con = _kwargs_motor(t_max_s=7200.0)
+        kw_con["forzantes"] = fz_con
+
+        res_sin = simular_secado(**kw_sin)
+        res_con = simular_secado(**kw_con)
+
+        assert np.mean(res_con.T_flujo_K) > np.mean(res_sin.T_flujo_K)
+        assert np.all(res_con.Q_rad_aire_W == pytest.approx(300.0))
+        assert res_con.energia_rad_aire_total_J > 0.0
+        assert np.all(res_sin.Q_rad_aire_W == 0.0)
+        assert res_sin.energia_rad_aire_total_J == 0.0
 
 
 class TestPoliticaBAntirehumectacion:

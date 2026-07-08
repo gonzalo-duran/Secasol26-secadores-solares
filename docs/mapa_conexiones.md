@@ -1,16 +1,16 @@
 # Mapa de conexiones — Secasol
 
-> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01, **S36–S45 2026-06-23**).
+> Documento auto-generado el 2026-05-19 (revisado al cierre de S30 extendida 2026-05-20, S31 2026-05-21, S32 2026-05-22, S34 2026-05-29, S35 2026-06-01, **S36–S45 2026-06-23**, **S47 2026-07-06**, **S48 2026-07-07**).
 > Objetivo: detectar **widgets UI sin consumidor en `calculos/`** y **campos consumidos sin widget UI** (toggles/inputs huérfanos).
 >
 > S33 (deploy a HF Spaces) no introdujo cableado widget→campo→consumidor: ver `docs/bitacora/bitacora_sesion33.md`.
-> El detalle histórico S36→S45 está consolidado al final (sección "Resueltos"); la **tabla maestra** ya refleja S40 (modo industrial) y S44 (techo translúcido + ventana CAJA/ARMARIO).
+> El detalle histórico S36→S45 está consolidado al final (sección "Resueltos"); la **tabla maestra** ya refleja S40 (modo industrial), S44 (techo translúcido + ventana CAJA/ARMARIO) y S47 (cámara radiativa orientada).
 
 ---
 
 ## Resumen ejecutivo
 
-> Nota S47: el **manual de usuario** (mejora 36) no introduce cableado widget→campo→consumidor: la vista `?manual=<slug>` (`ui/manual.py`, intercept en `Secasol.py`) es **stateless** (no toca `st.session_state.proyecto`) y los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py`) solo emiten un anchor `target=_blank`.
+> Nota S48: el **manual de usuario** (mejora 36) no introduce cableado widget→campo→consumidor: la vista `?manual=<slug>` (`ui/manual.py`, intercept en `Secasol.py`) es **stateless** (no toca `st.session_state.proyecto`) y los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py`) solo emiten un anchor `target=_blank`.
 
 Desconexiones / atenuaciones reales vigentes (eran 3 a inicio de S30):
 
@@ -531,8 +531,8 @@ graph TD
 | P3 | geometría + banco | `colector.unidad/banco.*` | `colector_calc`, `tipos234_calc`, `motor_calc` |
 | P4 | producto/X/masa/modelos | `camara.carga_producto.*` | `camara_calc`, `camara_termodinamica` |
 | P4 | T_prod inicial | `camara.carga_producto.T_prod_inicial_K` | `camara_termodinamica` |
-| P4 | geometría cámara | `camara.geometria.*` | `camara_calc`, `motor_calc` |
-| P4 | techo translúcido + A_rad | `camara.construccion.*` | `camara_calc`, `camara_termodinamica` |
+| P4 | geometría cámara (incl. orientación/techo un agua, S47) | `camara.geometria.*` | `camara_calc`, `motor_calc`, `calculos.radiacion_camara` |
+| P4 | vidriado (material/espesor/caras translúcidas, S47) + A_rad | `camara.construccion.*` | `camara_calc`, `camara_termodinamica`, `calculos.radiacion_camara` |
 | P4 | pared compuesta (capas) | `camara.construccion.pared.capas` | `camara_calc` (vía métodos U/R) |
 | P4 | bandejas (todo) | `camara.bandejas.*` | `camara_calc`, `motor_calc` |
 | P4 | caudal/dirección/recirc/HR | `camara.flujo.*` | `camara_calc`, `motor_calc` |
@@ -548,7 +548,8 @@ graph TD
 | P6 → P7 (S32d) | botón "Calcular chimenea" — resultado preliminar del lazo natural | `st.session_state["p6_chimenea_eval"]` (dict de `_caudal_natural_loop` con T_chim heurística) | `ui/p7_resultados._render_estado` (lee para marcar `P6 · Chimenea ✅` en checklist). El balance global de P7 **no lee este dict** — vuelve a resolver con Picard completo. |
 | (interno, S32c) | presión atmosférica corregida por altitud | — (calculada de `clima.datos["presion_Pa"]` o `emplazamiento.altitud_m`) | `presion_representativa_proyecto` → `_resolver_aux_cam_const`, `_correr_colector(_horizonte)`, `_caudal_natural_loop`/`_horizonte`, `operacion_anual_camara._calcular_punto_mensual`, `ui/p4_camara` (botón Calcular), `ui/p6_motor` (estimar_delta_P_*, delta_P_tiro_Pa, delta_P_turbina_motriz_Pa) |
 | P4→core | I_g_POA(t) sobre plano colector | `forzantes_base.I_g_POA_W_m2` (transitorio) | `balance_global._correr_colector_horizonte` → `_correr_colector` → `colector_calc`/`tipos234_calc` |
-| P4→core | GHI(t) sobre techo cámara | `forzantes_base.I_g_W_m2` (transitorio) | `camara_termodinamica.simular_secado` (Q_rad por techo translúcido) |
+| P4→core (S47) | I_eq_prod(t) sobre caras translúcidas de la cámara | `forzantes_base.I_g_W_m2` (transitorio; antes GHI cruda) | `calculos.radiacion_camara.series_radiacion_camara` → `camara_termodinamica.simular_secado` (Q_rad al producto) |
+| P4→core (S47) | Q_rad_aire(t): radiación no interceptada por el producto | `forzantes_base.Q_rad_aire_W` | `calculos.radiacion_camara.series_radiacion_camara` → `camara_termodinamica.resolver_estado_camara` (suma al balance de `T_flujo`) |
 | (interno) | POA representativa anual (sugerido P7) | — | `ui/p7_resultados._sugerir_condiciones` → `calcular_POA_horizonte` (quantile 90) |
 | P7 (S35) | barrido: parámetro / rango / N / KPIs avanzados | **ningún campo `Proyecto`** (estado efímero `session_state['p7_barridos_{modo}']`) | `barrido_parametrico.correr_barrido` lee el `path` del `ParametroBarrido` seleccionado sobre una **copia** del proyecto (`dataclasses.replace`, sin mutar el persistente). KPIs vía `catalogo_kpis_barrido` + `balance_global.resumen_camara` |
 | (interno, S35) | base de tiempo de cálculo para estimar barrido | — (`session_state['p7_t_calc_base_s_{constantes,transitorio}']`) | `ui/p7_resultados` stash tras cada `calcular_todo(_transitorio)` normal |
@@ -564,10 +565,15 @@ graph TD
 | **P3** (S44) | botón "Evaluar colector" en modo Ventana (sin campo nuevo) | `st.session_state["p3_eval"]` (`{"modo": "ventana", ...}` enriquecido: `T_abs_C`, `x_noon`, `marcas_*`) | `ui/p3_colector._evaluar_ventana` (día y noche) → `_fig_T_salida_ventana` + `_fig_T_fluido_dia` |
 | **P4** (S39) | sliders T_op / HR_op del aire de entrada | (condición de borde) | `camara_calc._calcular_termodinamico` → `simular_secado`. **Atenuados:** con `coef_transporte_func` variable en t solo pesan en modo **Constantes**; en Sintético/Día real/Anual el borde sale del clima/colector (ver Resumen ejecutivo #2). |
 | **P7** (S43) | carta psicrométrica del proceso (sin widget de entrada; se dibuja de los resultados) | — (lee `res`/`res_tr`/ventana + `omega_amb`) | `ui/p7_resultados._render_carta_psicrometrica` y `ui/reporte.py` → `ui/componentes/carta_psicrometrica.fig_carta_psicrometrica` (sobre `calculos/psicrometria.py`; adiabático/no-adiabático **emerge** del balance; representativo = mediodía solar; en túnel semicontinuo traza el path del aire por zonas a contracorriente) |
+| **P4** (S47) | pendiente/acimut/cara de caída del techo (un agua) | `camara.geometria.{pendiente_techo_deg, acimut_camara_deg, cara_caida_techo}` | `GeometriaCamara.caras()` (áreas/tilt/acimut por cara) → `calculos.radiacion_camara`, `camara_calc._construir_params_termodinamico` (A_cuerpo, A_techo) |
+| **P4** (S47) | superficies translúcidas (5 toggles: techo/frente/atrás/laterales) | `camara.construccion.caras_translucidas` (`CarasTranslucidas`) | `ConstruccionCamara.caras_translucidas_activas()` → `calculos.radiacion_camara.series_radiacion_camara`, `camara_calc._construir_params_termodinamico` (A_techo = suma de caras activas) |
+| **P2** (S47) | expander "Orientación del colector" oculto en CAJA (info → P4) | — (gate por `configuracion.tipologia`) | `ui/p2_emplazamiento.render` (sin campo nuevo; la orientación de la caja vive en `camara.geometria`) |
 
 > **S40 (modo industrial / gran escala):** todos los widgets de arriba están cableados extremo a extremo (UI → core → cálculo) y verificados con AppTest. La cadena térmica completa (colector → caño maestro → cámara) está validada contra datos de campo de ADITAL en `validacion/validacion_adital.py`.
 >
 > **S44 (techo translúcido + ventana CAJA/ARMARIO):** el espesor del techo translúcido entra al balance como conducción del vidriado; el modo Ventana se generaliza a CAJA/ARMARIO como multidía real (el pipeline de producción `_render_ventana` queda solo para gran escala).
+>
+> **S47 (cámara radiativa orientada):** la cámara tiene orientación y techo a un agua propios (independientes del banco de colectores); hasta 5 caras pueden ser translúcidas (mismo material/espesor). La radiación de cada cara se reparte entre el producto (factor de intercepción `f_i`) y el aire (`Q_rad_aire`, vía superficies internas — efecto invernadero de la caja). Cambio numérico deliberado: proyectos CAJA/techo-translúcido existentes ganan más energía que antes (la fracción del techo que no interceptaba la bandeja superior ya no se descarta). Ver `docs/notas/plan_camara_radiativa_orientada.md` y `calculos/radiacion_camara.py`.
 
 ---
 
@@ -658,6 +664,8 @@ Ver `docs/bitacora/bitacora_sesion37.md` (§159-§164). Suite al cierre de S37: 
 ✓ **S44 (2026-06) — techo translúcido al balance + ventana CAJA/ARMARIO:** el espesor del techo translúcido (`cubierta_translucida_espesor_m`) entra como conducción del vidriado (`U_techo` al balance de `T_flujo`, se descuenta la cara del techo de `A_cuerpo`); el modo Ventana se generaliza a CAJA/ARMARIO como **multidía real** (`_render_ventana` de producción queda solo para gran escala). Ver las filas **(S44)** de la tabla maestra. Ver `bitacora_sesion44.md`.
 
 ✓ **S45 (2026-06-23) — auditoría integral pre-seminario INENCO:** quick-wins de UX (onboarding + ayudas para usuario nuevo), fix de docstring de Tipos234 y nota Klein. **Sin cambios de cableado** widget→campo→consumidor. Validación HWB 4/4 + ADITAL 7/7. Suite **1042 tests**. v0.14.0 en producción (HF Spaces). Ver `bitacora_sesion45.md`.
+
+✓ **S47 (2026-07-06) — cámara radiativa orientada:** la cámara gana orientación propia (`geometria.acimut_camara_deg`) y techo a un agua (`pendiente_techo_deg` + `cara_caida_techo`), independiente del banco de colectores; hasta 5 caras pueden ser translúcidas (`construccion.caras_translucidas`, mismo material/espesor). Nuevo módulo `calculos/radiacion_camara.py` (POA por cara + reparto producto/aire con factores de intercepción `f_i`); nuevo término `Q_rad_aire` en `resolver_estado_camara`/`simular_secado`/`simular_cascada` y en `ForzantesAire`. Los 6 builders de forzantes (CAJA/ARMARIO día-único y multidía, ventana gran escala, anual) pasaron de GHI cruda a irradiancia equivalente por orientación. P2 oculta "Orientación del colector" en CAJA. Ver las filas **(S47)** de la tabla maestra. **Cambio numérico deliberado** en CAJA/techo-translúcido existentes (ver CHANGELOG). Ver `docs/notas/plan_camara_radiativa_orientada.md`.
 
 ---
 

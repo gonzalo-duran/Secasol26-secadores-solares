@@ -4,10 +4,10 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S47): v0.14.1 · 7 pestañas funcionales + manual de usuario ·
-> suite pytest 1190. Hoja de ruta a 1.0: **modo industrial completo y validado**
-> + mejoras 25–36 implementadas. Resta solo i18n y refinamiento del análisis
-> anual.
+> Estado general (S48): v0.15.0 · 7 pestañas funcionales + manual de usuario ·
+> suite pytest 1221. Hoja de ruta a 1.0: **modo industrial completo y validado**
+> + mejoras 25–36 implementadas + cámara radiativa orientada. Resta solo i18n y
+> refinamiento del análisis anual.
 
 ## En progreso
 
@@ -16,7 +16,12 @@ decisiones de diseño en [[docs/decisiones]].
 
 ## Completado (hitos recientes)
 
-- **Manual de usuario estilo SAM (S47, mejora 36)** — manual autocontenido en
+- **Cámara radiativa orientada (S47, v0.15.0)** — la cámara gana orientación
+  propia (acimut) y techo a un agua independientes del banco de colectores;
+  hasta 5 caras translúcidas con transposición POA por cara y reparto de la
+  radiación producto/aire (`calculos/radiacion_camara.py`). Barridos de
+  pendiente/acimut de cámara. Ver `docs/bitacora/bitacora_sesion47.md`.
+- **Manual de usuario estilo SAM (S48, mejora 36)** — manual autocontenido en
   pestaña paralela (`?manual=<slug>`): 22 capítulos markdown en
   `manual/capitulos/` (guía por sección, fundamentos, referencia técnica del
   seminario adaptada, apéndices), dos niveles de lectura (texto + expanders

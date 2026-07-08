@@ -1,158 +1,97 @@
-# Bitácora — Sesión 47 (2026-07-07)
+# Bitácora — Sesión 47 (2026-07-06)
 
-## Tema de la sesión
+**Tema:** Implementación completa del plan **"Cámara radiativa orientada"**
+(`docs/notas/plan_camara_radiativa_orientada.md`): la cámara de secado gana orientación
+propia (acimut) y techo a un agua, independiente del banco de colectores; hasta 5 caras
+(techo + 4 paredes) pueden ser translúcidas; la radiación de cada cara se reparte entre el
+producto y el aire (efecto invernadero de la caja). Cierra el cambio de paradigma discutido
+en la sesión de planificación: en tipología CAJA la cámara **es** el colector.
 
-**Manual de usuario estilo SAM (mejora 36)** — el único ítem pendiente de las 36
-mejoras y el pendiente de producto central para la v1.0 (junto con i18n). Sesión
-corrida en Claude Code remoto (web); planificación en modo plan con exploración
-previa de `docs/notas/seminario/` y de la UI.
+**Estado al cierre:** Plan implementado en las 7 etapas previstas. Suite **1073 tests**
+(1042 al inicio de la sesión + 31 nuevos), sin regresiones. Versión bump **0.14.1 → 0.15.0**
+(`core/proyecto.py::VERSION_SOFTWARE`), `CHANGELOG.md` con sección `[0.15.0] — 2026-07-06`.
+Working tree sin commitear (convención del repo — usuario commiteará/pusheará a `main` en la
+próxima sesión). `black`/`ruff` limpios en todo lo tocado.
 
-## Decisiones de diseño (acordadas con el usuario en plan mode)
+---
 
-1. **Niveles de lectura**: cada capítulo abre con la idea general y despliega los
-   entresijos en bloques `st.expander` "🔬 En profundidad"; el detalle completo
-   por subsistema vive en capítulos técnicos aparte (Parte IV), enlazados.
-2. **Vehículo**: el manual es una **vista de la misma app** ruteada por query
-   param (`?manual=<slug>`), abierta en **otra pestaña del navegador**
-   (`target=_blank`) — modelo SAM, sin infraestructura de build nueva, mismo
-   deploy a HF. Se descartó MkDocs (segundo pipeline + gotcha de static serving
-   en el Space).
-3. **Alcance**: manual completo en una tanda (21 capítulos), con 2 pilotos
-   primero (colector + radiación) para validar KaTeX/expanders/anclas e2e.
-4. **Fuente técnica**: los 8 markdown de `docs/notas/seminario/` **adaptados**
-   (registro de charla → referencia didáctica; "Highlights de implementación" →
-   apéndice de código; Referencias → bibliografía consolidada; se purgan las
-   referencias a sesiones internas).
+## Qué se implementó (por etapa)
 
-## Qué se construyó
+1. **Modelo de datos** (`core/camara.py`): `GeometriaCamara` gana `pendiente_techo_deg`,
+   `acimut_camara_deg` (Duffie), `cara_caida_techo`; properties `alto_menor_m`/`alto_mayor_m`
+   (deriva de `alto_m` = altura MEDIA, back-compat exacta con β=0), `A_techo_geom_m2`,
+   `caras()` (área/tilt/acimut de las 5 caras captadoras) y `A_cuerpo_total_m2` (≡ fórmula
+   histórica `2·(LA+lA+La)` con β=0). Nueva `CarasTranslucidas` (5 bools, default solo techo)
+   en `ConstruccionCamara.caras_translucidas`, más `absortancia_interior` (default 0.85).
+   Coherencia CAJA (`PROY_CAJA_SIN_CUBIERTA_TRANSLUCIDA`) extendida a "0 caras activas".
+   4 advertencias nuevas.
+2. **`calculos/radiacion_camara.py`** (nuevo): `factores_intercepcion` (f_i por cara: techo
+   `A_rad/A_techo_geom`, paredes por silueta del lecho apilado), `poa_caras_camara` (POA por
+   cara vía pvlib, shortcut a GHI si tilt=0), `series_radiacion_camara` → `(I_eq_prod,
+   Q_rad_aire_W)`, `factores_sinteticos` (modo sin clima real). `calcular_POA_horizonte` ganó
+   `tilt_deg`/`acimut_duffie_deg` opcionales (None → colector, back-compat).
+3. **Motor termodinámico**: `resolver_estado_camara` acepta `Q_rad_aire_W` (default 0.0,
+   suma al balance de `T_flujo`); `simular_secado`/`simular_cascada` lo leen de
+   `forzantes.Q_rad_aire_W` (cascada lo reparte `/n_zonas`); `camara_calc` usa
+   `A_cuerpo_total_m2` y suma las áreas de las caras translúcidas activas.
+4. **Builders de forzantes**: los 6 caminos (CAJA/ARMARIO día-único y multidía, ventana
+   GRAN_ESCALA, anual ARMARIO, sintético) pasan de `I_g_W_m2=GHI` a
+   `series_radiacion_camara`/`factores_sinteticos`, con fallback a GHI+ceros si falla.
+5. **UI**: P4 gana "Orientación y techo a un agua" (pendiente/acimut/cara de caída) y
+   "Superficies translúcidas" (5 toggles + preview de área/tilt/orientación por cara), en
+   todas las tipologías. P2 oculta "Orientación del colector" en CAJA (nota → P4). Round-trip
+   JSON con back-compat (`_from_json_camara` usa `.get(..., default)`).
+6. **P7 / reporte PDF**: `_sugerir_condiciones` usa la irradiancia equivalente de la cámara en
+   CAJA; snapshot/reporte omiten labels de colector en CAJA y agregan orientación de cámara +
+   caras translúcidas. `docs/mapa_conexiones.md` y `CHANGELOG.md` actualizados.
+7. **Barridos paramétricos**: nuevos `pendiente_techo_camara`/`acimut_camara` en el catálogo
+   (disponibles en las 3 tipologías, solo Transitorio/Anual). `BarridoConfig.forzantes_builder`
+   (nuevo): en modo Transitorio, si se provee, reconstruye las forzantes desde el proyecto
+   clonado y mutado en cada punto — sin esto, barrer la orientación de la cámara no tendría
+   ningún efecto (la forzante congelada se reutilizaría igual). P7 arma el closure desde los
+   kwargs persistidos en `p4_horizonte_meta` (extendido con `tipo_forzantes`, `T_op_K`, `HR_op`,
+   etc.) para reproducir exactamente el builder de P4.
 
-### Infraestructura del visor
+## Decisiones de física (validadas con el usuario antes de implementar)
 
-- `ui/componentes/manual_contenido.py` — TOC declarativo (`CapituloManual`,
-  `CAPITULOS`, `POR_SLUG`, `PARTES`, `SLUG_POR_SECCION`). Sin streamlit.
-- `ui/componentes/manual_render.py` — parser puro (`parsear_capitulo`,
-  `extraer_enlaces_manual`, `extraer_anclas`, `extraer_esquemas`,
-  `separar_ancla_heading`) + `render_bloques` (un `st.markdown` **por bloque**
-  para acotar KaTeX e intercalar expanders/esquemas/headings con ancla).
-  Errores de sintaxis con código (`MANUAL_PROFUNDIDAD_SIN_CIERRE`, `_ANIDADA`,
-  `_CIERRE_SUELTO`, `_SIN_TITULO`).
-- `ui/componentes/manual_link.py` — `boton_manual` (anchor pill `_blank`) +
-  `enlace_manual_inline`. **Regla dura**: todo enlace al manual desde la vista
-  de diseño va con `target=_blank`; sin él, el clic recarga la app y pierde
-  `st.session_state.proyecto`.
-- `ui/manual.py` — vista stateless: sidebar propio con TOC por partes (enlaces,
-  no widgets), breadcrumb, índice generado del TOC (`?manual=indice` o slug
-  inválido), navegación anterior/siguiente, `lru_cache` de lectura.
-- `Secasol.py` — intercept de `st.query_params["manual"]` **antes** de
-  inicializar `proyecto`, con `st.stop()`; enlace global "📖 Manual del
-  usuario" en el sidebar.
-- `ui/p1..p7_*.py` — `boton_manual(SLUG_POR_SECCION["pN"])` tras el
-  `st.header` de cada sección (2 líneas por archivo: import + llamada).
-- `.github/workflows/deploy_hf.yml` — línea `cp -r ../manual/ src/manual/`
-  (la whitelist del deploy no copiaba `docs/`; el manual vive top-level).
-
-### Sintaxis de los capítulos (markdown + convenciones parseables)
-
-- `<!-- profundidad: Título -->` … `<!-- /profundidad -->` → expander (sin
-  anidamiento).
-- `<!-- esquema: nombre | caption -->` → `mostrar_esquema` (reusa los 5 SVG de
-  `assets/esquemas/`).
-- `## Título {#ancla}` → `st.header(anchor="ancla")` (anclas explícitas; no se
-  depende de la generación automática de Streamlit, frágil con acentos).
-- Enlaces internos `[texto](?manual=slug#ancla)` — markdown puro, sin HTML.
-- Ecuaciones `$`/`$$` — KaTeX nativo de `st.markdown` (primer uso de ecuaciones
-  renderizadas en la UI del proyecto). Regla editorial: `aligned`, nunca
-  `align`; sin `$` literal.
-
-### Contenido — 22 capítulos en `manual/capitulos/`
-
-- **Parte I**: `01_introduccion` (qué es, público, flujo P1→P7, cómo usar el
-  manual, límites honestos del modelo).
-- **Parte II** (guía por sección, espejo P1–P7): `10_tipologia`,
-  `11_emplazamiento`, `12_colector` (piloto), `13_camara`, `14_auxiliar`,
-  `15_motor`, `16_resultados`. Fuentes: seminario + `mapa_conexiones.md`
-  (incluye la advertencia de que los sliders T/HR de P4 solo influyen en modo
-  Constantes, y que el botón de chimenea de P6 es preliminar).
-- **Parte III** (fundamentos): `20_radiacion` (piloto; componentes GHI/DNI/DHI,
-  SPA, incidencia, Liu-Jordan), `21_psicrometria` (ω/HR, carta, bulbo húmedo),
-  `22_fisica_secado` (base seca, a_w, GAB, períodos de secado emergentes),
-  `24_catalogo_productos` (los 19 productos, humedades típicas, estado de
-  calibración GAB 4/19, rol vestigial de las cinéticas de capa fina — agregado
-  al final de la sesión a pedido del usuario), `23_convenciones` (SI estricto +
-  tres convenciones de acimut con fórmulas). Orden de navegación por la tupla
-  `CAPITULOS`: el catálogo va entre "secado" y "convenciones" aunque el número
-  de archivo sea 24 (los números de archivo son cosméticos).
-- **Parte IV** (técnica, seminario adaptado): `30_tec_emplazamiento`,
-  `31_tec_colector`, `32_tec_camara`, `33_tec_industrial`,
-  `34_tec_chimenea_motor`, `35_tec_auxiliar`, `36_tec_resultados`. Ecuaciones
-  intactas; `08_cierre.md` no genera capítulo (alimenta intro y apéndice).
-- **Apéndices**: `90_apendice_codigo` (los "Highlights de implementación" del
-  seminario compilados por subsistema + validación HWB/ADITAL/Klein),
-  `91_glosario` (términos + tabla de símbolos), `92_bibliografia` (consolidada
-  por tema con anclas citables `{#clave}`).
-
-### Tests
-
-`tests/test_ui/test_manual.py` — **148 tests** (funciones puras, sin servidor):
-TOC↔disco (declarados existen, sin huérfanos, slugs kebab-case únicos), sintaxis
-de profundidad (parsea + errores esperados), **enlaces internos resuelven**
-(slug y ancla contra el capítulo destino), ningún capítulo queda aislado,
-esquemas existen en `assets/esquemas/`, `$$` balanceado por bloque, sin
-`\begin{align}`, `SLUG_POR_SECCION` cubre p1..p7, sin URLs absolutas
-hardcodeadas.
+- **Reparto producto/aire**, no "todo al producto": cada cara translúcida intercepta una
+  fracción `f_i` de su radiación transmitida directamente sobre el producto; el resto calienta
+  el aire vía superficies internas (`Q_rad_aire`). Sin esto, las paredes vidriadas no
+  modelarían el efecto invernadero de una caja de vidrio.
+- **`I_eq_prod` normalizada por `A_techo_geom`** (no por `ΣAᵢ`): evita dilución (agregar una
+  cara nunca reduce la ganancia) y da back-compat algebraica exacta con GHI en la
+  configuración histórica (techo-solo, β=0).
+- **Cambio numérico deliberado**: la fracción del techo que hoy "se perdía" (fuera de `A_rad`,
+  sin contabilizarse en ningún lado) ahora calienta el aire. Proyectos CAJA/techo-translúcido
+  existentes darán más ganancia térmica que antes — es la física real de la caja, no un bug.
+- **Techo a un agua**: `alto_m` = altura MEDIA (no la máxima ni la mínima) — mantiene exactos
+  el volumen y el área transversal de flujo sin tocar ningún otro cálculo aguas abajo.
+- Fuera de alcance (mejoras futuras, anotadas en CHANGELOG): pérdidas IR nocturnas del
+  vidriado; discretización vertical del producto por bandeja.
 
 ## Verificación
 
-- **Suite completa: 1190 passed** (1042 previas + 148 del manual). black + ruff
-  limpios.
-- E2E visual con Playwright sobre `streamlit run` (contenedor remoto):
-  `?manual=indice` (índice por partes), `?manual=colector` (tabla de tipos +
-  SVG en iframe + expanders + enlaces), `?manual=radiacion` (KaTeX inline y
-  display renderizado, boxed Liu-Jordan OK), breadcrumb y
-  anterior/siguiente correctos. Sidebar del manual con capítulo activo
-  resaltado.
-- Pendiente de verificación **post-deploy en HF** (cuando se pushee a `main`):
-  que el iframe del Space permita el popup `_blank` y que `manual/` llegue vía
-  el `cp` nuevo del workflow.
+- **Suite: 1073 passed** (31 tests nuevos: geometría un agua, `radiacion_camara.py`, término
+  `Q_rad_aire` en el motor batch y cascada, builders con cámara orientada, round-trip JSON +
+  back-compat de snapshot viejo, catálogo/mecanismo de barridos).
+- **Back-compat exacta verificada**: con techo-solo y `pendiente_techo_deg=0` (configuración
+  histórica), `I_eq_prod` es bit-idéntica a GHI (shortcut sin pvlib); `A_cuerpo_total_m2`
+  reproduce la fórmula algebraica anterior; snapshots `.json` viejos sin los campos nuevos
+  deserializan a los defaults históricos.
+- **UI verificada en vivo** con `streamlit.testing.v1.AppTest` (sin browser disponible en el
+  entorno): P2 y P4 renderizan sin excepciones en CAJA y ARMARIO; los widgets nuevos
+  (pendiente/acimut/cara de caída, 5 toggles, preview de caras) aparecen con los valores
+  esperados; P2 oculta correctamente "Acimut del colector" en CAJA y muestra la nota hacia P4;
+  P7 renderiza sin excepciones con cámara ARMARIO configurada.
+- `black` + `ruff` limpios en todos los archivos tocados (los pocos warnings de `ruff`/
+  `markdownlint` restantes son preexistentes, confirmados con `git stash`).
 
-## Documentación actualizada
+## Pendientes
 
-- `docs/notas/mejoras.md` — ítem 36 → `[IMPLEMENTADO]` con detalle.
-- `CLAUDE.md` — árbol de capas (+`ui/manual.py`, `manual/capitulos/`), nueva
-  subsección "Manual de usuario", nota de whitelist en §Deploy.
-- `CHANGELOG.md` — Added en [Unreleased].
-- `docs/tareas.md` — estado general S47 + hito completado.
-- `docs/mapa_conexiones.md` — nota S47 (el manual no agrega cableado
-  widget→campo; vista stateless).
-
-## Adiciones posteriores en la misma sesión (misma rama)
-
-Después de cerrar el manual, la sesión sumó a la rama
-`claude/hola-code-vs-local-cli-vjvre6` (commits `11cbd82`, `b4966c1`,
-`2909631`):
-
-- **`docs/notas/plan_integracion_S48.md`** — guía operativa para el merge del
-  día siguiente: la Dell tiene una ampliación grande de cámara sin pushear;
-  orden acordado (cámara → main → producción; después manual → main), conflictos
-  esperados archivo por archivo, y verificaciones post-deploy. El merge de la
-  i18n arranca sobre `main` ya integrado.
-- **`docs/notas/plan_i18n.md`** — plan de internacionalización ES/EN/PT en fases
-  (mecanismo `t()`+YAML sin gettext, advertencias por código en la UI con core
-  intacto, manual multiidioma solo-infra ahora + contenido después, selector
-  sidebar + `?lang=`). A ejecutar post-S48.
-- **`manual/capitulos/24_catalogo_productos.md`** — capítulo nuevo de la
-  Parte III "El catálogo de productos" (a pedido del usuario): los 19 productos,
-  humedades típicas, estado de calibración GAB (4/19), y aclaración del rol
-  vestigial de las cinéticas de capa fina (S38). Manual 21→22 capítulos, tests
-  142→148, suite 1184→1190.
-
-## Pendientes que deja la sesión
-
-- Verificación post-deploy en HF Spaces (popup `_blank` desde el iframe +
-  llegada de `manual/` al Space).
-- Deep-links contextuales adicionales con `enlace_manual_inline` (ej. junto a
-  la carta psicrométrica de P7 → `?manual=psicrometria`) — el helper ya existe,
-  no se usó todavía.
-- Los pendientes heredados de S45/S46 (aire local en Tipos 2/3/4, hermetizar
-  caché climático del deploy, Python 3.14 del Dockerfile) siguen abiertos.
-- i18n del manual (los .md son la unidad natural de traducción).
+- **Commitear y pushear a `main`** en la próxima sesión (el usuario va a probar la app primero;
+  working tree puro por convención hasta que lo pida explícitamente).
+- Mejoras futuras fuera de alcance: pérdidas IR nocturnas del vidriado, discretización vertical
+  del producto por bandeja (ver CHANGELOG `[Unreleased]`).
+- Validación de campo/orden de magnitud de la cámara radiativa orientada contra un caso real
+  (no había caso de referencia con caja orientada disponible, a diferencia de ADITAL para el
+  modo industrial).

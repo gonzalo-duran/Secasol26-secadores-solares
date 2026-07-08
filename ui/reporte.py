@@ -182,13 +182,26 @@ def _figuras_p2(proyecto) -> list[tuple[str, bytes]]:
             out.append((titulo, png))
 
     try:
-        acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
+        from core.proyecto import Tipologia
+
+        es_caja = getattr(getattr(proyecto, "configuracion", None), "tipologia", None) == (
+            Tipologia.CAJA
+        )
+        camara = getattr(proyecto, "camara", None)
+        if es_caja and camara is not None:
+            pendiente_poa = camara.geometria.pendiente_techo_deg
+            acimut_pvlib = acimut_duffie_a_pvlib(camara.geometria.acimut_camara_deg)
+            titulo_poa = "Irradiación: plano horizontal vs techo de la cámara"
+        else:
+            pendiente_poa = empl.pendiente_colector_deg
+            acimut_pvlib = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
+            titulo_poa = "Irradiación: plano horizontal vs plano del colector"
         poa = _calcular_poa_horaria(
             datos_local,
             empl.latitud_deg,
             empl.longitud_deg,
             empl.altitud_m,
-            empl.pendiente_colector_deg,
+            pendiente_poa,
             acimut_pvlib,
             albedo=empl.albedo_suelo,
         )
@@ -197,7 +210,7 @@ def _figuras_p2(proyecto) -> list[tuple[str, bytes]]:
             height=620,
         )
         if png:
-            out.append(("Irradiación: plano horizontal vs plano del colector", png))
+            out.append((titulo_poa, png))
     except Exception:
         pass
     return out
@@ -561,11 +574,20 @@ def _portada(styles, snap_meta: dict, snap_cfg: dict, snap_empl: dict, snap_clim
             ["Latitud", f"{snap_empl.get('latitud_deg', '—')}°"],
             ["Longitud", f"{snap_empl.get('longitud_deg', '—')}°"],
             ["Altitud", f"{_fmt(snap_empl.get('altitud_m'))} m"],
-            [
-                "Acimut colector (Duffie)",
-                f"{snap_empl.get('acimut_colector_deg_duffie', '—')}° (0°=Sur)",
-            ],
-            ["Pendiente colector", f"{snap_empl.get('pendiente_colector_deg', '—')}°"],
+        ]
+        # Sin colector externo (CAJA), el snapshot no trae estos campos — la
+        # orientación de la cámara se reporta en la sección de Cámara (P4).
+        if "acimut_colector_deg_duffie" in snap_empl:
+            rows_empl.append(
+                [
+                    "Acimut colector (Duffie)",
+                    f"{snap_empl.get('acimut_colector_deg_duffie', '—')}° (0°=Sur)",
+                ]
+            )
+            rows_empl.append(
+                ["Pendiente colector", f"{snap_empl.get('pendiente_colector_deg', '—')}°"]
+            )
+        rows_empl += [
             ["Albedo del suelo", f"{_fmt(snap_empl.get('albedo_suelo'))}"],
             ["Zona horaria", snap_empl.get("zona_horaria", "—")],
         ]
@@ -738,16 +760,27 @@ def _seccion_camara(styles, snap_cam: dict | None, figuras: list[tuple[str, byte
                     f"{_fmt(g.get('alto_m'))} m",
                 ],
                 ["Volumen", f"{_fmt(g.get('volumen_m3'))} m³"],
+                [
+                    "Orientación cámara (Duffie)",
+                    f"{_fmt(g.get('acimut_camara_deg'))}° (0°=Sur)",
+                ],
+                [
+                    "Pendiente techo (cae hacia)",
+                    f"{_fmt(g.get('pendiente_techo_deg'))}° ({g.get('cara_caida_techo', '—')})",
+                ],
                 ["Motor numérico", snap_cam.get("modo_calculo", "—")],
             ]
         )
     )
 
     elems.append(Spacer(1, 6))
-    elems.append(Paragraph("Construcción (pared opaca + techo)", styles["h2"]))
+    elems.append(Paragraph("Construcción (pared opaca + superficies translúcidas)", styles["h2"]))
     pared = cn.get("pared", {})
+    caras_t = cn.get("caras_translucidas") or {}
+    caras_activas_str = ", ".join(nombre for nombre, activa in caras_t.items() if activa) or "—"
     rows_pared = [
-        ["Techo translúcido", cn.get("cubierta_translucida_id") or "(opaca)"],
+        ["Material de vidriado", cn.get("cubierta_translucida_id") or "(opaca)"],
+        ["Caras translúcidas", caras_activas_str],
         ["A_rad", f"{_fmt(cn.get('A_rad_m2'))} m²"],
         ["Pared compuesta", "Sí" if pared.get("es_compuesta") else "No"],
         ["Capas", str(len(pared.get("capas", [])))],

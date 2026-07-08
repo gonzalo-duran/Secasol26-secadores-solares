@@ -28,8 +28,9 @@ def test_ids_unicos():
     assert len(ids) == len(set(ids)), "Hay ids duplicados en el catálogo de parámetros."
 
 
-def test_catalogo_tiene_15_parametros():
-    assert len(CATALOGO_PARAMETROS) == 15
+def test_catalogo_tiene_17_parametros():
+    """15 + pendiente_techo_camara + acimut_camara (S47)."""
+    assert len(CATALOGO_PARAMETROS) == 17
 
 
 def test_modos_soportados_validos():
@@ -78,12 +79,23 @@ def test_pendiente_acimut_no_en_constantes():
     assert {"pendiente_colector", "acimut_colector"} <= ids_trans
 
 
+def test_orientacion_camara_disponible_en_todas_las_tipologias():
+    """pendiente_techo_camara/acimut_camara aplican a CAJA/ARMARIO/GRAN_ESCALA
+    (la cámara tiene orientación propia, S47) y no en Constantes."""
+    for tip in Tipologia:
+        ids_trans = {p.id for p in parametros_para_tipologia(tip, "transitorio")}
+        assert {"pendiente_techo_camara", "acimut_camara"} <= ids_trans
+        ids_const = {p.id for p in parametros_para_tipologia(tip, "constantes")}
+        assert "pendiente_techo_camara" not in ids_const
+        assert "acimut_camara" not in ids_const
+
+
 def test_obtener_parametro_desconocido_lanza_keyerror():
     with pytest.raises(KeyError, match="BARRIDO_PARAMETRO_DESCONOCIDO"):
         obtener_parametro("parametro_que_no_existe")
 
 
-@pytest.mark.parametrize("parametro_id", ["acimut_colector", "HR_camara", "T_amb"])
+@pytest.mark.parametrize("parametro_id", ["acimut_colector", "acimut_camara", "HR_camara", "T_amb"])
 def test_conversiones_ui_si_reversibles(parametro_id):
     """si_a_ui ∘ ui_a_si ≈ identidad en el interior del rango.
 
