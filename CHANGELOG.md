@@ -11,6 +11,66 @@ Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
 - Manual de usuario estilo SAM (mejora 36) e internacionalización (idiomas).
+- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
+  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+---
+
+## [0.15.0] — 2026-07-06
+
+**Cámara radiativa orientada** (S47): cambio de paradigma para la tipología CAJA — la cámara
+pasa a operar como colector propio, con orientación y techo a un agua independientes del banco
+de colectores. Habilita también orientar la cámara distinto del colector en ARMARIO/GRAN_ESCALA.
+Ver `docs/notas/plan_camara_radiativa_orientada.md` y `docs/bitacora/bitacora_sesion47.md`.
+
+### Added
+
+- **Orientación propia de la cámara y techo a un agua**: `GeometriaCamara.acimut_camara_deg`
+  (convención Duffie), `pendiente_techo_deg` + `cara_caida_techo`, independiente de la
+  orientación del banco de colectores.
+- **Superficies translúcidas por cara** (`ConstruccionCamara.caras_translucidas`): además del
+  techo, ahora se puede vidriar frente/atrás/laterales (mismo material y espesor para todas).
+  Cada cara activa capta radiación según su propia inclinación y acimut (transposición
+  Liu-Jordan vía pvlib, `calculos/radiacion_camara.py`).
+- **Reparto de radiación producto/aire**: la radiación transmitida por cada cara translúcida se
+  reparte entre lo que intercepta directamente el producto (factor de intercepción `f_i` — techo:
+  `A_rad/A_techo_geom`; paredes: silueta del lecho apilado) y lo que calientan las superficies
+  internas opacas (nuevo término `Q_rad_aire` en el balance de `T_flujo`, con
+  `ConstruccionCamara.absortancia_interior`, default 0.85). Modela el efecto invernadero de una
+  caja con paredes vidriadas.
+- P4: sección "Orientación y techo a un agua" (pendiente, acimut, cara de caída) y "Superficies
+  translúcidas" (5 toggles + vista previa de área/inclinación/orientación por cara) en Geometría
+  de la cámara, disponibles en todas las tipologías.
+- P2: en tipología CAJA, el expander "Orientación del colector" se reemplaza por una nota que
+  apunta a P4 (no hay colector externo cuya orientación configurar).
+- Barridos paramétricos: `pendiente_techo_camara` y `acimut_camara` (Transitorio/Anual, las 3
+  tipologías); `BarridoConfig.forzantes_builder` reconstruye las forzantes por punto en modo
+  Transitorio cuando el parámetro barrido solo afecta el armado de forzantes (no un campo que
+  lea el motor directamente).
+
+### Changed
+
+- **Cambio numérico deliberado en CAJA/techo-translúcido**: la fracción de radiación del techo
+  que antes "se perdía" (no interceptaba la bandeja superior y no se contabilizaba en ningún
+  lado) ahora calienta el aire vía `Q_rad_aire`. Proyectos CAJA existentes con techo translúcido
+  darán **más ganancia térmica** que antes — es una corrección física (radiación real que la caja
+  efectivamente capta), no un bug. La irradiancia equivalente al producto (`I_g_W_m2` en
+  `ForzantesAire`) sigue siendo bit-idéntica a GHI en la configuración histórica (techo-solo,
+  techo plano).
+- `calculos/clima_calc.calcular_POA_horizonte` acepta `tilt_deg`/`acimut_duffie_deg` opcionales
+  (antes tomaba siempre la orientación del colector desde `Emplazamiento`).
+
+### Compatibilidad de archivos guardados
+
+Snapshots `.json`/`.txt` anteriores a 0.15.0 cargan sin error: los campos nuevos (orientación,
+caras translúcidas) toman sus defaults históricos (techo horizontal, solo techo translúcido).
+Los resultados de proyectos CAJA con techo translúcido existentes **cambian** al recalcular
+(ver "Changed" arriba) — es la corrección física esperada, no una regresión.
+
+### Verificación
+
+Suite: 1042 → **1073 tests** (31 nuevos), sin regresiones. `black`/`ruff` limpios. UI verificada
+en vivo con `streamlit.testing.v1.AppTest` (CAJA/ARMARIO, sin excepciones).
 
 ---
 

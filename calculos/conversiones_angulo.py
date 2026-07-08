@@ -117,3 +117,21 @@ def acimut_pvlib_a_duffie(acimut_pvlib_deg: float) -> float:
     if resultado > 180.0:
         resultado -= 360.0
     return resultado
+
+
+def normalizar_acimut_duffie(acimut_duffie_deg: float) -> float:
+    """Envuelve un acimut Duffie arbitrario al rango canónico (−180, +180].
+
+    Útil para derivar el acimut de caras rotadas (p. ej. ``γ + 90``,
+    ``γ + 180``) que pueden caer fuera del rango de almacenamiento.
+
+    Args:
+        acimut_duffie_deg: Acimut en convención Duffie [°], cualquier rango.
+
+    Returns:
+        Acimut en convención Duffie [°], rango (−180, +180].
+    """
+    resultado = float(acimut_duffie_deg) % 360.0
+    if resultado > 180.0:
+        resultado -= 360.0
+    return resultado

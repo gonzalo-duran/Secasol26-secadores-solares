@@ -152,12 +152,14 @@ def _construir_params_termodinamico(
             "calor_especifico_seco en catálogo. Usando default 1500 J/(kg·K)."
         )
 
-    # --- Radiación solar al producto (techo translúcido) ---
-    # Área conductiva del techo = cara superior completa (largo·ancho). Cuando el
-    # techo es translúcido se modela como vidriado (R_cond = espesor/k_efectivo) y
-    # se *quita* de la envolvente opaca A_cuerpo para no doble-contar esa cara.
+    # --- Radiación solar al producto (superficies translúcidas) ---
+    # Área conductiva vidriada = suma de las caras activas (techo, y en su caso
+    # frente/atrás/laterales — ver GeometriaCamara.caras()). Esas caras se
+    # modelan como vidriado (R_cond = espesor/k_efectivo) y se *quitan* de la
+    # envolvente opaca A_cuerpo para no doble-contar.
     A_techo = 0.0
     R_cond_techo = 0.0
+    caras_activas = cons.caras_translucidas_activas()
     if cons.cubierta_translucida_id is not None:
         cub = catalogo.CUBIERTAS[cons.cubierta_translucida_id]
         tau_cub = float(cub["transmitancia_solar"])
@@ -176,13 +178,14 @@ def _construir_params_termodinamico(
             k_techo = mapa_k.get(int(round(espesor_techo_m * 1000)))
         if k_techo is None:
             k_techo = cub.get("conductividad_termica")
-        if k_techo and k_techo > 0:
-            A_techo = g.largo_m * g.ancho_m
+        if k_techo and k_techo > 0 and caras_activas:
+            caras_geom = g.caras()
+            A_techo = sum(caras_geom[nombre].area_m2 for nombre in caras_activas)
             R_cond_techo = espesor_techo_m / float(k_techo)
-        else:
+        elif not (k_techo and k_techo > 0):
             advertencias.append(
                 f"CAM_TD_K_TECHO_FALTA: cubierta '{cons.cubierta_translucida_id}' sin "
-                "conductividad para el techo translúcido; su pérdida conductiva se omite."
+                "conductividad para el vidriado; su pérdida conductiva se omite."
             )
     else:
         tau_cub = 0.0
@@ -223,9 +226,12 @@ def _construir_params_termodinamico(
 
     # --- Geometría total ---
     A_prod = b.n_bandejas * b.area_bandeja_m2
-    A_cuerpo = 2.0 * (g.largo_m * g.alto_m + g.ancho_m * g.alto_m + g.largo_m * g.ancho_m)
-    # Envolvente opaca: si el techo es translúcido, esa cara se modela como
-    # vidriado (U_techo) aparte y se descuenta del cuerpo opaco.
+    # A_cuerpo_total_m2 incluye piso + techo (a un agua) + 4 paredes; con
+    # pendiente_techo_deg=0 es idéntica a la fórmula histórica de caja
+    # rectangular: 2·(largo·alto + ancho·alto + largo·ancho).
+    A_cuerpo = g.A_cuerpo_total_m2
+    # Envolvente opaca: las caras translúcidas activas se modelan como
+    # vidriado (U_techo) aparte y se descuentan del cuerpo opaco.
     A_cuerpo_opaco = A_cuerpo - A_techo
 
     # --- Boundary del aire de referencia ---

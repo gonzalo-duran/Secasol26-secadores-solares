@@ -285,8 +285,10 @@ def calcular_POA_horizonte(
     emplazamiento: Emplazamiento,
     *,
     modelo_difuso: str = "isotropic",
+    tilt_deg: Optional[float] = None,
+    acimut_duffie_deg: Optional[float] = None,
 ) -> pd.Series:
-    """Calcula POA horaria sobre el plano del colector [W/m²].
+    """Calcula POA horaria sobre un plano orientado [W/m²].
 
     Aplica transposición de Liu-Jordan (componente directa: DNI·cos(θ_i);
     componente difusa: ``modelo_difuso``; componente reflejada del suelo:
@@ -297,19 +299,24 @@ def calcular_POA_horizonte(
         datos_clima: DataFrame horario con columnas ``GHI_Wm2``, ``DNI_Wm2``,
             ``DHI_Wm2`` y un índice DatetimeIndex tz-aware (típicamente el
             que produce ``obtener_clima``).
-        emplazamiento: Emplazamiento del secador (lat, lon, alt, tilt y
-            acimut en convención Duffie).
+        emplazamiento: Emplazamiento del secador (lat, lon, alt; y tilt/acimut
+            del colector si no se pasan explícitamente).
         modelo_difuso: Modelo de transposición difusa que acepta pvlib
             (``isotropic``, ``klucher``, ``haydavies``, ``reindl``, ``king``,
             ``perez``). Default ``isotropic`` por simplicidad y coherencia
             con P3.
+        tilt_deg: Inclinación del plano [°]. ``None`` → usa
+            ``emplazamiento.pendiente_colector_deg`` (comportamiento
+            histórico: POA del colector).
+        acimut_duffie_deg: Acimut del plano, convención Duffie. ``None`` →
+            usa ``emplazamiento.acimut_colector_deg``.
 
     Returns:
         ``pd.Series`` POA horaria [W/m²], índice idéntico a ``datos_clima``.
         Valores negativos (artefacto numérico cerca del horizonte) se
-        clipean a 0. Horas con DNI o DHI NaN reciben fallback a GHI (el
-        colector no puede saber cuánto era directa vs difusa, así que se
-        asume conservadoramente POA = GHI esa hora).
+        clipean a 0. Horas con DNI o DHI NaN reciben fallback a GHI (no se
+        puede saber cuánto era directa vs difusa, así que se asume
+        conservadoramente POA = GHI esa hora).
 
     Raises:
         ValueError: Si ``datos_clima`` no tiene las columnas esperadas o
@@ -334,10 +341,14 @@ def calcular_POA_horizonte(
         altitude=emplazamiento.altitud_m,
     )
 
-    acimut_pvlib = acimut_duffie_a_pvlib(emplazamiento.acimut_colector_deg)
+    tilt = emplazamiento.pendiente_colector_deg if tilt_deg is None else tilt_deg
+    acimut_duffie = (
+        emplazamiento.acimut_colector_deg if acimut_duffie_deg is None else acimut_duffie_deg
+    )
+    acimut_pvlib = acimut_duffie_a_pvlib(acimut_duffie)
 
     poa = pvlib.irradiance.get_total_irradiance(
-        surface_tilt=emplazamiento.pendiente_colector_deg,
+        surface_tilt=tilt,
         surface_azimuth=acimut_pvlib,
         solar_zenith=sol_pos["apparent_zenith"],
         solar_azimuth=sol_pos["azimuth"],

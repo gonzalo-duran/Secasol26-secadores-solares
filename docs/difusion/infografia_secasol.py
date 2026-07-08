@@ -23,11 +23,11 @@ from reportlab.pdfgen import canvas
 W, H = 1280, 720  # lámina panorámica 16:9 (puntos PDF)
 
 # ---------------------------------------------------------------- paleta -------
-AZUL = HexColor("#0B3D66")       # azul profundo institucional
+AZUL = HexColor("#0B3D66")  # azul profundo institucional
 AZUL2 = HexColor("#155B8A")
-NARANJA = HexColor("#E8821E")    # sol / energía
+NARANJA = HexColor("#E8821E")  # sol / energía
 AMBAR = HexColor("#F4B23E")
-VERDE = HexColor("#2E9E5B")      # agro
+VERDE = HexColor("#2E9E5B")  # agro
 CREMA = HexColor("#FFF8EF")
 CREMA2 = HexColor("#FDEFD9")
 GRIS = HexColor("#5A6470")
@@ -91,8 +91,13 @@ def draw(c: canvas.Canvas) -> None:
             lw = lh * ar
             x_right -= lw
             c.drawImage(
-                ImageReader(path), x_right, hy + (132 - lh) / 2,
-                width=lw, height=lh, mask="auto", preserveAspectRatio=True,
+                ImageReader(path),
+                x_right,
+                hy + (132 - lh) / 2,
+                width=lw,
+                height=lh,
+                mask="auto",
+                preserveAspectRatio=True,
             )
             x_right -= 26
 
@@ -102,21 +107,36 @@ def draw(c: canvas.Canvas) -> None:
     c.drawString(55, hy - 46, "¿Qué hace distinto a Secasol?")
 
     bullets = [
-        (NARANJA, "Escala flexible",
-         "Diseña desde pocos kilos (caja doméstica/educativa)",
-         "hasta toneladas (secadores industriales semicontinuos)."),
-        (VERDE, "Código libre y abierto",
-         "Licencia GNU GPLv3: auditable, reproducible y sin costo.",
-         "Pensado para enseñanza, investigación y transferencia."),
-        (AZUL2, "Disponible 24 horas en la web",
-         "Corre en el navegador (Hugging Face Spaces).",
-         "Sin instalar nada, desde cualquier dispositivo."),
-        (AMBAR, "Modular y guiado",
-         "Flujo de 7 etapas: del emplazamiento al reporte final,",
-         "con clima real (NASA POWER) y física en cada paso."),
-        (VERDE, "Para docentes, profesionales y productores",
-         "Orientado a usuarios con capacitación en secado solar:",
-         "academia, técnicos y productores agrícolas."),
+        (
+            NARANJA,
+            "Escala flexible",
+            "Diseña desde pocos kilos (caja doméstica/educativa)",
+            "hasta toneladas (secadores industriales semicontinuos).",
+        ),
+        (
+            VERDE,
+            "Código libre y abierto",
+            "Licencia GNU GPLv3: auditable, reproducible y sin costo.",
+            "Pensado para enseñanza, investigación y transferencia.",
+        ),
+        (
+            AZUL2,
+            "Disponible 24 horas en la web",
+            "Corre en el navegador (Hugging Face Spaces).",
+            "Sin instalar nada, desde cualquier dispositivo.",
+        ),
+        (
+            AMBAR,
+            "Modular y guiado",
+            "Flujo de 7 etapas: del emplazamiento al reporte final,",
+            "con clima real (NASA POWER) y física en cada paso.",
+        ),
+        (
+            VERDE,
+            "Para docentes, profesionales y productores",
+            "Orientado a usuarios con capacitación en secado solar:",
+            "academia, técnicos y productores agrícolas.",
+        ),
     ]
 
     top = hy - 78
@@ -161,14 +181,14 @@ def draw(c: canvas.Canvas) -> None:
     c.setFont("Helvetica", 13)
     c.drawString(rx, hy - 64, "Capacidad de carga de producto fresco (escala logarítmica)")
 
-    gx0, gx1 = rx + 12, W - 60          # extensión del eje x
+    gx0, gx1 = rx + 12, W - 60  # extensión del eje x
     vmin, vmax = 1.0, 10000.0
     lo, hi = math.log10(vmin), math.log10(vmax)
 
     def xs(v: float) -> float:
         return gx0 + (math.log10(v) - lo) / (hi - lo) * (gx1 - gx0)
 
-    base_y = hy - 220                    # línea base del eje
+    base_y = hy - 220  # línea base del eje
     # grilla + etiquetas de ticks
     ticks = [(1, "1"), (10, "10"), (100, "100"), (1000, "1.000"), (10000, "10.000")]
     c.setFont("Helvetica", 11)
@@ -211,8 +231,12 @@ def draw(c: canvas.Canvas) -> None:
     c.drawString(rx, py + 34, "Flujo modular en 7 pasos")
 
     pasos = [
-        ("1", "Tipología"), ("2", "Emplaza-\nmiento"), ("3", "Colector"),
-        ("4", "Cámara"), ("5", "Auxiliar"), ("6", "Motor/\nChimenea"),
+        ("1", "Tipología"),
+        ("2", "Emplaza-\nmiento"),
+        ("3", "Colector"),
+        ("4", "Cámara"),
+        ("5", "Auxiliar"),
+        ("6", "Motor/\nChimenea"),
         ("7", "Resultados"),
     ]
     pw, ph = 78, 50
@@ -260,8 +284,7 @@ def draw(c: canvas.Canvas) -> None:
     c.drawString(rx + 30, panel_y + panel_h - 32, "Probalo online, sin instalar nada")
     c.setFillColor(AMBAR)
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(rx + 30, panel_y + panel_h - 58,
-                 "huggingface.co/spaces/gonzalojduran/Secasol26")
+    c.drawString(rx + 30, panel_y + panel_h - 58, "huggingface.co/spaces/gonzalojduran/Secasol26")
 
     c.setFillColor(_hx(BLANCO, 0.92))
     c.setFont("Helvetica", 12.5)

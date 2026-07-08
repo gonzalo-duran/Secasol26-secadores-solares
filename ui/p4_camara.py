@@ -24,6 +24,11 @@ from calculos.balance_global import (
 )
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from calculos.conversiones_angulo import (
+    acimut_duffie_a_pvlib,
+    acimut_duffie_a_ui360,
+    acimut_ui360_a_duffie,
+)
 from calculos.motor_calc import _D_P_DEFAULT_M, _C_obstruccion_bloqueo
 from calculos.operacion_anual_camara import (
     ResultadosAnualCamara,
@@ -35,6 +40,7 @@ from core.advertencias import Severidad
 from core.camara import (
     Camara,
     CapaPared,
+    CarasTranslucidas,
     CargaProducto,
     ConfiguracionBandejas,
     ConfiguracionCarros,
@@ -191,7 +197,11 @@ def _construir_forzantes_termodinamico(
       comporta como en condiciones fijas (compatible con tests antiguos).
     - "sintetico"  → curva senoidal día/noche con pico al mediodía. Amplitudes:
       T_sal_col ±15 K respecto al T_op, T_amb ±5 K respecto a T_amb_K.
-      I_g(t) semicampana con pico I_g_max_W_m2 (0 si techo opaco).
+      I_g(t) semicampana con pico I_g_max_W_m2 (0 si no hay caras translúcidas
+      activas). Sin posición solar horaria disponible, I_g_max_W_m2 se
+      interpreta como pico sobre CADA cara activa; ``factores_sinteticos``
+      lo escala a la irradiancia equivalente al producto y deriva el pico de
+      ``Q_rad_aire`` (radiación no interceptada que calienta el aire).
     - "real"       → serie horaria del colector calculada en P3 + clima NASA
       de P2. Requiere `p3_eval` (dict producido por P3 en modo 'diario') y
       `proyecto` con `clima.datos` no nulo. GHI viene del clima.
@@ -199,7 +209,13 @@ def _construir_forzantes_termodinamico(
     if tipo_forzantes == "constantes":
         return None
     if tipo_forzantes == "sintetico":
+        from calculos.radiacion_camara import factores_sinteticos
+
         omega_amb = humedad_absoluta(HR_op, T_op_K, P_Pa)
+        camara_proy = getattr(proyecto, "camara", None)
+        factor_prod, factor_aire = (
+            factores_sinteticos(camara_proy) if camara_proy is not None else (1.0, 0.0)
+        )
         return construir_serie_sintetica_dia_tipo(
             T_sal_col_promedio_K=T_op_K,
             T_sal_col_amplitud_K=15.0,
@@ -208,7 +224,8 @@ def _construir_forzantes_termodinamico(
             T_amb_promedio_K=T_amb_K,
             T_amb_amplitud_K=5.0,
             v_viento_ms=2.0,
-            I_g_max_W_m2=I_g_max_W_m2,
+            I_g_max_W_m2=I_g_max_W_m2 * factor_prod,
+            Q_rad_aire_max_W=I_g_max_W_m2 * factor_aire,
             n_dias=n_dias,
         )
     if tipo_forzantes == "real":
@@ -263,21 +280,36 @@ def _forzantes_desde_slice(
     *,
     datos_slice,
     empl,
+    camara,
     caudal_kg_s: float,
     T_sal_col_K,
     P_Pa: float,
 ) -> ForzantesAire:
     """Arma ForzantesAire desde un slice climático de 24·N h sin replicar.
 
-    Construye T_amb/ω/v/GHI/POA desde ``datos_slice`` y usa la ``T_sal_col_K``
+    Construye T_amb/ω/v/I_eq/POA desde ``datos_slice`` y usa la ``T_sal_col_K``
     provista (T_amb en CAJA; salida del colector hora a hora en ARMARIO). Pasa
     la serie completa a ``armar_forzantes_aire`` por el camino sin replicación
     (modo "diario": n_reps=1, usa la serie tal cual aunque tenga 24·N puntos).
+
+    ``I_g_W_m2`` e ``Q_rad_aire_W`` se computan con
+    ``calculos.radiacion_camara.series_radiacion_camara`` (irradiancia
+    equivalente por orientación de las caras translúcidas de ``camara``); si
+    falla (p.ej. sin cubierta o datos insuficientes), cae a GHI horizontal
+    sin aporte al aire (comportamiento histórico).
     """
+    from calculos.radiacion_camara import series_radiacion_camara
+
     T_amb_K_arr = np.asarray(datos_slice["T_amb_K"], dtype=float)
     HR_arr = np.asarray(datos_slice["HR"], dtype=float)
     v_viento_arr = np.asarray(datos_slice["WS_ms"], dtype=float)
-    I_g_arr = np.asarray(datos_slice["GHI_Wm2"], dtype=float)
+    try:
+        I_g_serie, Q_rad_aire_serie = series_radiacion_camara(datos_slice, empl, camara)
+        I_g_arr = np.asarray(I_g_serie, dtype=float)
+        Q_rad_aire_arr = np.asarray(Q_rad_aire_serie, dtype=float)
+    except Exception:
+        I_g_arr = np.asarray(datos_slice["GHI_Wm2"], dtype=float)
+        Q_rad_aire_arr = np.zeros_like(I_g_arr)
     try:
         from calculos.clima_calc import calcular_POA_horizonte
 
@@ -300,6 +332,7 @@ def _forzantes_desde_slice(
         T_amb_K=T_amb_K_arr,
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
+        Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=3600.0,
     )
 
@@ -363,6 +396,7 @@ def _construir_forzantes_reales(
         return _forzantes_desde_slice(
             datos_slice=datos_slice,
             empl=empl,
+            camara=proyecto.camara,
             caudal_kg_s=caudal_kg_s,
             T_sal_col_K=T_sal_col_K,
             P_Pa=P_Pa,
@@ -399,10 +433,20 @@ def _construir_forzantes_reales(
     T_amb_K_arr = np.asarray(datos_dia["T_amb_K"], dtype=float)
     HR_arr = np.asarray(datos_dia["HR"], dtype=float)
     v_viento_arr = np.asarray(datos_dia["WS_ms"], dtype=float)
-    # Irradiancia global horizontal sobre el techo (NASA POWER → ALLSKY_SFC_SW_DWN).
-    # En cámaras opacas el motor anula el término Q_rad sin coste; pasarla siempre
-    # simplifica el wire-up.
-    I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+    # Irradiancia equivalente al producto sobre las caras translúcidas de la
+    # cámara (orientación propia, ver calculos/radiacion_camara.py). En
+    # cámaras opacas el motor anula el término Q_rad sin coste; se computa
+    # siempre para simplificar el wire-up. Fallback a GHI horizontal (sin
+    # aporte al aire) si falla (p.ej. sin cubierta o datos insuficientes).
+    from calculos.radiacion_camara import series_radiacion_camara
+
+    try:
+        I_g_serie, Q_rad_aire_serie = series_radiacion_camara(datos_dia, empl, proyecto.camara)
+        I_g_arr = np.asarray(I_g_serie, dtype=float)
+        Q_rad_aire_arr = np.asarray(Q_rad_aire_serie, dtype=float)
+    except Exception:
+        I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+        Q_rad_aire_arr = np.zeros_like(I_g_arr)
     # POA horaria sobre el plano del colector (transposición de DNI/GHI/DHI
     # con tilt/azimut). El balance global la usa al re-correr el colector
     # con el caudal natural impuesto por el lazo de chimenea (Picard).
@@ -449,6 +493,7 @@ def _construir_forzantes_reales(
         T_amb_K=T_amb_K_arr,
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
+        Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=3600.0,
     )
 
@@ -497,6 +542,7 @@ def _construir_forzantes_reales_caja(
         return _forzantes_desde_slice(
             datos_slice=datos_slice,
             empl=empl,
+            camara=proyecto.camara,
             caudal_kg_s=caudal_kg_s,
             T_sal_col_K=np.asarray(datos_slice["T_amb_K"], dtype=float),
             P_Pa=P_Pa,
@@ -513,7 +559,15 @@ def _construir_forzantes_reales_caja(
     T_amb_K_arr = np.asarray(datos_dia["T_amb_K"], dtype=float)
     HR_arr = np.asarray(datos_dia["HR"], dtype=float)
     v_viento_arr = np.asarray(datos_dia["WS_ms"], dtype=float)
-    I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+    from calculos.radiacion_camara import series_radiacion_camara
+
+    try:
+        I_g_serie, Q_rad_aire_serie = series_radiacion_camara(datos_dia, empl, proyecto.camara)
+        I_g_arr = np.asarray(I_g_serie, dtype=float)
+        Q_rad_aire_arr = np.asarray(Q_rad_aire_serie, dtype=float)
+    except Exception:
+        I_g_arr = np.asarray(datos_dia["GHI_Wm2"], dtype=float)
+        Q_rad_aire_arr = np.zeros_like(I_g_arr)
     try:
         from calculos.clima_calc import calcular_POA_horizonte
 
@@ -543,6 +597,7 @@ def _construir_forzantes_reales_caja(
         T_amb_K=T_amb_K_arr,
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
+        Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=3600.0,
     )
 
@@ -615,6 +670,7 @@ def _construir_forzantes_ventana(
     return _forzantes_desde_slice(
         datos_slice=datos_slice,
         empl=empl,
+        camara=proyecto.camara,
         caudal_kg_s=caudal_kg_s,
         T_sal_col_K=T_sal_col_K,
         P_Pa=P_Pa,
@@ -866,10 +922,14 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
         f"  Ancho : {g.ancho_m:.3f} m",
         f"  Alto  : {g.alto_m:.3f} m",
         f"  Volumen interno   : {g.largo_m * g.ancho_m * g.alto_m:.3f} m³",
+        f"  Pendiente techo   : {g.pendiente_techo_deg:.1f}°  (cae hacia: {g.cara_caida_techo})",
+        f"  Acimut cámara     : {g.acimut_camara_deg:.1f}° Duffie",
         "",
         "CONSTRUCCIÓN",
-        "  Techo translúcido : " + (cn.cubierta_translucida_id or "(opaca)"),
+        "  Material vidriado : " + (cn.cubierta_translucida_id or "(opaca)"),
     ]
+    if cn.cubierta_translucida_id is not None:
+        lines.append("  Caras translúcidas: " + ", ".join(cn.caras_translucidas_activas()))
     if cn.cubierta_translucida_id is not None and cn.A_rad_m2 is not None:
         lines.append(f"  A_rad             : {cn.A_rad_m2:.4f} m²")
     if cn.cubierta_translucida_id is not None and cn.cubierta_translucida_espesor_m is not None:
@@ -1026,6 +1086,9 @@ def _from_json_camara(data: dict) -> "Camara":
         largo_m=float(g_d["largo_m"]),
         ancho_m=float(g_d["ancho_m"]),
         alto_m=float(g_d["alto_m"]),
+        pendiente_techo_deg=float(g_d.get("pendiente_techo_deg", 0.0)),
+        acimut_camara_deg=float(g_d.get("acimut_camara_deg", 180.0)),
+        cara_caida_techo=g_d.get("cara_caida_techo", "frente"),
     )
 
     pared_d = cn_d.get("pared") or {}
@@ -1039,6 +1102,7 @@ def _from_json_camara(data: dict) -> "Camara":
         for c in capas_d
     ]
     pared = ParedCamara(capas=capas)
+    caras_d = cn_d.get("caras_translucidas") or {}
     construccion = ConstruccionCamara(
         cubierta_translucida_id=cn_d.get("cubierta_translucida_id"),
         A_rad_m2=(float(cn_d["A_rad_m2"]) if cn_d.get("A_rad_m2") is not None else None),
@@ -1047,6 +1111,14 @@ def _from_json_camara(data: dict) -> "Camara":
             if cn_d.get("cubierta_translucida_espesor_m") is not None
             else None
         ),
+        caras_translucidas=CarasTranslucidas(
+            techo=bool(caras_d.get("techo", True)),
+            frente=bool(caras_d.get("frente", False)),
+            atras=bool(caras_d.get("atras", False)),
+            lateral_izq=bool(caras_d.get("lateral_izq", False)),
+            lateral_der=bool(caras_d.get("lateral_der", False)),
+        ),
+        absortancia_interior=float(cn_d.get("absortancia_interior", 0.85)),
         pared=pared,
     )
 
@@ -1156,6 +1228,12 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "ancho_m": g.ancho_m,
             "alto_m": g.alto_m,
             "volumen_m3": g.largo_m * g.ancho_m * g.alto_m,
+            "pendiente_techo_deg": g.pendiente_techo_deg,
+            "acimut_camara_deg": g.acimut_camara_deg,
+            "cara_caida_techo": g.cara_caida_techo,
+            "alto_menor_m": g.alto_menor_m,
+            "alto_mayor_m": g.alto_mayor_m,
+            "A_techo_geom_m2": g.A_techo_geom_m2,
         },
         "construccion": {
             "cubierta_translucida_id": cn.cubierta_translucida_id,
@@ -1166,6 +1244,14 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             ),
             "A_rad_m2": cn.A_rad_m2,
             "cubierta_translucida_espesor_m": cn.cubierta_translucida_espesor_m,
+            "caras_translucidas": {
+                "techo": cn.caras_translucidas.techo,
+                "frente": cn.caras_translucidas.frente,
+                "atras": cn.caras_translucidas.atras,
+                "lateral_izq": cn.caras_translucidas.lateral_izq,
+                "lateral_der": cn.caras_translucidas.lateral_der,
+            },
+            "absortancia_interior": cn.absortancia_interior,
             "pared": {
                 "es_compuesta": cn.pared.es_compuesta,
                 "espesor_total_m": cn.pared.espesor_total_m,
@@ -1626,6 +1712,72 @@ def render() -> None:
         vol = largo * ancho * alto
         st.caption(f"Volumen interno: {vol:.3f} m³  |  Área de planta: {largo*ancho:.3f} m²")
 
+        st.markdown("**Orientación y techo a un agua**")
+        st.caption(
+            "La cámara tiene su propia orientación (independiente de la del banco "
+            "de colectores en P2). El techo es a un agua: cae desde el alto mayor "
+            "hasta el alto menor en la cara elegida."
+        )
+        oc1, oc2, oc3 = st.columns(3)
+        pendiente_techo = oc1.number_input(
+            "Pendiente del techo [°]",
+            min_value=0.0,
+            max_value=60.0,
+            value=float(geo_prev.pendiente_techo_deg),
+            step=1.0,
+            format="%.1f",
+            help="0° = techo plano (histórico, sin cambios en el balance).",
+        )
+        acimut_camara_ui360 = oc2.number_input(
+            "Acimut de la cámara [°] — 0°=Sur, 90°=Este, 180°=Norte, 270°=Oeste",
+            min_value=0.0,
+            max_value=360.0,
+            value=float(acimut_duffie_a_ui360(geo_prev.acimut_camara_deg)),
+            step=1.0,
+            format="%.1f",
+            help="Acimut de la normal exterior de la cara 'frente' (misma convención que P2).",
+        )
+        _opciones_caida = {
+            "frente": "Frente",
+            "atras": "Atrás",
+            "lateral_izq": "Lateral izquierdo",
+            "lateral_der": "Lateral derecho",
+        }
+        _caida_keys = list(_opciones_caida.keys())
+        cara_caida_sel = oc3.selectbox(
+            "Cara de caída del techo",
+            options=_caida_keys,
+            format_func=lambda k: _opciones_caida[k],
+            index=(
+                _caida_keys.index(geo_prev.cara_caida_techo)
+                if geo_prev.cara_caida_techo in _caida_keys
+                else 0
+            ),
+            help=(
+                "Cara hacia la que cae el techo (la de menor altura). "
+                "Izquierda/derecha mirando en la dirección del flujo (de atrás hacia el frente)."
+            ),
+        )
+        acimut_camara_duffie = acimut_ui360_a_duffie(acimut_camara_ui360)
+        _geo_preview: Optional[GeometriaCamara] = None
+        try:
+            _geo_preview = GeometriaCamara(
+                largo_m=largo,
+                ancho_m=ancho,
+                alto_m=alto,
+                pendiente_techo_deg=pendiente_techo,
+                acimut_camara_deg=acimut_camara_duffie,
+                cara_caida_techo=cara_caida_sel,
+            )
+            st.caption(
+                f"Alto menor: {_geo_preview.alto_menor_m:.2f} m  |  "
+                f"Alto mayor: {_geo_preview.alto_mayor_m:.2f} m  |  "
+                f"Área real del techo: {_geo_preview.A_techo_geom_m2:.3f} m²  |  "
+                f"Acimut pvlib: {acimut_duffie_a_pvlib(acimut_camara_duffie):.1f}°"
+            )
+        except ValueError as err:
+            st.error(f"⚠️ {err}")
+
         cons_prev = (
             proyecto.camara.construccion if proyecto.camara is not None else ConstruccionCamara()
         )
@@ -1645,29 +1797,32 @@ def render() -> None:
             except ValueError:
                 idx_cub_default = 0
         cubierta_sel = st.selectbox(
-            "Techo translúcido",
+            "Material de vidriado",
             options=opciones_cubierta,
             index=idx_cub_default,
             format_func=lambda k: catalogo.CUBIERTAS.get(k, {}).get("descripcion", k),
             help=(
                 "Opaca: cámara cerrada al sol (secador indirecto puro). "
-                "Material translúcido: ingresa radiación al producto "
-                "Q_rad = I_g · τ · α · A_rad. τ leído del catálogo de cubiertas.\n\n"
-                "**CAJA**: obligatoriamente translúcido (la radiación es la única "
-                "fuente de energía sin colector externo)."
+                "Material translúcido: mismo material y espesor para todas las "
+                "caras marcadas abajo; cada una ingresa radiación al producto "
+                "y al aire según su propia orientación "
+                "(ver calculos/radiacion_camara.py).\n\n"
+                "**CAJA**: obligatoriamente translúcida (al menos una cara), la "
+                "radiación es la única fuente de energía sin colector externo."
             ),
         )
         cubierta_id_sel: Optional[str] = (
             None if cubierta_sel == opciones_cubierta[0] else cubierta_sel
         )
         espesor_techo_m_sel: Optional[float] = None
+        caras_translucidas_sel = CarasTranslucidas(techo=False)
         if cubierta_id_sel is not None:
             tau_info = catalogo.CUBIERTAS[cubierta_id_sel].get("transmitancia_solar", 0.85)
             st.caption(f"τ_solar = {float(tau_info):.2f} (del catálogo)")
-            # Espesor del techo translúcido (mejora 33). Para el alveolar se
-            # ofrecen las medidas de mercado del mapa k(espesor) del catálogo;
-            # el espesor entra al balance como pérdida conductiva del vidriado
-            # (U_techo = k_efectivo/espesor en serie con films), ver camara_calc.
+            # Espesor del vidriado (mejora 33), único para todas las caras. Para
+            # el alveolar se ofrecen las medidas de mercado del mapa k(espesor)
+            # del catálogo; el espesor entra al balance como pérdida conductiva
+            # (U = k_efectivo/espesor en serie con films), ver camara_calc.
             mapa_k_techo = catalogo.CUBIERTAS.get(cubierta_id_sel, {}).get(
                 "k_efectivo_por_espesor_mm"
             )
@@ -1678,7 +1833,7 @@ def render() -> None:
             )
             esp_techo_prev_m = cons_prev.cubierta_translucida_espesor_m or 0.006
             espesor_techo_mm = selector_espesor_mm(
-                "Espesor del techo [mm]",
+                "Espesor del vidriado [mm]",
                 esp_techo_prev_m,
                 key="p4_esp_techo",
                 opciones_mm=opciones_techo_mm,
@@ -1691,6 +1846,56 @@ def render() -> None:
                 k_techo_eff = mapa_k_techo.get(int(round(espesor_techo_mm)))
                 if k_techo_eff:
                     st.caption(f"k_efectivo = {float(k_techo_eff):.3f} W/(m·K) (del catálogo)")
+
+            st.markdown("**Superficies translúcidas**")
+            st.caption(
+                "Caras que llevan el vidriado elegido (mismo material/espesor en "
+                "todas). El piso siempre es opaco. Default: solo techo "
+                "(comportamiento histórico)."
+            )
+            caras_prev = (
+                cons_prev.caras_translucidas
+                if cons_prev.cubierta_translucida_id is not None
+                else CarasTranslucidas()
+            )
+            tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+            techo_activo = tc1.checkbox("Techo", value=caras_prev.techo)
+            frente_activo = tc2.checkbox("Frente", value=caras_prev.frente)
+            atras_activo = tc3.checkbox("Atrás", value=caras_prev.atras)
+            lateral_izq_activo = tc4.checkbox("Lat. izq.", value=caras_prev.lateral_izq)
+            lateral_der_activo = tc5.checkbox("Lat. der.", value=caras_prev.lateral_der)
+            caras_translucidas_sel = CarasTranslucidas(
+                techo=techo_activo,
+                frente=frente_activo,
+                atras=atras_activo,
+                lateral_izq=lateral_izq_activo,
+                lateral_der=lateral_der_activo,
+            )
+            if not any(
+                [techo_activo, frente_activo, atras_activo, lateral_izq_activo, lateral_der_activo]
+            ):
+                st.warning(
+                    "⚠️ Ninguna cara está activa: la cámara queda térmicamente opaca "
+                    "(sin ganancia radiativa) aunque el material esté definido."
+                )
+                if es_caja_pre:
+                    st.error(
+                        "❌ Tipología CAJA requiere al menos una cara translúcida. "
+                        "Sin colector externo, la radiación es la única fuente de energía."
+                    )
+            elif _geo_preview is not None:
+                _caras_geom_prev = _geo_preview.caras()
+                _preview_rows = [
+                    {
+                        "Cara": nombre.replace("_", " ").capitalize(),
+                        "Área [m²]": round(cara.area_m2, 3),
+                        "Inclinación [°]": round(cara.tilt_deg, 1),
+                        "Acimut UI360 [°]": round(acimut_duffie_a_ui360(cara.acimut_duffie_deg), 1),
+                        "Translúcida": getattr(caras_translucidas_sel, nombre),
+                    }
+                    for nombre, cara in _caras_geom_prev.items()
+                ]
+                st.dataframe(_preview_rows, hide_index=True, width="stretch")
         elif es_caja_pre:
             st.error(
                 "❌ Tipología CAJA requiere techo translúcido. Sin colector externo "
@@ -2481,10 +2686,18 @@ def render() -> None:
     # -----------------------------------------------------------------------
     def _build_camara(*, modo_calculo_override: str | None = None) -> Camara:
         """Construye Camara con los valores actuales de los widgets."""
-        geo = GeometriaCamara(largo_m=largo, ancho_m=ancho, alto_m=alto)
+        geo = GeometriaCamara(
+            largo_m=largo,
+            ancho_m=ancho,
+            alto_m=alto,
+            pendiente_techo_deg=pendiente_techo,
+            acimut_camara_deg=acimut_camara_duffie,
+            cara_caida_techo=cara_caida_sel,
+        )
         cons = ConstruccionCamara(
             cubierta_translucida_id=cubierta_id_sel,
             cubierta_translucida_espesor_m=espesor_techo_m_sel,
+            caras_translucidas=caras_translucidas_sel,
             pared=pared_widget,
         )
         band = ConfiguracionBandejas(
@@ -2540,13 +2753,15 @@ def render() -> None:
             "alimenta los resultados anuales — esos salen del botón "
             "'Calcular operación anual' de arriba."
         )
-    _bloqueo_caja_opaca = es_caja_pre and cubierta_id_sel is None
+    _bloqueo_caja_opaca = es_caja_pre and (
+        cubierta_id_sel is None or not caras_translucidas_sel.activas()
+    )
     calcular = st.button(
         "⚙️ Calcular cámara",
         type="primary" if modo_analisis != ModoAnalisis.ANUAL else "secondary",
         disabled=_bloqueo_caja_opaca,
         help=(
-            "Tipología CAJA requiere techo translúcido para poder calcular."
+            "Tipología CAJA requiere al menos una cara translúcida para poder calcular."
             if _bloqueo_caja_opaca
             else None
         ),
@@ -2554,10 +2769,18 @@ def render() -> None:
 
     if calcular:
         try:
-            geo = GeometriaCamara(largo_m=largo, ancho_m=ancho, alto_m=alto)
+            geo = GeometriaCamara(
+                largo_m=largo,
+                ancho_m=ancho,
+                alto_m=alto,
+                pendiente_techo_deg=pendiente_techo,
+                acimut_camara_deg=acimut_camara_duffie,
+                cara_caida_techo=cara_caida_sel,
+            )
             cons = ConstruccionCamara(
                 cubierta_translucida_id=cubierta_id_sel,
                 cubierta_translucida_espesor_m=espesor_techo_m_sel,
+                caras_translucidas=caras_translucidas_sel,
                 pared=pared_widget,
             )
             band = ConfiguracionBandejas(
@@ -2682,6 +2905,19 @@ def render() -> None:
                                 else ("día típico repetido" if n_dias > 1 else "1 día")
                             )
                         ),
+                        # Kwargs del builder (S47): permiten a P7 reconstruir las
+                        # forzantes desde un proyecto clonado y mutado en un
+                        # barrido paramétrico (ver BarridoConfig.forzantes_builder),
+                        # en vez de reutilizar esta forzante congelada.
+                        "usar_ventana": usar_ventana,
+                        "tipo_forzantes": tipo_forzantes,
+                        "T_op_K": T_op_K,
+                        "HR_op": HR_op,
+                        "T_amb_calc_K": T_amb_calc_K,
+                        "n_dias_solicitado": int(n_dias),
+                        "I_g_max_W_m2": I_g_max_W_m2,
+                        "P_proyecto_Pa": P_proyecto_Pa,
+                        "dias_consecutivos": dias_consecutivos,
                     }
                 else:
                     # Modo "Constantes": no hay horizonte transitorio para P7.

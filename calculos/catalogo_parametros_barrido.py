@@ -223,6 +223,47 @@ CATALOGO_PARAMETROS: tuple[ParametroBarrido, ...] = (
         descripcion_corta="Orientación acimutal del plano del colector (barrido lineal en Duffie).",
     ),
     ParametroBarrido(
+        id="pendiente_techo_camara",
+        label="Pendiente del techo de la cámara",
+        path="camara.geometria.pendiente_techo_deg",
+        unidad_ui="°",
+        unidad_si="°",
+        si_a_ui=_identidad,
+        ui_a_si=_identidad,
+        valor_min_si=0.0,
+        valor_max_si=60.0,
+        paso_sugerido_si=5.0,
+        transform_pre_set=None,
+        tipologias=_TODAS_TIPOLOGIAS,
+        modos_soportados=_TRANSITORIO_ANUAL,
+        descripcion_corta=(
+            "Inclinación del techo a un agua de la cámara (independiente del "
+            "colector). En modo Transitorio requiere que el barrido reconstruya "
+            "las forzantes por punto (forzantes_builder) — no tiene efecto si "
+            "se reutiliza una forzante_base congelada."
+        ),
+    ),
+    ParametroBarrido(
+        id="acimut_camara",
+        label="Acimut de la cámara",
+        path="camara.geometria.acimut_camara_deg",
+        unidad_ui="° (UI360)",
+        unidad_si="° (Duffie)",
+        si_a_ui=acimut_duffie_a_ui360,
+        ui_a_si=acimut_ui360_a_duffie,
+        valor_min_si=-180.0,
+        valor_max_si=180.0,
+        paso_sugerido_si=15.0,
+        transform_pre_set=None,
+        tipologias=_TODAS_TIPOLOGIAS,
+        modos_soportados=_TRANSITORIO_ANUAL,
+        descripcion_corta=(
+            "Orientación acimutal de la cámara (independiente del colector; "
+            "define el acimut de todas sus caras). Mismo requisito de "
+            "forzantes_builder que 'pendiente_techo_camara' en Transitorio."
+        ),
+    ),
+    ParametroBarrido(
         id="masa_producto",
         label="Masa de producto fresco",
         path="camara.carga_producto.masa_total_kg",

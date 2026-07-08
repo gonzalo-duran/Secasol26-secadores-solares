@@ -292,3 +292,77 @@ class TestSmokeMotorTD:
         assert hasattr(res, "status")
         assert len(res.X_prod_kg_kg) > 0
         assert len(res.t_array_s) == len(res.X_prod_kg_kg)
+
+
+# ---------------------------------------------------------------------------
+# Cámara radiativa orientada (S47) — I_eq_prod vs GHI, Q_rad_aire, POA colector
+# ---------------------------------------------------------------------------
+
+
+def _camara_translucida(**geo_overrides) -> Camara:
+    from core.camara import CarasTranslucidas
+
+    return Camara(
+        geometria=GeometriaCamara(largo_m=1.2, ancho_m=0.8, alto_m=1.5, **geo_overrides),
+        construccion=ConstruccionCamara(
+            cubierta_translucida_id="vidrio_comun",
+            caras_translucidas=CarasTranslucidas(techo=True, frente=True),
+        ),
+        bandejas=ConfiguracionBandejas(
+            n_bandejas=5,
+            area_bandeja_m2=0.5,
+            espesor_capa_m=0.020,
+            separacion_entre_bandejas_m=0.15,
+        ),
+        flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.060),
+    )
+
+
+class TestCamaraOrientadaEnForzantesReales:
+    """`_construir_forzantes_reales` debe usar la irradiancia equivalente de
+    la cámara (no GHI cruda) y poblar Q_rad_aire_W cuando hay caras
+    translúcidas más allá del techo horizontal."""
+
+    def test_sin_camara_cae_a_GHI_y_ceros(self):
+        """proyecto.camara is None → fallback histórico (GHI, sin Q_rad_aire)."""
+        proy, horas = _proyecto_con_clima_diario()
+        proy.camara = None
+        fz = _construir_forzantes_reales(
+            p3_eval=_p3_eval_diario(horas), proyecto=proy, caudal_kg_s=0.060, n_dias=1
+        )
+        ghi_esperado = np.maximum(0.0, 900.0 * np.sin(np.pi * (np.arange(24) - 6.0) / 12.0))
+        np.testing.assert_allclose(fz.I_g_W_m2, ghi_esperado, atol=1e-6)
+        assert np.all(fz.Q_rad_aire_W == 0.0)
+
+    def test_camara_con_cara_frente_da_I_g_distinto_de_GHI_y_Q_rad_aire_positivo(self):
+        proy, horas = _proyecto_con_clima_diario()
+        ghi_clima = proy.clima.datos["GHI_Wm2"].to_numpy()
+        proy.clima.datos["DNI_Wm2"] = ghi_clima * 0.7
+        proy.clima.datos["DHI_Wm2"] = ghi_clima * 0.3
+        proy.camara = _camara_translucida(pendiente_techo_deg=20.0)
+        fz = _construir_forzantes_reales(
+            p3_eval=_p3_eval_diario(horas), proyecto=proy, caudal_kg_s=0.060, n_dias=1
+        )
+        ghi = np.maximum(0.0, 900.0 * np.sin(np.pi * (np.arange(24) - 6.0) / 12.0))
+        assert not np.allclose(fz.I_g_W_m2, ghi, atol=1e-6)
+        assert np.any(fz.Q_rad_aire_W > 0.0)
+
+    def test_POA_colector_no_se_ve_afectada_por_orientacion_de_camara(self):
+        """I_g_POA_W_m2 (colector) es independiente de la cámara."""
+        proy, horas = _proyecto_con_clima_diario()
+        # DNI/DHI aproximados (no físicamente exactos) sólo para que
+        # calcular_POA_horizonte no caiga al fallback por columnas faltantes.
+        ghi = proy.clima.datos["GHI_Wm2"].to_numpy()
+        proy.clima.datos["DNI_Wm2"] = ghi * 0.7
+        proy.clima.datos["DHI_Wm2"] = ghi * 0.3
+
+        proy.camara = None
+        fz_sin = _construir_forzantes_reales(
+            p3_eval=_p3_eval_diario(horas), proyecto=proy, caudal_kg_s=0.060, n_dias=1
+        )
+        proy.camara = _camara_translucida(pendiente_techo_deg=30.0, acimut_camara_deg=90.0)
+        fz_con = _construir_forzantes_reales(
+            p3_eval=_p3_eval_diario(horas), proyecto=proy, caudal_kg_s=0.060, n_dias=1
+        )
+        assert fz_sin.I_g_POA_W_m2 is not None
+        np.testing.assert_allclose(fz_sin.I_g_POA_W_m2, fz_con.I_g_POA_W_m2, rtol=1e-9)

@@ -130,13 +130,13 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
     if (
         cfg.tipologia == Tipologia.CAJA
         and proyecto.camara is not None
-        and proyecto.camara.construccion.cubierta_translucida_id is None
+        and not proyecto.camara.construccion.caras_translucidas_activas()
     ):
         errores.append(
-            "PROY_CAJA_SIN_CUBIERTA_TRANSLUCIDA: tipología CAJA requiere techo "
-            "translúcido (cubierta_translucida_id no-None). Sin colector externo, "
-            "la radiación solar a través de la cubierta es la única fuente de "
-            "energía del producto."
+            "PROY_CAJA_SIN_CUBIERTA_TRANSLUCIDA: tipología CAJA requiere al menos "
+            "una cara translúcida (cubierta_translucida_id no-None y al menos una "
+            "cara activa en caras_translucidas). Sin colector externo, la radiación "
+            "solar a través de la cubierta es la única fuente de energía del producto."
         )
     if (
         proyecto.auxiliar is not None
@@ -764,6 +764,7 @@ def armar_forzantes_aire(
     T_amb_K: Optional[np.ndarray] = None,
     I_g_W_m2: Optional[np.ndarray] = None,
     I_g_POA_W_m2: Optional[np.ndarray] = None,
+    Q_rad_aire_W: Optional[np.ndarray] = None,
     dt_s: float = 3600.0,
 ) -> ForzantesAire:
     """Construye la serie de forzantes de entrada a la cámara para el motor dinámico.
@@ -799,6 +800,10 @@ def armar_forzantes_aire(
             fallback al re-correr el colector con caudal natural). Para forzantes
             reales armadas desde clima, computar con
             ``calculos.clima_calc.calcular_POA_horizonte``.
+        Q_rad_aire_W: Serie horaria de potencia radiativa que calienta el aire
+            de la cámara vía superficies internas [W]. None → array de ceros
+            (comportamiento histórico). Computar con
+            ``calculos.radiacion_camara.series_radiacion_camara``.
         dt_s: Intervalo entre puntos de la serie [s]. Default 3600 (datos horarios).
 
     Returns:
@@ -881,6 +886,17 @@ def armar_forzantes_aire(
     else:
         I_g_POA_base = None
 
+    # --- Q_rad_aire (potencia radiativa al aire vía superficies internas) ---
+    if Q_rad_aire_W is not None:
+        Q_rad_aire_base = np.asarray(Q_rad_aire_W, dtype=float)
+        if len(Q_rad_aire_base) != n_base:
+            raise ValueError(
+                f"FORZANTES_LONGITUD_INCONSISTENTE: Q_rad_aire_W tiene "
+                f"{len(Q_rad_aire_base)} elementos, esperado {n_base}."
+            )
+    else:
+        Q_rad_aire_base = np.zeros(n_base)
+
     # --- m_dot: constante ---
     m_base = np.full(n_base, float(m_dot_aire_seco_kg_s))
 
@@ -903,6 +919,7 @@ def armar_forzantes_aire(
         m_arr = np.tile(m_base, n_reps)
         I_g_arr = np.tile(I_g_base, n_reps)
         I_g_POA_arr = np.tile(I_g_POA_base, n_reps) if I_g_POA_base is not None else None
+        Q_rad_aire_arr = np.tile(Q_rad_aire_base, n_reps)
     else:
         T_ent_arr = T_ent_base.copy()
         omega_arr = omega.copy()
@@ -911,6 +928,7 @@ def armar_forzantes_aire(
         m_arr = m_base.copy()
         I_g_arr = I_g_base.copy()
         I_g_POA_arr = I_g_POA_base.copy() if I_g_POA_base is not None else None
+        Q_rad_aire_arr = Q_rad_aire_base.copy()
 
     # --- Vector de tiempos: empieza en 0, paso dt_s ---
     N = len(T_ent_arr)
@@ -925,6 +943,7 @@ def armar_forzantes_aire(
         v_viento_ms=v_arr,
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
+        Q_rad_aire_W=Q_rad_aire_arr,
     )
 
 
@@ -938,6 +957,7 @@ def construir_serie_sintetica_dia_tipo(
     T_amb_amplitud_K: float = 0.0,
     v_viento_ms: float = 2.0,
     I_g_max_W_m2: float = 0.0,
+    Q_rad_aire_max_W: float = 0.0,
     hora_pico: float = 12.0,
     n_horas: int = 24,
     n_dias: int = 1,
@@ -962,11 +982,15 @@ def construir_serie_sintetica_dia_tipo(
         T_amb_promedio_K: Temperatura ambiente media [K]. None → T_sal_col_prom − 10 K.
         T_amb_amplitud_K: Amplitud de T_amb [K]. Default 0 (T_amb constante).
         v_viento_ms: Velocidad del viento [m/s]. Constante. Default 2.0.
-        I_g_max_W_m2: Irradiancia global pico al mediodía [W/m²]. Default 0
-            (sin radiación — cámara opaca o sin techo translúcido). Típico
-            cielo claro: 800–1000 W/m². La curva diaria es una semicampana
-            sinusoidal positiva (sol entre h=6 y h=18 si hora_pico=12);
-            de noche I_g=0.
+        I_g_max_W_m2: Irradiancia equivalente al producto, pico al mediodía
+            [W/m²]. Default 0 (sin radiación — cámara opaca o sin caras
+            translúcidas). Típico cielo claro: 800–1000 W/m². La curva diaria
+            es una semicampana sinusoidal positiva (sol entre h=6 y h=18 si
+            hora_pico=12); de noche I_g=0.
+        Q_rad_aire_max_W: Potencia radiativa al aire, pico al mediodía [W].
+            Default 0. Misma forma de semicampana que ``I_g_max_W_m2`` (no
+            hay posición solar horaria en modo sintético para diferenciar
+            caras) — ver ``calculos.radiacion_camara.factores_sinteticos``.
         hora_pico: Hora del día (0–24) en que ocurre el pico térmico. Default 12.
         n_horas: Puntos por día. Default 24 (datos horarios).
         n_dias: Número de días a replicar. Default 1.
@@ -990,6 +1014,7 @@ def construir_serie_sintetica_dia_tipo(
     # resulta I_g_max·2/π ≈ 0.637·I_g_max (típico de día claro).
     fase_dia = np.pi * (horas - hora_pico + 6.0) / 12.0
     I_g_arr = np.maximum(0.0, float(I_g_max_W_m2) * np.sin(fase_dia))
+    Q_rad_aire_arr = np.maximum(0.0, float(Q_rad_aire_max_W) * np.sin(fase_dia))
 
     omega = np.full(n_horas, float(omega_amb))
     v_viento_arr = np.full(n_horas, float(v_viento_ms))
@@ -1008,6 +1033,7 @@ def construir_serie_sintetica_dia_tipo(
         # misma curva como POA del colector. Si el usuario quiere distinguir
         # explícitamente, debe armar las forzantes con armar_forzantes_aire.
         I_g_POA_W_m2=I_g_arr.copy(),
+        Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=3600.0,
     )
 
@@ -1563,9 +1589,12 @@ def calcular_todo_transitorio(
                         res.advertencias.append(
                             "ADV_PICARD_POA_NO_DISPONIBLE: forzantes_base no "
                             "trae I_g_POA_W_m2 — el colector se re-corre con "
-                            "GHI como aproximación. Para fidelidad física "
-                            "completa, armar las forzantes desde clima real "
-                            "con calcular_POA_horizonte."
+                            "I_g_W_m2 (irradiancia equivalente de la cámara, "
+                            "no del colector) como aproximación. Solo ocurre en "
+                            "modo sintético, donde ambas curvas coinciden por "
+                            "construcción. Para fidelidad física completa, "
+                            "armar las forzantes desde clima real con "
+                            "calcular_POA_horizonte."
                         )
                 T_sal_col_serie = _correr_colector_horizonte(
                     proyecto,
@@ -1799,6 +1828,7 @@ def armar_forzantes_ventana(
     """
     from calculos.clima_calc import calcular_POA_horizonte
     from calculos.psicrometria import humedad_absoluta
+    from calculos.radiacion_camara import series_radiacion_camara
     from core.auxiliar import ModoOperacionAuxiliar
 
     advertencias: list[str] = []
@@ -1809,6 +1839,23 @@ def armar_forzantes_ventana(
     v_viento = np.asarray(df["WS_ms"].to_numpy(), dtype=float)
     GHI = np.asarray(df["GHI_Wm2"].to_numpy(), dtype=float)
     HR = np.asarray(df["HR"].to_numpy(), dtype=float)
+
+    # Irradiancia equivalente al producto sobre las caras translúcidas de la
+    # cámara (fase 2: orientación propia, independiente del banco de
+    # colectores). Fallback a GHI horizontal (sin aporte al aire) si falla.
+    try:
+        I_eq_serie, Q_rad_aire_serie = series_radiacion_camara(
+            df, proyecto.emplazamiento, proyecto.camara
+        )
+        I_eq_prod = np.asarray(I_eq_serie, dtype=float)
+        Q_rad_aire = np.asarray(Q_rad_aire_serie, dtype=float)
+    except Exception as exc:
+        advertencias.append(
+            f"ADV_VENTANA_IEQ_NO_DISPONIBLE: {exc}. Se usa GHI como irradiancia "
+            "equivalente de la cámara, sin aporte radiativo al aire."
+        )
+        I_eq_prod = GHI.copy()
+        Q_rad_aire = np.zeros(n)
 
     # POA sobre el plano del colector.
     try:
@@ -1938,8 +1985,9 @@ def armar_forzantes_ventana(
         m_dot_aire_seco_kg_s=np.full(n, proyecto.camara.flujo.caudal_masico_kg_s),
         T_amb_K=T_amb,
         v_viento_ms=v_viento,
-        I_g_W_m2=GHI,
+        I_g_W_m2=I_eq_prod,
         I_g_POA_W_m2=POA,
+        Q_rad_aire_W=Q_rad_aire,
     )
     return forzantes, lena_kg, advertencias
 

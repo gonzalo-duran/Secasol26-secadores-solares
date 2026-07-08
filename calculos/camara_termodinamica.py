@@ -110,6 +110,7 @@ def resolver_estado_camara(
     aw_func: Callable[[float], float],
     R_cond_techo_m2K_W: float = 0.0,
     A_techo_m2: float = 0.0,
+    Q_rad_aire_W: float = 0.0,
 ) -> EstadoCamara:
     """Resuelve el sistema algebraico de cámara (CSTR, cuasi-estacionario).
 
@@ -167,6 +168,11 @@ def resolver_estado_camara(
             Cuando > 0, suma al balance una pérdida UA_techo = A_techo /
             (1/h_conv + R_cond_techo + 1/h_w), sin afectar la reconstrucción
             de los nodos de la pared opaca.
+        Q_rad_aire_W: Potencia radiativa que calienta el aire directamente
+            (radiación transmitida por las caras translúcidas que no
+            intercepta el producto y calienta paredes/piso internos — efecto
+            invernadero de la caja). Default 0.0 → sin efecto, back-compat
+            exacta con el balance histórico. Ver ``calculos/radiacion_camara.py``.
 
     Returns:
         EstadoCamara con T_flujo, ω_flujo, ṁ_w, q_prod, q_pared, T_cam_int,
@@ -252,6 +258,7 @@ def resolver_estado_camara(
         + UA_loss * T_amb_K
         + hA_p * T_prod_K
         + m_dot_w * h_v_prod
+        + Q_rad_aire_W
     )
     denominador = m_dot_as_kg_s * cp_hum_flujo + UA_loss + hA_p
     T_flujo = numerador / denominador
@@ -336,6 +343,13 @@ class ResultadoMotorTermodinamico:
             I_g(t)·τ·α·A_rad. Cero en cámaras opacas o sin I_g.
         energia_rad_total_J: ∫ Q_rad dt sobre toda la simulación [J].
             Útil como diagnóstico de aporte solar directo vs convección.
+        Q_rad_aire_W: Serie temporal de potencia radiativa que calienta el
+            aire vía superficies internas (radiación transmitida por caras
+            translúcidas que no intercepta el producto). Cero por defecto
+            (``forzantes.Q_rad_aire_W is None`` o cámara sin caras
+            translúcidas adicionales al techo — ver
+            ``calculos/radiacion_camara.py``).
+        energia_rad_aire_total_J: ∫ Q_rad_aire dt sobre toda la simulación [J].
         horas_clipeo_nocturno_s: Tiempo acumulado [s] en que la política B
             anti-rehumectación clipeó dX/dt a 0 porque la fuerza motriz se
             invirtió (ω_sup < ω_ent → tendencia a condensación).
@@ -362,6 +376,8 @@ class ResultadoMotorTermodinamico:
     masa_evaporada_total_kg: float
     Q_rad_W: np.ndarray = field(default_factory=lambda: np.array([]))
     energia_rad_total_J: float = 0.0
+    Q_rad_aire_W: np.ndarray = field(default_factory=lambda: np.array([]))
+    energia_rad_aire_total_J: float = 0.0
     horas_clipeo_nocturno_s: float = 0.0
     horas_HR_alta_s: float = 0.0
     T_max_alcanzada_K: float = 0.0
@@ -483,6 +499,7 @@ def simular_secado(
     T_amb_fz = np.asarray(forzantes.T_amb_K, dtype=float)
     v_viento_fz = np.asarray(forzantes.v_viento_ms, dtype=float)
     I_g_fz = np.asarray(forzantes.I_g_W_m2, dtype=float)
+    Q_rad_aire_fz = np.asarray(forzantes.Q_rad_aire_W, dtype=float)
 
     # Factor radiativo precalculado: Q_rad(t) = factor · I_g(t).
     # Si τ=0 o A_rad=0, el factor es 0 y el término desaparece sin coste.
@@ -508,6 +525,10 @@ def simular_secado(
             return 0.0
         I_g = max(0.0, _interp(I_g_fz, t))
         return _Q_rad_factor * I_g
+
+    def _Q_rad_aire_t(t: float) -> float:
+        """Potencia radiativa que calienta el aire vía superficies internas [W]."""
+        return _interp(Q_rad_aire_fz, t)
 
     # --- Caso degenerado: producto ya está seco ---
     if X_prod_inicial_kg_kg <= X_prod_objetivo_kg_kg:
@@ -568,6 +589,7 @@ def simular_secado(
             aw_func=aw_func,
             R_cond_techo_m2K_W=R_cond_techo_m2K_W,
             A_techo_m2=A_techo_m2,
+            Q_rad_aire_W=_Q_rad_aire_t(t),
         )
 
     # --- Estado mutable para diagnóstico de política B y HR alta ---
@@ -716,6 +738,7 @@ def simular_secado(
     U_pared_arr = np.zeros(n)
     HR_flujo_arr = np.zeros(n)
     Q_rad_arr = np.zeros(n)
+    Q_rad_aire_arr = np.zeros(n)
     for i in range(n):
         t_i = float(sol.t[i])
         est, _ = _resolver_con_politica_B(sol.y[0, i], sol.y[1, i], t_i)
@@ -728,6 +751,7 @@ def simular_secado(
         T_cam_ext_arr[i] = est.T_cam_ext_K
         U_pared_arr[i] = est.U_pared_W_m2K
         Q_rad_arr[i] = _Q_rad_t(t_i)
+        Q_rad_aire_arr[i] = _Q_rad_aire_t(t_i)
         try:
             HR_flujo_arr[i] = HR_desde_omega(est.omega_flujo_kg_kg, est.T_flujo_K, P_Pa)
         except (ZeroDivisionError, ValueError):
@@ -741,9 +765,11 @@ def simular_secado(
         m_dot_pos = np.clip(m_dot_w_arr, 0.0, None)
         masa_evap = float(np.trapezoid(m_dot_pos, sol.t))
         energia_rad = float(np.trapezoid(Q_rad_arr, sol.t))
+        energia_rad_aire = float(np.trapezoid(Q_rad_aire_arr, sol.t))
     else:
         masa_evap = 0.0
         energia_rad = 0.0
+        energia_rad_aire = 0.0
 
     # Diagnósticos
     horas_clipeo = float(diag["horas_clipeo_s"])
@@ -779,6 +805,8 @@ def simular_secado(
         masa_evaporada_total_kg=masa_evap,
         Q_rad_W=Q_rad_arr,
         energia_rad_total_J=energia_rad,
+        Q_rad_aire_W=Q_rad_aire_arr,
+        energia_rad_aire_total_J=energia_rad_aire,
         horas_clipeo_nocturno_s=horas_clipeo,
         horas_HR_alta_s=horas_hr_alta,
         T_max_alcanzada_K=float(np.max(sol.y[0])) if n > 0 else float(T_prod_inicial_K),
@@ -971,6 +999,7 @@ def simular_cascada(
     T_amb_fz = np.asarray(forzantes.T_amb_K, dtype=float)
     v_viento_fz = np.asarray(forzantes.v_viento_ms, dtype=float)
     I_g_fz = np.asarray(forzantes.I_g_W_m2, dtype=float)
+    Q_rad_aire_fz = np.asarray(forzantes.Q_rad_aire_W, dtype=float)
 
     _Q_rad_factor = tau_cubierta_solar * alfa_producto_solar * A_rad_por_zona_m2
 
@@ -992,6 +1021,14 @@ def simular_cascada(
             return 0.0
         return _Q_rad_factor * max(0.0, _interp(I_g_fz, t))
 
+    def _Q_rad_aire_por_zona_t(t: float) -> float:
+        """Potencia radiativa al aire, repartida en partes iguales entre zonas.
+
+        ``forzantes.Q_rad_aire_W`` es el total de la cámara (como
+        ``A_rad_por_zona_m2`` = ``A_rad_total/N``, se reparte por zona).
+        """
+        return _interp(Q_rad_aire_fz, t) / n_zonas
+
     def _resolver_zona(
         T_prod: float,
         X_prod: float,
@@ -1000,6 +1037,7 @@ def simular_cascada(
         m_dot: float,
         T_amb: float,
         h_w: float,
+        Q_rad_aire_zona_W: float = 0.0,
         K_m_override: float | None = None,
     ) -> EstadoCamara:
         """Resuelve el CSTR de una zona dado el aire que le entra (de la vecina
@@ -1028,17 +1066,21 @@ def simular_cascada(
             aw_func=aw_func,
             R_cond_techo_m2K_W=R_cond_techo_m2K_W,
             A_techo_m2=A_techo_por_zona_m2,
+            Q_rad_aire_W=Q_rad_aire_zona_W,
         )
 
     def _march_aire(y: np.ndarray, t: float, aplicar_politica_B: bool) -> list[EstadoCamara]:
         """Marcha el aire de la zona N−1 → 0 y devuelve el EstadoCamara de cada
         zona (índice de lista = índice de zona)."""
         T_ent0, omega_ent0, m_dot, T_amb, h_w = _boundary_t(t)
+        Q_rad_aire_zona = _Q_rad_aire_por_zona_t(t)
         estados: list[EstadoCamara | None] = [None] * n_zonas
         T_ent_i, omega_ent_i = T_ent0, omega_ent0  # aire que entra a la zona N−1
         for i in range(n_zonas - 1, -1, -1):
             T_prod_i, X_prod_i = y[2 * i], y[2 * i + 1]
-            est = _resolver_zona(T_prod_i, X_prod_i, T_ent_i, omega_ent_i, m_dot, T_amb, h_w)
+            est = _resolver_zona(
+                T_prod_i, X_prod_i, T_ent_i, omega_ent_i, m_dot, T_amb, h_w, Q_rad_aire_zona
+            )
             if aplicar_politica_B and est.m_dot_w_kg_s < 0.0:
                 est = _resolver_zona(
                     T_prod_i,
@@ -1048,6 +1090,7 @@ def simular_cascada(
                     m_dot,
                     T_amb,
                     h_w,
+                    Q_rad_aire_zona,
                     K_m_override=0.0,
                 )
             estados[i] = est

@@ -217,3 +217,27 @@ def test_validacion_intervalo():
 def test_validacion_m_seco():
     with pytest.raises(ValueError, match="CASCADA_M_SECO_NO_POSITIVA"):
         simular_cascada(**_kwargs_cascada(m_seco_por_zona_kg=0.0))
+
+
+# ---------------------------------------------------------------------------
+# Q_rad_aire_W — reparto producto/aire (cámara radiativa orientada)
+# ---------------------------------------------------------------------------
+
+
+def test_Q_rad_aire_forzante_calienta_perfil_de_aire():
+    """forzantes.Q_rad_aire_W > 0 (repartido entre zonas) calienta el perfil
+    de T_aire respecto del caso sin aporte (mismo resto de condiciones)."""
+    t_max = (8 + 1) * 12 * 3600.0
+    fz_sin = _forzantes_constantes(t_max_s=t_max)
+    fz_con = ForzantesAire(
+        t_s=fz_sin.t_s,
+        T_ent_K=fz_sin.T_ent_K,
+        omega_ent=fz_sin.omega_ent,
+        m_dot_aire_seco_kg_s=fz_sin.m_dot_aire_seco_kg_s,
+        T_amb_K=fz_sin.T_amb_K,
+        v_viento_ms=fz_sin.v_viento_ms,
+        Q_rad_aire_W=np.full(2, 400.0),
+    )
+    res_sin = simular_cascada(**_kwargs_cascada(forzantes=fz_sin))
+    res_con = simular_cascada(**_kwargs_cascada(forzantes=fz_con))
+    assert np.mean(res_con.T_aire_perfil_zonas_K) > np.mean(res_sin.T_aire_perfil_zonas_K)
