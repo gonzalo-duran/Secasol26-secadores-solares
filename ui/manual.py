@@ -53,7 +53,7 @@ def _sidebar_manual(slug_activo: str) -> None:
     gestionar.
     """
     st.sidebar.title("📖 Manual de Secasol")
-    st.sidebar.markdown(f"[🏠 Índice](?manual={SLUG_INDICE})")
+    st.sidebar.markdown(f"[⬅ Volver al diseñador](./) · [🏠 Índice](?manual={SLUG_INDICE})")
     for parte in PARTES:
         lineas = [f"**{parte}**"]
         for cap in CAPITULOS:
@@ -67,7 +67,9 @@ def _sidebar_manual(slug_activo: str) -> None:
     st.sidebar.divider()
     st.sidebar.caption(
         "Los enlaces del manual navegan en esta misma pestaña. "
-        "Tu diseño sigue abierto en la pestaña original de Secasol."
+        "Tu diseño sigue abierto en la pestaña original de Secasol; "
+        "«Volver al diseñador» abre la vista de diseño acá (sesión nueva, "
+        "no toca tu proyecto)."
     )
 
 
