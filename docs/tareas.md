@@ -4,10 +4,10 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S48): v0.15.0 · 7 pestañas funcionales + manual de usuario ·
-> suite pytest 1221. Hoja de ruta a 1.0: **modo industrial completo y validado**
-> + mejoras 25–36 implementadas + cámara radiativa orientada. Resta solo i18n y
-> refinamiento del análisis anual.
+> Estado general (S49): **v0.16.0 en producción** · 7 pestañas funcionales +
+> manual de usuario · suite pytest 1221. Hoja de ruta a 1.0: **modo industrial
+> completo y validado** + mejoras 25–36 implementadas + cámara radiativa
+> orientada. Resta solo i18n y refinamiento del análisis anual.
 
 ## En progreso
 
