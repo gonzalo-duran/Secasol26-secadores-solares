@@ -25,7 +25,8 @@ en cada paso de tiempo. La evaporación es **difusiva**.
 **Hipótesis:**
 
 1. **Secador indirecto** (paredes opacas): sin radiación solar directa sobre el
-   producto, salvo la variante de **techo translúcido** (§5.2).
+   producto, salvo las **superficies translúcidas** (§5.2) — techo y/o paredes
+   vidriadas con reparto de la radiación entre producto y aire.
 2. **Modelo global (CSTR):** sin gradientes internos. Tres nodos — producto
    $T_{prod}$, aire de cámara $T_{flujo}$, paredes $T_{cam,int}/T_{cam,ext}$.
 3. **Solo el producto acumula calor en el tiempo** (capacitancia). El aire y
@@ -90,10 +91,14 @@ $$
  = -U_{total}A_{cuerpo}(T_{flujo}-T_{amb})
  - h_{conv}A_{prod}(T_{flujo}-T_{prod})
  + \dot m_w\,h_v(T_{prod})
+ + Q_{rad,aire}
 $$
 
-El último término (positivo) es el vapor que sale del producto a $T_{prod}$ y
-se incorpora al aire. Aquí está el **enfriamiento evaporativo**: el aire cede
+El término $\dot m_w\,h_v(T_{prod})$ (positivo) es el vapor que sale del
+producto a $T_{prod}$ y se incorpora al aire. $Q_{rad,aire}$ es la fracción de
+la radiación transmitida por las superficies translúcidas que **no** intercepta
+el producto y calienta el aire vía las superficies internas opacas (§5.2);
+vale 0 con envolvente opaca. Aquí está el **enfriamiento evaporativo**: el aire cede
 calor sensible al producto ($T_{flujo}\downarrow$) y gana humedad
 ($\omega_{flujo}\uparrow$). Los conceptos psicrométricos ($\omega$, saturación,
 entalpía del aire húmedo) están en [Psicrometría](?manual=psicrometria).
@@ -143,19 +148,47 @@ resistencia conductiva total $R_{cond}=\sum_i e_i/k_i$ se agrega y se convierte
 a una conductividad efectiva $k_{ais}=e_{cam,total}/R_{cond}$. Materiales y
 aislantes salen de catálogos.
 
-### 5.2 Techo translúcido — ganancia + pérdida {#techo-translucido}
+### 5.2 Superficies translúcidas — ganancia + pérdida {#techo-translucido}
 
-Si la cámara tiene techo translúcido, este aporta **dos** efectos:
+Hasta **5 caras** de la cámara (techo + 4 paredes) pueden ser translúcidas.
+Cada cara $i$ tiene inclinación y acimut propios, derivados de la
+**orientación de la cámara** y del **techo a un agua**
+(`GeometriaCamara.caras()`; el alto de la geometría es la altura **media**, lo
+que preserva el volumen y la sección de flujo al inclinar el techo). La
+irradiancia sobre cada cara es su **POA** (transposición Liu-Jordan por cara —
+[Radiación solar](?manual=radiacion); un techo horizontal usa GHI directamente,
+el caso histórico exacto).
 
-- **Ganancia radiativa** al producto: $Q_{rad}=I_g\,\tau\,\alpha\,A_{rad}$
-  (solo la primera bandeja "ve" el sol).
-- **Pérdida conductiva** del vidriado:
-  $U_{techo}=\left(\tfrac{1}{h_{conv}}+\tfrac{e_{techo}}{k_{ef}}+\tfrac{1}{h_w}\right)^{-1}$,
-  con $k_{ef}$ del mapa por espesor del catálogo (policarbonato alveolar).
+**Ganancia — reparto producto/aire.** Cada cara intercepta una fracción $f_i$
+de su radiación transmitida directamente sobre el producto; el resto lo
+absorben las superficies internas opacas (absortancia interior $\alpha_{int}$,
+default 0.85) y calienta el aire:
 
-El área del techo se **descuenta de la envolvente opaca** $A_{cuerpo}$ (para no
-doble-contar) y $UA_{techo}$ se suma al balance de $T_{flujo}$. Techo opaco →
-$A_{techo}=0$, sin efecto.
+$$
+I_{eq,prod}=\frac{\sum_i f_i\,A_i\,POA_i}{A_{rad}},
+\qquad
+Q_{rad,aire}=\tau\,\alpha_{int}\sum_i (1-f_i)\,A_i\,POA_i
+$$
+
+El producto recibe $Q_{rad}=I_{eq,prod}\,\tau\,\alpha\,A_{rad}$ (como el techo
+translúcido histórico, ahora con la irradiancia equivalente de todas las
+caras); $Q_{rad,aire}$ entra al balance de $T_{flujo}$ (§4.1b). Los factores de
+intercepción: el techo "ve" el producto según $f_{techo}=A_{rad}/A_{techo}$;
+las paredes según la **silueta del lecho apilado**
+($f_{pared}=N_{bandejas}\,e_{capa}/H$). Es el **efecto invernadero** de una
+caja vidriada: en tipología Caja, la cámara **es** el colector.
+
+**Pérdida conductiva** del vidriado:
+$U_{techo}=\left(\tfrac{1}{h_{conv}}+\tfrac{e_{techo}}{k_{ef}}+\tfrac{1}{h_w}\right)^{-1}$,
+con $k_{ef}$ del mapa por espesor del catálogo (policarbonato alveolar),
+aplicada al **área translúcida total** $\sum_i A_i$.
+
+El área translúcida se **descuenta de la envolvente opaca** $A_{cuerpo}$ (para
+no doble-contar) y $U_{techo}\sum_i A_i$ se suma al balance de $T_{flujo}$.
+Envolvente opaca → sin efecto.
+
+**Fuera del modelo** (anotado como mejora futura): pérdidas IR nocturnas del
+vidriado y discretización vertical del producto por bandeja.
 
 ## 6. Modelo del producto y la isoterma de sorción {#producto}
 

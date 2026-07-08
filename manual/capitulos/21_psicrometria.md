@@ -87,7 +87,7 @@ Cómo leerla:
   aire seco es la **tasa de agua evaporada**.
 - Si la salida de cámara cae **sobre** la isentálpica punteada, el secado fue
   ≈ adiabático (cámara indirecta bien aislada). Si queda **por encima**, hubo
-  aporte extra de calor en la cámara (techo translúcido); **por debajo**,
+  aporte extra de calor en la cámara (superficies translúcidas); **por debajo**,
   pérdidas por paredes. Esto **no se impone**: emerge del balance.
 - La distancia del punto de salida a la **curva de saturación** es el margen
   que quedó sin usar: salida muy lejos de saturación con producto aún húmedo

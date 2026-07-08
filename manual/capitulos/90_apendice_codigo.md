@@ -60,7 +60,9 @@ Capítulo: [Técnico · Cámara de secado](?manual=tec-camara)
 | Inversión GAB → $a_w(X)$ | `calculos/psicrometria.py::actividad_agua_desde_X_GAB` |
 | $\omega_{sat}(T)$, entalpía, $c_p$ húmedo | `calculos/psicrometria.py` |
 | Pared compuesta (R en serie) | `core/camara.py::ConstruccionCamara.pared` |
-| Techo translúcido ($U_{techo}$ + $Q_{rad}$) | `camara_calc.py` + `resolver_estado_camara` |
+| Superficies translúcidas ($U_{techo}$ + $Q_{rad}$ + $Q_{rad,aire}$) | `camara_calc.py` + `resolver_estado_camara` |
+| Radiación por caras (POA por cara, reparto producto/aire) | `calculos/radiacion_camara.py` |
+| Orientación de la cámara y techo a un agua | `core/camara.py::GeometriaCamara.caras()` |
 | ΔP de lecho (Ergun) y malla | `calculos/motor_calc.py::_delta_P_lecho_por_bandeja` |
 | Dirección de flujo | `core/camara.py::DireccionFlujo`, `ConfiguracionFlujo` |
 

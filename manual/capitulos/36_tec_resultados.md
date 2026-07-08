@@ -19,7 +19,8 @@ balance global acoplado → dashboard + reporte.
 ## 2. Verificación de coherencia {#coherencia}
 
 Antes de calcular se verifican las **invariantes cruzadas** del proyecto: por
-ejemplo, Caja no admite colector externo ni motor y exige techo translúcido;
+ejemplo, Caja no admite colector externo ni motor y exige al menos una cara
+translúcida;
 auxiliar en serie poscolector exige colector; motor exige cámara; análisis
 anual no aplica a Caja. Los errores se muestran y bloquean el cálculo
 inconsistente.
@@ -43,15 +44,18 @@ Los tres encadenan **colector → auxiliar → cámara** y, si hay chimenea, cie
 el **lazo natural por Picard**
 ([Técnico · Motor y chimenea](?manual=tec-chimenea#picard)). La armadura de
 forzantes del aire construye $T_{ent}$, $\omega_{ent}$, $\dot m$, la
-irradiancia global sobre el techo de la cámara y la **POA sobre el plano del
-colector** ([Radiación solar](?manual=radiacion)).
+**irradiancia equivalente** sobre las caras translúcidas de la cámara (POA por
+cara con reparto producto/aire —
+[Técnico · Cámara](?manual=tec-camara#techo-translucido)) y la **POA sobre el
+plano del colector** ([Radiación solar](?manual=radiacion)).
 
 ### Sugerencia automática de irradiancia (modo Constantes) {#sugerencia}
 
 Para no obligar al usuario a inventar un valor "representativo", se sugieren
 condiciones desde el clima descargado: el **quantile 90 de la POA**
-representativa (transposición Liu-Jordan) y el quantile 75 de la temperatura
-ambiente. Si no hay POA, cae al q90 de GHI (conservador).
+representativa (transposición Liu-Jordan; en Caja, de la **irradiancia
+equivalente** sobre las caras translúcidas de la cámara) y el quantile 75 de la
+temperatura ambiente. Si no hay POA, cae al q90 de GHI (conservador).
 
 ## 4. Balance energético integrado {#balance-energetico}
 

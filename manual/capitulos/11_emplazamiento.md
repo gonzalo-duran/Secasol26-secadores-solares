@@ -59,6 +59,10 @@ la latitud para uso anual, mayor para favorecer el invierno. El fundamento
 completo (componentes de la radiación, ángulo de incidencia, modelo de
 Liu-Jordan) está en [Radiación solar y plano orientado](?manual=radiacion).
 
+En tipología **Caja** esta sección no aparece (no hay colector externo): el
+plano captador es la propia cámara, y su orientación y pendiente de techo se
+definen en [4 · Cámara](?manual=camara#orientacion).
+
 También se configura el **albedo** del suelo circundante (fracción de radiación
 que el suelo refleja hacia el colector), con un catálogo de valores típicos.
 

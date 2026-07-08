@@ -16,6 +16,21 @@ Largo, ancho y alto definen el volumen y —junto con el techo— la **envolvent
 por donde la cámara pierde calor al ambiente. El largo en el sentido del flujo
 es además la longitud característica de la transferencia aire→producto.
 
+## Orientación y techo a un agua {#orientacion}
+
+La cámara tiene **orientación propia**, independiente del banco de colectores:
+la **pendiente del techo** (techo a un agua), el **acimut de la cámara** (hacia
+dónde "mira", con 0° = Norte en la entrada de la UI) y la **cara de caída** del
+techo. El alto de la geometría es la **altura media** de la caja: inclinar el
+techo no cambia ni el volumen ni la sección de paso del aire.
+
+Esto importa porque cada cara translúcida capta radiación según su propia
+inclinación y orientación (transposición al plano de cada cara — ver
+[Radiación solar y plano orientado](?manual=radiacion)). En tipología **Caja**
+la cámara **es** el colector: por eso en
+[2 · Emplazamiento](?manual=emplazamiento) no aparece la orientación del
+colector y el plano captador se define acá.
+
 ## Paredes {#pared}
 
 La pared puede ser **simple** (un material con su espesor) o **compuesta**
@@ -27,13 +42,21 @@ interior, la conducción de las capas y el viento exterior.
 En la práctica: el aislante manda. Duplicar el espesor de aislante baja las
 pérdidas casi a la mitad; cambiar la chapa exterior casi no cambia nada.
 
-## Techo translúcido {#techo}
+## Superficies translúcidas {#techo}
 
-Opcionalmente el techo puede ser translúcido (policarbonato alveolar): aporta
-**ganancia solar directa** sobre la primera bandeja — es lo que convierte una
-Caja en secador — pero también **pierde más calor** que un techo opaco aislado.
-El modelo captura los dos efectos, con el espesor del alveolar como parámetro
-(ver [Técnico · Cámara](?manual=tec-camara#techo-translucido)).
+Opcionalmente el techo **y hasta las cuatro paredes** (frente, atrás,
+laterales) pueden ser translúcidos (policarbonato alveolar; mismo material y
+espesor para todas las caras): aportan **ganancia solar directa** — es lo que
+convierte una Caja en secador — pero también **pierden más calor** que una cara
+opaca aislada. El modelo captura los dos efectos, con el espesor del alveolar
+como parámetro.
+
+La radiación que transmite cada cara se **reparte**: una fracción incide
+directamente sobre el producto y el resto la absorben las superficies internas
+opacas y calienta el aire — el **efecto invernadero** de una caja vidriada. La
+sección muestra una vista previa del área, la inclinación y la orientación de
+cada cara activa. Las ecuaciones del reparto están en
+[Técnico · Cámara](?manual=tec-camara#techo-translucido).
 
 ## Bandejas y dirección del flujo {#bandejas}
 

@@ -67,7 +67,8 @@ carta muestra el camino del aire **zona por zona** a contracorriente.
 ## Corridas paramétricas (barridos) {#barridos}
 
 Los barridos responden "¿qué pasa si…?" sin rehacer la configuración: se elige
-un parámetro (velocidad de aire, área de colector, número de cubiertas…), un
+un parámetro (velocidad de aire, área de colector, número de cubiertas,
+pendiente del techo o acimut de la cámara…), un
 rango de valores, y Secasol corre el prediseño completo para cada punto,
 graficando los KPIs (tiempo de secado, COP, fracción solar, temperatura de
 salida). Es la herramienta para **comparar diseños** y encontrar rendimientos

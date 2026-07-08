@@ -30,8 +30,8 @@ invertida (solar útil + auxiliar + motor).
 **CSTR** — *continuous stirred-tank reactor*: modelo de mezcla perfecta usado
 para el aire de la cámara (sin gradientes internos).
 
-**Cubierta** — el vidriado del colector o del techo de la cámara
-(policarbonato, vidrio, film). Transmite radiación ($\tau$) y frena las
+**Cubierta** — el vidriado del colector o de las caras translúcidas de la
+cámara (policarbonato, vidrio, film). Transmite radiación ($\tau$) y frena las
 pérdidas convectivas.
 
 **DHI / DNI / GHI** — las tres componentes de la radiación reportadas por las

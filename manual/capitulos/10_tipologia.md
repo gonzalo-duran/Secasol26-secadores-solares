@@ -27,8 +27,9 @@ anula el colector y el motor (no aplican), con un aviso previo. Es una cascada
 intencional para mantener el proyecto coherente.
 
 <!-- profundidad: Qué implica cada tipología en el modelo -->
-- **Caja**: la cámara actúa como colector — el techo translúcido aporta la
-  ganancia solar ($Q_{rad}=I_g\,\tau\,\alpha\,A_{rad}$, ver
+- **Caja**: la cámara actúa como colector — las **superficies translúcidas**
+  (techo y/o paredes, con orientación y techo a un agua propios de la cámara)
+  aportan la ganancia solar, repartida entre el producto y el aire (ver
   [Técnico · Cámara](?manual=tec-camara#techo-translucido)) y el aire se mueve
   por tiro térmico (puede agregarse chimenea solar para reforzarlo).
 - **Armario**: la cadena completa colector → (auxiliar) → cámara, con la
