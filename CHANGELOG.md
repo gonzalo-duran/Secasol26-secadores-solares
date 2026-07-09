@@ -10,10 +10,18 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Internacionalización (idiomas) — **en curso** (ver Added abajo: F0–F1 hechas, F2–F9
-  pendientes según `docs/notas/plan_i18n.md`).
+- Traducción de los 22 capítulos del manual a EN/PT (i18n F9) — la infraestructura
+  multiidioma ya está liberada en 0.17.0; falta el contenido de los capítulos, que
+  hoy caen al ES con aviso (ver `docs/notas/plan_i18n.md`).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [0.17.0] — 2026-07-09
+
+Internacionalización ES/EN/PT de toda la aplicación (fases F0–F8 del plan i18n):
+UI de las 7 pestañas, componentes, advertencias de diseño, reporte PDF, catálogos
+e infraestructura multiidioma del manual. Único pendiente hacia el 100 %: traducir
+los 22 capítulos del manual (F9).
 
 ### Added
 
