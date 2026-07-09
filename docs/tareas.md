@@ -4,21 +4,26 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S49): **v0.16.0 en producción** · 7 pestañas funcionales +
-> manual de usuario · suite pytest 1221. Hoja de ruta a 1.0: **modo industrial
-> completo y validado** + mejoras 25–36 implementadas + cámara radiativa
-> orientada. Resta solo i18n y refinamiento del análisis anual.
+> Estado general (S49): **v0.17.0 en producción** · 7 pestañas funcionales +
+> manual de usuario · UI multiidioma ES/EN/PT · suite pytest 1262. Todos los
+> hitos DUROS de la hoja de ruta a 1.0 están cerrados (modo industrial, análisis
+> anual, manual, i18n infra F0–F8). **La 1.0.0 se libera con el manual 100%
+> traducido (F9)** — es lo único que falta; refinamiento anual y pérdidas IR
+> nocturnas quedan para 1.1+.
 
 ## En progreso
 
-- **Internacionalización ES/EN/PT (mejora 37)** — plan en
-  `docs/notas/plan_i18n.md`. **F0–F4 hechas** (S49): infraestructura
-  (`traducciones.py` + `idiomas.py` + `ui/idiomas/`), selector 🌐, fix
-  `nav_seccion`, **toda la UI de las 7 pestañas** (P1–P7) migrada + componentes
-  compartidos (carta psicrométrica, panel TD de cámara, selector de espesores,
-  esquemas), 24 tests. Residuo: solo la vista del manual (`manual.py`,
-  `manual_render.py`) que es la fase F8. Pendientes F5–F9: advertencias por
-  código, PDF, catálogos, manual multiidioma.
+- **Internacionalización ES/EN/PT (mejora 37) — F9, gate de la v1.0** — plan en
+  `docs/notas/plan_i18n.md`. **F0–F8 hechas y en producción (v0.17.0)**: infra +
+  selector 🌐, toda la UI de las 7 pestañas + componentes (F0–F4), advertencias
+  por código (F5), reporte PDF (F6), catálogos (F7) e infraestructura
+  multiidioma del manual (F8). `auditar_i18n.py` = 0. **Falta solo F9**:
+  traducir los 22 capítulos del manual a EN/PT en `manual/capitulos/{en,pt}/` +
+  agregar las claves `manual.toc.<slug>.titulo/.descripcion` y `manual.parte.<idx>`
+  a `en.yaml`/`pt.yaml` (el ES canónico vive en la tupla `CAPITULOS`). **Gotcha
+  F9**: sumar `manual.toc.*`/`manual.parte.*` al allowlist del test de paridad de
+  claves. La **próxima sesión arranca planificando F9** (orden de capítulos +
+  prioridad de idioma, decisión abierta).
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).
 

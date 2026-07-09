@@ -240,15 +240,41 @@ local, commit/push cuando el usuario lo pida.
   colector&lang=en` (aviso solo_es + "Back to the designer" + enlaces lang=en) y
   `?manual=indice&lang=pt` ("Manual do Secasol") sin excepción. Suite **1262**.
 
+## Cierre de sesión — commit, release 0.17.0 y decisión v1.0
+
+- **Todo el trabajo i18n (F0–F8) se commiteó en un único commit** `437612e`
+  ("feat(i18n): internacionalización ES/EN/PT completa (F0–F8)") y se pusheó a
+  `origin/main` (105 archivos: 44 nuevos, 38 modificados, 23 renombrados =
+  capítulos del manual a `es/`). `.trash/` (papelera de Obsidian) agregado al
+  `.gitignore`.
+- **Release 0.17.0** (`ff66c83`, "release(0.17.0)…"): bump
+  `VERSION_SOFTWARE` 0.16.0→0.17.0 + corte del CHANGELOG (la sección
+  `[Unreleased]` de la i18n pasa a `[0.17.0] — 2026-07-09`). Pusheado →
+  **deploy a HF Spaces disparado, v0.17.0 EN PRODUCCIÓN**. `main` = `ff66c83`.
+- **Decisión de producto: la v1.0.0 se libera con el manual 100% traducido**
+  (F9 completa). Todos los hitos duros de la hoja de ruta a 1.0 están cerrados
+  (pérdida carga bandejas S31, análisis anual S31c, modo industrial S40, manual
+  S48, i18n infra F0–F8 en 0.17.0). Lo único que separa de la 1.0.0 es F9.
+  Refinamiento anual y pérdidas IR nocturnas → 1.1+.
+- **La próxima sesión arranca planificando F9** (traducción del manual). Quedó
+  abierta la definición de estrategia: orden de capítulos (usuario-primero
+  Partes I–II vs secuencial) y prioridad de idioma (EN/PT a la par vs uno
+  primero). Nota de arquitectura para F9: la infra F8 sirve el `.md` traducido
+  apenas se deja en `manual/capitulos/{en,pt}/`; hay que agregar además las
+  claves `manual.toc.<slug>.titulo/.descripcion` y `manual.parte.<idx>` a
+  `en.yaml`/`pt.yaml` y **sumar `manual.toc.*`/`manual.parte.*` al allowlist del
+  test de paridad de claves** (el ES canónico vive en la tupla `CAPITULOS`).
+
 ## Pendientes
 
-- **i18n F9 (único trabajo grande que queda)**: traducir los 22 capítulos del
-  manual a EN y PT (capítulo a capítulo, en `manual/capitulos/{en,pt}/`), más las
-  claves `manual.toc.*`/`manual.parte.*` de los títulos del TOC. La infra ya está
-  (F8): al dejar el `.md` traducido en la carpeta del idioma, el visor lo toma
-  solo. Verificación visual de F1–F8 en navegador (selector 🌐, `?lang=en`
-  directo, una advertencia de cada severidad, descripciones de material/producto,
-  el **PDF exportado en cada idioma**, y el **manual con `?lang=`**).
+- **i18n F9 (único trabajo grande que queda — gate de la v1.0)**: traducir los
+  22 capítulos del manual a EN y PT (capítulo a capítulo, en
+  `manual/capitulos/{en,pt}/`), más las claves `manual.toc.*`/`manual.parte.*`
+  del TOC. La infra ya está (F8): al dejar el `.md` traducido en la carpeta del
+  idioma, el visor lo toma solo. Verificación visual de F1–F8 en navegador
+  (selector 🌐, `?lang=en` directo, una advertencia de cada severidad,
+  descripciones de material/producto, el **PDF exportado en cada idioma**, y el
+  **manual con `?lang=`**).
 - **Verificación post-deploy manual en el Space** (checklist Fase 3 del plan):
   botón "📖 Manual" desde el iframe de HF (pop-ups), `?manual=indice`, KaTeX en
   un capítulo con ecuaciones (`?manual=radiacion`), carga de `.json` intacta, y
