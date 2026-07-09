@@ -213,9 +213,16 @@ def test_manual_capitulos_es_completos():
 
 
 def test_ruta_capitulo_fallback_a_es():
-    """Un idioma sin la traducción del capítulo cae al ES con la señal es_fallback."""
-    cap = CAPITULOS[0]
-    # 'en' no tiene .md traducidos todavía (F9) → fallback a ES.
+    """Un capítulo sin la traducción a un idioma cae al ES con la señal es_fallback.
+
+    F9 traduce los capítulos de a poco; el test busca dinámicamente un capítulo
+    que todavía no tenga su .md en 'en' para ejercitar el fallback. Si ya están
+    todos traducidos, no hay nada que verificar (el fallback deja de aplicar).
+    """
+    sin_traducir = [cap for cap in CAPITULOS if not (CAPITULOS_DIR / "en" / cap.archivo).is_file()]
+    if not sin_traducir:
+        pytest.skip("todos los capítulos ya están traducidos a 'en' (F9 completa)")
+    cap = sin_traducir[0]
     ruta, es_fallback = _ruta(cap.archivo, "en")
     assert es_fallback is True
     assert ruta == CAPITULOS_DIR / "es" / cap.archivo
@@ -242,7 +249,11 @@ def test_manual_ui_chrome_traducido():
     assert traducir("manual.ui.volver", "es") == "⬅ Volver al diseñador"
     assert "Back" in traducir("manual.ui.volver", "en")
     assert "Voltar" in traducir("manual.ui.volver", "pt")
-    # Título del TOC: sin manual.toc.* aún → cae al ES de la tupla (F9).
+    # Título del TOC (F9): EN/PT resuelven por manual.toc.<slug>.titulo; ES cae al
+    # default de la tupla CAPITULOS (no hay claves manual.toc.* en es/manual.yaml).
     from ui.manual import _titulo
 
-    assert _titulo(POR_SLUG["colector"], "en") == POR_SLUG["colector"].titulo
+    cap = POR_SLUG["colector"]
+    assert _titulo(cap, "es") == cap.titulo  # ES: default de la tupla
+    assert _titulo(cap, "en") == "3 · Solar collector"
+    assert _titulo(cap, "pt") == "3 · Coletor solar"

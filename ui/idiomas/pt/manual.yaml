@@ -1,8 +1,9 @@
-# Visor do manual (plano i18n, F8 — infraestrutura). Apenas o "chrome" do
-# visor. Os títulos/descrições do TOC resolvem-se com
-# traducir("manual.toc.<slug>.titulo", lang, default=cap.titulo): o ES canônico
-# vive na tupla CAPITULOS (por isso não há chaves manual.toc.* aqui) e EN/PT
-# caem ao ES até que os capítulos sejam traduzidos (F9).
+# Visor do manual (plano i18n, F8/F9). O "chrome" do visor está em `ui:`; os
+# títulos/descrições do TOC (manual.toc.<slug>.*) e os rótulos das partes
+# (manual.parte.<idx>) são traduzidos aqui para EN/PT. O ES canônico vive na tupla
+# CAPITULOS, então o ES intencionalmente NÃO tem chaves manual.toc.*/manual.parte.*
+# (resolvidas pelo default da tupla) — o teste de paridade de chaves isenta essas
+# famílias para o ES mas ainda exige paridade EN↔PT sobre elas.
 
 ui:
   sidebar_titulo: 📖 Manual do Secasol
@@ -25,3 +26,83 @@ ui:
   no_existe: "O capítulo '{slug}' não existe. Este é o índice do manual."
   solo_es: >-
     Este capítulo ainda não está traduzido para o seu idioma; é exibido em espanhol.
+
+# Rótulos das partes (ordem de aparição de PARTES: I, II, III, IV, Apêndices).
+parte:
+  "0": "Parte I — Começar"
+  "1": "Parte II — Guia por seções"
+  "2": "Parte III — Fundamentos"
+  "3": "Parte IV — Referência técnica"
+  "4": "Apêndices"
+
+# Títulos e descrições do TOC, uma entrada por slug de capítulo.
+toc:
+  introduccion:
+    titulo: "Introdução"
+    descripcion: "O que é o Secasol, o alcance de pré-projeto, o fluxo de trabalho e como usar este manual."
+  tipologia:
+    titulo: "1 · Tipologia"
+    descripcion: "Caixa, armário ou grande escala; modo de análise e janela de produção."
+  emplazamiento:
+    titulo: "2 · Localização e clima"
+    descripcion: "Coordenadas, download NASA POWER, qualidade de dados e orientação do coletor."
+  colector:
+    titulo: "3 · Coletor solar"
+    descripcion: "Os 4 tipos de coletor de ar, materiais, geometria e banco."
+  camara:
+    titulo: "4 · Câmara de secagem"
+    descripcion: "Geometria, paredes, bandejas, produto e modos de operação da câmara."
+  auxiliar:
+    titulo: "5 · Aquecimento auxiliar"
+    descripcion: "Apoio elétrico ou a biomassa: modos de operação e consumos."
+  motor:
+    titulo: "6 · Motor e chaminé"
+    descripcion: "Ventilador, chaminé solar e exaustor eólico; perdas de carga do circuito."
+  resultados:
+    titulo: "7 · Resultados"
+    descripcion: "Rodar o pré-projeto, ler o painel, carta psicrométrica e exportação."
+  radiacion:
+    titulo: "Radiação solar e plano orientado"
+    descripcion: "Componentes GHI/DNI/DHI, geometria solar e transposição ao plano do coletor."
+  psicrometria:
+    titulo: "Psicrometria"
+    descripcion: "Umidade absoluta e relativa, saturação, e como ler a carta psicrométrica."
+  secado:
+    titulo: "Física da secagem"
+    descripcion: "Atividade de água, isotermas de sorção e a dinâmica do produto."
+  catalogo-productos:
+    titulo: "O catálogo de produtos"
+    descripcion: "Quais produtos o Secasol traz, como foram escolhidos, umidades típicas e estado de calibração."
+  convenciones:
+    titulo: "Convenções de unidades e ângulos"
+    descripcion: "SI estrito interno e as três convenções de azimute que o Secasol usa."
+  tec-emplazamiento:
+    titulo: "Técnico · Recurso solar e clima"
+    descripcion: "NASA POWER, política de lacunas e transposição Liu-Jordan com equações."
+  tec-colector:
+    titulo: "Técnico · Coletor de placa plana"
+    descripcion: "Balanços por superfície dos 4 tipos, correlações de Nusselt e solução numérica."
+  tec-camara:
+    titulo: "Técnico · Câmara de secagem"
+    descripcion: "Balanço acoplado calor-massa, parede composta, teto translúcido e bandejas."
+  tec-industrial:
+    titulo: "Técnico · Modo industrial"
+    descripcion: "Banco de coletores, duto mestre, túnel semicontínuo e validação ADITAL."
+  tec-chimenea:
+    titulo: "Técnico · Motor, chaminé e perdas de carga"
+    descripcion: "ΔP do circuito, tiragem térmica, exaustor eólico e laço Picard."
+  tec-auxiliar:
+    titulo: "Técnico · Aquecimento auxiliar"
+    descripcion: "Balanço do auxiliar, controle por set-point e calendário de arranque."
+  tec-resultados:
+    titulo: "Técnico · Balanço global e resultados"
+    descripcion: "Orquestração do cálculo, modos constantes/transitório/janela e verificação."
+  apendice-codigo:
+    titulo: "Apêndice · Implementação em código"
+    descripcion: "Onde vive cada modelo no código-fonte, para quem quiser lê-lo ou estendê-lo."
+  glosario:
+    titulo: "Glossário"
+    descripcion: "Termos e símbolos usados no manual e na interface."
+  bibliografia:
+    titulo: "Bibliografia"
+    descripcion: "Referências citadas nos capítulos técnicos."

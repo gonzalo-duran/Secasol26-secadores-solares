@@ -97,17 +97,36 @@ def test_yaml_sin_coercion_de_tipos():
     )
 
 
+# Familias que viven SOLO en EN/PT: el ES canónico del TOC y de las partes del
+# manual está en la tupla CAPITULOS (ui/componentes/manual_contenido.py), así que
+# el visor lo resuelve por default de la tupla y no hay claves manual.toc.*/
+# manual.parte.* en es/manual.yaml (F9). Se exceptúan de la paridad contra ES,
+# pero se exige paridad EN↔PT (ninguna traducción del TOC puede quedar a medias).
+_FAMILIAS_SOLO_EN_PT = ("manual.toc.", "manual.parte.")
+
+
+def _es_solo_en_pt(clave: str) -> bool:
+    return clave.startswith(_FAMILIAS_SOLO_EN_PT)
+
+
 def test_paridad_de_claves_entre_idiomas():
-    """EN y PT tienen exactamente el mismo set de claves que ES."""
+    """EN y PT tienen el mismo set de claves que ES (salvo familias EN/PT-only)."""
     claves_es = set(cargar_diccionario("es"))
-    for lang in ("en", "pt"):
-        claves = set(cargar_diccionario(lang))
+    por_lang = {lang: set(cargar_diccionario(lang)) for lang in ("en", "pt")}
+    for lang, claves in por_lang.items():
         faltan = claves_es - claves
-        huerfanas = claves - claves_es
+        huerfanas = {c for c in claves - claves_es if not _es_solo_en_pt(c)}
         assert not faltan, f"claves de ES sin traducir en '{lang}': {sorted(faltan)}"
         assert (
             not huerfanas
         ), f"claves huérfanas en '{lang}' (no existen en ES): {sorted(huerfanas)}"
+    # Las familias EN/PT-only deben coincidir entre EN y PT (ninguna a medias).
+    solo_en = {c for c in por_lang["en"] if _es_solo_en_pt(c)}
+    solo_pt = {c for c in por_lang["pt"] if _es_solo_en_pt(c)}
+    assert solo_en == solo_pt, (
+        "familias manual.toc.*/manual.parte.* desalineadas entre EN y PT: "
+        f"solo en EN {sorted(solo_en - solo_pt)}, solo en PT {sorted(solo_pt - solo_en)}"
+    )
 
 
 def _placeholders(plantilla: str) -> set[str]:

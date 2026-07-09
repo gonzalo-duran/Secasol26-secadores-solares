@@ -1,8 +1,9 @@
-# Manual viewer (i18n plan, F8 — infrastructure). Only the viewer "chrome".
-# TOC titles/descriptions resolve via traducir("manual.toc.<slug>.titulo", lang,
-# default=cap.titulo): the ES canonical lives in the CAPITULOS tuple, so there
-# are no manual.toc.* keys here and EN/PT fall back to ES until the chapters are
-# translated (F9).
+# Manual viewer (i18n plan, F8/F9). The viewer "chrome" is under `ui:`; the TOC
+# titles/descriptions (manual.toc.<slug>.*) and the part labels (manual.parte.<idx>)
+# are translated here for EN/PT. The ES canonical lives in the CAPITULOS tuple, so
+# ES intentionally has NO manual.toc.*/manual.parte.* keys (resolved via the tuple
+# default) — the key-parity test exempts these families for ES but still requires
+# EN↔PT parity on them.
 
 ui:
   sidebar_titulo: 📖 Secasol Manual
@@ -25,3 +26,83 @@ ui:
   no_existe: "Chapter '{slug}' does not exist. This is the manual index."
   solo_es: >-
     This chapter is not translated into your language yet; it is shown in Spanish.
+
+# Part labels (index order of PARTES: I, II, III, IV, Appendices).
+parte:
+  "0": "Part I — Getting started"
+  "1": "Part II — Guide by section"
+  "2": "Part III — Fundamentals"
+  "3": "Part IV — Technical reference"
+  "4": "Appendices"
+
+# TOC titles and descriptions, one entry per chapter slug.
+toc:
+  introduccion:
+    titulo: "Introduction"
+    descripcion: "What Secasol is, the pre-design scope, the workflow and how to use this manual."
+  tipologia:
+    titulo: "1 · Typology"
+    descripcion: "Box, cabinet or large scale; analysis mode and production window."
+  emplazamiento:
+    titulo: "2 · Site and climate"
+    descripcion: "Coordinates, NASA POWER download, data quality and collector orientation."
+  colector:
+    titulo: "3 · Solar collector"
+    descripcion: "The 4 types of air collector, materials, geometry and array."
+  camara:
+    titulo: "4 · Drying chamber"
+    descripcion: "Geometry, walls, trays, product and chamber operating modes."
+  auxiliar:
+    titulo: "5 · Auxiliary heating"
+    descripcion: "Electric or biomass backup: operating modes and consumption."
+  motor:
+    titulo: "6 · Fan and chimney"
+    descripcion: "Fan, solar chimney and wind extractor; circuit pressure drops."
+  resultados:
+    titulo: "7 · Results"
+    descripcion: "Run the pre-design, read the dashboard, psychrometric chart and export."
+  radiacion:
+    titulo: "Solar radiation and oriented plane"
+    descripcion: "GHI/DNI/DHI components, solar geometry and transposition to the collector plane."
+  psicrometria:
+    titulo: "Psychrometry"
+    descripcion: "Absolute and relative humidity, saturation, and how to read the psychrometric chart."
+  secado:
+    titulo: "Drying physics"
+    descripcion: "Water activity, sorption isotherms and the product dynamics."
+  catalogo-productos:
+    titulo: "The product catalog"
+    descripcion: "Which products Secasol brings, how they were chosen, typical moistures and calibration status."
+  convenciones:
+    titulo: "Unit and angle conventions"
+    descripcion: "Strict internal SI and the three azimuth conventions Secasol uses."
+  tec-emplazamiento:
+    titulo: "Technical · Solar resource and climate"
+    descripcion: "NASA POWER, gap policy and Liu-Jordan transposition with equations."
+  tec-colector:
+    titulo: "Technical · Flat-plate collector"
+    descripcion: "Surface-by-surface balances of the 4 types, Nusselt correlations and numerical solution."
+  tec-camara:
+    titulo: "Technical · Drying chamber"
+    descripcion: "Coupled heat-mass balance, composite wall, translucent roof and trays."
+  tec-industrial:
+    titulo: "Technical · Industrial mode"
+    descripcion: "Collector array, main duct, semi-continuous tunnel and ADITAL validation."
+  tec-chimenea:
+    titulo: "Technical · Motor, chimney and pressure drops"
+    descripcion: "Circuit ΔP, thermal draft, wind extractor and Picard loop."
+  tec-auxiliar:
+    titulo: "Technical · Auxiliary heating"
+    descripcion: "Auxiliary balance, set-point control and start-up schedule."
+  tec-resultados:
+    titulo: "Technical · Global balance and results"
+    descripcion: "Calculation orchestration, constants/transient/window modes and verification."
+  apendice-codigo:
+    titulo: "Appendix · Code implementation"
+    descripcion: "Where each model lives in the source code, for anyone who wants to read or extend it."
+  glosario:
+    titulo: "Glossary"
+    descripcion: "Terms and symbols used in the manual and in the interface."
+  bibliografia:
+    titulo: "Bibliography"
+    descripcion: "References cited in the technical chapters."

@@ -7,14 +7,43 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-Hoja de ruta a 1.0 (sin orden estricto):
+Mejoras post-1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Traducción de los 22 capítulos del manual a EN/PT (i18n F9) — la infraestructura
-  multiidioma ya está liberada en 0.17.0; falta el contenido de los capítulos, que
-  hoy caen al ES con aviso (ver `docs/notas/plan_i18n.md`).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [1.0.0] — 2026-07-09
+
+**Primera versión mayor.** Cierra la internacionalización ES/EN/PT del manual (fase F9 del
+plan i18n): el manual queda **100 % traducido** a los tres idiomas — contenido, chrome del
+visor, índice y navegación. Con esto se completan todos los hitos de la hoja de ruta a 1.0
+(pérdida de carga en bandejas, análisis anual, modo industrial/gran escala, manual estilo
+SAM e i18n completa).
+
+### Added
+
+- **i18n F9 — traducción del manual a EN/PT**: los 22 capítulos del manual (23 archivos,
+  ~22.100 palabras por idioma) traducidos completos al inglés y al portugués (PT-BR) en
+  `manual/capitulos/{en,pt}/`. Cubre Parte II (guía por secciones), Parte III (fundamentos),
+  Parte IV (referencia técnica) y apéndices (código, glosario, bibliografía). Se preserva la
+  sintaxis propia del manual: bloques `<!-- profundidad -->`, esquemas SVG, enlaces internos
+  `?manual=slug`, anclas `{#…}`, tablas y ecuaciones KaTeX. Los glosarios se re-alfabetizan
+  por idioma; las rutas de código del apéndice quedan intactas; los nombres nativos de
+  productos (yacón, algarroba, charqui, yerba mate, coca) se conservan.
+- **i18n F9 — índice y navegación del manual traducidos**: claves `manual.toc.<slug>.titulo/`
+  `.descripcion` (23 capítulos) y `manual.parte.<idx>` (5 partes) en `ui/idiomas/{en,pt}/`
+  `manual.yaml`. El índice, el sidebar, el breadcrumb y los enlaces anterior/siguiente ahora
+  muestran los títulos en el idioma activo. El ES canónico sigue viviendo en la tupla
+  `CAPITULOS` (resuelto por `default=cap.titulo`), por lo que estas familias existen solo en
+  EN/PT; el test de paridad de claves las exime contra ES pero exige paridad EN↔PT.
+
+### Changed
+
+- `VERSION_SOFTWARE` → `1.0.0`.
+- Los capítulos EN/PT del manual dejan de mostrar el aviso "solo disponible en español": la
+  vista sirve el `.md` traducido directamente (el fallback a ES de `ruta_capitulo` sigue como
+  red de seguridad para cualquier archivo que faltara).
 
 ## [0.17.0] — 2026-07-09
 
