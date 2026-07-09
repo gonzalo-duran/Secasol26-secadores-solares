@@ -1,0 +1,42 @@
+meses_abbr: Ene,Feb,Mar,Abr,May,Jun,Jul,Ago,Sep,Oct,Nov,Dic
+eje:
+  temperatura_c: Temperatura [°C]
+  irradiacion_mensual: Irradiación mensual [kWh/m²]
+  viento_ms: Velocidad del viento [m/s]
+  hr_pct: Humedad relativa [%]
+serie:
+  media_diaria: Media diaria
+  media_mensual: Media mensual
+  poa_global: POA global
+  poa: POA
+  viento_ms: Viento [m/s]
+  hr_pct: HR [%]
+  t_amb: T amb [°C]
+subplot:
+  plano_horizontal: Plano horizontal (GHI / DNI / DHI)
+  plano_colector: Plano del colector (POA global)
+carta:
+  saturacion: Saturación (HR 100 %)
+  hr: "HR {hr} %"
+  isentalpica: Isentálpica (referencia adiabática)
+  proceso: Proceso del secador
+  nota_directa: "cámara directa (no adiabática: el techo translúcido aporta calor)"
+  nota_indirecta: "cámara indirecta (≈ adiabática: el punto de salida cae sobre la isentálpica)"
+  nota: "P = {p:.1f} kPa (altitud del emplazamiento) · {camara}"
+  titulo: Carta psicrométrica del proceso de secado
+  eje_t: Temperatura de bulbo seco [°C]
+  eje_omega: Humedad absoluta ω [g/kg aire seco]
+termo:
+  curva_x: X(t)
+  x_obj: "X_obj={v:.3f}"
+  t_marca: "t={v:.1f}h"
+  t_producto: T producto [°C]
+  t_aire_camara: T aire cámara [°C]
+  q_prod: q aire→producto [W]
+  q_pared: q pérdida pared [W]
+  eje_x: X [kg agua / kg ms]
+  eje_t_prod: T producto [°C]
+  eje_t_aire: T aire [°C]
+  eje_calor: Calor [W]
+  eje_tiempo: Tiempo [h]
+  titulo: "Motor termodinámico — {prod} (status: {status})"

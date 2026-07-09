@@ -9,6 +9,10 @@ Permite al usuario:
 Los cambios se aplican de inmediato a st.session_state.proyecto.
 Si la tipología cambia a CAJA, colector y motor se anulan automáticamente
 (la tipología CAJA no admite colector externo ni motor).
+
+i18n (F1): todos los textos visibles pasan por ``t()`` con claves ``p1.*``
+(ver ``ui/idiomas/``). Los widgets de opciones usan como options los enums
+(valores estables) + ``format_func`` — nunca el rótulo traducido como valor.
 """
 
 from __future__ import annotations
@@ -27,53 +31,9 @@ from core.proyecto import (
     Tipologia,
 )
 from ui.componentes.esquemas import mostrar_esquema
+from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
-
-# ---------------------------------------------------------------------------
-# Descripciones de tipología
-# ---------------------------------------------------------------------------
-
-_DESC_TIPOLOGIA = {
-    Tipologia.CAJA: (
-        "**Secador de tipo Caja** — Pequeña escala (~1–10 kg de producto fresco). "
-        "La cámara actúa como colector: efecto invernadero directo sobre el producto. "
-        "Sin colector externo. Circulación de aire por **convección natural** "
-        "(puede incorporar chimenea solar). "
-        "Típico para uso doméstico o pequeños productores."
-    ),
-    Tipologia.ARMARIO: (
-        "**Secador tipo Armario** — Escala media (~10–100 kg de producto fresco). "
-        "Cámara de secado separada con uno o dos **colectores solares de aire** externos. "
-        "Circulación natural (chimenea) o forzada (ventilador / extractor eólico). "
-        "Puede incorporar calentamiento auxiliar (resistencia o biomasa). "
-        "Apto para productores pequeños y medianos."
-    ),
-    Tipologia.GRAN_ESCALA: (
-        "**Secador de Gran Escala** — Alta capacidad (~100 kg a varias toneladas). "
-        "**Banco de colectores** solares de aire en serie/paralelo con caño maestro. "
-        "Circulación **forzada** con motor eléctrico. "
-        "Puede incluir calentamiento auxiliar. "
-        "Orientado a producción agroindustrial."
-    ),
-}
-
-_ETIQUETAS_TIPOLOGIA = {
-    Tipologia.CAJA: "Caja (convección natural, sin colector externo)",
-    Tipologia.ARMARIO: "Armario (colector externo, 10–100 kg)",
-    Tipologia.GRAN_ESCALA: "Gran escala (banco de colectores, 100 kg+)",
-}
-
-_ETIQUETAS_DIA = {
-    DiaAnalisis.SOLSTICIO_VERANO: "Solsticio de verano (21 dic) — día más largo",
-    DiaAnalisis.SOLSTICIO_INVIERNO: "Solsticio de invierno (21 jun) — día más corto",
-    DiaAnalisis.EQUINOCCIO_MARZO: "Equinoccio de otoño — 21 mar (hem. sur)",
-    DiaAnalisis.EQUINOCCIO_SEPTIEMBRE: "Equinoccio de primavera — 21 sep (hem. sur)",
-    DiaAnalisis.MAS_CALUROSO: "Día más caluroso del año (T_amb máxima)",
-    DiaAnalisis.MAS_FRIO: "Día más frío del año (T_amb mínima)",
-    DiaAnalisis.ESPECIFICO: "Día específico definido por el usuario",
-}
-
 
 # ---------------------------------------------------------------------------
 # Render
@@ -82,7 +42,7 @@ _ETIQUETAS_DIA = {
 
 def render() -> None:
     """Renderiza la Pestaña 1 — Tipología y Configuración."""
-    st.header("1 · Tipología y Configuración del Análisis")
+    st.header(t("p1.header"))
     boton_manual(SLUG_POR_SECCION["p1"])
 
     proyecto = st.session_state.proyecto
@@ -92,25 +52,25 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección A: Metadatos del proyecto
     # -----------------------------------------------------------------------
-    with st.expander("Metadatos del proyecto", expanded=False):
+    with st.expander(t("p1.metadatos.titulo"), expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             nombre = st.text_input(
-                "Nombre del proyecto",
+                t("p1.metadatos.nombre.label"),
                 value=meta.nombre,
-                placeholder="Ej.: Secador armario manzana — Finca La Esperanza",
+                placeholder=t("p1.metadatos.nombre.placeholder"),
             )
         with c2:
             autor = st.text_input(
-                "Autor / responsable",
+                t("p1.metadatos.autor.label"),
                 value=meta.autor,
-                placeholder="Ej.: Juan García",
+                placeholder=t("p1.metadatos.autor.placeholder"),
             )
         notas = st.text_area(
-            "Notas libres",
+            t("p1.metadatos.notas.label"),
             value=meta.notas,
             height=80,
-            placeholder="Observaciones, condiciones de diseño, referencias, etc.",
+            placeholder=t("p1.metadatos.notas.placeholder"),
         )
 
         # Actualizar meta si cambió algo
@@ -126,52 +86,35 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección B: Tipología del secador
     # -----------------------------------------------------------------------
-    st.subheader("Tipología del secador")
+    st.subheader(t("p1.tipologia.titulo"))
 
-    with st.expander("¿Qué tipología elegir?", expanded=False):
-        st.markdown(
-            "La tipología define la arquitectura del secador y qué subsistemas se "
-            "habilitan en el prediseño:\n\n"
-            "| Tipología | Qué es | Cuándo | Subsistemas |\n"
-            "|---|---|---|---|\n"
-            "| **Caja** | Colector y cámara integrados; el sol entra directo a la "
-            "cámara (techo translúcido). Suele ir por convección natural. | Escala "
-            "chica, baja inversión (frutas, hierbas). | Cámara (+ chimenea opcional) |\n"
-            "| **Armario** | Colector externo + cámara con bandejas; aire forzado o "
-            "natural. | Escala media, mejor control de temperatura. | Colector + cámara "
-            "+ motor/chimenea (+ auxiliar) |\n"
-            "| **Gran escala** | Banco de colectores + cámara industrial (lotes o túnel "
-            "semicontinuo). | Producción comercial (cientos–miles de kg). | Banco de "
-            "colectores + caño maestro + cámara + motor + auxiliar |"
-        )
+    with st.expander(t("p1.tipologia.guia.titulo"), expanded=False):
+        st.markdown(t("p1.tipologia.guia.cuerpo"))
 
-    tipo_lista = list(_ETIQUETAS_TIPOLOGIA.keys())
-    tipo_labels = [_ETIQUETAS_TIPOLOGIA[t] for t in tipo_lista]
-    idx_tipo = tipo_lista.index(cfg.tipologia)
-
-    tipo_sel_label = st.radio(
-        "Seleccioná la tipología",
-        options=tipo_labels,
-        index=idx_tipo,
-        help="La tipología define qué subsistemas están disponibles en el prediseño.",
+    tipo_lista = list(Tipologia)
+    tipo_sel = st.radio(
+        t("p1.tipologia.label"),
+        options=tipo_lista,
+        index=tipo_lista.index(cfg.tipologia),
+        format_func=lambda tp: t(f"p1.tipologia.opcion.{tp.value.lower()}"),
+        help=t("p1.tipologia.help"),
     )
-    tipo_sel = tipo_lista[tipo_labels.index(tipo_sel_label)]
 
     # Descripción de la tipología seleccionada
-    st.info(_DESC_TIPOLOGIA[tipo_sel])
+    st.info(t(f"p1.tipologia.desc.{tipo_sel.value.lower()}"))
 
     # Esquema del circuito de aire según tipología (CAJA / ARMARIO)
     if tipo_sel == Tipologia.CAJA:
-        with st.expander("📐 Circuito de aire", expanded=False):
+        with st.expander(t("p1.esquema.titulo"), expanded=False):
             mostrar_esquema(
                 "circuito_caja",
-                caption="Circuito de aire del secador tipo Caja.",
+                caption=t("p1.esquema.caption_caja"),
             )
     elif tipo_sel == Tipologia.ARMARIO:
-        with st.expander("📐 Circuito de aire", expanded=False):
+        with st.expander(t("p1.esquema.titulo"), expanded=False):
             mostrar_esquema(
                 "circuito_armario",
-                caption="Circuito de aire del secador tipo Armario.",
+                caption=t("p1.esquema.caption_armario"),
             )
 
     # Efecto cascada: si la tipología cambia a CAJA, anular colector y motor;
@@ -180,88 +123,54 @@ def render() -> None:
         if tipo_sel == Tipologia.CAJA:
             if proyecto.colector is not None:
                 proyecto.colector = None
-                st.warning(
-                    "⚠️ La tipología **Caja** no admite colector externo. "
-                    "La configuración de P3 fue eliminada."
-                )
+                st.warning(t("p1.cascada.sin_colector"))
             if proyecto.motor is not None:
                 proyecto.motor = None
-                st.warning(
-                    "⚠️ La tipología **Caja** usa convección natural. "
-                    "La configuración del motor (P6) fue eliminada."
-                )
+                st.warning(t("p1.cascada.sin_motor"))
         elif tipo_sel == Tipologia.GRAN_ESCALA:
             from core import presets
 
             proyecto.colector = presets.colector_gran_escala()
             proyecto.camara = presets.camara_gran_escala()
             proyecto.motor = presets.motor_gran_escala()
-            st.info(
-                "🏭 Se cargó el **preset de gran escala** (secador híbrido "
-                "ADITAL, San Carlos): banco de 26 colectores 7.5×0.94 m + caño "
-                "maestro de 18 m, túnel de 18×3×1.85 m con 24 carros × 14 "
-                "bandejas, 5000 kg de pimiento y ventilador de 3.8 kg/s. "
-                "Ajustá lo que necesites en P3–P6."
-            )
+            st.info(t("p1.cascada.preset_gran_escala"))
 
     # -----------------------------------------------------------------------
     # Sección B2: Subtipo de secador industrial (solo GRAN_ESCALA)
     # -----------------------------------------------------------------------
     subtipo_sel = cfg.subtipo_gran_escala
     if tipo_sel == Tipologia.GRAN_ESCALA:
-        st.subheader("Subtipo de secador industrial")
-        sub_opciones = {
-            SubtipoGranEscala.BATCH: "Batch — secado por lotes (carga → seca → descarga)",
-            SubtipoGranEscala.SEMICONTINUO: (
-                "Semicontinuo — túnel a contracorriente, carga completa con avance "
-                "de carros (estilo ADITAL)"
-            ),
-        }
-        sub_lista = list(sub_opciones.keys())
+        st.subheader(t("p1.subtipo.titulo"))
+        sub_lista = list(SubtipoGranEscala)
         idx_sub = sub_lista.index(subtipo_sel) if subtipo_sel in sub_lista else 0
-        sub_label = st.radio(
-            "Modo de operación del secador",
-            options=list(sub_opciones.values()),
+        subtipo_sel = st.radio(
+            t("p1.subtipo.label"),
+            options=sub_lista,
             index=idx_sub,
-            help=(
-                "**Batch:** una carga completa se seca por lotes; la producción es "
-                "la suma de los lotes completados en la ventana.\n\n"
-                "**Semicontinuo:** el producto avanza a contracorriente del aire en "
-                "un túnel de N columnas; produce un caudal sostenido (kg/día)."
-            ),
+            format_func=lambda s: t(f"p1.subtipo.opcion.{s.value.lower()}"),
+            help=t("p1.subtipo.help"),
         )
-        subtipo_sel = sub_lista[list(sub_opciones.values()).index(sub_label)]
 
     # -----------------------------------------------------------------------
     # Sección C: Modo de análisis
     # -----------------------------------------------------------------------
-    st.subheader("Modo de análisis")
+    st.subheader(t("p1.modo.titulo"))
 
     anual_deshabilitado = tipo_sel == Tipologia.CAJA
 
     if anual_deshabilitado:
-        st.caption("ℹ️ El análisis **Anual** no está disponible para la tipología Caja en v0.")
+        st.caption(t("p1.modo.caja_sin_anual"))
         modo_sel = ModoAnalisis.DIARIO
     else:
-        modo_opciones = {
-            ModoAnalisis.DIARIO: "Diario — un día representativo (datos horarios)",
-            ModoAnalisis.VENTANA: "Ventana de producción — lapso [inicio, fin] (clima real horario)",
-            ModoAnalisis.ANUAL: "Anual — año completo (8 760 horas)",
-        }
-        modo_lista = list(modo_opciones.keys())
+        modo_lista = [ModoAnalisis.DIARIO, ModoAnalisis.VENTANA, ModoAnalisis.ANUAL]
         idx_modo = modo_lista.index(cfg.modo_analisis) if cfg.modo_analisis in modo_lista else 0
-        modo_label = st.radio(
-            "Tipo de análisis",
-            options=list(modo_opciones.values()),
+        modo_sel = st.radio(
+            t("p1.modo.label"),
+            options=modo_lista,
             index=idx_modo,
-            help=(
-                "**Diario:** un día seleccionado. Rápido, para prediseño inicial.\n\n"
-                "**Ventana de producción:** acumula la producción sobre un lapso "
-                "(semana, mes, campaña) con clima real horario. Pensado para gran escala.\n\n"
-                "**Anual:** integra sobre las 8 760 horas del año."
-            ),
+            format_func=lambda m: t(f"p1.modo.opcion.{m.value.lower()}"),
+            help=t("p1.modo.help"),
         )
-        modo_sel = modo_lista[list(modo_opciones.values()).index(modo_label)]
 
     # -----------------------------------------------------------------------
     # Sección D: Criterio de día (DIARIO) / ventana de producción (VENTANA)
@@ -272,23 +181,26 @@ def render() -> None:
     ventana_fin_sel = cfg.ventana_fin
 
     if modo_sel == ModoAnalisis.DIARIO:
-        dia_lista = list(_ETIQUETAS_DIA.keys())
-        dia_labels = [_ETIQUETAS_DIA[d] for d in dia_lista]
+        dia_lista = [
+            DiaAnalisis.SOLSTICIO_VERANO,
+            DiaAnalisis.SOLSTICIO_INVIERNO,
+            DiaAnalisis.EQUINOCCIO_MARZO,
+            DiaAnalisis.EQUINOCCIO_SEPTIEMBRE,
+            DiaAnalisis.MAS_CALUROSO,
+            DiaAnalisis.MAS_FRIO,
+            DiaAnalisis.ESPECIFICO,
+        ]
 
         # Mantener selección previa si es compatible
         idx_dia = dia_lista.index(cfg.dia_analisis) if cfg.dia_analisis in dia_lista else 0
 
-        dia_label_sel = st.selectbox(
-            "Criterio de selección del día de análisis",
-            options=dia_labels,
+        dia_sel = st.selectbox(
+            t("p1.dia.label"),
+            options=dia_lista,
             index=idx_dia,
-            help=(
-                "Determina qué día del año se usa para el cálculo. "
-                "Los criterios por temperatura o insolación usan los datos NASA POWER "
-                "del emplazamiento (requiere que P2 esté configurada)."
-            ),
+            format_func=lambda d: t(f"p1.dia.opcion.{d.value.lower()}"),
+            help=t("p1.dia.help"),
         )
-        dia_sel = dia_lista[dia_labels.index(dia_label_sel)]
 
         if dia_sel == DiaAnalisis.ESPECIFICO:
             fecha_min = date(ANIO_NASA_MIN, 1, 1)
@@ -309,14 +221,11 @@ def render() -> None:
                         # 29-feb fuera de año bisiesto.
                         fecha_default = date(ANIO_NASA_MAX, hoy.month, 28)
             fecha_sel = st.date_input(
-                "Fecha del análisis",
+                t("p1.dia.fecha.label"),
                 value=fecha_default,
                 min_value=fecha_min,
                 max_value=fecha_max,
-                help=(
-                    f"Fecha concreta del día a analizar. Rango disponible en "
-                    f"NASA POWER: {ANIO_NASA_MIN}–{ANIO_NASA_MAX}."
-                ),
+                help=t("p1.dia.fecha.help", anio_min=ANIO_NASA_MIN, anio_max=ANIO_NASA_MAX),
             )
         else:
             fecha_sel = None
@@ -349,21 +258,21 @@ def render() -> None:
             # Edición manual del fin → fechas libres (desactiva el atajo).
             st.session_state["p1_vent_dur_dias"] = None
 
-        st.caption("Atajos de duración (el fin sigue a la fecha de inicio):")
+        st.caption(t("p1.ventana.atajos_caption"))
         pc = st.columns(4)
-        if pc[0].button("1 semana"):
+        if pc[0].button(t("p1.ventana.atajo.semana")):
             _aplicar_atajo(7)
-        if pc[1].button("1 mes"):
+        if pc[1].button(t("p1.ventana.atajo.mes")):
             _aplicar_atajo(30)
-        if pc[2].button("Campaña (5 meses)"):
+        if pc[2].button(t("p1.ventana.atajo.campania")):
             _aplicar_atajo(150)
-        if pc[3].button("1 año"):
+        if pc[3].button(t("p1.ventana.atajo.anio")):
             _aplicar_atajo(365)
 
         cc = st.columns(2)
         with cc[0]:
             ventana_inicio_sel = st.date_input(
-                "Inicio",
+                t("p1.ventana.inicio"),
                 key="p1_vent_inicio",
                 min_value=fecha_min,
                 max_value=fecha_max,
@@ -371,7 +280,7 @@ def render() -> None:
             )
         with cc[1]:
             ventana_fin_sel = st.date_input(
-                "Fin",
+                t("p1.ventana.fin"),
                 key="p1_vent_fin",
                 min_value=fecha_min,
                 max_value=fecha_max,
@@ -381,26 +290,14 @@ def render() -> None:
         dur_activa = st.session_state.get("p1_vent_dur_dias")
         lapso_dias = (ventana_fin_sel - ventana_inicio_sel).days
         if ventana_fin_sel <= ventana_inicio_sel:
-            st.warning("⚠️ La fecha de fin debe ser posterior a la de inicio.")
+            st.warning(t("p1.ventana.fin_anterior"))
         elif lapso_dias > 366:
-            st.warning(
-                f"⚠️ El lapso de análisis no puede superar **366 días** "
-                f"(elegiste {lapso_dias}). Acortá la ventana o usá un atajo."
-            )
+            st.warning(t("p1.ventana.lapso_excesivo", lapso_dias=lapso_dias))
         else:
-            extra = (
-                f" · Atajo activo: fin = inicio + {dur_activa} días "
-                "(editar el fin lo desactiva)."
-                if dur_activa
-                else ""
-            )
-            st.caption(f"📆 Lapso: **{lapso_dias} días** de clima real horario.{extra}")
+            extra = t("p1.ventana.atajo_activo", dur=dur_activa) if dur_activa else ""
+            st.caption(t("p1.ventana.lapso_caption", lapso_dias=lapso_dias, extra=extra))
         if ventana_inicio_sel.year != ventana_fin_sel.year:
-            st.warning(
-                "⚠️ La ventana cruza el año calendario. Los datos climáticos "
-                "NASA POWER se descargan por año calendario: elegí una ventana "
-                "dentro de un mismo año para que P7 encuentre clima en todo el lapso."
-            )
+            st.warning(t("p1.ventana.cruza_anio"))
 
     else:
         # Modo ANUAL: no aplica criterio de día
@@ -431,39 +328,51 @@ def render() -> None:
             )
             proyecto.configuracion = nueva_cfg
         except (ValueError, NotImplementedError) as exc:
-            st.error(f"❌ Configuración inválida: {exc}")
+            st.error(t("p1.config_invalida", exc=exc))
 
     # -----------------------------------------------------------------------
     # Resumen de la configuración actual
     # -----------------------------------------------------------------------
     st.divider()
-    st.subheader("Configuración activa")
+    st.subheader(t("p1.resumen.titulo"))
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Tipología", tipo_sel.value)
-    c2.metric("Modo", modo_sel.value)
+    c1.metric(t("p1.resumen.tipologia"), t(f"p1.tipologia.corta.{tipo_sel.value.lower()}"))
+    c2.metric(t("p1.resumen.modo"), t(f"p1.resumen.modo_corta.{modo_sel.value.lower()}"))
     if modo_sel == ModoAnalisis.DIARIO:
         dia_str = (
-            str(fecha_sel) if dia_sel == DiaAnalisis.ESPECIFICO and fecha_sel else dia_sel.value
+            str(fecha_sel)
+            if dia_sel == DiaAnalisis.ESPECIFICO and fecha_sel
+            else t(f"p1.dia.corta.{dia_sel.value.lower()}")
         )
-        c3.metric("Día de análisis", dia_str)
+        c3.metric(t("p1.resumen.dia"), dia_str)
     elif modo_sel == ModoAnalisis.VENTANA:
         if ventana_inicio_sel and ventana_fin_sel:
-            c3.metric("Ventana", f"{ventana_inicio_sel} → {ventana_fin_sel}")
+            c3.metric(
+                t("p1.resumen.ventana"),
+                t("p1.resumen.ventana_valor", inicio=ventana_inicio_sel, fin=ventana_fin_sel),
+            )
         else:
-            c3.metric("Ventana", "(definir fechas)")
+            c3.metric(t("p1.resumen.ventana"), t("p1.resumen.ventana_sin_fechas"))
     else:
-        c3.metric("Período", "Año completo")
+        c3.metric(t("p1.resumen.periodo"), t("p1.resumen.anio_completo"))
 
     if tipo_sel == Tipologia.GRAN_ESCALA:
-        st.caption(f"**Subtipo industrial:** {subtipo_sel.value}")
+        st.caption(
+            t(
+                "p1.resumen.subtipo",
+                subtipo=t(f"p1.subtipo.corta.{subtipo_sel.value.lower()}"),
+            )
+        )
 
     # Recordatorio de lo que habilita cada tipología
     st.caption(
-        "**Secciones disponibles según tipología:** "
-        + (
-            "P2 Clima · P4 Cámara"
-            if tipo_sel == Tipologia.CAJA
-            else "P2 Clima · P3 Colector · P4 Cámara · P5 Auxiliar · P6 Motor"
+        t(
+            "p1.resumen.secciones",
+            secciones=(
+                t("p1.resumen.secciones_caja")
+                if tipo_sel == Tipologia.CAJA
+                else t("p1.resumen.secciones_completa")
+            ),
         )
     )

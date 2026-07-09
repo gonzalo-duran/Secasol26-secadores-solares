@@ -10,9 +10,75 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 Hoja de ruta a 1.0 (sin orden estricto):
 
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Internacionalización (idiomas).
+- Internacionalización (idiomas) — **en curso** (ver Added abajo: F0–F1 hechas, F2–F9
+  pendientes según `docs/notas/plan_i18n.md`).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+### Added
+
+- **Internacionalización ES/EN/PT — infraestructura + piloto (fases F0–F1 del plan i18n)**:
+  módulo `ui/componentes/traducciones.py` (loader puro de diccionarios YAML con fallback
+  idioma→ES→clave, nunca lanza) + `ui/componentes/idiomas.py` (`t()`, `idioma_actual()`,
+  selector 🌐 en sidebar con `?lang=` en la URL). Diccionarios `ui/idiomas/{es,en,pt}/`
+  (sidebar + P1 completos, ~140 claves por idioma). Migrados `Secasol.py` (sidebar,
+  onboarding, entorno, contacto) y `ui/p1_tipologia.py` (piloto). **Fix del bug latente
+  `nav_seccion`**: la navegación guarda claves estables (`p1`..`p7`) con `format_func`, así
+  la selección sobrevive al cambio de idioma. Tests `tests/test_ui/test_idiomas.py` (18:
+  paridad de claves/placeholders entre idiomas, fallbacks, heurística anti-regresión de
+  literales) y script de auditoría `scripts/auditar_i18n.py`.
+- **i18n F2**: P2 (Emplazamiento) y P3 (Colector) migradas completas a `t()`, incluyendo
+  las figuras Plotly (nombres de serie, ejes, títulos, marcas), la tabla mensual y los
+  encabezados del CSV. Diccionario compartido `graficas.yaml` (meses, ejes y series
+  comunes). ~370 claves nuevas por idioma.
+- **i18n F3**: P4 (Cámara), P5 (Auxiliar) y P6 (Motor) migradas completas a `t()` — widgets,
+  helps, métricas, spinners, warnings, selectores por enum/clave estable (tipo auxiliar,
+  modo de operación, forzantes, dirección de flujo, tipo de pared, terreno z₀) y las figuras
+  Plotly de la cámara (curva de secado + panel termodinámico). Se resolvieron los radios que
+  guardaban el rótulo como valor (forzantes, horizonte, composición multidía) migrándolos a
+  claves estables + `format_func`, para que la selección sobreviva al cambio de idioma.
+  ~600 claves nuevas por idioma.
+- **i18n F4**: P7 (Resultados) migrada completa a `t()` — dashboard integrado (colector,
+  auxiliar, cámara, motor, chimenea, balance, ciclo), pipeline transitoria con sus 5 figuras,
+  corridas paramétricas, ventana de producción, operación anual detallada, tabla de resultados
+  y bloque de guardado (.txt/.json/PDF). Componentes compartidos: figura de la **carta
+  psicrométrica**, panel termodinámico de cámara (`grafica_termodinamica_camara`), selector de
+  espesores y fallback de esquemas — con `graficas.yaml` (namespaces `carta`/`termo`) y nuevo
+  `comun.yaml`. Radio de modo de cálculo migrado a claves estables. Toda la UI de las 7
+  pestañas queda traducida. Los generadores de snapshot `.txt`/`.json` y los mensajes de
+  `core/`/`calculos/` quedan en ES (fases F5–F7). ~350 claves nuevas por idioma.
+- **i18n F5**: advertencias de diseño por código. Widget único
+  `ui/componentes/advertencias_widget.py` (`texto_advertencia` + `render_advertencias`) que
+  traduce cada `Advertencia` de `core/` por su `codigo` contra
+  `advertencias.<CODIGO>.mensaje/.sugerencia` interpolando `adv.contexto`, con fallback al
+  texto ES de core si falta la plantilla. Nuevo `advertencias.yaml` en los 3 idiomas con los
+  **43 códigos** de diseño (colector, cámara, auxiliar, motor, chimenea). Los renders inline
+  de P3–P6 se unifican en el widget; se eliminan los `_ICONOS_SEVERIDAD` duplicados. Los
+  mensajes de runtime de `calculos/` (P7) siguen en ES. 86 claves nuevas por idioma.
+- **i18n F6**: reporte PDF (`ui/reporte.py`). `generar_reporte_pdf(..., idioma)` recibe el
+  idioma activo desde P7 y lo enhebra como closure `tr` a portada, secciones (colector,
+  cámara, auxiliar, motor, chimenea, resultados globales), recolectores de figuras y
+  header/footer. Nuevo namespace `reporte.*` (244 claves por idioma). La tabla de advertencias
+  del PDF retraduce los mensajes por código reusando `advertencias.*` (F5). Los valores
+  numéricos, unidades y códigos de enum/estado quedan en v1. Fix de un bug latente de F2: la
+  clave/valor `"NO"` (noroeste) del selector de orientación de P2 se coercía a booleano
+  (mostraba "False") — se quotea; guard `test_yaml_sin_coercion_de_tipos` para toda la
+  familia de YAML.
+- **i18n F7**: catálogos de materiales y productos. Cada item de `catalogo/materiales|productos/`
+  gana `descripcion_en`/`descripcion_pt` (39 items). Nuevo helper
+  `ui.componentes.idiomas.t_catalogo(datos, default)` (envuelve `campo_i18n` con el idioma
+  activo); los `format_func` de los selectores de material/producto de P3/P4/P6 y las etiquetas
+  del producto lo usan, y el reporte PDF resuelve las descripciones de material vía
+  `campo_i18n(..., tr.idioma)`. `notas`/`fuente` de los catálogos quedan en ES (v1); los
+  bloques `capa_fina:` no se tocan.
+- **i18n F8**: infraestructura multiidioma del manual de usuario. Los capítulos se movieron a
+  `manual/capitulos/<lang>/` (ES completo; EN/PT parciales, su traducción es F9);
+  `manual_contenido.ruta_capitulo(archivo, lang)` resuelve con fallback a ES y el visor muestra
+  un aviso cuando cae al español. El chrome del visor se traduce vía el namespace `manual.ui.*`
+  y los títulos del TOC vía `manual.toc.*` con fallback al ES de la tupla `CAPITULOS`. Todos los
+  enlaces del manual propagan `&lang=` (sidebar, índice, breadcrumb, navegación, botones desde la
+  vista de diseño, y los enlaces internos del markdown). Con esto el `scripts/auditar_i18n.py`
+  llega a **0** literales pendientes.
 
 ---
 

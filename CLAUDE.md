@@ -55,7 +55,8 @@ ui/p{1-7}_*.py            ← UI por pestaña, llaman a core/ y calculos/
 ui/componentes/           ← widgets reutilizables (header, gráficas, unidades, serialización)
 ui/reporte.py             ← generación de reporte PDF (P7)
 ui/manual.py              ← vista del manual de usuario (?manual=<slug>, estilo SAM)
-manual/capitulos/*.md     ← contenido del manual (22 capítulos markdown)
+ui/idiomas/{es,en,pt}/*.yaml ← diccionarios de traducción (i18n, ver §Internacionalización)
+manual/capitulos/<lang>/*.md ← contenido del manual (22 capítulos; ES completo, EN/PT parciales F9)
 core/                     ← dataclasses del modelo de datos (sin Streamlit)
 calculos/                 ← motores numéricos puros (sin Streamlit)
 catalogo/materiales/*.yaml ← catálogos de materiales (cubiertas, placas, aislantes, fondos)
@@ -189,9 +190,64 @@ Desde **S40** la tipología `GRAN_ESCALA` es funcional (antes era cosmética, id
 
 Con `?manual=<slug>` en la URL, `Secasol.py` intercepta **antes** de inicializar `proyecto` y renderiza `ui/manual.py` (con `st.stop()` al final). **La vista manual es stateless: nunca toca `st.session_state.proyecto`.** Los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py::boton_manual`) y el enlace del sidebar abren SIEMPRE con `target=_blank` — un clic sin `_blank` desde la vista de diseño recargaría la app y perdería el proyecto.
 
-- Contenido: `manual/capitulos/*.md` (22 capítulos). TOC declarativo (slug → archivo → parte) en `ui/componentes/manual_contenido.py` (sin imports de streamlit, testeable). El **orden de navegación lo fija la tupla `CAPITULOS`**, no el número de archivo (ej. `24_catalogo_productos.md` se navega dentro de la Parte III entre "secado" y "convenciones"). Al agregar un capítulo: crear el .md + declararlo en `CAPITULOS` + enlazarlo desde algún capítulo (los tests exigen que ninguno quede aislado).
+- Contenido: `manual/capitulos/<lang>/*.md` (22 capítulos por idioma; **ES completo obligatorio**, EN/PT parciales — la traducción es F9). `manual_contenido.ruta_capitulo(archivo, lang)` resuelve el .md con **fallback a ES** y devuelve `(ruta, es_fallback)`; si cae al ES el visor muestra el aviso `manual.ui.solo_es`. TOC declarativo (slug → archivo → parte) en `ui/componentes/manual_contenido.py` (sin imports de streamlit, testeable). El **orden de navegación lo fija la tupla `CAPITULOS`**, no el número de archivo. Al agregar un capítulo: crear el .md **en `es/`** + declararlo en `CAPITULOS` + enlazarlo desde algún capítulo (los tests exigen que ninguno quede aislado).
+- **i18n del visor (F8):** el chrome se traduce vía `manual.ui.*`; los títulos del TOC vía `manual.toc.<slug>.titulo/.descripcion` con **fallback al ES de la tupla** (`traducir(..., default=cap.titulo)` — por eso no hay claves `manual.toc.*`/`manual.parte.*` hasta F9). El idioma sale de `idioma_actual()` (query param `?lang=` en la pestaña del manual, que es sesión nueva). **Todos los enlaces del manual propagan `&lang=`** (sidebar, índice, breadcrumb, prev/next, `boton_manual`/`enlace_manual_inline`, el enlace global de `Secasol.py`, y los enlaces internos del markdown reescritos por `manual._propagar_lang`). El deploy copia `manual/` recursivo → las subcarpetas por idioma viajan sin cambios en `deploy_hf.yml`.
 - Sintaxis propia de los .md (parseada por `ui/componentes/manual_render.py`, funciones puras + `render_bloques`): bloques `<!-- profundidad: Título -->…<!-- /profundidad -->` → `st.expander` (segundo nivel de lectura); `<!-- esquema: nombre | caption -->` → `mostrar_esquema`; anclas explícitas `## Título {#ancla}` → `st.header(anchor=)`; enlaces internos `[texto](?manual=slug#ancla)`; ecuaciones KaTeX `$`/`$$` nativas de `st.markdown`.
 - `tests/test_ui/test_manual.py` valida integridad: TOC↔disco, sintaxis de profundidad, que todo enlace/ancla/esquema resuelva, `$$` balanceado, higiene de URLs. Al agregar un capítulo: crear el .md + declararlo en `CAPITULOS`.
+
+### Internacionalización (i18n, desde S49)
+
+La UI es multiidioma **ES/EN/PT** (plan completo en `docs/notas/plan_i18n.md`; fases F0–F8
+hechas, F9 —traducción de los 22 capítulos del manual— pendiente). Arquitectura:
+`ui/componentes/traducciones.py` (loader puro, sin
+streamlit: aplana `ui/idiomas/<lang>/*.yaml` a claves con puntos, prefijadas con el stem del
+archivo) + `ui/componentes/idiomas.py` (estado: `idioma_actual()` = session_state →
+`?lang=` → ES; `t(clave, **kwargs)`; `selector_idioma()` 🌐 del sidebar). Fallback en
+cascada: idioma → ES → default → clave literal visible; `t()` **nunca lanza** (format roto →
+plantilla sin interpolar).
+
+Namespaces: el archivo YAML es la raíz (`p1.yaml` → `p1.*`); `comun.*` (repetidos),
+`sidebar.*` (Secasol.py), `p1..p7.*` (subnivel = bloque visual, widget = `.label`/`.help`),
+`graficas.*`, `reporte.*`, `advertencias.<CODIGO>.mensaje/.sugerencia`, `catalogo.*`,
+`manual.*`.
+
+**Reglas duras:**
+- **Todo string visible nuevo pasa por `t()` y se agrega a los TRES YAML en el mismo
+  cambio** (los tests exigen paridad de claves y de placeholders entre idiomas).
+- **Nunca `t()` a nivel de módulo** (el idioma cambia entre reruns): los dicts de etiquetas
+  module-level se convierten en claves resueltas dentro de `render()`.
+- Widgets de opciones: **options = valores estables** (enums, códigos `p1..p7`) +
+  `format_func` con `t()` — jamás el rótulo traducido como valor (gotcha `nav_seccion`).
+- Placeholders **siempre nombrados** (`{lapso_dias}`); la lógica se resuelve en Python antes
+  de `t()`; plurales con par de claves `.singular`/`.plural`.
+- Las plantillas de advertencias solo pueden interpolar claves presentes en `adv.contexto`.
+  Las advertencias de diseño (`Advertencia` de `core/`) se renderizan con el **widget único**
+  `ui/componentes/advertencias_widget.py::render_advertencias` (F5): traduce por
+  `advertencias.<CODIGO>.mensaje/.sugerencia` con `default=adv.mensaje/.sugerencia` (un código
+  sin plantilla YAML muestra igual el ES de core, nunca la clave cruda). Los `_mostrar_advertencias`
+  de P3–P6 delegan en él; P3 pasa `con_sugerencia=True`. Las `res.advertencias` de P7 son
+  `list[str]` de runtime de `calculos/` (no `Advertencia`), quedan en ES (`# i18n: exento`).
+- v1 mantiene el **punto decimal** y los formatos numéricos actuales en los 3 idiomas.
+- **Catálogos (F7):** los YAML de `catalogo/materiales|productos/` llevan `descripcion_en`/
+  `descripcion_pt` junto a `descripcion` (39 items). La UI resuelve la descripción en el idioma
+  activo con `ui.componentes.idiomas.t_catalogo(datos, default=id)` (envuelve `campo_i18n` +
+  `idioma_actual`); en el PDF (F6) se usa `campo_i18n(props, "descripcion", tr.idioma)`. `notas`/
+  `fuente` quedan en ES (v1). **No traducir los generadores de snapshot `.txt`/`.json`** (los
+  `_texto_config_*`/`_json_*`/`_texto_resultados_completo` — artefactos de exportación, ES). El
+  snapshot `props_catalogo` serializa el dict completo, así que arrastra las traducciones.
+- **Reporte PDF (F6):** `generar_reporte_pdf(..., idioma=idioma_actual())`; el idioma se
+  enhebra como closure `tr("colector.titulo", ...)` → `traducir("reporte.colector.titulo", …)`
+  a todas las `_seccion_*`/`_figuras_*`/`_crear_doc`. `tr.idioma` queda expuesto para que
+  `_bloque_advertencias` retraduzca los mensajes por código (namespace `advertencias.*`, F5).
+  Valores numéricos/unidades/códigos de enum quedan en v1. `reporte.py` usa reportlab (no
+  `st.*`) → el audit no lo escanea.
+- **Gotcha YAML (bool/None):** una **clave o valor** `no`/`No`/`NO`/`yes`/`Yes`/`on`/`off`/
+  `null` sin comillas se parsea como booleano/None (`no:`→clave `False`; valor `Yes`→`True`;
+  `NO`→`False`). La paridad NO lo detecta (los 3 idiomas comparten el error). Quotear siempre
+  (`"no": "NO"`). Lo cubre `test_yaml_sin_coercion_de_tipos` sobre el YAML crudo.
+- Literales legítimamente no traducibles (marca, mails): comentario `# i18n: exento` en la
+  línea (el test heurístico de `tests/test_ui/test_idiomas.py` lo respeta). Auditoría del
+  residuo por archivo: `.venv/bin/python scripts/auditar_i18n.py`.
 
 ### Convención de unidades (crítico)
 

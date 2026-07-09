@@ -11,6 +11,8 @@
 ## Resumen ejecutivo
 
 > Nota S48: el **manual de usuario** (mejora 36) no introduce cableado widget→campo→consumidor: la vista `?manual=<slug>` (`ui/manual.py`, intercept en `Secasol.py`) es **stateless** (no toca `st.session_state.proyecto`) y los botones "📖 Manual" de P1–P7 (`ui/componentes/manual_link.py`) solo emiten un anchor `target=_blank`.
+>
+> Nota S49: la **internacionalización ES/EN/PT** (mejora 37, fases F0–F4) tampoco introduce cableado widget→campo→consumidor: solo reemplaza literales visibles por `t("clave")` (diccionarios `ui/idiomas/{es,en,pt}/*.yaml`). El único cambio de estado es el selector 🌐 (`ui/componentes/idiomas.py::selector_idioma`) que guarda `st.session_state["idioma"]` ↔ query param `?lang=`, y el fix de `nav_seccion` (ahora guarda claves estables `p1..p7` en vez del rótulo, para que la navegación sobreviva al cambio de idioma). Ningún campo del `Proyecto` cambió.
 
 Desconexiones / atenuaciones reales vigentes (eran 3 a inicio de S30):
 

@@ -1,0 +1,153 @@
+header: 5 · Aquecimento Auxiliar
+cargar:
+  titulo: 📥 Carregar configuração salva (.json)
+  uploader: Envie um arquivo .json do auxiliar salvo anteriormente
+  error_reconstruccion: "❌ Erro reconstruindo o auxiliar: {exc}"
+  exito: ✅ Auxiliar carregado do JSON ({n} valores da sessão foram reiniciados).
+usar:
+  label: Incorporar sistema de aquecimento auxiliar
+  help: >-
+    Ativa um sistema de aquecimento auxiliar (resistência elétrica ou queimador
+    de biomassa) para estender o horário de secagem ou reforçar em dias nublados.
+  sin_auxiliar: >-
+    Sem aquecimento auxiliar. O secador opera apenas com energia solar.
+    Ative o botão para configurar um auxiliar.
+tipo_modo:
+  titulo: Tipo e modo de operação
+  tipo:
+    label: Tipo de fonte de calor auxiliar
+    help: |
+      Resistência elétrica: η ≈ 1, controle preciso, requer rede elétrica.
+      Queimador de biomassa: η ≈ 0,60–0,75, combustível local, controle mais simples.
+    resistencia_electrica: Resistência elétrica
+    quemador_biomasa: Queimador de biomassa
+  modo:
+    label: Modo de operação
+    help: |
+      **Série pós-coletor:** o auxiliar aquece o ar depois do coletor. Use como reforço em dias nublados ou para alcançar temperaturas mais altas.
+
+      **Reserva independente:** o auxiliar tem seu próprio circuito de ar. Use para secagem noturna ou dias sem sol.
+    serie_poscolector: Série pós-coletor
+    respaldo_independiente: Reserva independente
+operacion:
+  titulo: Parâmetros de operação
+  potencia:
+    label: Potência nominal [kW]
+    help: >-
+      Potência térmica nominal entregue ao ar.
+      Para resistência elétrica: potência elétrica = potência térmica.
+  fraccion:
+    label: Fração de potência em operação [%]
+    help: Permite modelar operação parcial do auxiliar.
+  t_max:
+    label: T máxima de saída [°C]
+    help: >-
+      Limite de segurança para proteger o produto.
+      Para frutas e hortaliças: ≤ 60–70 °C.
+  set_point:
+    check: Controle por set point de temperatura
+    check_help: >-
+      Se ativo, o auxiliar regula sua potência para manter
+      a temperatura de saída no valor objetivo.
+    label: Set point [°C]
+  nocturno:
+    label: Disponível para operação noturna
+    help: >-
+      Resistência elétrica: disponível se houver rede elétrica.
+      Queimador de biomassa: geralmente disponível.
+biomasa:
+  titulo: Parâmetros do queimador de biomassa
+  combustible: Combustível
+  otro: Outro (inserir manualmente)
+  opcion:
+    lena: Lenha seca (~20% UR)
+    pellets: Pellets de madeira
+    girasol: Casca de girassol
+    bagazo: Bagaço de cana (seco)
+  pci:
+    label: PCI [MJ/kg]
+    help: Poder calorífico inferior do combustível.
+  nombre_combustible: Nome do combustível
+  eficiencia: Eficiência do queimador [%]
+  consumo_estimado: >-
+    💡 Consumo estimado à potência efetiva ({potencia:.2f} kW):
+    **{consumo:.2f} kg/h** de {combustible}
+resistencia:
+  titulo: Parâmetros da resistência elétrica
+  especificar_tension: Especificar tensão de alimentação
+  tension:
+    label: Tensão [V]
+    help: 220 V monofásico ou 380 V trifásico.
+  corriente:
+    label: Corrente estimada
+    help: I = P / (V × cos_phi), cos_phi = 0,85.
+calendario:
+  titulo: 🌅 Calendário de partida (híbrido manhã/tarde)
+  intro: >-
+    Por padrão o auxiliar opera **de dia** (quando há sol, segundo I_g)
+    a menos que você habilite operação noturna. Se em vez disso você definir
+    um **calendário de partida**, o queimador opera **apenas nessas janelas
+    horárias** (manhã e/ou entardecer), independente do sol — o padrão do
+    secador híbrido solar-biomassa estilo ADITAL, onde o coletor cobre o
+    meio-dia e a lenha inicia/reforça nas bordas do dia. Aplica-se aos
+    modos transitórios (Dia real, multidia e janela de produção).
+  usar:
+    label: Usar calendário de partida
+    help: "Desmarcado: o auxiliar opera por irradiância (comportamento padrão)."
+  n_cargas: Número de cargas diárias
+  carga_inicio: Carga {i} — hora de início [h]
+  carga_duracion: Carga {i} — duração [h]
+  cobertura: >-
+    ⏱️ Cobertura total: **{horas:.1f} h/dia** em {n} janela(s).
+    Fora delas o auxiliar fica desligado.
+aplicar: ⚙️ Aplicar auxiliar
+error_config: "❌ Erro de configuração: {exc}"
+advertencias_titulo: Advertências de projeto
+sin_advertencias: ✅ Auxiliar configurado sem advertências.
+efecto:
+  titulo: Estimativa do efeito térmico
+  t_entrada:
+    label: Temperatura de entrada no auxiliar [°C]
+    hint_serie: T_saída do coletor (modo série).
+    hint_respaldo: T_ambiente (modo reserva independente).
+  caudal:
+    label: Vazão mássica [kg/s]
+    hint_colector: "Tomado do coletor: {q:.1f} L/s → ~{kg:.3f} kg/s"
+    hint_camara: Tomado da câmara de secagem.
+    hint_default: Vazão de ar seco que passa pelo auxiliar.
+  error_calculo: "❌ Erro no cálculo: {exc}"
+  t_entrada_metric: T entrada
+  t_salida: T saída
+  potencia_efectiva:
+    label: Potência efetiva
+    help: "Fração ativa: {frac:.0%}"
+  consumo_biomasa:
+    label: Consumo de biomassa
+    help: À potência efetiva de operação.
+  consumo_electrico: Consumo elétrico
+  set_point_activo: >-
+    ℹ️ Controle de set point ativo: o auxiliar opera a {frac:.0%} de sua
+    potência nominal para manter {t_salida:.1f} °C na saída.
+resumen:
+  titulo: Resumo da configuração
+  tipo: "**Tipo:** {v}"
+  modo: "**Modo:** {v}"
+  potencia: "**Potência nominal:** {v:.2f} kW"
+  fraccion: "**Fração operação:** {v} %"
+  t_max: "**T_máx saída:** {v:.0f} °C"
+  set_point: "**Set point:** {v}"
+  set_point_valor: "{v:.0f} °C"
+  set_point_no: Não definido
+  nocturno: "**Disponível noturno:** {v}"
+  combustible: "**Combustível:** {v}"
+  pci: "**PCI:** {v:.1f} MJ/kg"
+  pci_no: "**PCI:** —"
+  eta: "**η queimador:** {v:.0%}"
+  eta_no: "**η queimador:** —"
+  tension: "**Tensão:** {v:.0f} V"
+  tension_no: "**Tensão:** Não especificada"
+si: Sim
+"no": Não
+guardar:
+  txt: Salvar configuração do auxiliar (.txt)
+  json: Salvar configuração do auxiliar (.json)

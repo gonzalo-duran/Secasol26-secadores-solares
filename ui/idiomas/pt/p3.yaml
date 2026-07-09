@@ -1,0 +1,369 @@
+header: Coletor Solar de Ar
+caja_no_aplica: >-
+  A tipologia **Caixa** não tem coletor solar externo:
+  a câmara atua como coletor. Esta seção não se aplica.
+cargar:
+  titulo: 📥 Carregar configuração salva (.json)
+  uploader: Envie um arquivo .json do coletor salvo anteriormente
+  error_reconstruccion: "❌ Erro reconstruindo o coletor: {exc}"
+  exito: ✅ Coletor carregado do JSON ({n} valores da sessão foram reiniciados).
+tipo:
+  titulo: Tipo de coletor
+  label: Configuração do canal de fluxo
+  opcion:
+    "1": Tipo 1 — Canal único, absorvedor no fundo
+    "2": Tipo 2 — Absorvedor a meia altura, ambos os canais ativos
+    "3": Tipo 3 — Absorvedor a meia altura, canal inferior ativo (superior estanque)
+    "4": Tipo 4 — Absorvedor a meia altura, canal superior ativo (inferior estanque)
+  ayuda:
+    "1": >-
+      O absorvedor está no fundo do corpo do coletor.
+      O ar circula pelo canal único entre a cobertura e o absorvedor.
+      É a configuração mais simples e comum.
+    "2": >-
+      O absorvedor divide o corpo em dois canais.
+      O ar circula pelos dois canais simultaneamente, o que dobra a vazão
+      e melhora a extração de calor.
+    "3": >-
+      O absorvedor divide o corpo em dois canais.
+      O ar circula apenas pelo canal inferior (absorvedor–fundo).
+      O canal superior fica estanque e atua como isolamento adicional.
+    "4": >-
+      O absorvedor divide o corpo em dois canais.
+      O ar circula apenas pelo canal superior (cobertura–absorvedor).
+      O canal inferior fica estanque.
+  esquema_titulo: 📐 Seção transversal dos 4 tipos
+  esquema_caption: Seção transversal comparativa dos 4 tipos de coletor.
+materiales:
+  titulo: Materiais do coletor unitário
+  usuario: Definido pelo usuário
+  props_cubierta: "Propriedades da cobertura definida pelo usuário:"
+  props_placa: "Propriedades da placa absorvedora definida pelo usuário:"
+  props_aislante: "Propriedades do isolante definido pelo usuário:"
+  props_fondo: "Propriedades do fundo/carcaça definido pelo usuário:"
+  cubierta_titulo: Cobertura transparente
+  cubierta_label: Material da cobertura
+  espesor_mm: Espessura [mm]
+  espesor_cm: Espessura [cm]
+  n_cubiertas:
+    label: Nº de coberturas
+    help: >-
+      1 cobertura é o padrão. 2 coberturas reduzem as perdas
+      superiores (melhor em climas frios ou ventosos) mas diminuem a
+      transmitância solar.
+  esp_cub_cub:
+    label: Espaçamento entre coberturas [mm]
+    help: >-
+      Cavidade de ar entre as duas coberturas. Faixa
+      ótima 20–40 mm (Duffie & Beckman): minimiza a convecção
+      natural mantendo a resistência condutiva.
+  placa_titulo: Placa absorvedora
+  placa_label: Material da placa
+  placa_espesor_help: >-
+    Dado geométrico/diagnóstico: o modelo é quase-estacionário e
+    assume capacitância térmica da placa desprezível, então esta
+    espessura **não entra no balanço térmico** nem muda o desempenho
+    calculado.
+  aislante_titulo: Isolante térmico
+  aislante_label: Material isolante
+  fondo_titulo: Fundo / Carcaça
+  fondo_label: Material do fundo
+geometria:
+  titulo: Geometria e condição de projeto
+  ancho:
+    label: Largura do canal [m]
+    help: >-
+      Largura interna do canal de fluxo de um módulo unitário
+      (perpendicular ao fluxo). Em um banco, a largura total resulta
+      dos módulos em paralelo.
+  largo:
+    label: Comprimento do coletor [m]
+    help: >-
+      Comprimento do módulo na direção do fluxo. É a principal
+      variável de projeto: quanto mais comprido, maior o salto térmico do ar
+      mas também maior a perda de carga. A avaliação gráfica abaixo
+      ajuda a encontrar o comprimento ótimo.
+  espaciado_t1:
+    label: Espaçamento cobertura–placa [mm]
+    help: "Altura do canal único de fluxo. Típico: 15–50 mm."
+  espaciado_t234:
+    label: Canal superior cobertura–absorvedor [mm]
+    help: "Altura do canal superior (cobertura–absorvedor). Típico: 15–50 mm."
+  espaciado_inferior:
+    label: Canal inferior absorvedor–fundo [mm]
+    help: "Altura do canal inferior (absorvedor–fundo). Típico: 15–50 mm."
+  velocidad:
+    label: Velocidade de projeto [m/s]
+    help: >-
+      Velocidade superficial do ar no canal ativo.
+      Determina a vazão por unidade e a perda de carga.
+      Faixa recomendada: 0,3–3,0 m/s.
+  preview: >-
+    Seção do canal: {seccion:.1f} cm²  |  Vazão por unidade:
+    {caudal:.2f} L/s  |  Área de captação: {area:.2f} m²
+  preview_inferior: "  |  Seção inferior: {seccion:.1f} cm²"
+banco:
+  titulo: Banco de coletores
+  n_serie:
+    label: Coletores em série por ramal
+    help: O ar passa por N coletores consecutivos. Aumenta o ΔT de saída.
+  n_paralelo:
+    label: Ramais em paralelo
+    help: >-
+      Ramais paralelos. O ventilador move a soma das vazões de
+      todos os ramais. Em grande escala pode haver dezenas de ramais
+      (ex. ADITAL: 26 coletores descarregando no duto mestre).
+  caudal_total:
+    label: Vazão total ao ventilador
+    help: n_paralelo × vazão por unidade. Vazão volumétrica nas condições de projeto.
+  area_total: Área de captação total
+  camino:
+    label: Caminho do ar
+    help: n_série × comprimento da unidade. Comprimento total percorrido pelo ar.
+cano:
+  titulo: "**Duto mestre (manifold do banco)**"
+  intro: >-
+    Em grande escala os ramais não descarregam direto no ventilador: cada
+    ramal entrega seu ar por uma **boca** (com campânula de redução e
+    registro borboleta) a um **duto mestre** que corre ao longo do banco e
+    conduz a vazão acumulada até o ventilador (estilo túnel ADITAL).
+    Trabalha **em depressão** (a montante do ventilador) e sua seção cresce
+    em direção ao ventilador para manter a velocidade limitada à medida que
+    soma vazão. Seu ΔP soma-se ao que o ventilador vê (mostrado em **P6**) e
+    sua perda/ganho térmico entra no pipeline da janela de produção.
+  usar:
+    label: Incluir duto mestre
+    help: >-
+      Marcado: o manifold é modelado explicitamente (atrito +
+      acessórios de boca + balanço térmico com o ambiente).
+      Desmarcado: conexão direta simples (o ΔP de distribuição
+      cai na heurística de dutos do ventilador em P6).
+  largo:
+    label: Comprimento [m]
+    help: >-
+      Comprimento total do duto, que percorre o banco reunindo
+      as bocas dos ramais (≈ a largura do campo de coletores).
+      ADITAL: 18 m. O atrito é avaliado sobre este comprimento.
+  ancho:
+    label: Largura da seção [m]
+    help: >-
+      Largura da seção transversal retangular no **extremo do
+      ventilador**, onde já circula a vazão total do banco
+      (seção representativa do modelo de pré-dimensionamento).
+      ADITAL: 1,0 m.
+  alto:
+    label: Altura da seção [m]
+    help: >-
+      Altura da seção transversal no extremo do ventilador.
+      Junto com a largura define a velocidade troncal
+      v = Q_total / (largura × altura). ADITAL: 0,90 m.
+  aislado:
+    label: Isolado termicamente
+    help: >-
+      O duto perde calor ao ambiente por convecção externa
+      (vento), mas se sua face superior está ao sol também
+      ganha radiação: a perda líquida costuma ser pequena.
+      ADITAL: não isolado, ΔT líquido ≈ −3 °C.
+  aporte:
+    label: Ganho solar (face superior exposta)
+    help: >-
+      A face superior do duto exposta ao céu coleta radiação
+      solar e compensa parte da perda convectiva.
+      ADITAL: exposta (chapa galvanizada).
+  mat_aisl:
+    label: Material isolante
+    help: >-
+      Material do catálogo de isolantes (mesmo catálogo
+      do coletor e da câmara). Define a condutividade k
+      da camada.
+  esp_aisl: Espessura do isolante [cm]
+  absort:
+    label: Absortância solar da face superior [-]
+    help: >-
+      Absortância solar da superfície que recebe o sol.
+      Chapa pintada escura ≈ 0,90 (padrão);
+      galvanizado nu brilhante ≈ 0,35 (caso ADITAL).
+  cubierta:
+    label: Cobertura translúcida (opcional)
+    help: >-
+      Cobertura transparente sobre a face superior
+      (catálogo de coberturas do coletor): o ganho é
+      afetado por τ e a cavidade de ar reduz a
+      perda convectiva (mini-coletor).
+  sin_cubierta: (sem cobertura — chapa nua)
+  sec_var:
+    label: Seção crescente (variável ao longo do duto)
+    help: >-
+      O duto começa com seção pequena no extremo distante
+      e cresce em direção ao ventilador para manter a velocidade
+      limitada à medida que acumula vazão (interpolação linear).
+      Melhora a uniformidade de distribuição frente a um duto
+      constante pequeno, com menos material que um constante grande.
+  ancho_ini:
+    label: Largura da seção inicial [m]
+    help: Seção no extremo distante do ventilador (primeira boca).
+  alto_ini: Altura da seção inicial [m]
+  preview_crece: >-
+    Seção cresce {a_ini:.2f} → {a_fin:.2f} m² ·
+    v limitada a **{v_max:.1f} m/s** (extremo ventilador {v_fin:.1f} m/s)
+  preview_constante: >-
+    Seção constante {a_fin:.2f} m² ·
+    v máx **{v_max:.1f} m/s** (extremo ventilador {v_fin:.1f} m/s)
+  preview_dp: >-
+    {sec} · ΔP duto mestre ≈ **{total:.0f} Pa**
+    (atrito {friccion:.1f} + acessórios {accesorios:.1f}).
+    Fluxo acumulado ao longo do duto: a seção crescente mantém a
+    velocidade limitada com menos material que um duto grande constante.
+  invalido: "Duto mestre inválido: {e}"
+error_validacion: "**Erro de validação** ({codigo})\n\n{err}"
+advertencias:
+  resumen_criticas: >-
+    🚨 O projeto do coletor tem **{n} advertência(s)
+    crítica(s)**. Revise o detalhe abaixo antes de calcular.
+  resumen_warnings: >-
+    ⚠️ O projeto do coletor tem **{n} advertência(s)**.
+    Convém revisar o detalhe abaixo.
+  titulo_expander: Advertências de projeto ({nc} críticas, {nw} avisos, {ni} info)
+  sin_advertencias: Projeto do coletor sem advertências.
+eval:
+  titulo: Avaliação do desempenho do coletor
+  falta_emplazamiento: Configure o local (P2) para habilitar a avaliação.
+  falta_clima: Baixe os dados climáticos (P2) para habilitar a avaliação.
+  modo:
+    diario: Diário
+    ventana: Janela de produção
+    anual: Anual
+  modo_caption: >-
+    Modo de análise: **{modo}** (configurado em P1)  |
+    Inclinação: {pend:.0f}°  |  Ano climático: {anio}
+  albedo:
+    label: Albedo do solo (superfície circundante)
+    help: >-
+      Refletância solar do solo ao redor do coletor. Alimenta a
+      componente refletida da POA (GHI·ρ·(1−cos β)/2). Seu efeito cresce
+      com a inclinação: em um coletor vertical, metade de GHI·ρ
+      chega ao plano do coletor.
+    personalizado: ρ personalizado
+  boton: Calcular desempenho do coletor
+  sin_datos_dia: Não há dados para o dia {fecha} no arquivo climático.
+  spinner_dia: Avaliando coletor para {fecha}...
+  spinner_ventana: Avaliando coletor sobre a janela ({horas} horas)...
+  spinner_anual: Avaliando coletor para os 12 meses representativos...
+  ventana_error: "Não foi possível recortar a janela: {msg}"
+  resultados_titulo: "#### Resultados da avaliação"
+  diario:
+    t_max: T saída máx (dia)
+    t_mediodia: T saída ao meio-dia
+    dt_max: ΔT máx (saída − ambiente)
+    tab_a: 9a · T saída vs hora
+    tab_b: 9b · Perfil T fluido ao meio-dia
+    sin_radiacion: Não há radiação solar suficiente ao meio-dia para calcular o perfil.
+  ventana:
+    t_max: T saída máx (janela)
+    dt_medio: ΔT médio diurno (POA > 50)
+    horas_40: Horas com T saída > 40 °C
+    tab_series: Séries sobre a janela
+    tab_perfil: Perfil T fluido (meio-dia, 1º dia)
+    caption_series: >-
+      Séries horárias de **dia e noite** (à noite o ar não se
+      aquece → T_saída ≈ T_amb). Marcas: POA máx (◆) e meio-dia
+      solar (▲) de cada dia.
+    perfil_label: primeiro dia de {lapso}
+    caption_perfil: >-
+      ⚠️ Este gráfico representa **apenas o meio-dia solar do
+      primeiro dia** da janela de produção.
+    sin_radiacion: >-
+      Não há radiação suficiente ao meio-dia do primeiro dia para
+      calcular o perfil T(x).
+    caption_vista_previa: >-
+      Prévia à **velocidade de projeto** do módulo. O cálculo de
+      produção (P7) roda o coletor novamente na vazão real imposta pelo
+      ventilador do sistema.
+  anual:
+    t_max_mes: T saída máx (melhor mês)
+    t_min_mes: T saída mín (pior mês)
+    dt_min: ΔT mín do coletor
+    tab_a: 9a · T saída vs mês
+    tab_b: 9b · Perfil T fluido por mês
+    caption_mediodia: Avaliação no meio-dia solar do dia 15 de cada mês.
+    sin_resultados: Não foram obtidos resultados válidos. Verifique se o clima tem radiação suficiente.
+campo:
+  titulo: Avaliação do campo de coletores
+  intro: >-
+    Rede hidráulica do **banco + duto mestre** (metodologia ASHRAE
+    cap. 21: atrito Darcy-Weisbach por trecho + perdas singulares
+    de boca): distribuição real de vazão entre ramais, temperatura de
+    saída de cada ramal na sua própria vazão, mistura no manifold e
+    T do fluxo na saída do duto mestre.
+  origen_p4: a vazão do sistema configurada em P4 (vazão única S41)
+  origen_banco: a vazão de projeto do banco (não há câmara configurada)
+  q:
+    label: Vazão total [L/s]
+    help: "Vazão movida pelo ventilador. Padrão: {origen}."
+  t_amb: T ambiente [°C]
+  poa:
+    label: POA [W/m²]
+    help: Irradiância sobre o plano do coletor (ponto de operação representativo).
+  viento: Vento [m/s]
+  boton: Avaliar campo de coletores
+  spinner: Resolvendo rede hidráulica + térmica de {n} ramais...
+  t_salida_cano: T saída do duto mestre
+  delta_cano: "{v:+.1f} K no duto"
+  t_mezcla: T de mistura do banco
+  desuniformidad:
+    label: Desuniformidade de distribuição
+    help: (q_máx − q_mín) / q_médio. Abaixo de 10 % considera-se boa distribuição.
+  dp_sistema:
+    label: ΔP do sistema (campo)
+    help: "ΔP de trajetória equilibrada: ramal + tronco do duto mestre."
+  dp_troncal:
+    label: ΔP do tronco do duto
+    help: >-
+      Perda apenas do manifold (boca 1 distante → ventilador),
+      isolada do ramal. É o que responde à compensação
+      de seção do duto.
+  v_troncal:
+    label: v troncal (mín → máx)
+    help: >-
+      Velocidade do ar ao longo do duto (extremo distante →
+      ventilador). Uma seção crescente a mantém limitada ao
+      acumular vazão; uma seção pequena constante a dispara
+      perto do ventilador.
+  convergio: convergiu
+  no_convergio: "**não convergiu**"
+  caption_reparto: >-
+    Distribuição resolvida em {n} iterações ({estado}).
+    q por ramal: {qmin:.1f} – {qmax:.1f} L/s.
+figuras:
+  poa_wm2: POA [W/m²]
+  t_absorbedor: T absorvedor [°C]
+  t_salida: T saída do coletor [°C]
+  t_ambiente: T ambiente [°C]
+  poa_max_dia: POA máx (dia)
+  mediodia_solar: Meio-dia solar
+  titulo_ventana: Desempenho do coletor sobre a janela {lapso}
+  caudal_rama: Vazão por ramal [L/s]
+  t_salida_rama: T saída do ramal [°C]
+  v_troncal: v troncal [m/s]
+  subtitulo_reparto: Distribuição de vazão e temperatura por ramal
+  subtitulo_v_troncal: Velocidade no tronco
+  eje_boca_tramo: Boca / trecho (1 = extremo distante do ventilador)
+  eje_boca: Boca (1 = extremo distante do ventilador)
+  eje_t_salida: T saída [°C]
+  titulo_campo: Campo de coletores — distribuição, temperatura e velocidade do tronco
+  marca_mediodia: Meio-dia ({hora})
+  marca_poa_max: POA máx ({hora})
+  t_fluido: T fluido [°C]
+  t_entrada_annot: T entrada = {v:.1f} °C
+  eje_x_colector: Posição x ao longo do coletor [m]
+  eje_t_fluido: Temperatura do fluido [°C]
+  titulo_salida_dia: Temperatura de saída do coletor — {fecha}
+  titulo_perfil_dia: Perfil de temperatura do fluido — meio-dia solar — {fecha}
+  poa_mediodia: POA meio-dia [W/m²]
+  t_salida_mediodia: T saída do coletor — meio-dia [°C]
+  t_amb_mediodia: T ambiente — meio-dia [°C]
+  titulo_salida_anual: Temperatura de saída do coletor — meio-dia solar por mês (dia 15)
+  titulo_perfil_anual: Perfil de temperatura do fluido — meio-dia solar por mês
+guardar:
+  txt: Salvar configuração do coletor (.txt)
+  json: Salvar configuração do coletor (.json)

@@ -11,6 +11,14 @@ decisiones de diseño en [[docs/decisiones]].
 
 ## En progreso
 
+- **Internacionalización ES/EN/PT (mejora 37)** — plan en
+  `docs/notas/plan_i18n.md`. **F0–F4 hechas** (S49): infraestructura
+  (`traducciones.py` + `idiomas.py` + `ui/idiomas/`), selector 🌐, fix
+  `nav_seccion`, **toda la UI de las 7 pestañas** (P1–P7) migrada + componentes
+  compartidos (carta psicrométrica, panel TD de cámara, selector de espesores,
+  esquemas), 24 tests. Residuo: solo la vista del manual (`manual.py`,
+  `manual_render.py`) que es la fase F8. Pendientes F5–F9: advertencias por
+  código, PDF, catálogos, manual multiidioma.
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).
 

@@ -28,6 +28,7 @@ from calculos.balance_global import (
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from core.proyecto import ModoAnalisis, Tipologia
 from ui.componentes.graficas import grafica_termodinamica_camara, mostrar_plotly
+from ui.componentes.idiomas import idioma_actual, t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
@@ -66,13 +67,14 @@ def _resumen_camara(cam) -> tuple[float | None, float, str, bool]:
 
 
 def _mostrar_errores(errores: list[str]) -> None:
+    # Los mensajes de error vienen de calculos/ y quedan en ES en v1 (fase F5).
     for e in errores:
-        st.error(f"❌ {e}")
+        st.error(f"❌ {e}")  # i18n: exento (mensaje de calculos/, F5)
 
 
 def _mostrar_advertencias(advs: list[str]) -> None:
     for a in advs:
-        st.warning(f"⚠️ {a}")
+        st.warning(f"⚠️ {a}")  # i18n: exento (mensaje de calculos/, F5)
 
 
 def _desviacion_caudal_natural(res_chim: dict, proyecto) -> float | None:
@@ -96,7 +98,7 @@ def _render_chimenea_resultados(res_chim: dict, proyecto) -> None:
     Solo se llama cuando ``res.chimenea is not None`` (motor=None + chimenea
     + cámara presentes, ver `calcular_todo`).
     """
-    st.subheader("Chimenea Solar (convección natural)")
+    st.subheader(t("p7.chimenea.titulo"))
 
     m_punto = float(res_chim.get("m_punto_kgs", 0.0))
     # Caudal volumétrico a 1.1 kg/m³ (ρ_amb típica 25 °C, coherente con
@@ -105,13 +107,13 @@ def _render_chimenea_resultados(res_chim: dict, proyecto) -> None:
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
-        "Caudal natural",
+        t("p7.chimenea.caudal_natural.label"),
         f"{m_punto * 1000:.1f} g/s",
-        help="ṁ de equilibrio del lazo (cámara + colector + chimenea).",
+        help=t("p7.chimenea.caudal_natural.help"),
     )
-    c2.metric("Q volumétrico", f"{Q_m3h:.0f} m³/h", help="ṁ / ρ_amb (ρ ≈ 1.1 kg/m³).")
-    c3.metric("v chimenea", f"{res_chim.get('v_chim_ms', 0.0):.2f} m/s")
-    c4.metric("Re chimenea", f"{res_chim.get('Re_chimenea', 0.0):.0f}")
+    c2.metric(t("p7.chimenea.q_vol.label"), f"{Q_m3h:.0f} m³/h", help=t("p7.chimenea.q_vol.help"))
+    c3.metric(t("p7.chimenea.v_chim"), f"{res_chim.get('v_chim_ms', 0.0):.2f} m/s")
+    c4.metric(t("p7.chimenea.re"), f"{res_chim.get('Re_chimenea', 0.0):.0f}")
 
     dP_tiro = float(res_chim.get("delta_P_tiro_Pa", 0.0))
     dP_chim = float(res_chim.get("delta_P_chimenea_Pa", 0.0))
@@ -119,24 +121,24 @@ def _render_chimenea_resultados(res_chim: dict, proyecto) -> None:
     H_eff = float(res_chim.get("H_eff_m", 0.0))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("ΔP tiro", f"{dP_tiro:.2f} Pa", help="Empuje hidrostático disponible (g·H_eff·Δρ).")
+    c1.metric(
+        t("p7.chimenea.dp_tiro.label"), f"{dP_tiro:.2f} Pa", help=t("p7.chimenea.dp_tiro.help")
+    )
     c2.metric(
-        "ΔP chimenea", f"{dP_chim:.2f} Pa", help="Fricción + singulares del ducto de chimenea."
+        t("p7.chimenea.dp_chim.label"), f"{dP_chim:.2f} Pa", help=t("p7.chimenea.dp_chim.help")
     )
     c3.metric(
-        "ΔP resto lazo",
+        t("p7.chimenea.dp_resto.label"),
         f"{dP_resto:.2f} Pa",
-        help="Pérdidas de colector + cámara escaladas ∝ (ṁ/ṁ_diseño)².",
+        help=t("p7.chimenea.dp_resto.help"),
     )
-    c4.metric("H efectiva", f"{H_eff:.2f} m", help="altura_chimenea + alto_cámara.")
+    c4.metric(t("p7.chimenea.h_eff.label"), f"{H_eff:.2f} m", help=t("p7.chimenea.h_eff.help"))
 
     # Caption con el balance del lazo (verificación cualitativa de cierre).
     if dP_tiro > 0:
         balance_err = abs(dP_tiro - dP_chim - dP_resto) / dP_tiro
         st.caption(
-            f"Balance del lazo: ΔP_tiro = ΔP_chim + ΔP_resto "
-            f"({dP_tiro:.2f} ≈ {dP_chim:.2f} + {dP_resto:.2f}, "
-            f"error {balance_err:.1%})."
+            t("p7.chimenea.balance", tiro=dP_tiro, chim=dP_chim, resto=dP_resto, err=balance_err)
         )
 
     # Comparación con caudal de diseño de cámara: si difiere >30%, warning.
@@ -144,11 +146,12 @@ def _render_chimenea_resultados(res_chim: dict, proyecto) -> None:
     if desv is not None and desv > 0.30:
         m_design = proyecto.camara.flujo.caudal_masico_kg_s
         st.warning(
-            f"⚠️ El caudal natural ({m_punto * 1000:.1f} g/s) difiere "
-            f"**{desv:.0%}** del caudal de diseño de la cámara "
-            f"({m_design * 1000:.1f} g/s). Revisar diámetro/altura de la "
-            "chimenea en P6 o el caudal de diseño en P4 para que ambos "
-            "queden consistentes."
+            t(
+                "p7.chimenea.desviacion_caudal",
+                nat=m_punto * 1000,
+                desv=desv,
+                design=m_design * 1000,
+            )
         )
 
     # Advertencias propias de la solución del lazo (laminar, v alta, sin tiro).
@@ -168,48 +171,48 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         _mostrar_errores(res_tr.errores)
         return
     if res_tr.advertencias:
-        with st.expander("Advertencias del cálculo", expanded=False):
+        with st.expander(t("p7.transitorio.advertencias"), expanded=False):
             _mostrar_advertencias(res_tr.advertencias)
 
     # ---- Tarjetas resumen ----
-    st.subheader("Resumen del prediseño")
+    st.subheader(t("p7.transitorio.resumen"))
     c1, c2, c3, c4 = st.columns(4)
     t_h_obj = (
         res_tr.t_X_obj_alcanzado_s / 3600.0 if res_tr.t_X_obj_alcanzado_s is not None else None
     )
     c1.metric(
-        "X_obj alcanzado",
-        f"{t_h_obj:.1f} h" if t_h_obj is not None else "No (>horizonte)",
-        help="Tiempo desde t=0 en que la humedad del producto baja a X_obj.",
+        t("p7.transitorio.x_obj.label"),
+        f"{t_h_obj:.1f} h" if t_h_obj is not None else t("p7.transitorio.x_obj.no"),
+        help=t("p7.transitorio.x_obj.help"),
     )
     c2.metric(
-        "Masa agua evaporada",
+        t("p7.transitorio.masa_agua"),
         f"{res_tr.masa_agua_evaporada_kg:.2f} kg",
     )
     c3.metric(
-        "Energía secado",
+        t("p7.transitorio.energia_secado.label"),
         f"{res_tr.energia_secado_MJ:.2f} MJ",
-        help="masa_agua × Lv",
+        help=t("p7.transitorio.energia_secado.help"),
     )
     cop_txt = f"{res_tr.COP_secado:.2f}" if res_tr.COP_secado is not None else "—"
-    c4.metric("COP_secado", cop_txt)
+    c4.metric(t("p7.transitorio.cop"), cop_txt)
 
     c5, c6, c7, c8 = st.columns(4)
-    c5.metric("E_solar útil", f"{res_tr.energia_solar_util_MJ:.2f} MJ")
-    c6.metric("E_auxiliar", f"{res_tr.energia_auxiliar_MJ:.2f} MJ")
-    c7.metric("E_motor", f"{res_tr.energia_motor_MJ:.2f} MJ")
+    c5.metric(t("p7.transitorio.e_solar"), f"{res_tr.energia_solar_util_MJ:.2f} MJ")
+    c6.metric(t("p7.transitorio.e_aux"), f"{res_tr.energia_auxiliar_MJ:.2f} MJ")
+    c7.metric(t("p7.transitorio.e_motor"), f"{res_tr.energia_motor_MJ:.2f} MJ")
     fs_txt = f"{res_tr.fraccion_solar:.2f}" if res_tr.fraccion_solar is not None else "—"
-    c8.metric("Fracción solar", fs_txt)
+    c8.metric(t("p7.transitorio.fraccion_solar"), fs_txt)
 
     # ---- Series temporales ----
     if res_tr.camara is None or res_tr.forzantes_aplicadas is None:
-        st.warning("Sin trayectorias para graficar.")
+        st.warning(t("p7.transitorio.sin_trayectorias"))
         return
 
     t_h_fz = res_tr.forzantes_base.t_s / 3600.0
     t_h_cam = res_tr.camara.t_array_s / 3600.0
 
-    st.subheader("Trayectorias del horizonte")
+    st.subheader(t("p7.transitorio.trayectorias"))
 
     # --- Panel 1: Aire externo (T_amb, I_g, v_viento) ---
     fig1 = make_subplots(specs=[[{"secondary_y": True}]])
@@ -217,7 +220,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_fz,
             y=res_tr.forzantes_base.T_amb_K - 273.15,
-            name="T_amb",
+            name=t("p7.transitorio.fig1.t_amb"),
             line=dict(color="#1f77b4", width=2),
         ),
         secondary_y=False,
@@ -226,7 +229,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_fz,
             y=res_tr.forzantes_base.I_g_W_m2,
-            name="I_g (POA)",
+            name=t("p7.transitorio.fig1.i_g"),
             line=dict(color="#ff7f0e", width=1.5, dash="dot"),
         ),
         secondary_y=True,
@@ -235,16 +238,16 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_fz,
             y=res_tr.forzantes_base.v_viento_ms,
-            name="v_viento",
+            name=t("p7.transitorio.fig1.v_viento"),
             line=dict(color="#2ca02c", width=1),
         ),
         secondary_y=False,
     )
-    fig1.update_yaxes(title_text="T_amb [°C] / v [m/s]", secondary_y=False)
-    fig1.update_yaxes(title_text="I_g [W/m²]", secondary_y=True)
-    fig1.update_xaxes(title_text="Tiempo [h]")
+    fig1.update_yaxes(title_text=t("p7.transitorio.fig1.eje_t"), secondary_y=False)
+    fig1.update_yaxes(title_text=t("p7.transitorio.fig1.eje_ig"), secondary_y=True)
+    fig1.update_xaxes(title_text=t("p7.transitorio.eje_tiempo"))
     fig1.update_layout(
-        title="Forzantes climáticas del horizonte",
+        title=t("p7.transitorio.fig1.titulo"),
         height=320,
         hovermode="x unified",
     )
@@ -256,7 +259,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_fz,
             y=res_tr.forzantes_base.T_ent_K - 273.15,
-            name="T_sal_colector",
+            name=t("p7.transitorio.fig2.t_sal_col"),
             line=dict(color="#d62728", width=2),
         )
     )
@@ -265,7 +268,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
             go.Scatter(
                 x=t_h_fz,
                 y=res_tr.forzantes_aplicadas.T_ent_K - 273.15,
-                name="T_ent_cámara (post-aux)",
+                name=t("p7.transitorio.fig2.t_ent_cam"),
                 line=dict(color="#9467bd", width=2),
             )
         )
@@ -273,14 +276,14 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
             go.Scatter(
                 x=t_h_fz,
                 y=res_tr.auxiliar.delta_T_K,
-                name="ΔT_auxiliar",
+                name=t("p7.transitorio.fig2.dt_aux"),
                 line=dict(color="#8c564b", width=1, dash="dash"),
             )
         )
-    fig2.update_xaxes(title_text="Tiempo [h]")
-    fig2.update_yaxes(title_text="T [°C] / ΔT [K]")
+    fig2.update_xaxes(title_text=t("p7.transitorio.eje_tiempo"))
+    fig2.update_yaxes(title_text=t("p7.transitorio.fig2.eje"))
     fig2.update_layout(
-        title="Acoplamiento colector → auxiliar → entrada de cámara",
+        title=t("p7.transitorio.fig2.titulo"),
         height=320,
         hovermode="x unified",
     )
@@ -292,7 +295,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_cam,
             y=res_tr.camara.T_prod_K - 273.15,
-            name="T_prod",
+            name=t("p7.transitorio.fig3.t_prod"),
             line=dict(color="#1f77b4", width=2),
         ),
         secondary_y=False,
@@ -301,16 +304,16 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_cam,
             y=res_tr.camara.X_prod_kg_kg,
-            name="X_prod",
+            name=t("p7.transitorio.fig3.x_prod"),
             line=dict(color="#2ca02c", width=2),
         ),
         secondary_y=True,
     )
-    fig3.update_yaxes(title_text="T_prod [°C]", secondary_y=False)
-    fig3.update_yaxes(title_text="X [kg/kg ms]", secondary_y=True)
-    fig3.update_xaxes(title_text="Tiempo [h]")
+    fig3.update_yaxes(title_text=t("p7.transitorio.fig3.eje_t"), secondary_y=False)
+    fig3.update_yaxes(title_text=t("p7.transitorio.fig3.eje_x"), secondary_y=True)
+    fig3.update_xaxes(title_text=t("p7.transitorio.eje_tiempo"))
     fig3.update_layout(
-        title="Producto: temperatura y humedad",
+        title=t("p7.transitorio.fig3.titulo"),
         height=320,
         hovermode="x unified",
     )
@@ -318,7 +321,7 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         fig3.add_vline(
             x=res_tr.t_X_obj_alcanzado_s / 3600.0,
             line=dict(color="orange", dash="dashdot", width=1.5),
-            annotation_text="X_obj alcanzado",
+            annotation_text=t("p7.transitorio.fig3.x_obj_marca"),
             annotation_position="top",
         )
     mostrar_plotly(fig3, nombre="transitorio_Tprod_X")
@@ -329,14 +332,14 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
         go.Scatter(
             x=t_h_cam,
             y=res_tr.camara.m_dot_w_kg_s * 3600.0,
-            name="ṁ_w",
+            name=t("p7.transitorio.fig4.m_dot"),
             line=dict(color="#1f77b4", width=2),
         )
     )
-    fig4.update_xaxes(title_text="Tiempo [h]")
-    fig4.update_yaxes(title_text="Tasa evaporación [kg/h]")
+    fig4.update_xaxes(title_text=t("p7.transitorio.eje_tiempo"))
+    fig4.update_yaxes(title_text=t("p7.transitorio.fig4.eje"))
     fig4.update_layout(
-        title="Tasa de evaporación de agua del producto",
+        title=t("p7.transitorio.fig4.titulo"),
         height=280,
         hovermode="x unified",
     )
@@ -345,120 +348,134 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
     # --- Panel 5: Chimenea solar (lazo natural) ---
     res_ch = getattr(res_tr, "chimenea", None)
     if res_ch is not None:
-        st.subheader("Chimenea Solar — lazo natural (convección)")
+        st.subheader(t("p7.transitorio.chim_titulo"))
         m_arr = np.asarray(res_ch["m_punto_kgs"])
         Tch_C = np.asarray(res_ch["T_chim_K"]) - 273.15
         dPT = np.asarray(res_ch["delta_P_tiro_Pa"])
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("ṁ promedio", f"{res_ch['m_promedio_kgs'] * 1000:.1f} g/s")
-        c2.metric("ṁ máximo", f"{res_ch['m_max_kgs'] * 1000:.1f} g/s")
-        c3.metric("T_chim min/max", f"{Tch_C.min():.1f} / {Tch_C.max():.1f} °C")
+        c1.metric(t("p7.transitorio.chim_prom"), f"{res_ch['m_promedio_kgs'] * 1000:.1f} g/s")
+        c2.metric(t("p7.transitorio.chim_max"), f"{res_ch['m_max_kgs'] * 1000:.1f} g/s")
+        c3.metric(t("p7.transitorio.chim_tminmax"), f"{Tch_C.min():.1f} / {Tch_C.max():.1f} °C")
         c4.metric(
-            "Horas sin tiro",
+            t("p7.transitorio.chim_sin_tiro.label"),
             f"{int(res_ch['horas_sin_tiro'])} h",
-            help="T_chim ≤ T_amb → caudal natural nulo en esa hora.",
+            help=t("p7.transitorio.chim_sin_tiro.help"),
         )
 
         c1, c2, c3 = st.columns(3)
         c1.metric(
-            "Iteraciones Picard",
+            t("p7.transitorio.chim_iter.label"),
             f"{res_ch['iteraciones']}",
-            help="Convergencia del lazo T_chim ↔ ṁ_nat.",
+            help=t("p7.transitorio.chim_iter.help"),
         )
         c2.metric(
-            "Convergencia",
-            "✅ sí" if res_ch["convergio"] else "❌ no",
-            help=f"|ΔT_chim final| = {res_ch['delta_T_chim_final_K']:.2f} K",
+            t("p7.transitorio.chim_conv.label"),
+            (
+                t("p7.transitorio.chim_conv.si")
+                if res_ch["convergio"]
+                else t("p7.transitorio.chim_conv.no")
+            ),
+            help=t("p7.transitorio.chim_conv.help", v=res_ch["delta_T_chim_final_K"]),
         )
-        c3.metric("H efectiva", f"{res_ch['H_eff_m']:.2f} m")
+        c3.metric(t("p7.transitorio.chim_heff"), f"{res_ch['H_eff_m']:.2f} m")
 
         fig_ch = make_subplots(specs=[[{"secondary_y": True}]])
         fig_ch.add_trace(
             go.Scatter(
-                x=t_h_fz, y=m_arr * 1000.0, name="ṁ natural", line=dict(color="#17becf", width=2)
+                x=t_h_fz,
+                y=m_arr * 1000.0,
+                name=t("p7.transitorio.chim_fig.m_nat"),
+                line=dict(color="#17becf", width=2),
             ),
             secondary_y=False,
         )
         fig_ch.add_trace(
-            go.Scatter(x=t_h_fz, y=Tch_C, name="T_chim", line=dict(color="#e377c2", width=2)),
+            go.Scatter(
+                x=t_h_fz,
+                y=Tch_C,
+                name=t("p7.transitorio.chim_fig.t_chim"),
+                line=dict(color="#e377c2", width=2),
+            ),
             secondary_y=True,
         )
         fig_ch.add_trace(
             go.Scatter(
                 x=t_h_fz,
                 y=dPT,
-                name="ΔP tiro [Pa]",
+                name=t("p7.transitorio.chim_fig.dp_tiro"),
                 line=dict(color="#7f7f7f", width=1, dash="dot"),
             ),
             secondary_y=False,
         )
-        fig_ch.update_yaxes(title_text="ṁ [g/s]  ·  ΔP_tiro [Pa]", secondary_y=False)
-        fig_ch.update_yaxes(title_text="T_chim [°C]", secondary_y=True)
-        fig_ch.update_xaxes(title_text="Tiempo [h]")
+        fig_ch.update_yaxes(title_text=t("p7.transitorio.chim_fig.eje_izq"), secondary_y=False)
+        fig_ch.update_yaxes(title_text=t("p7.transitorio.chim_fig.eje_der"), secondary_y=True)
+        fig_ch.update_xaxes(title_text=t("p7.transitorio.eje_tiempo"))
         fig_ch.update_layout(
-            title="Lazo natural por chimenea: caudal, T_chim y tiro disponible",
+            title=t("p7.transitorio.chim_fig.titulo"),
             height=320,
             hovermode="x unified",
         )
         mostrar_plotly(fig_ch, nombre="chimenea")
 
     # ---- Diagnósticos extra ----
-    with st.expander("Diagnósticos del horizonte"):
+    with st.expander(t("p7.transitorio.diagnosticos")):
         d1, d2, d3 = st.columns(3)
         d1.metric(
-            "T_prod máx",
+            t("p7.transitorio.t_prod_max"),
             f"{(res_tr.T_prod_max_K - 273.15):.1f} °C" if res_tr.T_prod_max_K is not None else "—",
         )
-        d2.metric("Horas anti-rehumect.", f"{res_tr.horas_clipeo_pol_B_s/3600.0:.2f} h")
-        d3.metric("Horas HR>95%", f"{res_tr.horas_HR_alta_s/3600.0:.2f} h")
+        d2.metric(
+            t("p7.transitorio.horas_anti_rehum"), f"{res_tr.horas_clipeo_pol_B_s/3600.0:.2f} h"
+        )
+        d3.metric(t("p7.transitorio.horas_hr"), f"{res_tr.horas_HR_alta_s/3600.0:.2f} h")
         if res_tr.auxiliar is not None:
             st.write(
-                f"**Auxiliar activo**: {res_tr.auxiliar.horas_activo_s/3600.0:.2f} h "
-                f"(fracción {res_tr.auxiliar.fraccion_horas_activo*100:.0f} %)"
+                t(
+                    "p7.transitorio.aux_activo",
+                    horas=res_tr.auxiliar.horas_activo_s / 3600.0,
+                    frac=res_tr.auxiliar.fraccion_horas_activo * 100,
+                )
             )
             st.write(
-                f"**ΔT_aux máx**: {res_tr.auxiliar.delta_T_max_K:.1f} K  |  "
-                f"**Q_aux máx**: {res_tr.auxiliar.Q_max_W:.0f} W"
+                t(
+                    "p7.transitorio.aux_dt",
+                    dt=res_tr.auxiliar.delta_T_max_K,
+                    q=res_tr.auxiliar.Q_max_W,
+                )
             )
 
 
 def _seccion_config(proyecto) -> None:
     """Muestra el estado de configuración de cada sección."""
-    st.subheader("Estado de configuración")
+    st.subheader(t("p7.config.titulo"))
 
     motor_o_chim_ok = (proyecto.motor is not None) or (
         proyecto.chimenea is not None and st.session_state.get("p6_chimenea_eval") is not None
     )
     if proyecto.motor is not None:
-        label_p6 = "P6 · Motor"
+        label_p6 = t("p7.config.p6_motor")
     elif proyecto.chimenea is not None:
-        label_p6 = "P6 · Chimenea"
+        label_p6 = t("p7.config.p6_chim")
     else:
-        label_p6 = "P6 · Motor / Chimenea"
+        label_p6 = t("p7.config.p6_ambos")
 
     items = [
-        ("P2 · Emplazamiento", proyecto.emplazamiento is not None),
+        (t("p7.config.p2_empl"), proyecto.emplazamiento is not None),
         (
-            "P2 · Clima (NASA POWER)",
+            t("p7.config.p2_clima"),
             proyecto.clima is not None and proyecto.clima.datos is not None,
         ),
-        ("P3 · Colector", proyecto.colector is not None),
-        ("P4 · Cámara de Secado", proyecto.camara is not None),
-        ("P5 · Auxiliar", proyecto.auxiliar is not None),
+        (t("p7.config.p3_col"), proyecto.colector is not None),
+        (t("p7.config.p4_cam"), proyecto.camara is not None),
+        (t("p7.config.p5_aux"), proyecto.auxiliar is not None),
         (label_p6, motor_o_chim_ok),
     ]
     cols = st.columns(len(items))
     for col, (label, ok) in zip(cols, items):
         col.metric(label, _estado(ok))
 
-    st.caption(
-        "✅ configurado · ❌ pendiente. **Mínimo para calcular:** la **Cámara (P4)**. "
-        "El **Clima (P2)** es obligatorio en modos multidía/anual/ventana (en Constantes "
-        "se sugieren valores por defecto). El **Colector (P3)** es obligatorio salvo "
-        "tipología Caja. **Auxiliar (P5)** y **Motor/Chimenea (P6)** son opcionales "
-        "(sin motor → convección natural)."
-    )
+    st.caption(t("p7.config.caption"))
 
 
 def _sugerir_condiciones(proyecto) -> tuple[float, float, float]:
@@ -511,19 +528,19 @@ def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
     colores = []
 
     if res.energia_solar_util_MJ is not None and res.energia_solar_util_MJ > 0:
-        etiquetas.append("Solar<br>(colector)")
+        etiquetas.append(t("p7.balance_fig.solar"))
         valores.append(res.energia_solar_util_MJ)
         colores.append("#f5a623")
     if res.energia_auxiliar_MJ is not None and res.energia_auxiliar_MJ > 0:
-        etiquetas.append("Auxiliar")
+        etiquetas.append(t("p7.balance_fig.auxiliar"))
         valores.append(res.energia_auxiliar_MJ)
         colores.append("#e05c2a")
     if res.energia_motor_MJ is not None and res.energia_motor_MJ > 0:
-        etiquetas.append("Motor")
+        etiquetas.append(t("p7.balance_fig.motor"))
         valores.append(res.energia_motor_MJ)
         colores.append("#9c27b0")
     if res.energia_secado_MJ is not None and res.energia_secado_MJ > 0:
-        etiquetas.append("Evaporación<br>(útil)")
+        etiquetas.append(t("p7.balance_fig.evaporacion"))
         valores.append(res.energia_secado_MJ)
         colores.append("#4caf50")
 
@@ -540,9 +557,9 @@ def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
             textposition="outside",
         )
     )
-    fig.update_yaxes(title_text="Energía [MJ]")
+    fig.update_yaxes(title_text=t("p7.balance_fig.eje"))
     fig.update_layout(
-        title_text="Balance energético del ciclo de secado",
+        title_text=t("p7.balance_fig.titulo"),
         height=350,
         showlegend=False,
     )
@@ -1267,25 +1284,22 @@ def _render_barridos_parametricos(
     from calculos.catalogo_parametros_barrido import parametros_para_tipologia
 
     st.divider()
-    st.subheader("🔀 Corridas paramétricas")
-    st.caption(
-        f"Variá un parámetro y compará hasta {_MAX_BARRIDOS} corridas (modo **{modo}**). "
-        "Los resultados son efímeros: viven solo en esta sesión."
-    )
+    st.subheader(t("p7.barridos.titulo"))
+    st.caption(t("p7.barridos.caption", max=_MAX_BARRIDOS, modo=modo))
 
     tipologia = proyecto.configuracion.tipologia
     params = parametros_para_tipologia(tipologia, modo)
     if not params:
-        st.info("No hay parámetros barrideables para esta tipología y modo.")
+        st.info(t("p7.barridos.sin_params"))
         return
 
     key_estado = f"p7_barridos_{modo}"
     barridos: list = st.session_state.get(key_estado, [])
 
-    with st.expander("➕ Configurar un nuevo barrido", expanded=not barridos):
+    with st.expander(t("p7.barridos.configurar"), expanded=not barridos):
         labels = {p.label: p for p in params}
         label_sel = st.selectbox(
-            "Parámetro a variar", list(labels.keys()), key=f"barrido_param_{modo}"
+            t("p7.barridos.parametro"), list(labels.keys()), key=f"barrido_param_{modo}"
         )
         parametro = labels[label_sel]
         st.caption(parametro.descripcion_corta)
@@ -1302,7 +1316,7 @@ def _render_barridos_parametricos(
         c1, c2, c3 = st.columns(3)
         with c1:
             min_ui = st.number_input(
-                f"Mínimo [{parametro.unidad_ui}]",
+                t("p7.barridos.minimo", unidad=parametro.unidad_ui),
                 min_value=float(lo_ui),
                 max_value=float(hi_ui),
                 value=float(min_def),
@@ -1310,7 +1324,7 @@ def _render_barridos_parametricos(
             )
         with c2:
             max_ui = st.number_input(
-                f"Máximo [{parametro.unidad_ui}]",
+                t("p7.barridos.maximo", unidad=parametro.unidad_ui),
                 min_value=float(lo_ui),
                 max_value=float(hi_ui),
                 value=float(max_def),
@@ -1318,7 +1332,7 @@ def _render_barridos_parametricos(
             )
         with c3:
             n_puntos = st.number_input(
-                "N° de puntos",
+                t("p7.barridos.n_puntos"),
                 min_value=2,
                 max_value=30,
                 value=_N_DEFAULT_POR_MODO.get(modo, 5),
@@ -1330,33 +1344,32 @@ def _render_barridos_parametricos(
         avanzados_modo = [k for k in KPIS_AVANZADOS if modo in k.modos_validos]
         kpis_extra: list[str] = []
         if avanzados_modo:
-            with st.expander("KPIs adicionales (avanzado)", expanded=False):
+            with st.expander(t("p7.barridos.kpis_avanzados"), expanded=False):
                 for k in avanzados_modo:
-                    if st.checkbox(f"{k.label} [{k.unidad}]", key=f"barrido_kpi_{modo}_{k.id}"):
+                    if st.checkbox(
+                        t("p7.barridos.kpi_check", label=k.label, unidad=k.unidad),
+                        key=f"barrido_kpi_{modo}_{k.id}",
+                    ):
                         kpis_extra.append(k.id)
 
         nombre_def = f"{parametro.label} ({len(barridos) + 1})"
         nombre = st.text_input(
-            "Nombre de la corrida", value=nombre_def, key=f"barrido_nombre_{modo}"
+            t("p7.barridos.nombre"), value=nombre_def, key=f"barrido_nombre_{modo}"
         )
 
         # Estimación de tiempo.
         t_base = st.session_state.get(f"p7_t_calc_base_s_{modo}")
         if t_base:
             t_est = t_base * int(n_puntos)
-            st.caption(
-                f"⏱️ Tiempo estimado ≈ {t_est:.0f} s ({int(n_puntos)} × {t_base:.1f} s base)."
-            )
+            st.caption(t("p7.barridos.t_estimado", est=t_est, n=int(n_puntos), base=t_base))
             if t_est > 120:
-                st.warning(
-                    f"El barrido podría tardar ~{t_est:.0f} s. Reducí N° de puntos si es mucho."
-                )
+                st.warning(t("p7.barridos.t_largo", est=t_est))
 
         bloqueado = len(barridos) >= _MAX_BARRIDOS
         if bloqueado:
-            st.warning(f"Ya hay {_MAX_BARRIDOS} barridos. Eliminá uno para correr otro.")
+            st.warning(t("p7.barridos.bloqueado", max=_MAX_BARRIDOS))
         correr = st.button(
-            "▶ Correr barrido", type="primary", key=f"barrido_run_{modo}", disabled=bloqueado
+            t("p7.barridos.correr"), type="primary", key=f"barrido_run_{modo}", disabled=bloqueado
         )
 
         if correr:
@@ -1378,9 +1391,18 @@ def _render_barridos_parametricos(
 
             def _cb(i, n, v, _status=status, _prog=prog, _p=parametro):
                 _prog.progress(i / n)
-                _status.text(f"Punto {i}/{n}: {_p.label} = {v:.4g} {_p.unidad_ui}")
+                _status.text(
+                    t(
+                        "p7.barridos.progreso_punto",
+                        i=i,
+                        n=n,
+                        label=_p.label,
+                        v=v,
+                        unidad=_p.unidad_ui,
+                    )
+                )
 
-            with st.spinner("Corriendo barrido..."):
+            with st.spinner(t("p7.barridos.spinner")):
                 resultado = correr_barrido(proyecto, cfg, callback_progreso=_cb)
             prog.empty()
             status.empty()
@@ -1399,36 +1421,38 @@ def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> N
     from calculos.catalogo_kpis_barrido import kpis_fijos_para_modo, obtener_kpi
 
     # Tarjetas de gestión (nombre, parámetro, N, eliminar).
-    st.markdown("#### Barridos activos")
+    st.markdown(t("p7.barridos.activos"))
     for idx, b in enumerate(list(barridos)):
         color = _paleta_color_barrido(idx)
         c1, c2 = st.columns([5, 1])
         with c1:
+            _tarjeta = t(
+                "p7.barridos.tarjeta",
+                nombre=b.nombre,
+                param=b.parametro_meta.label,
+                n=len(b.puntos),
+                t=b.t_ejecucion_s,
+            )
             st.markdown(
-                f"<span style='color:{color}'>●</span> **{b.nombre}** — "
-                f"{b.parametro_meta.label}, {len(b.puntos)} puntos, "
-                f"{b.t_ejecucion_s:.1f} s",
+                f"<span style='color:{color}'>●</span> {_tarjeta}",
                 unsafe_allow_html=True,
             )
         with c2:
-            if st.button("🗑️", key=f"barrido_del_{modo}_{idx}", help="Eliminar"):
+            if st.button("🗑️", key=f"barrido_del_{modo}_{idx}", help=t("p7.barridos.eliminar")):
                 barridos.pop(idx)
                 st.session_state[key_estado] = barridos
                 st.rerun()
 
     # Tablas por barrido.
     for b in barridos:
-        with st.expander(f"📋 Tabla — {b.nombre}", expanded=False):
+        with st.expander(t("p7.barridos.tabla", nombre=b.nombre), expanded=False):
             st.dataframe(_barrido_a_dataframe(b), width="stretch")
 
     # Gráficas por KPI. Si todos los barridos comparten parámetro, se superponen.
     params_distintos = {b.config.parametro_id for b in barridos}
     comparten_parametro = len(params_distintos) == 1
     if not comparten_parametro:
-        st.info(
-            "Los barridos activos varían parámetros distintos: cada gráfica usa "
-            "su propio eje X y no se superponen."
-        )
+        st.info(t("p7.barridos.params_distintos"))
 
     # Conjunto de KPIs a graficar: fijos del modo + extras presentes en algún barrido.
     kpis_ids: list[str] = [k.id for k in kpis_fijos_para_modo(modo)]
@@ -1464,7 +1488,7 @@ def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> N
         eje_x = (
             f"{barridos[0].parametro_meta.label} [{barridos[0].parametro_meta.unidad_ui}]"
             if comparten_parametro
-            else "valor del parámetro"
+            else t("p7.barridos.eje_x_valor")
         )
         fig.update_layout(
             title=f"{kpi.label} [{kpi.unidad}]",
@@ -1496,7 +1520,7 @@ def _fig_perfil_tunel(res) -> go.Figure:
         go.Scatter(
             x=zonas,
             y=[float(x) for x in res.perfil_X_zonas],
-            name="X producto [kg/kg ms]",
+            name=t("p7.tunel_fig.x_prod"),
             mode="lines+markers",
             line=dict(color="#1f77b4"),
         ),
@@ -1506,18 +1530,18 @@ def _fig_perfil_tunel(res) -> go.Figure:
         fig.add_trace(
             go.Scatter(
                 x=zonas,
-                y=[float(t) - 273.15 for t in res.perfil_T_aire_zonas_K],
-                name="T aire [°C]",
+                y=[float(tk) - 273.15 for tk in res.perfil_T_aire_zonas_K],
+                name=t("p7.tunel_fig.t_aire"),
                 mode="lines+markers",
                 line=dict(color="#d62728", dash="dot"),
             ),
             secondary_y=True,
         )
-    fig.update_xaxes(title_text="Zona  (1 = fresco/entrada producto → N = seco/salida)")
-    fig.update_yaxes(title_text="X producto [kg/kg ms]", secondary_y=False)
-    fig.update_yaxes(title_text="T aire [°C]", secondary_y=True)
+    fig.update_xaxes(title_text=t("p7.tunel_fig.eje_zona"))
+    fig.update_yaxes(title_text=t("p7.tunel_fig.eje_x"), secondary_y=False)
+    fig.update_yaxes(title_text=t("p7.tunel_fig.eje_t"), secondary_y=True)
     fig.update_layout(
-        title="Perfil espacial del túnel (régimen)",
+        title=t("p7.tunel_fig.titulo"),
         height=380,
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
     )
@@ -1531,35 +1555,38 @@ def _render_resultados_ventana(res, proyecto) -> None:
         return
 
     dias = res.horizonte_s / 86400.0
-    st.subheader(f"Producción en la ventana — {res.subtipo.capitalize()}")
+    st.subheader(t("p7.ventana.produccion", subtipo=res.subtipo.capitalize()))
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Producto seco", f"{res.masa_seca_producida_kg:,.0f} kg")
+    c1.metric(t("p7.ventana.producto_seco"), f"{res.masa_seca_producida_kg:,.0f} kg")
     c2.metric(
-        "Tasa de régimen",
+        t("p7.ventana.tasa_regimen"),
         f"{res.tasa_regimen_kg_dia:,.1f} kg/día" if res.tasa_regimen_kg_dia else "—",
     )
-    c3.metric("Agua evaporada", f"{res.masa_evaporada_kg:,.0f} kg")
-    c4.metric("Leña consumida", f"{res.lena_consumida_kg:,.0f} kg")
-    st.caption(f"Ventana simulada: {dias:.1f} días ({res.horizonte_s / 3600:.0f} h).")
+    c3.metric(t("p7.ventana.agua_evaporada"), f"{res.masa_evaporada_kg:,.0f} kg")
+    c4.metric(t("p7.ventana.lena"), f"{res.lena_consumida_kg:,.0f} kg")
+    st.caption(t("p7.ventana.simulada", dias=dias, horas=res.horizonte_s / 3600))
 
     if res.subtipo == "BATCH":
         b1, b2, b3 = st.columns(3)
-        b1.metric("Lotes completos", f"{res.n_batches_completos}")
+        b1.metric(t("p7.ventana.lotes"), f"{res.n_batches_completos}")
         b2.metric(
-            "Tiempo medio / lote",
+            t("p7.ventana.tiempo_lote"),
             f"{res.t_secado_medio_s / 3600:.1f} h" if res.t_secado_medio_s else "—",
         )
-        b3.metric("Lote en progreso", "Sí" if res.batch_en_progreso else "No")
+        b3.metric(
+            t("p7.ventana.lote_progreso"),
+            t("p7.ventana.si") if res.batch_en_progreso else t("p7.ventana.no"),
+        )
     else:  # SEMICONTINUO
         s1, s2, s3 = st.columns(3)
-        s1.metric("Columnas descargadas", f"{res.n_avances}")
+        s1.metric(t("p7.ventana.columnas_desc"), f"{res.n_avances}")
         s2.metric(
-            "X salida (régimen)",
+            t("p7.ventana.x_salida"),
             f"{res.X_salida_regimen:.3f}" if res.X_salida_regimen is not None else "—",
         )
         s3.metric(
-            "Throughput fresco",
+            t("p7.ventana.throughput"),
             f"{res.throughput_fresco_kg_dia:,.0f} kg/día" if res.throughput_fresco_kg_dia else "—",
         )
         if res.perfil_X_zonas is not None and len(res.perfil_X_zonas) > 0:
@@ -1574,61 +1601,48 @@ def _render_resultados_ventana(res, proyecto) -> None:
 def _render_ventana(proyecto) -> None:
     """Rama de P7 para tipología gran escala en modo VENTANA de producción."""
     cfg = proyecto.configuracion
-    st.subheader("Ventana de producción (gran escala)")
+    st.subheader(t("p7.ventana.titulo"))
 
     inicio = getattr(cfg, "ventana_inicio", None)
     fin = getattr(cfg, "ventana_fin", None)
     subtipo = getattr(cfg, "subtipo_gran_escala", None)
     if inicio is None or fin is None:
-        st.warning(
-            "⚠️ Configurá la **ventana de análisis** (fechas inicio/fin) en **P1** "
-            "antes de calcular la producción."
-        )
+        st.warning(t("p7.ventana.sin_fechas"))
         return
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Lapso", f"{(fin - inicio).days} días")
-    c2.metric("Desde → Hasta", f"{inicio} → {fin}")
-    c3.metric("Subtipo", subtipo.value.capitalize() if subtipo else "—")
+    c1.metric(t("p7.ventana.lapso"), f"{(fin - inicio).days} días")
+    c2.metric(t("p7.ventana.desde_hasta"), f"{inicio} → {fin}")
+    c3.metric(t("p7.ventana.subtipo"), subtipo.value.capitalize() if subtipo else "—")
 
     clima = getattr(proyecto, "clima", None)
     df_ventana, msg = _slice_clima_ventana(clima, inicio, fin)
     if df_ventana is None:
-        st.info(
-            f"ℹ️ Para correr la ventana hace falta clima real horario. {msg} "
-            "Descargalo en **P2 · Emplazamiento**."
-        )
+        st.info(t("p7.ventana.sin_clima", msg=msg))
         return
 
-    st.caption(
-        f"Clima del lapso: **{len(df_ventana)} horas** reales (NASA POWER, año {clima.anio})."
-    )
+    st.caption(t("p7.ventana.clima_lapso", n=len(df_ventana), anio=clima.anio))
     if clima.anio is not None and inicio.year != clima.anio:
-        st.warning(
-            f"⚠️ La ventana está definida en **{inicio.year}** pero el clima "
-            f"descargado es de **{clima.anio}**: se usan los datos de "
-            f"{clima.anio} mapeados por mes/día. Para el clima correcto, "
-            f"descargá el año {inicio.year} en P2."
-        )
+        st.warning(t("p7.ventana.anio_distinto", anio_ventana=inicio.year, anio_clima=clima.anio))
 
     st.divider()
-    if st.button("▶ Calcular ventana de producción", type="primary", key="p7_btn_ventana"):
+    if st.button(t("p7.ventana.boton"), type="primary", key="p7_btn_ventana"):
         import time as _time
 
         _t0 = _time.perf_counter()
-        with st.spinner("Corriendo colector(t) + caño maestro + auxiliar(t) + cámara..."):
+        with st.spinner(t("p7.ventana.spinner")):
             res = calcular_todo_ventana(proyecto, df_ventana)
         st.session_state["p7_resultado_ventana"] = res
         st.session_state["p7_t_calc_ventana_s"] = _time.perf_counter() - _t0
 
     res = st.session_state.get("p7_resultado_ventana")
     if res is None:
-        st.info("ℹ️ Presioná **Calcular** para evaluar la producción sobre la ventana.")
+        st.info(t("p7.ventana.prompt"))
         return
 
     t_calc = st.session_state.get("p7_t_calc_ventana_s")
     if t_calc is not None:
-        st.caption(f"⏱️ Cálculo en {t_calc:.1f} s.")
+        st.caption(t("p7.ventana.t_calc", t=t_calc))
     _render_resultados_ventana(res, proyecto)
 
 
@@ -1663,17 +1677,8 @@ def _render_carta_psicrometrica(res, proyecto, *, omega_amb: Optional[float] = N
     if fig is None:
         return
     st.divider()
-    st.subheader("Carta psicrométrica del proceso")
-    st.caption(
-        "Estados del aire húmedo a lo largo del proceso, corregidos a la presión "
-        "del emplazamiento. El calentamiento en colector y auxiliar es **sensible** "
-        "(ω constante → tramos horizontales); en la cámara el aire **gana humedad**. "
-        "La isentálpica punteada es la referencia adiabática desde la entrada de "
-        "cámara: si la salida cae sobre ella el secado fue ≈ adiabático (cámara "
-        "indirecta); por encima, hubo aporte de calor (cámara directa con techo "
-        "translúcido). En modos con evolución temporal el estado mostrado es el de "
-        "máxima irradiancia (≈ mediodía solar)."
-    )
+    st.subheader(t("p7.carta.titulo"))
+    st.caption(t("p7.carta.caption"))
     mostrar_plotly(fig, nombre="carta_psicrometrica")
 
 
@@ -1684,7 +1689,7 @@ def _render_carta_psicrometrica(res, proyecto, *, omega_amb: Optional[float] = N
 
 def render() -> None:
     """Renderiza la Pestaña 7 — Resultados del Prediseño."""
-    st.header("7 · Resultados del Prediseño")
+    st.header(t("p7.header"))
     boton_manual(SLUG_POR_SECCION["p7"])
 
     proyecto = st.session_state.proyecto
@@ -1697,10 +1702,7 @@ def render() -> None:
 
     # Mínimo necesario para calcular
     if proyecto.camara is None:
-        st.warning(
-            "⚠️ Para calcular resultados es necesario configurar al menos la "
-            "**Cámara de Secado (P4)**."
-        )
+        st.warning(t("p7.sin_camara"))
         return
 
     # -----------------------------------------------------------------------
@@ -1725,20 +1727,11 @@ def render() -> None:
             _render_operacion_anual_detalle(proyecto)
             _render_barridos_parametricos(proyecto, "anual")
             st.divider()
-            st.markdown("### Cálculo de un día representativo (contexto adicional)")
-            st.caption(
-                "Debajo aparece el cálculo de un único día (constantes o "
-                "transitorio). Es útil para validar el motor o explorar "
-                "transitorios — los resultados anuales que importan están "
-                "arriba. Si no querés verlo, ignorá esta sección."
-            )
+            _md_titulo = "### " + t("p7.anual_prompt_detalle")
+            st.markdown(_md_titulo)
+            st.caption(t("p7.anual_prompt_detalle_cap"))
         else:
-            st.info(
-                "📅 **Modo ANUAL activado.** Para ver los resultados mensuales "
-                "y agregados anuales, andá a **P4** y apretá el botón "
-                "'📅 Calcular operación anual'. Mientras tanto se muestra el "
-                "cálculo de un día representativo."
-            )
+            st.info(t("p7.anual_sin_calcular"))
 
     # -----------------------------------------------------------------------
     # Selector modo de cálculo: transitorio (horizonte de P4) vs constantes
@@ -1750,59 +1743,44 @@ def render() -> None:
     )
 
     if horizonte_disponible:
-        st.subheader("Modo de cálculo")
+        st.subheader(t("p7.modo.titulo"))
+        # Options con claves estables: la selección no depende del idioma.
+        _modo_keys = ["transitorio", "constantes"]
         modo_p7 = st.radio(
-            "¿Cómo evaluamos el prediseño completo?",
-            options=[
-                "Transitorio (horizonte de P4)",
-                "Constantes representativas",
-            ],
+            t("p7.modo.label"),
+            options=_modo_keys,
             index=0,
             horizontal=True,
-            help=(
-                "Transitorio: usa las forzantes horarias con las que corriste "
-                "el motor termodinámico de cámara (P4), suma el auxiliar paso "
-                "a paso y reporta resultados integrados sobre el horizonte.\n\n"
-                "Constantes: condiciones representativas escalares — un punto "
-                "de diseño único."
-            ),
+            format_func=lambda k: t(f"p7.modo.{k}"),
+            help=t("p7.modo.help"),
         )
     else:
-        modo_p7 = "Constantes representativas"
+        modo_p7 = "constantes"
         if proyecto.camara.modo_calculo == "termodinamico":
-            st.info(
-                "ℹ️ Para activar el **modo transitorio** corré primero la cámara "
-                "en P4 con forzantes 'Día sintético' o 'Día real'. El horizonte "
-                "se va a propagar automáticamente acá."
-            )
+            st.info(t("p7.modo.sin_horizonte"))
 
     # ===========================================================================
     # RAMA: Transitorio (mejora 19)
     # ===========================================================================
-    if modo_p7 == "Transitorio (horizonte de P4)":
+    if modo_p7 == "transitorio":
         n_dias_hor = int(horizonte_meta.get("n_dias", 1))
         modo_fz_label = str(horizonte_meta.get("modo_forzantes", "sintético"))
         horizonte_tipo = horizonte_meta.get("horizonte_tipo")
         horizonte_h = float(fz_horizonte.t_s[-1]) / 3600.0
 
-        st.subheader("Horizonte propagado de cámara")
+        st.subheader(t("p7.horizonte.titulo"))
         c1, c2, c3 = st.columns(3)
-        _hz_txt = f"{n_dias_hor} día(s)"
+        _hz_txt = t("p7.horizonte.dias", n=n_dias_hor)
         if horizonte_tipo and n_dias_hor > 1:
             _hz_txt += f" · {horizonte_tipo}"
-        c1.metric("Horizonte", _hz_txt)
-        c2.metric("Duración", f"{horizonte_h:.1f} h")
-        c3.metric("Forzantes", modo_fz_label)
-        st.caption(
-            "Las forzantes T_amb(t), T_sal_col(t), v_viento(t), I_g(t), ω(t) "
-            "vienen de P4 exactamente como las simulaste. Si configuraste un "
-            "**Auxiliar (P5)**, se aplica paso a paso a la T_ent de cámara "
-            "antes de re-correr el motor termodinámico."
-        )
+        c1.metric(t("p7.horizonte.horizonte"), _hz_txt)
+        c2.metric(t("p7.horizonte.duracion"), f"{horizonte_h:.1f} h")
+        c3.metric(t("p7.horizonte.forzantes"), modo_fz_label)
+        st.caption(t("p7.horizonte.caption"))
 
         st.divider()
         calcular_tr = st.button(
-            "▶ Calcular pipeline transitoria",
+            t("p7.horizonte.boton"),
             type="primary",
             key="p7_btn_calc_tr",
         )
@@ -1810,7 +1788,7 @@ def render() -> None:
             import time as _time
 
             _t0 = _time.perf_counter()
-            with st.spinner("Corriendo auxiliar(t) + cámara TD + motor..."):
+            with st.spinner(t("p7.horizonte.spinner")):
                 res_tr: ResultadosCompletosTransitorio = calcular_todo_transitorio(
                     proyecto,
                     forzantes_base=fz_horizonte,
@@ -1820,7 +1798,7 @@ def render() -> None:
             st.session_state["p7_t_calc_base_s_transitorio"] = _time.perf_counter() - _t0
 
         if "p7_resultados_tr" not in st.session_state:
-            st.info("ℹ️ Presioná **Calcular** para evaluar la pipeline transitoria.")
+            st.info(t("p7.horizonte.prompt"))
             return
 
         res_tr = st.session_state["p7_resultados_tr"]
@@ -1854,19 +1832,15 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Condiciones de operación representativas
     # -----------------------------------------------------------------------
-    st.subheader("Condiciones de operación representativas")
-    st.caption(
-        "Ingresá las condiciones del día / momento de análisis. "
-        "Los valores sugeridos provienen de los datos NASA POWER de P2 "
-        "(percentil 75 de T, percentil 90 de irradiancia)."
-    )
+    st.subheader(t("p7.condiciones.titulo"))
+    st.caption(t("p7.condiciones.caption"))
 
     T_sug, I_sug, v_sug = _sugerir_condiciones(proyecto)
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         T_amb_C = st.number_input(
-            "T ambiente [°C]",
+            t("p7.condiciones.t_amb"),
             min_value=-10.0,
             max_value=50.0,
             value=st.session_state.get("p7_T_amb_C", T_sug),
@@ -1876,18 +1850,18 @@ def render() -> None:
         st.session_state["p7_T_amb_C"] = T_amb_C
     with c2:
         I_g = st.number_input(
-            "Irradiancia en plano colector [W/m²]",
+            t("p7.condiciones.irradiancia.label"),
             min_value=0.0,
             max_value=1200.0,
             value=st.session_state.get("p7_I_g", I_sug),
             step=10.0,
             format="%.0f",
-            help="Irradiancia global sobre el plano del colector (POA).",
+            help=t("p7.condiciones.irradiancia.help"),
         )
         st.session_state["p7_I_g"] = I_g
     with c3:
         v_viento = st.number_input(
-            "Velocidad del viento [m/s]",
+            t("p7.condiciones.viento"),
             min_value=0.0,
             max_value=20.0,
             value=st.session_state.get("p7_v_viento", v_sug),
@@ -1897,16 +1871,12 @@ def render() -> None:
         st.session_state["p7_v_viento"] = v_viento
     with c4:
         HR_cam_pct = st.slider(
-            "HR del aire de entrada [%]",
+            t("p7.condiciones.hr.label"),
             min_value=5.0,
             max_value=80.0,
             value=st.session_state.get("p7_HR_cam", _HR_CAMARA_DEFAULT_PCT),
             step=5.0,
-            help=(
-                "HR del aire que entra a la cámara, en el modo **Constantes "
-                "representativas**. Fija la ω de entrada. En el modo Transitorio la "
-                "HR de entrada sale de las forzantes y este valor no se usa."
-            ),
+            help=t("p7.condiciones.hr.help"),
         )
         st.session_state["p7_HR_cam"] = HR_cam_pct
 
@@ -1917,13 +1887,13 @@ def render() -> None:
     # Botón de cálculo
     # -----------------------------------------------------------------------
     st.divider()
-    calcular = st.button("▶ Calcular prediseño completo", type="primary")
+    calcular = st.button(t("p7.condiciones.boton"), type="primary")
 
     if calcular:
         import time as _time
 
         _t0 = _time.perf_counter()
-        with st.spinner("Calculando..."):
+        with st.spinner(t("p7.condiciones.spinner")):
             res: ResultadosCompletos = calcular_todo(
                 proyecto=proyecto,
                 T_amb_K=T_amb_K,
@@ -1937,20 +1907,20 @@ def render() -> None:
 
     # Usar resultados almacenados si existen
     if "p7_resultados" not in st.session_state:
-        st.info("ℹ️ Configurá las condiciones y presioná **Calcular** para ver los resultados.")
+        st.info(t("p7.condiciones.prompt"))
         return
 
     res: ResultadosCompletos = st.session_state["p7_resultados"]
 
     # Errores fatales
     if res.errores:
-        st.error("Se detectaron errores que impiden el cálculo:")
+        st.error(t("p7.errores_fatales"))
         _mostrar_errores(res.errores)
         return
 
     # Advertencias
     if res.advertencias:
-        with st.expander(f"⚠️ {len(res.advertencias)} advertencias del cálculo"):
+        with st.expander(t("p7.advertencias_expander", n=len(res.advertencias))):
             _mostrar_advertencias(res.advertencias)
 
     st.divider()
@@ -1961,92 +1931,85 @@ def render() -> None:
 
     # --- Colector ---
     if res.colector is not None:
-        st.subheader("Colector Solar")
+        st.subheader(t("p7.colector.titulo"))
         col = res.colector
         _t_sal = getattr(col, "T_salida_K", getattr(col, "T_salida_mezcla_K", None))
         _regimen = getattr(
             col, "regimen_flujo", getattr(col, "regimen_ci", getattr(col, "regimen_cs", "—"))
         )
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("T entrada", f"{kelvin_a_celsius(col.T_entrada_K):.1f} °C")
+        c1.metric(t("p7.colector.t_entrada"), f"{kelvin_a_celsius(col.T_entrada_K):.1f} °C")
         if _t_sal is not None:
             c2.metric(
-                "T salida",
+                t("p7.colector.t_salida"),
                 f"{kelvin_a_celsius(_t_sal):.1f} °C",
                 delta=f"+{_t_sal - col.T_entrada_K:.1f} °C",
             )
-        c3.metric("Q útil", f"{col.Q_util_W:.0f} W")
-        c4.metric("η térmica", f"{col.eta_termica:.1%}")
-        c5.metric("Régimen", _regimen or "—")
+        c3.metric(t("p7.colector.q_util"), f"{col.Q_util_W:.0f} W")
+        c4.metric(t("p7.colector.eta"), f"{col.eta_termica:.1%}")
+        c5.metric(t("p7.colector.regimen"), _regimen or "—")
         _re = getattr(col, "Re_medio", getattr(col, "Re_ci", getattr(col, "Re_cs", None)))
         _hint = getattr(
             col, "h_int_medio", getattr(col, "h_int_ci", getattr(col, "h_int_cs", None))
         )
         if _re:
-            st.caption(f"Re = {_re:.0f}  |  h_int = {_hint:.1f} W/(m²·K)")
+            st.caption(t("p7.colector.re_hint", re=_re, hint=_hint))
 
     # --- Auxiliar ---
     if res.auxiliar is not None:
-        st.subheader("Auxiliar Térmico")
+        st.subheader(t("p7.auxiliar.titulo"))
         aux = res.auxiliar
         c1, c2, c3 = st.columns(3)
-        c1.metric("T entrada auxiliar", f"{kelvin_a_celsius(aux.T_entrada_K):.1f} °C")
+        c1.metric(t("p7.auxiliar.t_entrada"), f"{kelvin_a_celsius(aux.T_entrada_K):.1f} °C")
         c2.metric(
-            "T salida auxiliar",
+            t("p7.auxiliar.t_salida"),
             f"{kelvin_a_celsius(aux.T_salida_K):.1f} °C",
             delta=f"+{aux.delta_T_K:.1f} °C",
         )
-        c3.metric("Q efectivo", f"{aux.Q_efectivo_W / 1000:.2f} kW")
+        c3.metric(t("p7.auxiliar.q_efectivo"), f"{aux.Q_efectivo_W / 1000:.2f} kW")
 
     # --- Temperatura de entrada a la cámara ---
     if res.T_entrada_camara_K is not None:
-        st.info(
-            f"🌡️ **Temperatura de entrada a la cámara: "
-            f"{kelvin_a_celsius(res.T_entrada_camara_K):.1f} °C**"
-        )
+        st.info(t("p7.t_entrada_camara", t=kelvin_a_celsius(res.T_entrada_camara_K)))
 
     # --- Cámara ---
     if res.camara is not None:
-        st.subheader("Cámara de Secado")
+        st.subheader(t("p7.camara.titulo"))
         cam = res.camara
         if isinstance(cam, ResultadoMotorTermodinamico):
             c1, c2, c3, c4 = st.columns(4)
             if cam.t_secado_s is not None:
-                c1.metric("Tiempo de secado", f"{cam.t_secado_s / 3600.0:.1f} h")
+                c1.metric(t("p7.camara.t_secado"), f"{cam.t_secado_s / 3600.0:.1f} h")
             else:
-                c1.metric("Tiempo de secado", "—", help=f"No convergió: {cam.status}")
-            c2.metric("Status", cam.status)
-            c3.metric("Agua evaporada", f"{cam.masa_evaporada_total_kg:.2f} kg")
+                c1.metric(
+                    t("p7.camara.t_secado"),
+                    "—",
+                    help=t("p7.camara.no_convergio_help", status=cam.status),
+                )
+            c2.metric(t("p7.camara.status"), cam.status)
+            c3.metric(t("p7.camara.agua_evaporada"), f"{cam.masa_evaporada_total_kg:.2f} kg")
             X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
-            c4.metric("X final", f"{X_final:.4f} kg/kg ms")
+            c4.metric(t("p7.camara.x_final"), f"{X_final:.4f} kg/kg ms")
 
             if cam.status == "t_max_alcanzado":
-                st.warning(
-                    "⚠️ El motor termodinámico no alcanzó X_objetivo dentro del "
-                    "tiempo máximo de simulación. Energías y COP no son confiables."
-                )
+                st.warning(t("p7.camara.t_max_warning"))
             elif cam.status == "error":
-                st.error(f"❌ Error en el motor termodinámico: {cam.status}")
+                st.error(t("p7.camara.error", status=cam.status))
 
             X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
             prod_id = proyecto.camara.carga_producto.producto_id
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
             mostrar_plotly(fig_td, nombre="camara_trayectorias")
-            st.caption(
-                "ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el "
-                "caudal de aire es el término dominante en el balance energético — "
-                "el aire mantiene la temperatura cercana a T_entrada. Cada curva usa "
-                "su propia escala (ejes izquierdo y derecho)."
-            )
+            st.caption(t("p7.camara.caption_taire"))
 
     # --- Motor ---
     if proyecto.motor is not None and proyecto.motor.potencia_a_instalar_W:
-        st.subheader("Motor / Ventilador")
+        st.subheader(t("p7.motor.titulo"))
         mot = proyecto.motor
         c1, c2, c3 = st.columns(3)
-        c1.metric("ΔP sistema", f"{mot.perdida_carga_total_Pa:.1f} Pa")
-        c2.metric("P eléctrica", f"{mot.potencia_electrica_W:.0f} W")
-        c3.metric("P a instalar", f"{mot.potencia_a_instalar_W:.0f} W")
+        c1.metric(t("p7.motor.dp"), f"{mot.perdida_carga_total_Pa:.1f} Pa")
+        c2.metric(t("p7.motor.p_electrica"), f"{mot.potencia_electrica_W:.0f} W")
+        c3.metric(t("p7.motor.p_instalar"), f"{mot.potencia_a_instalar_W:.0f} W")
 
     # --- Chimenea solar (convección natural) ---
     if getattr(res, "chimenea", None) is not None:
@@ -2054,31 +2017,28 @@ def render() -> None:
 
     # --- Balance global ---
     if res.energia_total_MJ is not None and res.energia_total_MJ > 0:
-        st.subheader("Balance Energético Global")
+        st.subheader(t("p7.balance.titulo"))
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric(
-            "COP de secado",
+            t("p7.balance.cop.label"),
             f"{res.COP_secado:.3f}" if res.COP_secado else "—",
-            help=(
-                "masa_agua × Lv / energía_total. "
-                "Valores típicos: 0.10–0.35 para secadores solares."
-            ),
+            help=t("p7.balance.cop.help"),
         )
         c2.metric(
-            "Fracción solar",
+            t("p7.balance.fraccion_solar.label"),
             f"{res.fraccion_solar:.1%}" if res.fraccion_solar is not None else "100%",
-            help="Energía del colector / (colector + auxiliar).",
+            help=t("p7.balance.fraccion_solar.help"),
         )
         c3.metric(
-            "E secado",
+            t("p7.balance.e_secado.label"),
             f"{res.energia_secado_MJ:.3f} MJ",
-            help="masa_agua × Lv — energía realmente útil para evaporación.",
+            help=t("p7.balance.e_secado.help"),
         )
         c4.metric(
-            "E total",
+            t("p7.balance.e_total.label"),
             f"{res.energia_total_MJ:.3f} MJ",
-            help="Solar + auxiliar + motor.",
+            help=t("p7.balance.e_total.help"),
         )
 
         fig_bal = _fig_sankey_simplificado(res)
@@ -2089,42 +2049,47 @@ def render() -> None:
     _render_carta_psicrometrica(res, proyecto, omega_amb=_omega_amb_constantes(res, proyecto))
 
     # --- Resumen del ciclo ---
-    st.subheader("Resumen del ciclo de secado")
+    st.subheader(t("p7.ciclo.titulo"))
     if proyecto.camara is not None and res.camara is not None:
         p = proyecto.camara.carga_producto
         ms = res.masa_producto_seco_kg
         t_h, masa_agua, _status, _ok = _resumen_camara(res.camara)
 
         c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("Masa producto fresco", f"{p.masa_total_kg:.1f} kg")
+        c1.metric(t("p7.ciclo.masa_fresco"), f"{p.masa_total_kg:.1f} kg")
         c2.metric(
-            "Masa producto seco", f"{ms:.2f} kg" if ms else "—", help="masa_fresco / (1 + X₀)"
+            t("p7.ciclo.masa_seco.label"),
+            f"{ms:.2f} kg" if ms else "—",
+            help=t("p7.ciclo.masa_seco.help"),
         )
-        c3.metric("Agua evaporada", f"{masa_agua:.2f} kg")
+        c3.metric(t("p7.ciclo.agua_evaporada"), f"{masa_agua:.2f} kg")
         c4.metric(
-            "Rendimiento en masa",
+            t("p7.ciclo.rendimiento.label"),
             f"{res.rendimiento_masa:.1%}" if res.rendimiento_masa else "—",
-            help="kg_seco / kg_fresco",
+            help=t("p7.ciclo.rendimiento.help"),
         )
-        c5.metric("Tiempo de secado", f"{t_h:.1f} h" if t_h is not None else "no convergió")
+        c5.metric(
+            t("p7.ciclo.t_secado"),
+            f"{t_h:.1f} h" if t_h is not None else t("p7.ciclo.no_convergio"),
+        )
 
     # --- Tabla de resumen exportable ---
-    with st.expander("Tabla de resultados completa"):
+    with st.expander(t("p7.tabla.titulo")):
         filas = []
         if res.colector:
             col = res.colector
             _t_sal = getattr(col, "T_salida_K", getattr(col, "T_salida_mezcla_K", None))
             filas += [
-                ("Colector — T entrada [°C]", f"{kelvin_a_celsius(col.T_entrada_K):.1f}"),
-                ("Colector — T salida [°C]", f"{kelvin_a_celsius(_t_sal):.1f}" if _t_sal else "—"),
-                ("Colector — Q útil [W]", f"{col.Q_util_W:.0f}"),
-                ("Colector — η térmica", f"{col.eta_termica:.1%}"),
+                (t("p7.tabla.col_t_ent"), f"{kelvin_a_celsius(col.T_entrada_K):.1f}"),
+                (t("p7.tabla.col_t_sal"), f"{kelvin_a_celsius(_t_sal):.1f}" if _t_sal else "—"),
+                (t("p7.tabla.col_q"), f"{col.Q_util_W:.0f}"),
+                (t("p7.tabla.col_eta"), f"{col.eta_termica:.1%}"),
             ]
         if res.auxiliar:
             aux = res.auxiliar
             filas += [
-                ("Auxiliar — ΔT [°C]", f"{aux.delta_T_K:.1f}"),
-                ("Auxiliar — Q efectivo [W]", f"{aux.Q_efectivo_W:.0f}"),
+                (t("p7.tabla.aux_dt"), f"{aux.delta_T_K:.1f}"),
+                (t("p7.tabla.aux_q"), f"{aux.Q_efectivo_W:.0f}"),
             ]
         if res.camara is not None:
             cam = res.camara
@@ -2133,50 +2098,50 @@ def render() -> None:
                 f"{kelvin_a_celsius(res.T_entrada_camara_K):.1f}" if res.T_entrada_camara_K else "—"
             )
             filas += [
-                ("Cámara — T operación [°C]", T_op_str),
+                (t("p7.tabla.cam_top"), T_op_str),
                 (
-                    "Cámara — Tiempo secado [h]",
-                    f"{t_h_cam:.2f}" if t_h_cam is not None else "no convergió",
+                    t("p7.tabla.cam_t"),
+                    f"{t_h_cam:.2f}" if t_h_cam is not None else t("p7.tabla.no_convergio"),
                 ),
-                ("Cámara — Agua evaporada [kg]", f"{masa_cam:.3f}"),
-                ("Cámara — Status / convergencia", status_cam),
+                (t("p7.tabla.cam_agua"), f"{masa_cam:.3f}"),
+                (t("p7.tabla.cam_status"), status_cam),
             ]
             if isinstance(cam, ResultadoMotorTermodinamico):
                 X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
                 T_prod_final_C = float(cam.T_prod_K[-1]) - 273.15 if len(cam.T_prod_K) else 0.0
                 filas += [
-                    ("Cámara — X final [kg/kg ms]", f"{X_final:.4f}"),
-                    ("Cámara — T producto final [°C]", f"{T_prod_final_C:.1f}"),
+                    (t("p7.tabla.cam_xfin"), f"{X_final:.4f}"),
+                    (t("p7.tabla.cam_tprod"), f"{T_prod_final_C:.1f}"),
                 ]
         if proyecto.motor and proyecto.motor.potencia_a_instalar_W:
             mot = proyecto.motor
             filas += [
-                ("Motor — ΔP [Pa]", f"{mot.perdida_carga_total_Pa:.1f}"),
-                ("Motor — P eléctrica [W]", f"{mot.potencia_electrica_W:.1f}"),
-                ("Motor — P a instalar [W]", f"{mot.potencia_a_instalar_W:.1f}"),
+                (t("p7.tabla.mot_dp"), f"{mot.perdida_carga_total_Pa:.1f}"),
+                (t("p7.tabla.mot_pe"), f"{mot.potencia_electrica_W:.1f}"),
+                (t("p7.tabla.mot_pi"), f"{mot.potencia_a_instalar_W:.1f}"),
             ]
         if getattr(res, "chimenea", None) is not None:
             ch = res.chimenea
             m_punto = float(ch.get("m_punto_kgs", 0.0))
             filas += [
-                ("Chimenea — Caudal natural [g/s]", f"{m_punto * 1000:.2f}"),
-                ("Chimenea — Caudal vol. [m³/h]", f"{m_punto / 1.1 * 3600.0:.1f}"),
-                ("Chimenea — v [m/s]", f"{ch.get('v_chim_ms', 0.0):.3f}"),
-                ("Chimenea — Re", f"{ch.get('Re_chimenea', 0.0):.0f}"),
-                ("Chimenea — ΔP tiro [Pa]", f"{ch.get('delta_P_tiro_Pa', 0.0):.3f}"),
-                ("Chimenea — ΔP ducto [Pa]", f"{ch.get('delta_P_chimenea_Pa', 0.0):.3f}"),
-                ("Chimenea — ΔP resto [Pa]", f"{ch.get('delta_P_resto_Pa', 0.0):.3f}"),
-                ("Chimenea — H efectiva [m]", f"{ch.get('H_eff_m', 0.0):.2f}"),
+                (t("p7.tabla.chim_caudal"), f"{m_punto * 1000:.2f}"),
+                (t("p7.tabla.chim_qvol"), f"{m_punto / 1.1 * 3600.0:.1f}"),
+                (t("p7.tabla.chim_v"), f"{ch.get('v_chim_ms', 0.0):.3f}"),
+                (t("p7.tabla.chim_re"), f"{ch.get('Re_chimenea', 0.0):.0f}"),
+                (t("p7.tabla.chim_tiro"), f"{ch.get('delta_P_tiro_Pa', 0.0):.3f}"),
+                (t("p7.tabla.chim_ducto"), f"{ch.get('delta_P_chimenea_Pa', 0.0):.3f}"),
+                (t("p7.tabla.chim_resto"), f"{ch.get('delta_P_resto_Pa', 0.0):.3f}"),
+                (t("p7.tabla.chim_heff"), f"{ch.get('H_eff_m', 0.0):.2f}"),
             ]
         if res.energia_total_MJ:
             filas += [
-                ("Balance — E solar útil [MJ]", f"{res.energia_solar_util_MJ:.4f}"),
-                ("Balance — E auxiliar [MJ]", f"{res.energia_auxiliar_MJ:.4f}"),
-                ("Balance — E motor [MJ]", f"{res.energia_motor_MJ:.4f}"),
-                ("Balance — E secado [MJ]", f"{res.energia_secado_MJ:.4f}"),
-                ("Balance — COP", f"{res.COP_secado:.4f}" if res.COP_secado else "—"),
+                (t("p7.tabla.bal_solar"), f"{res.energia_solar_util_MJ:.4f}"),
+                (t("p7.tabla.bal_aux"), f"{res.energia_auxiliar_MJ:.4f}"),
+                (t("p7.tabla.bal_motor"), f"{res.energia_motor_MJ:.4f}"),
+                (t("p7.tabla.bal_secado"), f"{res.energia_secado_MJ:.4f}"),
+                (t("p7.tabla.bal_cop"), f"{res.COP_secado:.4f}" if res.COP_secado else "—"),
                 (
-                    "Balance — Fracción solar",
+                    t("p7.tabla.bal_fs"),
                     f"{res.fraccion_solar:.1%}" if res.fraccion_solar is not None else "100%",
                 ),
             ]
@@ -2184,8 +2149,9 @@ def render() -> None:
         if filas:
             import pandas as pd
 
-            df = pd.DataFrame(filas, columns=["Parámetro", "Valor"])
-            st.dataframe(df.set_index("Parámetro"), width="stretch")
+            _col_p = t("p7.tabla.col_param")
+            df = pd.DataFrame(filas, columns=[_col_p, t("p7.tabla.col_valor")])
+            st.dataframe(df.set_index(_col_p), width="stretch")
 
     # --- Guardar resultados completos ---
     _render_botones_guardado(
@@ -2225,58 +2191,42 @@ def _render_operacion_anual_detalle(proyecto) -> None:
         return
 
     st.divider()
-    st.subheader("Operación anual de cámara")
-    st.caption(
-        "Resultados del motor termodinámico corrido mes a mes sobre el día "
-        "típico, escalado por la cantidad de batches/mes configurada en P4. "
-        "Eficiencias según método Augustus Leon (RSER 2002)."
-    )
+    st.subheader(t("p7.anual_det.titulo"))
+    st.caption(t("p7.anual_det.caption"))
 
     if res_anual.advertencias:
         for msg in res_anual.advertencias:
-            st.warning(f"⚠️ {msg}")
+            st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, F5)
 
     # Resumen anual (mismo que P4 pero acá lo tenemos integrado en P7)
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("kg secados/año", f"{res_anual.kg_secados_anual:.0f}")
-    col2.metric("η_total media", f"{res_anual.eta_total_anual_media * 100:.1f}%")
-    col3.metric("t_secado promedio", f"{res_anual.t_secado_promedio_h:.1f} h")
-    col4.metric("Energía solar anual", f"{res_anual.E_solar_anual_MJ:.0f} MJ")
+    col1.metric(t("p7.anual_det.kg_anual"), f"{res_anual.kg_secados_anual:.0f}")
+    col2.metric(t("p7.anual_det.eta_media"), f"{res_anual.eta_total_anual_media * 100:.1f}%")
+    col3.metric(t("p7.anual_det.t_prom"), f"{res_anual.t_secado_promedio_h:.1f} h")
+    col4.metric(t("p7.anual_det.e_solar"), f"{res_anual.E_solar_anual_MJ:.0f} MJ")
 
     # Tabla 12 meses
     import pandas as pd
 
-    meses_nombres = [
-        "Ene",
-        "Feb",
-        "Mar",
-        "Abr",
-        "May",
-        "Jun",
-        "Jul",
-        "Ago",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dic",
-    ]
+    meses_nombres = t("graficas.meses_abbr").split(",")
+    _col_mes = t("p7.anual_det.col_mes")
     filas = []
     for p in res_anual.puntos_mensuales:
         filas.append(
             {
-                "Mes": meses_nombres[p.mes - 1],
-                "t_secado [h]": round(p.t_secado_h, 1),
-                "Convergió": "✓" if p.convergio else "—",
-                "m_evap/batch [kg]": round(p.m_evap_kg_por_batch, 2),
-                "batches/mes": p.n_batches,
-                "kg/mes": round(p.kg_secados_mes, 1),
-                "η_drying [%]": round(p.eta_drying * 100, 2),
-                "η_pickup [%]": round(p.eta_pickup * 100, 1),
-                "η_térmica [%]": round(p.eta_termica * 100, 1),
-                "η_total [%]": round(p.eta_total * 100, 2),
+                _col_mes: meses_nombres[p.mes - 1],
+                t("p7.anual_det.col_t"): round(p.t_secado_h, 1),
+                t("p7.anual_det.col_conv"): "✓" if p.convergio else "—",
+                t("p7.anual_det.col_mevap"): round(p.m_evap_kg_por_batch, 2),
+                t("p7.anual_det.col_batches"): p.n_batches,
+                t("p7.anual_det.col_kg"): round(p.kg_secados_mes, 1),
+                t("p7.anual_det.col_drying"): round(p.eta_drying * 100, 2),
+                t("p7.anual_det.col_pickup"): round(p.eta_pickup * 100, 1),
+                t("p7.anual_det.col_termica"): round(p.eta_termica * 100, 1),
+                t("p7.anual_det.col_total"): round(p.eta_total * 100, 2),
             }
         )
-    df_meses = pd.DataFrame(filas).set_index("Mes")
+    df_meses = pd.DataFrame(filas).set_index(_col_mes)
     st.dataframe(df_meses, width="stretch")
 
     # Gráfica de barras kg/mes con línea η_total
@@ -2284,26 +2234,26 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     fig.add_bar(
         x=meses_nombres,
         y=[p.kg_secados_mes for p in res_anual.puntos_mensuales],
-        name="kg/mes",
+        name=t("p7.anual_det.fig_kg"),
         marker_color="#1f77b4",
     )
     fig.add_scatter(
         x=meses_nombres,
         y=[p.eta_total * 100 for p in res_anual.puntos_mensuales],
-        name="η_total [%]",
+        name=t("p7.anual_det.fig_eta"),
         mode="lines+markers",
         line=dict(color="#d62728", width=2),
         marker=dict(size=8),
         yaxis="y2",
     )
     fig.update_layout(
-        title="Producción mensual y eficiencia del sistema",
-        xaxis_title="Mes",
+        title=t("p7.anual_det.fig_titulo"),
+        xaxis_title=t("p7.anual_det.fig_eje_mes"),
         height=400,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
     )
-    fig.update_yaxes(title_text="Producto secado [kg/mes]", secondary_y=False)
-    fig.update_yaxes(title_text="η_total [%]", secondary_y=True)
+    fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_kg"), secondary_y=False)
+    fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_eta"), secondary_y=True)
     mostrar_plotly(fig, nombre="operacion_anual")
 
 
@@ -2342,7 +2292,7 @@ def _render_botones_guardado(
     col_txt, col_json = st.columns(2)
     with col_txt:
         st.download_button(
-            "Guardar prediseño completo (.txt)",
+            t("p7.guardar.txt"),
             data=texto_res,
             file_name=nombre_archivo_descarga(proyecto, "prediseno_completo", "txt"),
             mime="text/plain",
@@ -2350,7 +2300,7 @@ def _render_botones_guardado(
         )
     with col_json:
         st.download_button(
-            "Guardar prediseño completo (.json)",
+            t("p7.guardar.json"),
             data=dump_json(json_res),
             file_name=nombre_archivo_descarga(proyecto, "prediseno_completo", "json"),
             mime="application/json",
@@ -2358,15 +2308,12 @@ def _render_botones_guardado(
         )
 
     # --- Generar reporte PDF ---
-    st.markdown("##### Reporte PDF")
-    st.caption(
-        "Genera un PDF completo con todas las secciones, tablas de configuración "
-        "y gráficas. Puede tardar 10–30 s al generar las imágenes."
-    )
-    if st.button("Generar reporte PDF", type="primary", width="stretch", key="p7_generar_pdf"):
+    st.markdown(t("p7.guardar.pdf_titulo"))
+    st.caption(t("p7.guardar.pdf_caption"))
+    if st.button(t("p7.guardar.pdf_boton"), type="primary", width="stretch", key="p7_generar_pdf"):
         from ui.reporte import generar_reporte_pdf
 
-        with st.spinner("Generando reporte PDF (incluye exportación de gráficas)..."):
+        with st.spinner(t("p7.guardar.pdf_spinner")):
             try:
                 pdf_bytes = generar_reporte_pdf(
                     proyecto,
@@ -2376,20 +2323,18 @@ def _render_botones_guardado(
                     I_g=I_g,
                     v_viento=v_viento,
                     HR_cam_pct=HR_cam_pct,
+                    idioma=idioma_actual(),
                 )
                 st.session_state["p7_reporte_pdf"] = pdf_bytes
-                st.success(
-                    f"✅ Reporte generado ({len(pdf_bytes) / 1024:.0f} KB). "
-                    "Descargá con el botón debajo."
-                )
+                st.success(t("p7.guardar.pdf_exito", kb=len(pdf_bytes) / 1024))
             except Exception as exc:
-                st.error(f"❌ Error generando el reporte: {exc}")
+                st.error(t("p7.guardar.pdf_error", exc=exc))
                 st.session_state.pop("p7_reporte_pdf", None)
 
     pdf_cached = st.session_state.get("p7_reporte_pdf")
     if pdf_cached is not None:
         st.download_button(
-            "Descargar reporte PDF",
+            t("p7.guardar.pdf_descargar"),
             data=pdf_cached,
             file_name=nombre_archivo_reporte(proyecto, "pdf"),
             mime="application/pdf",

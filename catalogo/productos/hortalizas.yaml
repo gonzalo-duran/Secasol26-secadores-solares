@@ -11,6 +11,8 @@
 # =============================================================================
 tomate:
   descripcion: "Tomate (Solanum lycopersicum) en rodajas o mitades. Producción relevante en NOA y Cuyo. Para uso como tomate deshidratado o polvo. Alta humedad inicial (~94% bh). Sensible a pardeado no enzimático (reacción de Maillard) a altas temperaturas."
+  descripcion_en: "Tomato (Solanum lycopersicum), sliced or halved. Significant production in the NOA and Cuyo. For use as dried tomato or powder. High initial moisture (~94% wb). Sensitive to non-enzymatic browning (Maillard reaction) at high temperatures."
+  descripcion_pt: "Tomate (Solanum lycopersicum), em rodelas ou metades. Produção relevante no NOA e em Cuyo. Para uso como tomate desidratado ou em pó. Alta umidade inicial (~94% bu). Sensível ao escurecimento não enzimático (reação de Maillard) a altas temperaturas."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -81,6 +83,8 @@ tomate:
 # =============================================================================
 papa:
   descripcion: "Papa (Solanum tuberosum) en rodajas o cubos. Producto de alta disponibilidad en NOA (Puna). Relativamente alta densidad y baja humedad inicial comparado a otras hortalizas (~80% bh). Encogimiento significativo durante secado."
+  descripcion_en: "Potato (Solanum tuberosum), sliced or diced. Widely available in the NOA (Puna). Relatively high density and low initial moisture compared with other vegetables (~80% wb). Significant shrinkage during drying."
+  descripcion_pt: "Batata (Solanum tuberosum), em rodelas ou cubos. Produto de alta disponibilidade no NOA (Puna). Densidade relativamente alta e baixa umidade inicial em comparação com outras hortaliças (~80% bu). Encolhimento significativo durante a secagem."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -210,6 +214,8 @@ papa:
 # =============================================================================
 cebolla:
   descripcion: "Cebolla (Allium cepa) en aros o rodajas. Producción importante en Cuyo y zonas áridas NOA. Alta humedad inicial (~89% bh). El compuesto de azufre afecta el sabor del producto seco — secado rápido a T moderada preserva calidad."
+  descripcion_en: "Onion (Allium cepa), in rings or slices. Significant production in Cuyo and the arid NOA. High initial moisture (~89% wb). The sulfur compound affects the flavor of the dried product — fast drying at moderate temperature preserves quality."
+  descripcion_pt: "Cebola (Allium cepa), em anéis ou rodelas. Produção importante em Cuyo e nas zonas áridas do NOA. Alta umidade inicial (~89% bu). O composto de enxofre afeta o sabor do produto seco — secagem rápida a temperatura moderada preserva a qualidade."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -277,6 +283,8 @@ cebolla:
 # =============================================================================
 pimiento_rojo:
   descripcion: "Pimiento rojo (Capsicum annuum) en rodajas o tiras, para producción de pimentón. Cultivo relevante en NOA (Salta, La Rioja). Contiene capsaicina y carotenoides (responsables del color del pimentón). Sensible a pérdida de color a T > 70°C."
+  descripcion_en: "Red bell pepper (Capsicum annuum), in slices or strips, for paprika production. Significant crop in the NOA (Salta, La Rioja). Contains capsaicin and carotenoids (responsible for paprika's color). Sensitive to color loss at T > 70°C."
+  descripcion_pt: "Pimentão vermelho (Capsicum annuum), em rodelas ou tiras, para produção de páprica. Cultivo relevante no NOA (Salta, La Rioja). Contém capsaicina e carotenoides (responsáveis pela cor da páprica). Sensível à perda de cor a T > 70°C."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: true   # carotenoides (color del pimentón) se degradan con luz UV y calor excesivo
@@ -379,6 +387,8 @@ pimiento_rojo:
 # =============================================================================
 zanahoria_rallada:
   descripcion: "Zanahoria (Daucus carota) rallada. La geometría de rallado difiere fundamentalmente de los ensayos estándar de rodajas — el espesor efectivo es mucho menor (~0.5-1.5 mm) y la relación superficie/volumen es mucho mayor. Los parámetros de capa fina de papers de rodajas son solo orientativos."
+  descripcion_en: "Grated carrot (Daucus carota). The grated geometry fundamentally differs from standard slice tests — the effective thickness is much smaller (~0.5-1.5 mm) and the surface/volume ratio much higher. The thin-layer parameters from slice papers are only indicative."
+  descripcion_pt: "Cenoura (Daucus carota) ralada. A geometria de ralado difere fundamentalmente dos ensaios padrão de rodelas — a espessura efetiva é muito menor (~0.5-1.5 mm) e a relação superfície/volume é muito maior. Os parâmetros de camada fina de artigos de rodelas são apenas orientativos."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -454,6 +464,8 @@ zanahoria_rallada:
 # =============================================================================
 perejil:
   descripcion: "Perejil (Petroselinum crispum), hojas frescas. Alta relación superficie/volumen por su estructura laminar. Producto aromático — temperatura máxima ~50°C para preservar aceites esenciales. Secado relativamente rápido."
+  descripcion_en: "Parsley (Petroselinum crispum), fresh leaves. High surface/volume ratio due to its laminar structure. Aromatic product — maximum temperature ~50°C to preserve essential oils. Relatively fast drying."
+  descripcion_pt: "Salsa (Petroselinum crispum), folhas frescas. Alta relação superfície/volume por sua estrutura laminar. Produto aromático — temperatura máxima ~50°C para preservar óleos essenciais. Secagem relativamente rápida."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: true   # aceites esenciales (apiol, mirceno) sensibles a UV
@@ -524,6 +536,8 @@ perejil:
 # =============================================================================
 apio:
   descripcion: "Apio (Apium graveolens), pecíolos y hojas. Literatura escasa para secado convectivo solar. Parámetros ESTIMADOS POR ANALOGÍA con perejil (morfología similar: tallo herbáceo + hoja plana, composición parecida). Usar con precaución."
+  descripcion_en: "Celery (Apium graveolens), petioles and leaves. Scarce literature for solar convective drying. Parameters ESTIMATED BY ANALOGY with parsley (similar morphology: herbaceous stalk + flat leaf, similar composition). Use with caution."
+  descripcion_pt: "Aipo (Apium graveolens), pecíolos e folhas. Literatura escassa para secagem convectiva solar. Parâmetros ESTIMADOS POR ANALOGIA com a salsa (morfologia similar: talo herbáceo + folha plana, composição parecida). Usar com precaução."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: true
@@ -597,6 +611,8 @@ apio:
 # =============================================================================
 mandioca:
   descripcion: "Mandioca (Manihot esculenta), raíz en rodajas o rallada. Producción relevante en NOA (ramal jujeño, sudeste de Salta). Alta densidad de almidón. Encogimiento moderado durante secado. Humedad inicial ~60-65% bh."
+  descripcion_en: "Cassava (Manihot esculenta), root in slices or grated. Significant production in the NOA (Jujuy ramal, southeastern Salta). High starch density. Moderate shrinkage during drying. Initial moisture ~60-65% wb."
+  descripcion_pt: "Mandioca (Manihot esculenta), raiz em rodelas ou ralada. Produção relevante no NOA (ramal de Jujuy, sudeste de Salta). Alta densidade de amido. Encolhimento moderado durante a secagem. Umidade inicial ~60-65% bu."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -667,6 +683,8 @@ mandioca:
 # =============================================================================
 aji_rojo:
   descripcion: "Ají rojo (Capsicum spp., chillies) — frutos enteros, pungentes por capsaicina, color rojo por carotenoides (capsantina). DISTINTO de pimiento_rojo (bell pepper grande dulce): el ají rojo es pequeño (~4 cm de largo), pungente, y se seca ENTERO (no rebanado). Producción NOA importante para condimento y exportación. Paper de referencia: variedad polyster (Coimbatore, India)."
+  descripcion_en: "Red chili (Capsicum spp., chillies) — whole fruits, pungent from capsaicin, red from carotenoids (capsanthin). DIFFERENT from pimiento_rojo (large sweet bell pepper): the red chili is small (~4 cm long), pungent, and dried WHOLE (not sliced). Significant NOA production for seasoning and export. Reference paper: polyster variety (Coimbatore, India)."
+  descripcion_pt: "Pimenta vermelha (Capsicum spp., chillies) — frutos inteiros, picantes por capsaicina, cor vermelha por carotenoides (capsantina). DIFERENTE de pimiento_rojo (pimentão grande doce): a pimenta vermelha é pequena (~4 cm de comprimento), picante, e seca-se INTEIRA (não fatiada). Produção relevante no NOA para condimento e exportação. Artigo de referência: variedade polyster (Coimbatore, Índia)."
   categoria: HORTALIZA
   tipo_secado: CAPA_FINA
   fotosensible: true   # capsaicina y carotenoides se degradan con calor >60°C y UV

@@ -1,0 +1,500 @@
+header: 4 · Drying Chamber
+info_caja: >-
+  📦 **BOX typology**: the chamber acts as a direct dryer.
+  The translucent roof is mandatory (the only energy source)
+  and the operating temperature is that of the ambient air.
+info_semicontinuo: >-
+  🏭 **Large scale — Semi-continuous (counter-current tunnel)**: the total
+  load and the geometry below are split into N columns in series; the air
+  enters hot through the dry column and leaves humid through the fresh one.
+  Configure the tunnel topology in its section.
+cargar:
+  titulo: 📥 Load saved configuration (.json)
+  uploader: Upload a previously saved chamber .json file
+  error_reconstruccion: "❌ Error rebuilding the chamber: {exc}"
+  exito: ✅ Chamber loaded from JSON ({n} session values were reset).
+producto:
+  titulo: Product to dry
+  sin_productos: >-
+    No products with calibrated thin-layer models were found in the catalogue.
+    Check the files in catalogo/productos/.
+  label: Product
+  help: >-
+    Product to dry. Selecting it loads its sorption isotherm (GAB),
+    basic properties and equilibrium moisture, which feed the coupled
+    heat-mass balance of the chamber. Only products with calibrated data
+    in the catalogue appear; if yours is missing, it must be calibrated first.
+  x_ini:
+    label: Initial moisture X₀ [kg water / kg ds]
+    help: "Dry basis. Typically 4–16 kg/kg ds for fresh fruits and vegetables."
+  x_obj:
+    label: Target moisture X_obj [kg water / kg ds]
+    help: >-
+      Desired final moisture on a dry basis.
+      Typical storage values: 0.10–0.20 kg/kg ds.
+  masa: Total mass to dry [kg]
+  gab_ok: ✅ Calibrated GAB isotherm available.
+  gab_fallback: "⚠️ No GAB isotherm. X_eq = {x:.3f} kg/kg ds will be used (fallback)."
+geometria:
+  titulo: Chamber geometry
+  esquema_titulo: 📐 Chamber diagram
+  esquema_caption: Diagram of the drying chamber with its main dimensions.
+  largo: Length [m]
+  ancho: Width [m]
+  alto: Height [m]
+  volumen: "Internal volume: {vol:.3f} m³  |  Floor area: {area:.3f} m²"
+  orientacion_titulo: "**Orientation and mono-pitch roof**"
+  orientacion_caption: >-
+    The chamber has its own orientation (independent of the collector-bank
+    orientation in P2). The roof is mono-pitch: it slopes from the taller
+    height to the shorter one on the chosen face.
+  pendiente_techo:
+    label: Roof pitch [°]
+    help: "0° = flat roof (historical, no change in the balance)."
+  acimut:
+    label: Chamber azimuth [°] — 0°=South, 90°=East, 180°=North, 270°=West
+    help: Azimuth of the outer normal of the 'front' face (same convention as P2).
+  cara_caida:
+    label: Roof low-side face
+    help: >-
+      Face the roof slopes toward (the shortest one).
+      Left/right looking in the flow direction (from back to front).
+    frente: Front
+    atras: Back
+    lateral_izq: Left side
+    lateral_der: Right side
+  preview_techo: >-
+    Lower height: {menor:.2f} m  |  Higher height: {mayor:.2f} m  |
+    Actual roof area: {area:.3f} m²  |  pvlib azimuth: {pvlib:.1f}°
+vidriado:
+  opaca: (opaque — no radiation to the product)
+  material:
+    label: Glazing material
+    help: >-
+      Opaque: chamber closed to the sun (pure indirect dryer).
+      Translucent material: same material and thickness for all faces
+      marked below; each one lets radiation into the product and the air
+      according to its own orientation (see calculos/radiacion_camara.py).
+
+      **BOX**: mandatorily translucent (at least one face), radiation is
+      the only energy source without an external collector.
+  tau: "τ_solar = {v:.2f} (from the catalogue)"
+  espesor: Glazing thickness [mm]
+  k_efectivo: "k_effective = {v:.3f} W/(m·K) (from the catalogue)"
+  caras_titulo: "**Translucent surfaces**"
+  caras_caption: >-
+    Faces carrying the chosen glazing (same material/thickness on all).
+    The floor is always opaque. Default: roof only (historical behaviour).
+  cara_techo: Roof
+  cara_frente: Front
+  cara_atras: Back
+  cara_lat_izq: Left side
+  cara_lat_der: Right side
+  sin_caras: >-
+    ⚠️ No face is active: the chamber becomes thermally opaque
+    (no radiative gain) even though the material is defined.
+  caja_sin_caras: >-
+    ❌ BOX typology requires at least one translucent face.
+    Without an external collector, radiation is the only energy source.
+  caja_sin_techo: >-
+    ❌ BOX typology requires a translucent roof. Without an external
+    collector and with an opaque cover, the dryer receives no energy.
+  preview:
+    cara: Face
+    area: Area [m²]
+    inclinacion: Tilt [°]
+    acimut: Azimuth UI360 [°]
+    translucida: Translucent
+materiales:
+  titulo: "**Chamber materials**"
+  caption: >-
+    The chosen composition applies to side walls, floor and roof
+    (except when the roof is translucent, in which case it is handled
+    separately above).
+  tipo_pared:
+    label: Wall type
+    simple: Simple (1 material + thickness)
+    compuesta: Composite (outer face + insulation + inner face)
+    help: >-
+      Simple: a single structural layer.
+      Composite: outer face + insulation + inner face,
+      thermal resistances in series.
+  catalogo:
+    label: Catalogue
+    help: "fondos = sheet/structural wood; aislantes = wool, EPS, PUR."
+  material: Material
+  material_estructural: Material (structural)
+  material_aislante: Material (insulation)
+  espesor_mm: Thickness [mm]
+  cara_externa: "**Outer face**"
+  espesor_externa: Outer thickness [mm]
+  aislante: "**Insulation**"
+  espesor_aislante: Insulation thickness [mm]
+  cara_interna: "**Inner face**"
+  espesor_interna: Inner thickness [mm]
+  resumen_u: >-
+    📐 **U_wall (conduction only)** = {u:.2f} W/(m²·K)  |
+    R = {r:.3f} m²·K/W  |  Total thickness = {esp:.1f} mm
+  resumen_u_nota: >-
+    Note: this U corresponds only to the wall conduction.
+    The thermodynamic engine adds the interior and exterior convective
+    films (h_int + R_wall + h_w) at each integration step.
+bandejas:
+  titulo_carros: Trolley and tray configuration
+  titulo: Tray configuration
+  n_carros:
+    label: Number of trolleys
+    help: >-
+      Mobile trolleys with trays inside the chamber/tunnel.
+      ADITAL: 24 trolleys. In semi-continuous it also defines the
+      number of tunnel zones (1 trolley per zone).
+  band_por_carro:
+    label: Trays per trolley
+    help: "Vertical tray stack of each trolley. ADITAL: ~14."
+  bandejas_totales: "Total trays: **{n}** (= trolleys × trays/trolley)"
+  n_bandejas: Number of trays
+  area_bandeja: Area per tray [m²]
+  espesor_capa:
+    label: Product layer thickness [m]
+    help: Thin-layer models valid for thickness ≤ 5 cm.
+  separacion:
+    label: Spacing between trays [m]
+    help: Clear distance between the surfaces of consecutive trays.
+  resumen: >-
+    Stack height{sufijo}: {altura:.2f} m  |
+    Total tray area: {area:.2f} m²  |
+    Estimated load: {carga:.1f} kg/m²/tray
+  sufijo_carro: " per trolley"
+  perdida_titulo: "**Product pressure drop (cross-flow)**"
+  k_rug_help: >-
+    Blockage obstruction coefficient C_obs, applied as C·ρv²/2 over the
+    channel between trays, to capture the form loss of the product bed in
+    cross-flow (HORIZONTAL). It combines with the rough-wall friction
+    (Colebrook with ε = product size), which captures the drag on the bed
+    surface.
+
+    **Automatic default** (improvement 29, general model): Borda-Carnot
+    contraction + expansion with β = layer_thickness/spacing (fraction of
+    the gap occupied by the product):
+    • C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
+    • Grows with β and diverges when the gap blocks (β→1).
+
+    In VERTICAL_ASCENDING this term does not apply: the Ergun equation
+    already captures the through-bed resistance via Φ_s and d_p.
+  forzar_k: Force C_obstruction (override the automatic default)
+  c_obstruccion:
+    label: C_obstruction [dimensionless]
+    help: "Applied as C·ρv²/2 over the velocity of the channel between trays."
+  k_auto: >-
+    Automatically estimated C_obstruction: **{k:.2f}**
+    (β = thickness/spacing = {beta:.2f}; bed roughness d_p = {dp:.1f} mm)
+tunel:
+  titulo: 🏭 Tunnel topology (semi-continuous)
+  zonas_carros:
+    label: Tunnel zones (= trolleys)
+    help: >-
+      Each tunnel zone holds exactly one trolley: the number of
+      zones is set by the number of trolleys in the 'Trolleys and
+      trays' section.
+  n_zonas:
+    label: Number of columns (zones in series)
+    help: >-
+      Columns of trolleys in series along the tunnel. The air flows
+      counter-current: it enters hot through the dry column (zone N)
+      and leaves humid through the fresh one (zone 1).
+  cadencia:
+    label: Advance cadence [h]
+    help: >-
+      How often a column advances one position. The dry column is
+      unloaded and a fresh one enters. The outlet dryness is emergent
+      (X_target is not forced).
+  resumen: >-
+    ⏱️ Total residence of a trolley: **{res:.1f} h** (≈ {dias:.1f} days)  |
+    Load per column: **{carga:.1f} kg**  |
+    One trolley unloaded every **{cadencia:.1f} h**.
+flujo:
+  titulo: Air flow
+  hint_colector: "The collector delivers {q:.1f} L/s → ~{kg:.3f} kg/s (at ρ≈{rho} kg/m³)."
+  caudal:
+    label: Mass flow [kg/s]
+    help_default: Dry-air flow circulating through the chamber.
+  direccion:
+    label: Flow direction
+    horizontal: HORIZONTAL
+    vertical_ascendente: VERTICAL_ASCENDING
+  usar_hr:
+    label: Specify inlet RH
+    help: If not specified, the calculation uses the scalar fallback from the catalogue.
+  hr_entrada: RH of the air at the chamber inlet [%]
+  velocidad: "Estimated superficial velocity: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
+borde:
+  titulo: Chamber inlet air (boundary condition)
+  no_aplica: >-
+    **Real day** mode active: the inlet air temperature and humidity come
+    from the climate/collector, and the transport coefficients are
+    recomputed over time. These values are not set in this mode.
+  caption: >-
+    These values describe the air that **enters** the chamber, not the
+    temperature/RH **inside** it (which the engine computes and which vary
+    over time). They are the boundary condition of the **Constants** and
+    **Synthetic** modes.
+  hint_t_caja: >-
+    BOX typology: the incoming air is the ambient (no collector).
+    Set T ≈ representative T_amb of the site.
+  hint_t_otro: >-
+    Temperature of the air entering the chamber. Typically ≈ collector
+    outlet T. The T inside the chamber is a dynamic engine output.
+  t_op: Inlet air temperature [°C]
+  hr_op:
+    label: Inlet air RH [%]
+    help: >-
+      Relative humidity of the air entering the chamber; it fixes its
+      inlet absolute humidity ω. The RH inside the chamber is dynamic
+      (thermodynamic-engine output). Not used in Real day mode: inlet ω
+      comes from the climate.
+forzantes:
+  titulo: Air forcing and simulation horizon
+  ventana_info: >-
+    🗓️ **Production window**: the horizon is the span defined in
+    P1 ({vi} → {vf}, {ndias} days) with real hourly climate (multi-day). {borde}
+  ventana_borde_caja: T_inlet = T_amb(t) (the chamber acts as the collector).
+  ventana_borde_otro: Forcing = collector hour by hour (day and night) + NASA POWER climate.
+  ventana_sin_clima: >-
+    ⚠️ The production window needs real climate loaded in
+    **P2 · Site**.
+  real_caja: Real day (ambient climate)
+  real_otro: Real day (climate + collector)
+  op_constantes: Constants (fast)
+  op_sintetico: Synthetic day (sinusoidal)
+  help_real_caja: >-
+    **Real day:** hourly series of T_amb, ω, wind and I_g from the
+    NASA POWER climate in P2 for the day selected in P1.
+    T_inlet to the bed = T_amb (the chamber acts as the collector).
+  help_real_otro: >-
+    **Real day:** hourly collector series computed in P3 +
+    NASA POWER climate from P2.
+  radio:
+    label: Inlet-air forcing
+    help: >-
+      **Constants:** T_in, ω and T_amb fixed at the design value.
+      Equivalent to a single run.
+
+      **Synthetic day:** day/night sinusoidal curve (midday peak,
+      ±15 K in T_col_out, ±5 K in T_amb). Captures the diurnal cycle.
+
+      {real}
+  real_no_disp: "⚠️ Real day not available: {motivo} Falls back to 'Synthetic day'."
+  hz:
+    label: Drying horizon
+    un_dia: 1 day
+    multidia: Multi-day
+    help: |
+      1 day: 24 h of simulation. Multi-day: 24 h × N (1–21).
+
+      Constants: defines the run's `t_max_s`.
+
+      Synthetic/Real: defines how many typical days are replicated.
+  n_dias: Number of days
+  composicion:
+    label: Horizon composition
+    repetir: Repeat typical day
+    consecutivos: Consecutive real days
+    help: >-
+      Repeat typical day: the design day is repeated N times
+      (periodic forcing).
+
+      Consecutive real days: N calendar days of NASA climate
+      starting from the design day (real day-to-day variability).
+      If the range crosses Dec 31 it is trimmed and warned.
+  reales_caja: >-
+    📅 Real forcing (BOX): T_inlet(t) = T_amb(t) and
+    ω(t), v_wind(t) and I_g(t) from the NASA POWER climate in P2
+    for the analysis day selected in P1.
+  reales_otro: >-
+    📅 Real forcing: T_col_out(t) from the P3 calculation,
+    ω_amb(t), T_amb(t), v_wind(t) and I_g(t) from the NASA POWER climate in P2.
+  i_g_max:
+    label: Midday peak I_g [W/m²]
+    help: >-
+      Peak of global horizontal irradiance on the roof.
+      Typical clear day: 800–1000 W/m². Daily curve: positive
+      sinusoidal half-bell (sun between 6 h and 18 h).
+  t_amb_repr: >-
+    📍 Representative ambient T: **{t:.1f} °C** ({origen}). Used for
+    wall losses and as the product's initial T if not explicitly defined.
+  t_prod_check: Define the product's initial T explicitly (refrigerated, preheated, etc.)
+  t_prod:
+    label: Product initial T [°C]
+    help: "Reasonable range: −10 °C (refrigerated) to +70 °C (preheated)."
+  sin_gab: >-
+    ⚠️ The selected product **has no calibrated GAB parameters**.
+    The thermodynamic engine will use a non-physical fallback (linear ramp
+    `a_w = X / X_initial`) that overestimates drying at low X. For reliable
+    results, load GAB parameters into the catalogue or choose another product.
+t_amb_origen:
+  media_anual: "NASA POWER annual mean = {t:.1f} °C"
+  fallback: "fallback 25 °C (no climate loaded)"
+anual:
+  sin_clima: ℹ️ **Annual operation** available only with NASA POWER climate loaded in P2.
+  sin_colector: >-
+    ⚠️ The chamber's annual operation requires a collector configured
+    in P3 (linear pre-design model).
+  titulo: "### 📅 Chamber annual operation (cascade A + B)"
+  caption: >-
+    Runs the thermodynamic engine over each month's typical day, computes
+    the 4 Augustus Leon efficiencies (RSER 2002) and scales to monthly
+    operation with the configured number of batches. The per-month detail
+    is shown in P7.
+  batches:
+    label: Product batches per month
+    help: >-
+      Number of complete product batches assumed to run per month.
+      10 batches/month ≈ 1 batch every 3 days.
+  dias_batch:
+    label: Days/batch (approx.)
+    help: 30 days/month ÷ batches/month
+  calcular:
+    label: 📅 Compute annual operation
+    help: >-
+      Builds the chamber with the current widget values,
+      sets modo_calculo=thermodynamic and runs 12 simulations (~30 s).
+  error_config: "❌ Configuration error: {exc}"
+  error: "❌ {exc}"
+  error_calculo: "❌ Error in annual calculation: {exc}"
+  spinner: Running the thermodynamic engine month by month...
+  exito: ✅ Annual operation computed. See monthly detail in P7.
+  resumen: "**Annual summary**"
+  kg_secados:
+    label: kg dried/year
+    help: Sum of kg of fresh product dried over the 12 months.
+  eta_total:
+    label: mean η_total
+    help: Overall system efficiency weighted by kg/month.
+  t_secado:
+    label: mean drying time
+    help: Average over months that converged to X_target.
+  e_solar:
+    label: Annual solar energy
+    help: On the collector plane during operating batches.
+error_config: "❌ Configuration error: {exc}"
+advertencias_titulo: Design warnings
+sin_advertencias: ✅ Design with no warnings.
+presion_usada: "Atmospheric pressure used: {origen}."
+horizonte_recortado: >-
+  ⚠️ The horizon was trimmed to {n} day(s): the design day + {solicitado}
+  days crosses the end of the climate year ({anio}). Choose an earlier start
+  day (P1) or fewer days for the full horizon.
+spinner_integrando: Integrating the thermodynamic engine...
+error_calculo: "❌ Calculation error: {exc}"
+advertencias_calculo: Calculation warnings
+test_puntual:
+  titulo: "### Single-day spot test (optional)"
+  caption: >-
+    Lets you run a single batch with a synthetic or real day to
+    validate the engine or explore one-day transients. It does **not**
+    feed the annual results — those come from the 'Compute annual
+    operation' button above.
+calcular:
+  label: ⚙️ Compute chamber
+  help_bloqueo: BOX typology requires at least one translucent face to be able to compute.
+resultados_td:
+  titulo: Thermodynamic-engine results
+  t_secado: Drying time
+  no_alcanzado: not reached
+  status: Status
+  agua_evaporada:
+    label: Evaporated water
+    help: Integral of ṁ_w(t) over the simulation.
+  x_final:
+    label: Final X
+    help: Product moisture at the end of the integration.
+  t_max:
+    label: T_max product
+    help: Maximum T_prod recorded along the trajectory.
+  horas_anti_rehum:
+    label: Anti-rewetting hours
+    help: Time with policy B active (dX/dt clipped to 0).
+  horas_hr:
+    label: Hours RH > 95 %
+    help: Time with chamber-air RH > 95 % (saturation risk).
+  energia_rad:
+    label: Direct radiative energy
+    help: >-
+      ∫ Q_rad(t) dt — direct solar gain to the product through
+      the translucent roof. 0 in opaque chambers.
+  no_convergio: >-
+    ⚠️ In {dias:.1f} day(s) X_obj = {x_obj:.3f} kg/kg ds was not reached.
+    Final moisture: {x_fin:.3f} kg/kg ds. Increase the horizon or improve
+    the conditions.
+  curva_expander: ℹ️ About the shape of the ṁ_w curve (diffusive model)
+  curva_md: |
+    The thermodynamic engine models evaporation as
+
+    $$\dot m_w = K_m \cdot A_{prod} \cdot (\omega_{sup} - \omega_{flujo})$$
+
+    with $\omega_{sup} = \omega_{sat}(T_{prod}) \cdot a_w(X_{prod})$.
+
+    **Warming-up period:** at the start the product is colder than the air. ω_sat(T_prod) is small (it grows exponentially with T via Clausius-Clapeyron), so ω_sup ≈ ω_in and ṁ_w starts near zero. As T_prod rises, ω_sup grows fast and ṁ_w scales with it. This appears as a **rising initial ramp**, not the classic "constant rate from t=0" of empirical models (Lewis, Page).
+
+    **Falling-rate period:** appears only when X crosses X_m (GAB monolayer moisture). Only then does a_w start to fall and drag ω_sup down. If your X_target > X_m, you finish drying before entering this zone and never see the drop.
+
+    **Peak at the end of the run:** if the X_obj event fires near solar noon, T_prod (and hence ṁ_w) is at its maximum right when the integration cuts off. The last stored point coincides with the peak — it is not a plotting artefact.
+
+    Empirical thin-layer models (Lewis/Page/etc.) **absorb the warming-up into the parameter k**, which is why they show MR falling from 1 from t=0. The diffusive engine models the energy balance explicitly — more realistic but the curve shape differs.
+resultados_cf:
+  titulo: Pre-design results
+  t_secado:
+    label: Drying time
+    help: Estimated time to reduce X₀ to X_obj.
+  x_eq:
+    label: X_eq
+    help: "Equilibrium moisture ({fuente})."
+  agua_extraida:
+    label: Extracted water
+    help: Mass of water that must evaporate.
+  mr_obj:
+    label: Target MR
+    help: Moisture ratio at the end of drying.
+resumen:
+  titulo: Configuration summary
+  producto: "**Product:** {v}"
+  masa: "**Mass:** {v:.1f} kg"
+  x_ini: "**X₀:** {v:.2f} kg/kg ds"
+  x_obj: "**X_obj:** {v:.3f} kg/kg ds"
+  modelo_cf: "**Thin-layer model (catalogue):** {v}"
+  motor: "**Numeric engine:** {v}"
+  t_op: "**T_operation:** {v} °C"
+  hr_op: "**RH_operation:** {v} %"
+  camara: "**Chamber:** {largo}×{ancho}×{alto} m"
+  bandejas: "**Trays:** {n} × {area:.2f} m²"
+  espesor_capa: "**Layer thickness:** {v:.1f} cm"
+  caudal: "**Flow:** {v:.4f} kg/s"
+  direccion: "**Direction:** {v}"
+  t_amb: "**T_amb (calc):** {v:.1f} °C"
+guardar:
+  txt: Save chamber configuration (.txt)
+  json: Save chamber configuration (.json)
+graficas:
+  curva_x: X(t)
+  x_eq: "X_eq={v:.3f}"
+  x_obj: "X_obj={v:.3f}"
+  x_0: "X₀={v:.3f}"
+  t_marca: "t={v:.1f}h"
+  eje_tiempo: Time [h]
+  eje_x: Moisture X [kg water / kg ds]
+  titulo_curva: "Drying curve — {prod} · model {modelo}"
+  panel_x: Product moisture X(t)
+  panel_temps: "Temperatures: product, air and walls"
+  panel_hr: Chamber-air RH
+  panel_evap: Evaporation rate
+  t_producto: T_product
+  t_aire: T_air (flow)
+  t_pared_int: T_inner wall
+  t_pared_ext: T_outer wall
+  hr_flujo: RH_flow [%]
+  m_dot: ṁ_w [g/h]
+  eje_x_ms: X [kg/kg ds]
+  eje_t: T [°C]
+  eje_hr: RH [%]
+  eje_m_dot: ṁ_w [g/h]
+  titulo_td: "Thermodynamic engine — {prod}"

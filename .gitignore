@@ -40,3 +40,6 @@ docs/pruebas_coincidencia/
 
 # Clon local del Hugging Face Space (deploy automatizado vía GitHub Action — ver S33)
 Secasol26/
+
+# Papelera de Obsidian (vault local — no se versiona)
+.trash/

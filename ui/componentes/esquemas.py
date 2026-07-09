@@ -84,9 +84,11 @@ def mostrar_esquema(
         max_ancho_px: Ancho máximo del esquema en píxeles.
         caption: Texto opcional debajo del esquema.
     """
+    from ui.componentes.idiomas import t
+
     svg = _leer_svg(nombre)
     if not svg:
-        st.caption(f"[esquema '{nombre}' no encontrado]")
+        st.caption(t("comun.esquema_no_encontrado", nombre=nombre))
         return
 
     aspecto = _aspecto_svg(svg)

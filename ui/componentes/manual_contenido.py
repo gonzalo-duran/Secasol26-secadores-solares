@@ -18,6 +18,10 @@ from pathlib import Path
 
 CAPITULOS_DIR = Path(__file__).resolve().parent.parent.parent / "manual" / "capitulos"
 
+# Idioma canónico del manual: los .md ES siempre existen; EN/PT son parciales
+# (fase F9). Los .md viven en subcarpetas por idioma: manual/capitulos/<lang>/.
+IDIOMA_MANUAL_DEFAULT = "es"
+
 # Slug reservado para la página índice (no corresponde a ningún .md).
 SLUG_INDICE = "indice"
 
@@ -42,8 +46,8 @@ class CapituloManual:
 
     @property
     def ruta(self) -> Path:
-        """Ruta absoluta al archivo markdown del capítulo."""
-        return CAPITULOS_DIR / self.archivo
+        """Ruta absoluta al markdown ES del capítulo (idioma canónico)."""
+        return CAPITULOS_DIR / IDIOMA_MANUAL_DEFAULT / self.archivo
 
 
 _PARTE_I = "Parte I — Empezar"
@@ -233,3 +237,24 @@ SLUG_POR_SECCION: dict[str, str] = {
     "p6": "motor",
     "p7": "resultados",
 }
+
+
+def ruta_capitulo(archivo: str, lang: str) -> tuple[Path, bool]:
+    """Resuelve la ruta del markdown de un capítulo con fallback a ES (F8).
+
+    Los .md viven en ``manual/capitulos/<lang>/``. El ES es obligatorio; EN/PT
+    son parciales (F9). Si el archivo no existe en ``lang``, cae al ES.
+
+    Args:
+        archivo: Nombre del archivo (ej. ``12_colector.md``).
+        lang: Idioma pedido (``es``/``en``/``pt``).
+
+    Returns:
+        Tupla ``(ruta, es_fallback)``: la ruta a usar y ``True`` si se cayó al
+        ES por no existir la traducción en ``lang``.
+    """
+    if lang != IDIOMA_MANUAL_DEFAULT:
+        candidato = CAPITULOS_DIR / lang / archivo
+        if candidato.is_file():
+            return candidato, False
+    return CAPITULOS_DIR / IDIOMA_MANUAL_DEFAULT / archivo, lang != IDIOMA_MANUAL_DEFAULT

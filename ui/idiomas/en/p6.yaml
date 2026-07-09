@@ -1,0 +1,254 @@
+header: 6 · Fan / Drive
+intro: >-
+  The air moves by **forced convection** (fan/motor) or **natural** (solar
+  chimney, no electricity). Forced: more flow control and the ability to
+  overcome high pressure drops (thick beds, collector bank, industrial scale),
+  at the cost of energy. Natural: no electricity, lower flow that varies with
+  sun and wind — needs a chimney to induce draft. Choose with the toggle below.
+cargar:
+  titulo: 📥 Load saved configuration (.json)
+  uploader: Upload a previously saved fan .json file
+  error_reconstruccion: "❌ Error rebuilding the fan: {exc}"
+  exito: ✅ Fan loaded from JSON ({n} session values were reset).
+usar:
+  label: Add forced-convection system (fan / motor)
+  help: >-
+    Turn off for natural-convection typologies
+    (box-type dryer with chimney, or cabinet without a fan).
+  sin_motor: >-
+    No fan. The dryer runs by natural convection.
+    Configure the solar chimney below to induce thermal draft,
+    or toggle it on to size a fan.
+accionamiento:
+  titulo: Drive type
+  caption: >-
+    Electric motor (axial or centrifugal fan). For natural convection —
+    optionally with a wind extractor at the chimney top — turn off the
+    fan with the toggle above.
+caudal:
+  titulo: Design flow
+  hint_colector: "Collector (P3): {q:.1f} L/s"
+  hint_camara: "Chamber (P4): {g:.1f} g/s → {l:.1f} L/s (at 50 °C)"
+  label: Volumetric flow [L/s]
+  help_default: Flow the fan must move.
+  metric: Flow
+perdidas:
+  titulo: System pressure drops
+  modo:
+    label: Pressure-drop input
+    help: |
+      **By components:** estimates ΔP_collector (Darcy-Weisbach) and ΔP_chamber (tray resistance) from P3 and P4, plus a 20% duct margin.
+
+      **Direct total ΔP:** enter the field-measured or catalogue value.
+    componentes: By components (auto-estimated)
+    total: Direct total ΔP
+  total:
+    label: System total ΔP [Pa]
+    help: Includes collector, chamber and ducts.
+  colector:
+    label: Collector ΔP [Pa]
+    help_auto: "Collector-bank pressure drop (Darcy-Weisbach). Auto (P3): {v:.1f} Pa."
+    help_sin: Collector-bank pressure drop (Darcy-Weisbach). Configure P3 for auto-estimation.
+    auto_caption: "Auto P3: **{v:.1f} Pa**"
+  camara:
+    label: Chamber ΔP [Pa]
+    help_auto: "Chamber-tray pressure drop. Auto (P4): {v:.1f} Pa (K_mesh=2.0)."
+    help_sin: Chamber-tray pressure drop. Configure P4 for auto-estimation.
+    auto_caption: "Auto P4: **{v:.1f} Pa**"
+  ductos:
+    check: Specify duct ΔP
+    label: Duct ΔP [Pa]
+    auto_caption: "Auto 20%: **{v:.1f} Pa**"
+  singulares:
+    titulo: "Minor-loss ΔP (inlet, outlet, elbows, manifold, diffuser): **{v:.1f} Pa**"
+    v_label: Air velocity in the main duct [m/s]
+    v_help: >-
+      Typical velocity in solar-dryer ducts: 5–10 m/s.
+      Higher → more minor loss. For ø≈15 cm ducts with
+      Q≈900 m³/h, v ≈ 14 m/s.
+    detalle: |
+      n_parallel = {n_par} · assumed n_elbows = 2 · C coefficients from ASHRAE ch. 21 / Idelchik
+
+      - Inlet (C=0.5): {entrada:.1f} Pa
+      - Free-discharge outlet (C=1.0): {salida:.1f} Pa
+      - 2 × 90° elbows (C=0.9 each): {codos:.1f} Pa
+      - Bank→duct manifold, junction (C=1.5): {manifold:.1f} Pa
+      - Chamber inlet diffuser (C=0.3): {difusor:.1f} Pa
+  total_preview: >-
+    **Estimated total ΔP: {total:.1f} Pa** (col={col:.1f} + cham={cam:.1f} +
+    duct={duc:.1f} + minor={sing:.1f})
+  cano_caption: "↳ Duct ΔP includes the **main duct** (P3): {v:.1f} Pa of the bank manifold."
+ventilador:
+  titulo: Fan and motor parameters
+  eta_vent:
+    label: Fan η [%]
+    help: "Simple axial: 45–60%. Medium-pressure centrifugal: 60–75%."
+  eta_motor:
+    label: Electric motor η [%]
+    help: "Motors < 1 kW: 75–85%."
+  fs:
+    label: Service factor [-]
+    help: "Motor oversizing. NEMA continuous standard: 1.15."
+  usar_tension: Specify supply voltage
+  tension: Voltage [V]
+calcular: ⚙️ Compute motor
+error_config: "❌ Configuration error: {exc}"
+advertencias_titulo: Design warnings
+sin_advertencias: ✅ Motor sized with no warnings.
+resultados:
+  titulo: Sizing results
+  dp_total: Total ΔP
+  p_hidraulica:
+    label: Hydraulic power
+    help: Q × ΔP
+  p_electrica:
+    label: Electric power
+    help: "P_hyd / (η_fan={eta_vent:.0%} × η_motor={eta_motor:.0%})"
+  p_instalar:
+    label: Power to install
+    help: "P_elec × SF={fs:.2f}. Nominal power of the motor to buy."
+  corriente: "⚡ Estimated rated current: **{i:.2f} A** at {v} V (cos φ = 0.85)"
+resumen:
+  titulo: Configuration summary
+  tipo: "**Type:** Electric motor"
+  caudal: "**Flow:** {v:.1f} L/s"
+  dp_total: "**Total ΔP:** {v:.1f} Pa"
+  eta_vent: "**Fan η:** {v:.0%}"
+  eta_motor: "**Motor η:** {v:.0%}"
+  fs: "**Service factor:** {v:.2f}"
+  p_hidraulica: "**Hydraulic power:** {v:.1f} W"
+  p_eje: "**Shaft power:** {v:.1f} W"
+  p_electrica: "**Electric power:** {v:.1f} W"
+  p_instalar: "**Power to install:** {v:.1f} W"
+  corriente: "**Current:** {v:.2f} A"
+guardar:
+  txt: Save motor configuration (.txt)
+  json: Save motor configuration (.json)
+chimenea:
+  titulo: Solar chimney
+  cargar:
+    titulo: 📥 Load chimney configuration (.json)
+    uploader: Upload a previously saved chimney .json file
+    error_reconstruccion: "❌ Error rebuilding the chimney: {exc}"
+    exito: ✅ Chimney loaded from JSON ({n} values were reset).
+  usar:
+    label: Add solar chimney
+    help: >-
+      A chimney generates thermal draft from the density difference between
+      the hot air (chamber + chimney) and the ambient. Model in
+      `calculos.chimenea_calc`.
+  sin_chimenea: No chimney. The air will move only by free diffusion.
+  diametro: Inner diameter [m]
+  altura: Height [m]
+  material: Material
+  extractor:
+    check: Add wind extractor at the top
+    check_help: >-
+      Passive 'Chinese-hat' turbine mounted at the chimney top. It adds a
+      driving term ΔP = Cp·ρ·v_wind²/2 to the natural loop, where v_wind is
+      corrected from the NASA POWER value (10 m) to the top height via a
+      logarithmic boundary-layer profile. It also introduces an extra
+      resistance Kt·ρ·v_flow²/2 to the rising flow.
+
+      **Edge cases:**
+      • v_wind = 0 (calm): the turbine only adds resistance → worse than a bare chimney.
+      • No sun (night/cloudy): if there is wind, the turbine keeps moving air — system robustness.
+      • High v_wind + sun: effects add up, higher flow.
+
+      No specific literature correlation; the Cp and Kt ranges are order-of-magnitude anchors (Idelchik / commercial turbine datasheets).
+    titulo: Wind extractor parameters
+    diam:
+      label: Extractor diameter [m]
+      help: >-
+        Diameter of the extractor throat. Typical commercial sizes:
+        0.30 / 0.45 / 0.60 m. Recommended ≥ the chimney
+        diameter to avoid throttling.
+    cp:
+      label: Turbine Cp [dimensionless]
+      help: >-
+        Driving pressure coefficient: ΔP_drive = Cp·ρ·v² / 2.
+        Typical range 0.3–0.6 for Chinese-hat turbines.
+        Higher values only with manufacturer data.
+    kt:
+      label: Turbine Kt (resistance) [dimensionless]
+      help: >-
+        Resistance coefficient: ΔP_resistance = Kt·ρ·v_flow²/2
+        on the air velocity in the extractor.
+        1.0 (default) covers expansion + blade obstruction.
+    z0:
+      label: Terrain type (z₀)
+      help: >-
+        Aerodynamic roughness length of the terrain. Used to
+        correct the NASA POWER wind (at 10 m) to the chimney-top
+        height via the logarithmic profile
+        v(z) = v(10)·ln(z/z₀)/ln(10/z₀).
+      mar: Sea/lake (0.001 m)
+      campo: Open field (0.03 m)
+      rural: Medium rural (0.05 m)
+      suburbano: Suburban (0.20 m)
+      urbano: Dense urban (0.50 m)
+    preview_viento: >-
+      Site mean wind (P2, at 10 m): **{v10:.1f} m/s** → corrected
+      to {z:.1f} m at the top: **{vloc:.2f} m/s** → turbine driving ΔP
+      (at T_amb 20 °C): **{dp:.2f} Pa**.
+    preview_sin_clima: >-
+      Load climate data in P2 to preview the wind effect
+      at the chimney-top height.
+  error_validacion: "**Validation error** — {err}"
+  tiro:
+    titulo: "**Estimated thermal draft** (chamber + chimney as a rising column)"
+    metric_dt: ΔT = +{dt:.0f} K
+    caption: >-
+      Informative calculation with T_amb=20 °C, H_effective = chimney height
+      ({alt:.1f} m) + chamber height ({hcam:.2f} m) = {heff:.2f} m. The
+      equilibrium flow is solved in `balance_global` with the loop's T_chim
+      and real losses.
+  guardar:
+    txt: Save chimney configuration (.txt)
+    json: Save chimney configuration (.json)
+  calcular:
+    falta_camara: >-
+      ⚠️ Configure the chamber (P4) before evaluating the chimney — its
+      design flow and ΔP are inputs of the natural loop.
+    boton: 🌪️ Compute chimney
+    spinner: Solving the natural chimney loop...
+    error_calculo: "❌ Calculation error: {exc}"
+    prompt: >-
+      Press **Compute chimney** to solve the natural loop with
+      representative conditions. The result is persisted and shown
+      in P7 as an evaluated section.
+    titulo: Natural-loop results
+    caudal_natural:
+      label: Natural flow
+      help: Equilibrium ṁ of the loop (chamber + collector + chimney).
+    v_chim:
+      label: Chimney v
+      help: Mean velocity in the chimney section.
+    re:
+      label: Chimney Re
+      help: "Re > 4000: turbulent. Re < 2300: laminar."
+    dp_tiro:
+      label: Thermal-draft ΔP
+      help: Hydrostatic buoyancy = g·H_eff·(ρ_amb − ρ_chim).
+    dp_ducto:
+      label: Chimney-duct ΔP
+      help: Friction + minor losses of the chimney duct.
+    dp_resto:
+      label: Rest ΔP (col+cham)
+      help: Collector + chamber ΔP scaled quadratically to the equilibrium flow.
+    dp_turbina:
+      label: Turbine driving ΔP
+      help: "Wind extractor at v_local={v:.2f} m/s."
+    h_eff: Effective H
+    advertencias: "⚠️ {n} natural-loop warning(s)"
+    inputs: >-
+      Inputs: T_amb={t_amb:.1f} °C, T_chim={t_chim:.1f} °C
+      (heuristic ΔT={dt:.0f} K for {tipo}), v_wind={v:.1f} m/s,
+      P={p:.2f} kPa. Climate: {clima}. Pressure: {presion}.
+      In P7 it is re-solved with the full Picard loop (the chamber's T_chim
+      feeds back into the calculation).
+    tipo_caja: BOX
+    tipo_otro: CABINET/LARGE-SCALE
+condiciones:
+  media_anual: NASA POWER annual mean (P2)
+  fallback: fallback (T=20 °C, v=2 m/s)

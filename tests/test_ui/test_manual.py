@@ -19,6 +19,9 @@ from ui.componentes.manual_contenido import (
     SLUG_INDICE,
     SLUG_POR_SECCION,
 )
+from ui.componentes.manual_contenido import (
+    ruta_capitulo as _ruta,
+)
 from ui.componentes.manual_render import (
     extraer_anclas,
     extraer_enlaces_manual,
@@ -48,7 +51,7 @@ def test_manual_archivos_declarados_existen():
 
 def test_manual_sin_archivos_huerfanos():
     declarados = {c.archivo for c in CAPITULOS}
-    en_disco = {p.name for p in CAPITULOS_DIR.glob("*.md")}
+    en_disco = {p.name for p in (CAPITULOS_DIR / "es").glob("*.md")}
     huerfanos = en_disco - declarados
     assert not huerfanos, f"Archivos .md sin declarar en el TOC: {sorted(huerfanos)}"
 
@@ -192,3 +195,54 @@ def test_manual_sin_urls_absolutas_de_la_app(cap):
     texto = _texto(cap)
     for prohibido in ("http://localhost", "https://localhost", "hf.space", "huggingface.co"):
         assert prohibido not in texto, f"{cap.slug}: URL absoluta hardcodeada '{prohibido}'"
+
+
+# ---------------------------------------------------------------------------
+# 8. Multiidioma (F8): carpetas por idioma, fallback a ES, propagación de lang
+# ---------------------------------------------------------------------------
+
+
+def test_manual_capitulos_es_completos():
+    """Todos los capítulos existen bajo manual/capitulos/es/ (ES obligatorio)."""
+    from ui.componentes.manual_contenido import IDIOMA_MANUAL_DEFAULT
+
+    for cap in CAPITULOS:
+        ruta, es_fallback = _ruta(cap.archivo, IDIOMA_MANUAL_DEFAULT)
+        assert ruta.is_file(), f"falta el ES de {cap.slug}: {ruta}"
+        assert es_fallback is False
+
+
+def test_ruta_capitulo_fallback_a_es():
+    """Un idioma sin la traducción del capítulo cae al ES con la señal es_fallback."""
+    cap = CAPITULOS[0]
+    # 'en' no tiene .md traducidos todavía (F9) → fallback a ES.
+    ruta, es_fallback = _ruta(cap.archivo, "en")
+    assert es_fallback is True
+    assert ruta == CAPITULOS_DIR / "es" / cap.archivo
+    assert ruta.is_file()
+
+
+def test_render_manual_helpers_propagan_lang():
+    """Los helpers del visor arman URLs con &lang= y reescriben enlaces internos."""
+    from ui.manual import _propagar_lang, _url
+
+    assert _url("colector", "en") == "?manual=colector&lang=en"
+    assert _url("colector", "pt", ancla="tipos") == "?manual=colector&lang=pt#tipos"
+    # Reescribe enlaces internos del markdown preservando el ancla.
+    md = "ver [colector](?manual=colector) y [psi](?manual=psicrometria#carta)"
+    out = _propagar_lang(md, "en")
+    assert "(?manual=colector&lang=en)" in out
+    assert "(?manual=psicrometria&lang=en#carta)" in out
+
+
+def test_manual_ui_chrome_traducido():
+    """El chrome del visor (manual.ui.*) resuelve distinto por idioma."""
+    from ui.componentes.traducciones import traducir
+
+    assert traducir("manual.ui.volver", "es") == "⬅ Volver al diseñador"
+    assert "Back" in traducir("manual.ui.volver", "en")
+    assert "Voltar" in traducir("manual.ui.volver", "pt")
+    # Título del TOC: sin manual.toc.* aún → cae al ES de la tupla (F9).
+    from ui.manual import _titulo
+
+    assert _titulo(POR_SLUG["colector"], "en") == POR_SLUG["colector"].titulo

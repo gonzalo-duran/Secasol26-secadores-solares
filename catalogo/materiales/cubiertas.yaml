@@ -5,6 +5,8 @@
 
 vidrio_comun:
   descripcion: "Vidrio float común, contenido normal de hierro"
+  descripcion_en: "Common float glass, normal iron content"
+  descripcion_pt: "Vidro float comum, teor normal de ferro"
   transmitancia_solar: 0.84
   emisividad_ir: 0.88
   conductividad_termica: 1.0       # W/m·K
@@ -16,6 +18,8 @@ vidrio_comun:
 
 vidrio_bajo_hierro:
   descripcion: "Vidrio templado bajo contenido de hierro (solar grade)"
+  descripcion_en: "Tempered low-iron glass (solar grade)"
+  descripcion_pt: "Vidro temperado de baixo teor de ferro (solar grade)"
   transmitancia_solar: 0.91
   emisividad_ir: 0.88
   conductividad_termica: 1.0
@@ -27,6 +31,8 @@ vidrio_bajo_hierro:
 
 policarbonato_alveolar:
   descripcion: "Placa de policarbonato alveolar (cámaras de aire internas)"
+  descripcion_en: "Multiwall polycarbonate sheet (internal air cavities)"
+  descripcion_pt: "Placa de policarbonato alveolar (câmaras de ar internas)"
   transmitancia_solar: 0.78
   emisividad_ir: 0.90
   conductividad_termica: 0.05      # k EFECTIVO, no intrínseco; ver nota
@@ -57,6 +63,8 @@ policarbonato_alveolar:
 
 polietileno_ldpe:
   descripcion: "Film de polietileno baja densidad (invernadero)"
+  descripcion_en: "Low-density polyethylene film (greenhouse)"
+  descripcion_pt: "Filme de polietileno de baixa densidade (estufa)"
   transmitancia_solar: 0.85
   emisividad_ir: 0.30              # ¡semitransparente al IR! pierde mucho por radiación
   conductividad_termica: 0.33

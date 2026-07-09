@@ -24,6 +24,7 @@ from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.emplazamiento import Emplazamiento
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.graficas import mostrar_plotly
+from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import (
@@ -122,21 +123,21 @@ def _resumen_mensual(datos_local: pd.DataFrame) -> pd.DataFrame:
     hr_mes = HR_pct.resample("ME").mean()
     p_mes = pres_hPa.resample("ME").mean()
 
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = t("graficas.meses_abbr").split(",")
     nombres_mes = [_MES_ABBR[ts.month - 1] for ts in t_mes.index]
 
     df = pd.DataFrame(
         {
-            "Mes": nombres_mes,
-            "T prom [°C]": t_mes["mean"].round(1).values,
-            "T min [°C]": t_mes["min"].round(1).values,
-            "T max [°C]": t_mes["max"].round(1).values,
-            "GHI [kWh/m²]": ghi_mes_kWh.round(1).values,
-            "DNI [kWh/m²]": dni_mes_kWh.round(1).values,
-            "DHI [kWh/m²]": dhi_mes_kWh.round(1).values,
-            "Viento [m/s]": ws_mes.round(1).values,
-            "HR [%]": hr_mes.round(1).values,
-            "Presión [hPa]": p_mes.round(1).values,
+            t("p2.tabla.mes"): nombres_mes,
+            t("p2.tabla.t_prom"): t_mes["mean"].round(1).values,
+            t("p2.tabla.t_min"): t_mes["min"].round(1).values,
+            t("p2.tabla.t_max"): t_mes["max"].round(1).values,
+            t("p2.tabla.ghi"): ghi_mes_kWh.round(1).values,
+            t("p2.tabla.dni"): dni_mes_kWh.round(1).values,
+            t("p2.tabla.dhi"): dhi_mes_kWh.round(1).values,
+            t("p2.tabla.viento"): ws_mes.round(1).values,
+            t("p2.tabla.hr"): hr_mes.round(1).values,
+            t("p2.tabla.presion"): p_mes.round(1).values,
         }
     )
     return df
@@ -154,7 +155,7 @@ def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
             x=T_diaria.index,
             y=T_diaria.values,
             mode="lines",
-            name="Media diaria",
+            name=t("graficas.serie.media_diaria"),
             line=dict(color="#aec6e8", width=0.8),
         )
     )
@@ -163,13 +164,13 @@ def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
             x=T_mensual.index,
             y=T_mensual.values,
             mode="lines+markers",
-            name="Media mensual",
+            name=t("graficas.serie.media_mensual"),
             line=dict(color="#1f77b4", width=2.5),
             marker=dict(size=6),
         )
     )
     fig.update_layout(
-        yaxis_title="Temperatura [°C]",
+        yaxis_title=t("graficas.eje.temperatura_c"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
         height=320,
@@ -182,7 +183,7 @@ def _fig_temperatura(datos_local: pd.DataFrame) -> go.Figure:
 
 def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
     """Irradiación mensual GHI/DNI/DHI — figura interactiva Plotly."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = t("graficas.meses_abbr").split(",")
 
     ghi_s = datos_local["GHI_Wm2"].resample("ME").sum() / 1000.0
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
@@ -201,7 +202,7 @@ def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
     )
     fig.update_layout(
         barmode="stack",
-        yaxis_title="Irradiación mensual [kWh/m²]",
+        yaxis_title=t("graficas.eje.irradiacion_mensual"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
         height=320,
@@ -213,7 +214,7 @@ def _fig_irradiancia(datos_local: pd.DataFrame) -> go.Figure:
 
 def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
     """Velocidad del viento y HR mensuales — eje Y secundario nativo Plotly."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = t("graficas.meses_abbr").split(",")
 
     ws_s = datos_local["WS_ms"].resample("ME").mean()
     hr_s = (datos_local["HR"] * 100.0).resample("ME").mean()
@@ -222,13 +223,17 @@ def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(
         go.Bar(
-            name="Viento [m/s]", x=etiquetas, y=ws_s.values, marker_color="#4caf50", opacity=0.7
+            name=t("graficas.serie.viento_ms"),
+            x=etiquetas,
+            y=ws_s.values,
+            marker_color="#4caf50",
+            opacity=0.7,
         ),
         secondary_y=False,
     )
     fig.add_trace(
         go.Scatter(
-            name="HR [%]",
+            name=t("graficas.serie.hr_pct"),
             x=etiquetas,
             y=hr_s.values,
             mode="lines+markers",
@@ -238,7 +243,7 @@ def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
         secondary_y=True,
     )
     fig.update_yaxes(
-        title_text="Velocidad del viento [m/s]",
+        title_text=t("graficas.eje.viento_ms"),
         title_font_color="#4caf50",
         secondary_y=False,
         showgrid=True,
@@ -246,7 +251,7 @@ def _fig_viento_hr(datos_local: pd.DataFrame) -> go.Figure:
         gridcolor="lightgray",
     )
     fig.update_yaxes(
-        title_text="Humedad relativa [%]", title_font_color="#9c27b0", secondary_y=True
+        title_text=t("graficas.eje.hr_pct"), title_font_color="#9c27b0", secondary_y=True
     )
     fig.update_layout(
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -305,7 +310,7 @@ def _fig_irradiancia_comparativa(
     poa_horaria: pd.Series,
 ) -> go.Figure:
     """Dos subgráficos: plano horizontal (GHI/DNI/DHI) y plano del colector (POA)."""
-    _MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    _MES_ABBR = t("graficas.meses_abbr").split(",")
 
     ghi_s = datos_local["GHI_Wm2"].resample("ME").sum() / 1000.0
     dni_s = datos_local["DNI_Wm2"].resample("ME").sum() / 1000.0
@@ -318,7 +323,10 @@ def _fig_irradiancia_comparativa(
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.10,
-        subplot_titles=["Plano horizontal (GHI / DNI / DHI)", "Plano del colector (POA global)"],
+        subplot_titles=[
+            t("graficas.subplot.plano_horizontal"),
+            t("graficas.subplot.plano_colector"),
+        ],
     )
     fig.add_trace(
         go.Bar(name="GHI", x=etiquetas, y=ghi_s.values, marker_color="#f5a623", opacity=0.85),
@@ -337,7 +345,7 @@ def _fig_irradiancia_comparativa(
     )
     fig.add_trace(
         go.Bar(
-            name="POA global",
+            name=t("graficas.serie.poa_global"),
             x=etiquetas,
             y=poa_s.values,
             marker_color="#4caf50",
@@ -402,14 +410,14 @@ def _fig_temperatura_diaria(datos_dia: pd.DataFrame) -> go.Figure:
             x=horas_str,
             y=T_C.values,
             mode="lines+markers",
-            name="T amb [°C]",
+            name=t("graficas.serie.t_amb"),
             line=dict(color="#1f77b4", width=2.0),
             marker=dict(size=5),
             hovertemplate="%{x} — %{y:.1f} °C<extra></extra>",
         )
     )
     fig.update_layout(
-        yaxis_title="Temperatura [°C]",
+        yaxis_title=t("graficas.eje.temperatura_c"),
         hovermode="x unified",
         height=300,
         margin=dict(l=50, r=20, t=20, b=40),
@@ -429,7 +437,10 @@ def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.F
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.10,
-        subplot_titles=["Plano horizontal (GHI / DNI / DHI)", "Plano del colector (POA global)"],
+        subplot_titles=[
+            t("graficas.subplot.plano_horizontal"),
+            t("graficas.subplot.plano_colector"),
+        ],
     )
 
     fig.add_trace(
@@ -474,7 +485,7 @@ def _fig_irradiancia_diaria(datos_dia: pd.DataFrame, poa_dia: pd.Series) -> go.F
             fill="tozeroy",
             fillcolor="rgba(76,175,80,0.35)",
             line=dict(color="#4caf50"),
-            name="POA",
+            name=t("graficas.serie.poa"),
         ),
         row=2,
         col=1,
@@ -502,7 +513,7 @@ def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
             x=horas_str,
             y=ws,
             mode="lines+markers",
-            name="Viento [m/s]",
+            name=t("graficas.serie.viento_ms"),
             line=dict(color="#4caf50", width=2.0),
             marker=dict(size=5),
         ),
@@ -513,14 +524,14 @@ def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
             x=horas_str,
             y=hr_pct,
             mode="lines+markers",
-            name="HR [%]",
+            name=t("graficas.serie.hr_pct"),
             line=dict(color="#9c27b0", width=2.0),
             marker=dict(size=5, symbol="square"),
         ),
         secondary_y=True,
     )
     fig.update_yaxes(
-        title_text="Velocidad del viento [m/s]",
+        title_text=t("graficas.eje.viento_ms"),
         title_font_color="#4caf50",
         showgrid=True,
         gridwidth=0.5,
@@ -528,7 +539,7 @@ def _fig_viento_hr_diaria(datos_dia: pd.DataFrame) -> go.Figure:
         secondary_y=False,
     )
     fig.update_yaxes(
-        title_text="Humedad relativa [%]", title_font_color="#9c27b0", secondary_y=True
+        title_text=t("graficas.eje.hr_pct"), title_font_color="#9c27b0", secondary_y=True
     )
     fig.update_layout(
         hovermode="x unified",
@@ -550,19 +561,19 @@ def _generar_csv(datos: pd.DataFrame, zona_horaria: str) -> bytes:
         Bytes del archivo CSV codificado en UTF-8.
     """
     export = datos.tz_convert(zona_horaria).copy()
-    export.index.name = "fecha_hora_local"
+    export.index.name = t("p2.csv.indice")
     export["T_amb_C"] = export["T_amb_K"] - 273.15
     export["HR_pct"] = export["HR"] * 100.0
     export["presion_hPa"] = export["presion_Pa"] / 100.0
 
     columnas_csv = {
-        "T_amb_C": "T_amb [°C]",
-        "GHI_Wm2": "GHI [W/m²]",
-        "DNI_Wm2": "DNI [W/m²]",
-        "DHI_Wm2": "DHI [W/m²]",
-        "WS_ms": "Viento [m/s]",
-        "HR_pct": "HR [%]",
-        "presion_hPa": "Presión [hPa]",
+        "T_amb_C": t("p2.csv.t_amb"),
+        "GHI_Wm2": t("p2.csv.ghi"),
+        "DNI_Wm2": t("p2.csv.dni"),
+        "DHI_Wm2": t("p2.csv.dhi"),
+        "WS_ms": t("p2.csv.viento"),
+        "HR_pct": t("p2.csv.hr"),
+        "presion_hPa": t("p2.csv.presion"),
     }
     df_out = export[list(columnas_csv.keys())].rename(columns=columnas_csv)
     buf = io.StringIO()
@@ -578,7 +589,7 @@ def _generar_csv(datos: pd.DataFrame, zona_horaria: str) -> bytes:
 def render() -> None:
     """Renderiza la pestaña 2: Emplazamiento y Recursos Climáticos."""
 
-    st.header("Emplazamiento y Recursos Climáticos")
+    st.header(t("p2.header"))
     boton_manual(SLUG_POR_SECCION["p2"])
 
     proyecto = st.session_state.proyecto
@@ -593,36 +604,36 @@ def render() -> None:
     # Sección 1: Ubicación geográfica
     # -----------------------------------------------------------------------
 
-    with st.expander("Ubicación geográfica", expanded=False):
+    with st.expander(t("p2.ubicacion.titulo"), expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             lat = st.number_input(
-                "Latitud [°]",
+                t("p2.ubicacion.lat.label"),
                 min_value=-90.0,
                 max_value=90.0,
                 value=float(empl.latitud_deg),
                 step=0.01,
                 format="%.4f",
-                help="Norte positivo. Rango: −90° a +90°.",
+                help=t("p2.ubicacion.lat.help"),
             )
             lon = st.number_input(
-                "Longitud [°]",
+                t("p2.ubicacion.lon.label"),
                 min_value=-180.0,
                 max_value=180.0,
                 value=float(empl.longitud_deg),
                 step=0.01,
                 format="%.4f",
-                help="Este positivo. Rango: −180° a +180°.",
+                help=t("p2.ubicacion.lon.help"),
             )
         with c2:
             alt = st.number_input(
-                "Altitud [m s.n.m.]",
+                t("p2.ubicacion.alt.label"),
                 min_value=-500.0,
                 max_value=8850.0,
                 value=float(empl.altitud_m),
                 step=10.0,
                 format="%.0f",
-                help="Altitud del sitio. NASA POWER reporta la altitud de su punto de grilla.",
+                help=t("p2.ubicacion.alt.help"),
             )
             tz_idx = (
                 _ZONAS_HORARIAS.index(empl.zona_horaria)
@@ -630,19 +641,28 @@ def render() -> None:
                 else 0
             )
             zona = st.selectbox(
-                "Zona horaria",
+                t("p2.ubicacion.zona.label"),
                 options=_ZONAS_HORARIAS,
                 index=tz_idx,
-                help="Identificador IANA de zona horaria local.",
+                help=t("p2.ubicacion.zona.help"),
             )
         with c3:
-            st.caption("Referencia geográfica")
-            hemisferio = "Sur" if lat < 0 else "Norte"
-            meridiano = "Oeste" if lon < 0 else "Este"
+            st.caption(t("p2.ubicacion.referencia"))
+            hemisferio = t(
+                "p2.ubicacion.hemisferio_sur" if lat < 0 else "p2.ubicacion.hemisferio_norte"
+            )
+            meridiano = t(
+                "p2.ubicacion.meridiano_oeste" if lon < 0 else "p2.ubicacion.meridiano_este"
+            )
             st.info(
-                f"**Lat:** {abs(lat):.4f}° {hemisferio}\n\n"
-                f"**Lon:** {abs(lon):.4f}° {meridiano}\n\n"
-                f"**Alt:** {alt:.0f} m"
+                t(
+                    "p2.ubicacion.resumen",
+                    lat=abs(lat),
+                    hemisferio=hemisferio,
+                    lon=abs(lon),
+                    meridiano=meridiano,
+                    alt=alt,
+                )
             )
 
         # Aplicar cambios al emplazamiento
@@ -667,7 +687,7 @@ def render() -> None:
                 empl = nuevo_empl
         except ValueError as err:
             codigo = str(err).split(":")[0]
-            st.error(f"Error de validación ({codigo}): {err}")
+            st.error(t("p2.error_validacion", codigo=codigo, err=err))
 
     # -----------------------------------------------------------------------
     # Sección 2: Orientación del colector
@@ -675,57 +695,53 @@ def render() -> None:
 
     _tipologia_p2 = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
     if _tipologia_p2 == Tipologia.CAJA:
-        with st.expander("Orientación del colector", expanded=False):
-            st.info(
-                "🧊 Tipología **Caja**: no hay colector externo — la cámara actúa "
-                "como colector. Su orientación, pendiente de techo y superficies "
-                "translúcidas se configuran en **P4 · Cámara**."
-            )
+        with st.expander(t("p2.orientacion.titulo"), expanded=False):
+            st.info(t("p2.orientacion.nota_caja"))
     else:
-        with st.expander("Orientación del colector", expanded=False):
+        with st.expander(t("p2.orientacion.titulo"), expanded=False):
             c1, c2 = st.columns([2, 1])
             with c1:
                 # Mostrar en convención UI360 (0=S, 90=E, 180=N, 270=O)
                 acimut_ui360 = st.number_input(
-                    "Acimut del colector [°]  —  0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste",
+                    t("p2.orientacion.acimut.label"),
                     min_value=0.0,
                     max_value=360.0,
                     value=float(acimut_duffie_a_ui360(empl.acimut_colector_deg)),
                     step=1.0,
                     format="%.1f",
-                    help=(
-                        "Convención: 0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste.\n"
-                        "En el hemisferio sur, un colector óptimo apunta al Norte (180°)."
-                    ),
+                    help=t("p2.orientacion.acimut.help"),
                 )
                 pendiente = st.number_input(
-                    "Pendiente / inclinación [°]  —  0° = horizontal, 90° = vertical",
+                    t("p2.orientacion.pendiente.label"),
                     min_value=0.0,
                     max_value=90.0,
                     value=float(empl.pendiente_colector_deg),
                     step=1.0,
                     format="%.1f",
-                    help="Ángulo entre el plano del colector y la horizontal.",
+                    help=t("p2.orientacion.pendiente.help"),
                 )
             with c2:
-                st.caption("Orientación del colector")
+                st.caption(t("p2.orientacion.caption"))
                 _puntos_ui360 = {
-                    0.0: "Sur",
-                    45.0: "SE",
-                    90.0: "Este",
-                    135.0: "NE",
-                    180.0: "Norte",
-                    225.0: "NO",
-                    270.0: "Oeste",
-                    315.0: "SO",
-                    360.0: "Sur",
+                    0.0: "sur",
+                    45.0: "se",
+                    90.0: "este",
+                    135.0: "ne",
+                    180.0: "norte",
+                    225.0: "no",
+                    270.0: "oeste",
+                    315.0: "so",
+                    360.0: "sur",
                 }
                 referencia = min(_puntos_ui360.keys(), key=lambda k: abs(k - acimut_ui360))
                 acimut_duffie = acimut_ui360_a_duffie(acimut_ui360)
                 acimut_pvlib = acimut_duffie_a_pvlib(acimut_duffie)
-                st.metric("Orientación aproximada", _puntos_ui360[referencia])
-                st.caption(f"Acimut pvlib (interno): {acimut_pvlib:.1f}°")
-                st.caption(f"Inclinación: {pendiente:.1f}°")
+                st.metric(
+                    t("p2.orientacion.aprox"),
+                    t(f"p2.orientacion.puntos.{_puntos_ui360[referencia]}"),
+                )
+                st.caption(t("p2.orientacion.acimut_pvlib", v=acimut_pvlib))
+                st.caption(t("p2.orientacion.inclinacion", v=pendiente))
 
             # Actualizar emplazamiento con orientación (almacenamiento en Duffie)
             try:
@@ -740,13 +756,13 @@ def render() -> None:
                     empl = nuevo_empl
             except ValueError as err:
                 codigo = str(err).split(":")[0]
-                st.error(f"Error de validación ({codigo}): {err}")
+                st.error(t("p2.error_validacion", codigo=codigo, err=err))
 
     # -----------------------------------------------------------------------
     # Sección 3: Datos climáticos NASA POWER
     # -----------------------------------------------------------------------
 
-    st.subheader("Datos climáticos NASA POWER")
+    st.subheader(t("p2.clima.titulo"))
 
     # Sincronización con P1: si el usuario eligió un día específico (modo
     # DIARIO) o una ventana de producción (modo VENTANA) en P1, el año de
@@ -762,10 +778,10 @@ def render() -> None:
     )
     if modo_ventana and ventana_inicio_p1 is not None:
         anio_p1 = ventana_inicio_p1.year
-        fecha_sync_label = f"ventana de producción desde {ventana_inicio_p1.isoformat()}"
+        fecha_sync_label = t("p2.clima.sync_ventana", fecha=ventana_inicio_p1.isoformat())
     elif fecha_p1:
         anio_p1 = fecha_p1.year
-        fecha_sync_label = f"día específico {fecha_p1.isoformat()}"
+        fecha_sync_label = t("p2.clima.sync_dia", fecha=fecha_p1.isoformat())
     else:
         anio_p1 = None
         fecha_sync_label = None
@@ -782,48 +798,43 @@ def render() -> None:
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
         anio = st.number_input(
-            "Año de referencia",
+            t("p2.clima.anio.label"),
             min_value=_ANIO_MIN,
             max_value=_ANIO_MAX,
             step=1,
             key="p2_anio_descarga",
             help=(
-                f"Año calendar de los datos horarios. "
-                f"Rango disponible en NASA POWER: {_ANIO_MIN}–{_ANIO_MAX}. "
+                t("p2.clima.anio.help_base", anio_min=_ANIO_MIN, anio_max=_ANIO_MAX)
                 + (
-                    f"Sincronizado con P1 ({fecha_sync_label}). Podés sobreescribirlo."
+                    t("p2.clima.anio.help_sync", sync=fecha_sync_label)
                     if fecha_sync_label
-                    else "Cuando elijas un día específico o una ventana de "
-                    "producción en P1, este año se ajusta automáticamente."
+                    else t("p2.clima.anio.help_sin_sync")
                 )
             ),
         )
     with c2:
         forzar = st.checkbox(
-            "Forzar re-descarga",
+            t("p2.clima.forzar.label"),
             value=False,
-            help="Ignora el caché local y descarga nuevamente desde NASA POWER.",
+            help=t("p2.clima.forzar.help"),
         )
     with c3:
         st.write("")
         st.write("")
-        boton_descarga = st.button("Descargar datos", type="primary", width="stretch")
+        boton_descarga = st.button(t("p2.clima.descargar"), type="primary", width="stretch")
 
     clima: Clima | None = proyecto.clima
 
     if boton_descarga:
         with st.spinner(
-            f"Descargando datos NASA POWER para ({empl.latitud_deg:.4f}, {empl.longitud_deg:.4f}), año {anio}..."
+            t("p2.clima.spinner", lat=empl.latitud_deg, lon=empl.longitud_deg, anio=anio)
         ):
             try:
                 clima = obtener_clima(empl, int(anio), forzar_descarga=forzar)
                 proyecto.clima = clima
-                st.success(
-                    f"Datos cargados: {len(clima.datos):,} registros horarios. "
-                    f"Altitud NASA POWER: {clima.altitud_nasa_m:.0f} m s.n.m."
-                )
+                st.success(t("p2.clima.exito", n=len(clima.datos), alt=clima.altitud_nasa_m))
             except RuntimeError as err:
-                st.error(f"Error de descarga: {err}")
+                st.error(t("p2.clima.error_descarga", err=err))
                 clima = None
 
     # -----------------------------------------------------------------------
@@ -836,68 +847,64 @@ def render() -> None:
 
         # Resumen de calidad
         col_cal = st.columns(4)
-        col_cal[0].metric("Registros totales", f"{len(datos):,}")
-        col_cal[1].metric("Año de datos", str(clima.anio))
+        col_cal[0].metric(t("p2.calidad.registros"), f"{len(datos):,}")
+        col_cal[1].metric(t("p2.calidad.anio_datos"), str(clima.anio))
         col_cal[2].metric(
-            "Horas interpoladas",
+            t("p2.calidad.interpoladas.label"),
             f"{cal.n_horas_interpoladas}",
-            help="Huecos ≤ 3 h corregidos por interpolación.",
+            help=t("p2.calidad.interpoladas.help"),
         )
         col_cal[3].metric(
-            "Horas bloqueadas",
+            t("p2.calidad.bloqueadas.label"),
             f"{cal.n_horas_bloqueadas}",
             delta=None if cal.n_horas_bloqueadas == 0 else "⚠",
-            help="Huecos > 3 h que requieren decisión del usuario.",
+            help=t("p2.calidad.bloqueadas.help"),
         )
 
         # Coherencia con la ventana de producción de P1 (modo VENTANA).
         if modo_ventana and ventana_inicio_p1 is not None and clima.anio != ventana_inicio_p1.year:
             st.warning(
-                f"⚠️ El clima descargado es del año **{clima.anio}**, pero la ventana "
-                f"de producción de P1 empieza en **{ventana_inicio_p1.year}**. "
-                "P7 evaluará la ventana con los datos del año descargado. "
-                f"Para usar el clima correcto, descargá el año {ventana_inicio_p1.year}."
+                t(
+                    "p2.calidad.anio_distinto_ventana",
+                    anio_clima=clima.anio,
+                    anio_ventana=ventana_inicio_p1.year,
+                )
             )
 
         # ---- Decisión de usuario para huecos bloqueados ----
         if cal.n_horas_bloqueadas > 0 and cal.decision_usuario is None:
             st.warning(
-                f"Se detectaron {cal.n_horas_bloqueadas} horas con datos faltantes "
-                f"(hueco máximo: {cal.mayor_hueco_h} h > límite de 3 h para interpolación). "
-                "Los cálculos posteriores pueden fallar si se procesan esas horas."
+                t(
+                    "p2.calidad.huecos_warning",
+                    n=cal.n_horas_bloqueadas,
+                    mayor=cal.mayor_hueco_h,
+                )
             )
             decision = st.radio(
-                "¿Cómo continuar?",
+                t("p2.calidad.como_continuar"),
                 options=["aceptar_con_nulos", "descargar_nuevo_anio"],
-                format_func=lambda x: {
-                    "aceptar_con_nulos": "Continuar con horas faltantes (NaN). Los cálculos ignorarán esos instantes.",
-                    "descargar_nuevo_anio": "Seleccionar otro año y volver a descargar.",
-                }[x],
+                format_func=lambda x: t(f"p2.calidad.opcion_{x}"),
                 key="p2_decision_huecos",
             )
-            if st.button("Confirmar decisión"):
+            if st.button(t("p2.calidad.confirmar")):
                 clima.calidad.decision_usuario = decision
                 proyecto.clima = clima
                 if decision == "descargar_nuevo_anio":
                     proyecto.clima = None
                     st.rerun()
                 else:
-                    st.success("Decisión guardada. Podés continuar con el prediseño.")
+                    st.success(t("p2.calidad.decision_guardada"))
 
         elif cal.n_horas_bloqueadas > 0 and cal.decision_usuario == "aceptar_con_nulos":
-            st.info(
-                f"{cal.n_horas_bloqueadas} horas con NaN aceptadas. "
-                "Los cálculos ignorarán esos instantes."
-            )
+            st.info(t("p2.calidad.nulos_aceptados", n=cal.n_horas_bloqueadas))
 
         # -----------------------------------------------------------------------
         # Sección 4: Visualizaciones
         # -----------------------------------------------------------------------
 
-        st.subheader("Recurso climático anual")
+        st.subheader(t("p2.anual.titulo"))
         st.caption(
-            f"Datos horarios NASA POWER — Año {clima.anio} — "
-            f"({empl.latitud_deg:.4f}°, {empl.longitud_deg:.4f}°)"
+            t("p2.anual.caption", anio=clima.anio, lat=empl.latitud_deg, lon=empl.longitud_deg)
         )
 
         # Convertir índice a zona horaria local y recortar al año de análisis.
@@ -911,16 +918,16 @@ def render() -> None:
         # tanto en la sección anual como en la sección diaria.
         # En CAJA no hay colector: se usa la orientación propia de la cámara
         # (techo a un agua) si está configurada; si no, GHI horizontal.
-        _poa_label = "el plano del colector"
+        _poa_label = t("p2.anual.poa_plano_colector")
         if _tipologia_p2 == Tipologia.CAJA and getattr(proyecto, "camara", None) is not None:
             _geo_cam = proyecto.camara.geometria
             pendiente_poa = _geo_cam.pendiente_techo_deg
             acimut_pvlib_actual = acimut_duffie_a_pvlib(_geo_cam.acimut_camara_deg)
-            _poa_label = "el techo de la cámara"
+            _poa_label = t("p2.anual.poa_techo_camara")
         else:
             pendiente_poa = empl.pendiente_colector_deg
             acimut_pvlib_actual = acimut_duffie_a_pvlib(empl.acimut_colector_deg)
-        with st.spinner(f"Calculando irradiancia sobre {_poa_label}..."):
+        with st.spinner(t("p2.anual.spinner_poa", plano=_poa_label)):
             poa_horaria = _calcular_poa_horaria(
                 datos_local,
                 lat=empl.latitud_deg,
@@ -932,7 +939,12 @@ def render() -> None:
             )
 
         tab_t, tab_rad, tab_vhr, tab_tabla = st.tabs(
-            ["Temperatura", "Irradiancia solar", "Viento y Humedad", "Tabla mensual"]
+            [
+                t("p2.tabs.temperatura"),
+                t("p2.tabs.irradiancia"),
+                t("p2.tabs.viento_hr"),
+                t("p2.tabs.tabla"),
+            ]
         )
 
         with tab_t:
@@ -946,21 +958,17 @@ def render() -> None:
             poa_anual = poa_horaria.sum() / 1000.0
             ghi_anual = datos_local["GHI_Wm2"].sum() / 1000.0
             col_a, col_b, col_c = st.columns(3)
-            col_a.metric("GHI anual", f"{ghi_anual:.0f} kWh/m²")
+            col_a.metric(t("p2.anual.ghi_anual"), f"{ghi_anual:.0f} kWh/m²")
             col_b.metric(
-                "POA anual (plano colector)",
+                t("p2.anual.poa_anual"),
                 f"{poa_anual:.0f} kWh/m²",
-                delta=f"{poa_anual - ghi_anual:+.0f} vs GHI",
+                delta=t("p2.anual.delta_vs_ghi", delta=poa_anual - ghi_anual),
             )
             col_c.metric(
-                "Pendiente / Acimut",
+                t("p2.anual.pend_acimut"),
                 f"{empl.pendiente_colector_deg:.0f}° / {acimut_duffie_a_ui360(empl.acimut_colector_deg):.0f}°",
             )
-            st.caption(
-                "Plano horizontal: datos directos de NASA POWER (GHI, DNI, DHI). "
-                "Plano del colector: irradiancia transpuesta con modelo Hay-Davies (pvlib), "
-                "usando la pendiente e inclinación configuradas arriba."
-            )
+            st.caption(t("p2.anual.nota_transposicion"))
 
         with tab_vhr:
             fig_vhr = _fig_viento_hr(datos_local)
@@ -968,7 +976,7 @@ def render() -> None:
 
         with tab_tabla:
             df_mens = _resumen_mensual(datos_local)
-            st.dataframe(df_mens.set_index("Mes"), width="stretch")
+            st.dataframe(df_mens.set_index(t("p2.tabla.mes")), width="stretch")
 
         # -----------------------------------------------------------------------
         # Sección 5: Recurso climático del día de diseño (solo modo DIARIO)
@@ -981,42 +989,44 @@ def render() -> None:
             datos_dia = datos_local[mask_dia]
             poa_dia = poa_horaria[mask_dia]
 
-            _LABELS_DIA = {
-                DiaAnalisis.ESPECIFICO: "día específico",
-                DiaAnalisis.SOLSTICIO_VERANO: "solsticio de verano",
-                DiaAnalisis.SOLSTICIO_INVIERNO: "solsticio de invierno",
-                DiaAnalisis.EQUINOCCIO_MARZO: "equinoccio de otoño (hem. sur)",
-                DiaAnalisis.EQUINOCCIO_SEPTIEMBRE: "equinoccio de primavera (hem. sur)",
-                DiaAnalisis.MAS_CALUROSO: "día más caluroso",
-                DiaAnalisis.MAS_FRIO: "día más frío",
-            }
-            label_dia = _LABELS_DIA.get(cfg.dia_analisis, "día de diseño")
+            label_dia = t(
+                f"p2.dia.criterio.{cfg.dia_analisis.value.lower()}",
+                default=t("p2.dia.criterio.default"),
+            )
 
-            st.subheader("Recurso climático del día de diseño")
+            st.subheader(t("p2.dia.titulo"))
             st.caption(
-                f"Perfil horario para el {fecha_dia.strftime('%d/%m/%Y')} "
-                f"({label_dia}) — "
-                f"({empl.latitud_deg:.4f}°, {empl.longitud_deg:.4f}°)"
+                t(
+                    "p2.dia.caption",
+                    fecha=fecha_dia.strftime("%d/%m/%Y"),
+                    criterio=label_dia,
+                    lat=empl.latitud_deg,
+                    lon=empl.longitud_deg,
+                )
             )
 
             if len(datos_dia) == 0:
                 st.warning(
-                    f"No hay datos para el {fecha_dia.strftime('%d/%m/%Y')} en el "
-                    f"año {clima.anio}. Verificá que el año de la serie climática "
-                    "coincida con el año del día de diseño."
+                    t(
+                        "p2.dia.sin_datos",
+                        fecha=fecha_dia.strftime("%d/%m/%Y"),
+                        anio=clima.anio,
+                    )
                 )
             else:
                 # Métricas del día
                 T_dia_C = datos_dia["T_amb_K"] - 273.15
                 col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
-                col_d1.metric("T media", f"{T_dia_C.mean():.1f} °C")
-                col_d2.metric("T min / max", f"{T_dia_C.min():.1f} / {T_dia_C.max():.1f} °C")
-                col_d3.metric("GHI día", f"{datos_dia['GHI_Wm2'].sum()/1000:.2f} kWh/m²")
-                col_d4.metric("POA día", f"{poa_dia.sum()/1000:.2f} kWh/m²")
-                col_d5.metric("Viento medio", f"{datos_dia['WS_ms'].mean():.1f} m/s")
+                col_d1.metric(t("p2.dia.t_media"), f"{T_dia_C.mean():.1f} °C")
+                col_d2.metric(
+                    t("p2.dia.t_min_max"), f"{T_dia_C.min():.1f} / {T_dia_C.max():.1f} °C"
+                )
+                col_d3.metric(t("p2.dia.ghi_dia"), f"{datos_dia['GHI_Wm2'].sum()/1000:.2f} kWh/m²")
+                col_d4.metric(t("p2.dia.poa_dia"), f"{poa_dia.sum()/1000:.2f} kWh/m²")
+                col_d5.metric(t("p2.dia.viento_medio"), f"{datos_dia['WS_ms'].mean():.1f} m/s")
 
                 tab_dt, tab_drad, tab_dvhr = st.tabs(
-                    ["Temperatura", "Irradiancia solar", "Viento y Humedad"]
+                    [t("p2.tabs.temperatura"), t("p2.tabs.irradiancia"), t("p2.tabs.viento_hr")]
                 )
 
                 with tab_dt:
@@ -1026,11 +1036,7 @@ def render() -> None:
                 with tab_drad:
                     fig_drad = _fig_irradiancia_diaria(datos_dia, poa_dia)
                     mostrar_plotly(fig_drad, nombre="irradiancia_dia")
-                    st.caption(
-                        "Plano horizontal: datos directos de NASA POWER. "
-                        "Plano del colector: modelo Hay-Davies (pvlib), "
-                        "con la pendiente e inclinación configuradas arriba."
-                    )
+                    st.caption(t("p2.dia.nota_transposicion"))
 
                 with tab_dvhr:
                     fig_dvhr = _fig_viento_hr_diaria(datos_dia)
@@ -1039,7 +1045,7 @@ def render() -> None:
                 # Botón CSV del día
                 csv_dia = _generar_csv(datos_dia, empl.zona_horaria)
                 st.download_button(
-                    label=f"Descargar CSV del día ({fecha_dia.strftime('%d/%m/%Y')})",
+                    label=t("p2.dia.csv", fecha=fecha_dia.strftime("%d/%m/%Y")),
                     data=csv_dia,
                     file_name=(
                         f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}"
@@ -1061,31 +1067,39 @@ def render() -> None:
         ):
             from calculos.clima_calc import slice_clima_ventana
 
-            st.subheader("Recurso climático de la ventana de producción")
+            st.subheader(t("p2.ventana.titulo"))
             df_vent, msg_vent = slice_clima_ventana(clima, cfg.ventana_inicio, cfg.ventana_fin)
             if df_vent is None:
-                st.warning(f"⚠️ {msg_vent}")
+                st.warning(f"⚠️ {msg_vent}")  # i18n: exento (mensaje de calculos/, queda ES)
             else:
                 datos_vent = df_vent.tz_convert(empl.zona_horaria)
                 poa_vent = poa_horaria.reindex(datos_vent.index).fillna(0.0)
                 n_dias_vent = (cfg.ventana_fin - cfg.ventana_inicio).days
                 st.caption(
-                    f"Lapso {cfg.ventana_inicio} → {cfg.ventana_fin} "
-                    f"({n_dias_vent} días, {len(datos_vent)} horas de clima real, "
-                    f"año {clima.anio}) — "
-                    f"({empl.latitud_deg:.4f}°, {empl.longitud_deg:.4f}°)"
+                    t(
+                        "p2.ventana.caption",
+                        inicio=cfg.ventana_inicio,
+                        fin=cfg.ventana_fin,
+                        dias=n_dias_vent,
+                        horas=len(datos_vent),
+                        anio=clima.anio,
+                        lat=empl.latitud_deg,
+                        lon=empl.longitud_deg,
+                    )
                 )
 
                 T_vent_C = datos_vent["T_amb_K"] - 273.15
                 col_v1, col_v2, col_v3, col_v4, col_v5 = st.columns(5)
-                col_v1.metric("T media", f"{T_vent_C.mean():.1f} °C")
-                col_v2.metric("T min / max", f"{T_vent_C.min():.1f} / {T_vent_C.max():.1f} °C")
-                col_v3.metric("GHI ventana", f"{datos_vent['GHI_Wm2'].sum()/1000:.1f} kWh/m²")
-                col_v4.metric("POA ventana", f"{poa_vent.sum()/1000:.1f} kWh/m²")
-                col_v5.metric("Viento medio", f"{datos_vent['WS_ms'].mean():.1f} m/s")
+                col_v1.metric(t("p2.dia.t_media"), f"{T_vent_C.mean():.1f} °C")
+                col_v2.metric(
+                    t("p2.dia.t_min_max"), f"{T_vent_C.min():.1f} / {T_vent_C.max():.1f} °C"
+                )
+                col_v3.metric(t("p2.ventana.ghi"), f"{datos_vent['GHI_Wm2'].sum()/1000:.1f} kWh/m²")
+                col_v4.metric(t("p2.ventana.poa"), f"{poa_vent.sum()/1000:.1f} kWh/m²")
+                col_v5.metric(t("p2.dia.viento_medio"), f"{datos_vent['WS_ms'].mean():.1f} m/s")
 
                 tab_vt, tab_vrad, tab_vvhr = st.tabs(
-                    ["Temperatura", "Irradiancia solar", "Viento y Humedad"]
+                    [t("p2.tabs.temperatura"), t("p2.tabs.irradiancia"), t("p2.tabs.viento_hr")]
                 )
                 with tab_vt:
                     mostrar_plotly(
@@ -1096,20 +1110,13 @@ def render() -> None:
                         _fig_irradiancia_diaria(datos_vent, poa_vent),
                         nombre="irradiancia_ventana",
                     )
-                    st.caption(
-                        "Plano horizontal: datos directos de NASA POWER. "
-                        "Plano del colector: modelo Hay-Davies (pvlib), con la "
-                        "pendiente e inclinación configuradas arriba."
-                    )
+                    st.caption(t("p2.dia.nota_transposicion"))
                 with tab_vvhr:
                     mostrar_plotly(_fig_viento_hr_diaria(datos_vent), nombre="viento_hr_ventana")
 
                 csv_vent = _generar_csv(datos_vent, empl.zona_horaria)
                 st.download_button(
-                    label=(
-                        f"Descargar CSV de la ventana "
-                        f"({cfg.ventana_inicio} → {cfg.ventana_fin})"
-                    ),
+                    label=t("p2.ventana.csv", inicio=cfg.ventana_inicio, fin=cfg.ventana_fin),
                     data=csv_vent,
                     file_name=(
                         f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}"
@@ -1123,21 +1130,15 @@ def render() -> None:
         # Sección 6: Descarga CSV
         # -----------------------------------------------------------------------
 
-        st.subheader("Exportar datos")
+        st.subheader(t("p2.exportar.titulo"))
         csv_bytes = _generar_csv(datos, empl.zona_horaria)
         st.download_button(
-            label="Descargar CSV (unidades de usuario)",
+            label=t("p2.exportar.csv"),
             data=csv_bytes,
             file_name=f"nasa_power_{empl.latitud_deg:.4f}_{empl.longitud_deg:.4f}_{clima.anio}.csv",
             mime="text/csv",
-            help=(
-                "Exporta los datos en unidades de usuario: T [°C], GHI/DNI/DHI [W/m²], "
-                "Viento [m/s], HR [%], Presión [hPa]. Índice en hora local."
-            ),
+            help=t("p2.exportar.csv_help"),
         )
 
     elif proyecto.clima is None and not boton_descarga:
-        st.info(
-            "Ingresá las coordenadas del emplazamiento y presioná **Descargar datos** "
-            "para obtener la serie climática anual de NASA POWER."
-        )
+        st.info(t("p2.sin_clima"))

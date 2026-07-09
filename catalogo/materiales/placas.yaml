@@ -5,6 +5,8 @@
 
 galvanizada_pintada_negro_mate:
   descripcion: "Chapa galvanizada con pintura negro mate (esmalte sintético)"
+  descripcion_en: "Galvanized sheet with matte black paint (synthetic enamel)"
+  descripcion_pt: "Chapa galvanizada com pintura preto fosco (esmalte sintético)"
   absortancia_solar: 0.95
   emisividad_ir: 0.88
   conductividad_termica: 50        # W/m·K (acero galvanizado, dominado por el sustrato)
@@ -17,6 +19,8 @@ galvanizada_pintada_negro_mate:
 
 aluminio_pintado_negro_mate:
   descripcion: "Chapa de aluminio con pintura negro mate"
+  descripcion_en: "Aluminum sheet with matte black paint"
+  descripcion_pt: "Chapa de alumínio com pintura preto fosco"
   absortancia_solar: 0.95
   emisividad_ir: 0.88
   conductividad_termica: 205       # alto, mejora distribución térmica
@@ -29,6 +33,8 @@ aluminio_pintado_negro_mate:
 
 acero_carbono_pintado_negro_mate:
   descripcion: "Chapa de acero al carbono con pintura negro mate"
+  descripcion_en: "Carbon steel sheet with matte black paint"
+  descripcion_pt: "Chapa de aço carbono com pintura preto fosco"
   absortancia_solar: 0.95
   emisividad_ir: 0.88
   conductividad_termica: 52
@@ -41,6 +47,8 @@ acero_carbono_pintado_negro_mate:
 
 aluminio_tinox:
   descripcion: "Chapa de aluminio con recubrimiento selectivo TiNOX (Almeco)"
+  descripcion_en: "Aluminum sheet with TiNOX selective coating (Almeco)"
+  descripcion_pt: "Chapa de alumínio com revestimento seletivo TiNOX (Almeco)"
   absortancia_solar: 0.95
   emisividad_ir: 0.05              # selectivo: alto α / baja ε
   conductividad_termica: 205
@@ -55,6 +63,8 @@ aluminio_tinox:
 
 acero_cromo_negro:
   descripcion: "Chapa de acero al carbono con cromo negro electrodepositado"
+  descripcion_en: "Carbon steel sheet with electrodeposited black chrome"
+  descripcion_pt: "Chapa de aço carbono com cromo negro eletrodepositado"
   absortancia_solar: 0.95
   emisividad_ir: 0.10
   conductividad_termica: 52
@@ -67,6 +77,8 @@ acero_cromo_negro:
 
 galvanizada_cruda:
   descripcion: "Chapa galvanizada sin tratamiento (referencia, no recomendada)"
+  descripcion_en: "Bare galvanized sheet (reference, not recommended)"
+  descripcion_pt: "Chapa galvanizada sem tratamento (referência, não recomendada)"
   absortancia_solar: 0.65
   emisividad_ir: 0.13
   conductividad_termica: 50

@@ -1,0 +1,153 @@
+header: 5 · Calentamiento Auxiliar
+cargar:
+  titulo: 📥 Cargar configuración guardada (.json)
+  uploader: Subí un archivo .json del auxiliar previamente guardado
+  error_reconstruccion: "❌ Error reconstruyendo el auxiliar: {exc}"
+  exito: ✅ Auxiliar cargado desde JSON (se reiniciaron {n} valores de la sesión).
+usar:
+  label: Incorporar sistema de calentamiento auxiliar
+  help: >-
+    Activa un sistema de calentamiento auxiliar (resistencia eléctrica o quemador
+    de biomasa) para extender el horario de secado o reforzar en días nublados.
+  sin_auxiliar: >-
+    Sin calentamiento auxiliar. El secador opera únicamente con energía solar.
+    Activar el toggle para configurar un auxiliar.
+tipo_modo:
+  titulo: Tipo y modo de operación
+  tipo:
+    label: Tipo de fuente de calor auxiliar
+    help: |
+      Resistencia eléctrica: η ≈ 1, control preciso, requiere red eléctrica.
+      Quemador de biomasa: η ≈ 0.60–0.75, combustible local, control más simple.
+    resistencia_electrica: Resistencia eléctrica
+    quemador_biomasa: Quemador de biomasa
+  modo:
+    label: Modo de operación
+    help: |
+      **Serie post-colector:** el auxiliar calienta el aire luego del colector. Úselo como refuerzo en días nublados o para alcanzar temperaturas más altas.
+
+      **Respaldo independiente:** el auxiliar tiene su propio circuito de aire. Úselo para secado nocturno o días sin sol.
+    serie_poscolector: Serie post-colector
+    respaldo_independiente: Respaldo independiente
+operacion:
+  titulo: Parámetros de operación
+  potencia:
+    label: Potencia nominal [kW]
+    help: >-
+      Potencia térmica nominal entregada al aire.
+      Para resistencia eléctrica: potencia eléctrica = potencia térmica.
+  fraccion:
+    label: Fracción de potencia en operación [%]
+    help: Permite modelar operación parcial del auxiliar.
+  t_max:
+    label: T máxima de salida [°C]
+    help: >-
+      Límite de seguridad para proteger el producto.
+      Para frutas y hortalizas: ≤ 60–70 °C.
+  set_point:
+    check: Control por set point de temperatura
+    check_help: >-
+      Si está activo, el auxiliar regula su potencia para mantener
+      la temperatura de salida en el valor objetivo.
+    label: Set point [°C]
+  nocturno:
+    label: Disponible para operación nocturna
+    help: >-
+      Resistencia eléctrica: disponible si hay red eléctrica.
+      Quemador de biomasa: generalmente disponible.
+biomasa:
+  titulo: Parámetros del quemador de biomasa
+  combustible: Combustible
+  otro: Otro (ingresar manualmente)
+  opcion:
+    lena: Leña seca (~20% HR)
+    pellets: Pellets de madera
+    girasol: Cáscara de girasol
+    bagazo: Bagazo de caña (seco)
+  pci:
+    label: PCI [MJ/kg]
+    help: Poder calorífico inferior del combustible.
+  nombre_combustible: Nombre del combustible
+  eficiencia: Eficiencia del quemador [%]
+  consumo_estimado: >-
+    💡 Consumo estimado a potencia efectiva ({potencia:.2f} kW):
+    **{consumo:.2f} kg/h** de {combustible}
+resistencia:
+  titulo: Parámetros de la resistencia eléctrica
+  especificar_tension: Especificar tensión de alimentación
+  tension:
+    label: Tensión [V]
+    help: 220 V monofásico o 380 V trifásico.
+  corriente:
+    label: Corriente estimada
+    help: I = P / (V × cos_phi), cos_phi = 0.85.
+calendario:
+  titulo: 🌅 Calendario de arranque (híbrido mañana/tarde)
+  intro: >-
+    Por defecto el auxiliar opera **de día** (cuando hay sol, según I_g)
+    salvo que habilites operación nocturna. Si en cambio cargás un
+    **calendario de arranque**, el quemador opera **solo en esas ventanas
+    horarias** (mañana y/o atardecer), independiente del sol — el patrón del
+    secador híbrido solar-biomasa estilo ADITAL, donde el colector cubre el
+    mediodía y la leña arranca/refuerza en los bordes del día. Aplica a los
+    modos transitorios (Día real, multi-día y ventana de producción).
+  usar:
+    label: Usar calendario de arranque
+    help: "Sin tildar: el auxiliar opera por irradiancia (comportamiento por defecto)."
+  n_cargas: Número de cargas diarias
+  carga_inicio: Carga {i} — hora de inicio [h]
+  carga_duracion: Carga {i} — duración [h]
+  cobertura: >-
+    ⏱️ Cobertura total: **{horas:.1f} h/día** en {n} ventana(s).
+    Fuera de ellas el auxiliar queda apagado.
+aplicar: ⚙️ Aplicar auxiliar
+error_config: "❌ Error de configuración: {exc}"
+advertencias_titulo: Advertencias de diseño
+sin_advertencias: ✅ Auxiliar configurado sin advertencias.
+efecto:
+  titulo: Estimación del efecto térmico
+  t_entrada:
+    label: Temperatura de entrada al auxiliar [°C]
+    hint_serie: T_salida del colector (modo serie).
+    hint_respaldo: T_ambiente (modo respaldo independiente).
+  caudal:
+    label: Caudal másico [kg/s]
+    hint_colector: "Tomado del colector: {q:.1f} L/s → ~{kg:.3f} kg/s"
+    hint_camara: Tomado de la cámara de secado.
+    hint_default: Caudal de aire seco que pasa por el auxiliar.
+  error_calculo: "❌ Error en el cálculo: {exc}"
+  t_entrada_metric: T entrada
+  t_salida: T salida
+  potencia_efectiva:
+    label: Potencia efectiva
+    help: "Fracción activa: {frac:.0%}"
+  consumo_biomasa:
+    label: Consumo biomasa
+    help: A la potencia efectiva de operación.
+  consumo_electrico: Consumo eléctrico
+  set_point_activo: >-
+    ℹ️ Control de set point activo: el auxiliar opera al {frac:.0%} de su
+    potencia nominal para mantener {t_salida:.1f} °C a la salida.
+resumen:
+  titulo: Resumen de la configuración
+  tipo: "**Tipo:** {v}"
+  modo: "**Modo:** {v}"
+  potencia: "**Potencia nominal:** {v:.2f} kW"
+  fraccion: "**Fracción operación:** {v} %"
+  t_max: "**T_max salida:** {v:.0f} °C"
+  set_point: "**Set point:** {v}"
+  set_point_valor: "{v:.0f} °C"
+  set_point_no: No definido
+  nocturno: "**Disponible nocturno:** {v}"
+  combustible: "**Combustible:** {v}"
+  pci: "**PCI:** {v:.1f} MJ/kg"
+  pci_no: "**PCI:** —"
+  eta: "**η quemador:** {v:.0%}"
+  eta_no: "**η quemador:** —"
+  tension: "**Tensión:** {v:.0f} V"
+  tension_no: "**Tensión:** No especificada"
+si: Sí
+"no": "No"
+guardar:
+  txt: Guardar configuración del auxiliar (.txt)
+  json: Guardar configuración del auxiliar (.json)

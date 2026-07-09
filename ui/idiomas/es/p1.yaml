@@ -1,0 +1,161 @@
+header: 1 · Tipología y Configuración del Análisis
+metadatos:
+  titulo: Metadatos del proyecto
+  nombre:
+    label: Nombre del proyecto
+    placeholder: "Ej.: Secador armario manzana — Finca La Esperanza"
+  autor:
+    label: Autor / responsable
+    placeholder: "Ej.: Juan García"
+  notas:
+    label: Notas libres
+    placeholder: Observaciones, condiciones de diseño, referencias, etc.
+tipologia:
+  titulo: Tipología del secador
+  guia:
+    titulo: ¿Qué tipología elegir?
+    cuerpo: |
+      La tipología define la arquitectura del secador y qué subsistemas se habilitan en el prediseño:
+
+      | Tipología | Qué es | Cuándo | Subsistemas |
+      |---|---|---|---|
+      | **Caja** | Colector y cámara integrados; el sol entra directo a la cámara (techo translúcido). Suele ir por convección natural. | Escala chica, baja inversión (frutas, hierbas). | Cámara (+ chimenea opcional) |
+      | **Armario** | Colector externo + cámara con bandejas; aire forzado o natural. | Escala media, mejor control de temperatura. | Colector + cámara + motor/chimenea (+ auxiliar) |
+      | **Gran escala** | Banco de colectores + cámara industrial (lotes o túnel semicontinuo). | Producción comercial (cientos–miles de kg). | Banco de colectores + caño maestro + cámara + motor + auxiliar |
+  label: Seleccioná la tipología
+  help: La tipología define qué subsistemas están disponibles en el prediseño.
+  opcion:
+    caja: Caja (convección natural, sin colector externo)
+    armario: Armario (colector externo, 10–100 kg)
+    gran_escala: Gran escala (banco de colectores, 100 kg+)
+  corta:
+    caja: Caja
+    armario: Armario
+    gran_escala: Gran escala
+  desc:
+    caja: >-
+      **Secador de tipo Caja** — Pequeña escala (~1–10 kg de producto fresco).
+      La cámara actúa como colector: efecto invernadero directo sobre el producto.
+      Sin colector externo. Circulación de aire por **convección natural**
+      (puede incorporar chimenea solar).
+      Típico para uso doméstico o pequeños productores.
+    armario: >-
+      **Secador tipo Armario** — Escala media (~10–100 kg de producto fresco).
+      Cámara de secado separada con uno o dos **colectores solares de aire** externos.
+      Circulación natural (chimenea) o forzada (ventilador / extractor eólico).
+      Puede incorporar calentamiento auxiliar (resistencia o biomasa).
+      Apto para productores pequeños y medianos.
+    gran_escala: >-
+      **Secador de Gran Escala** — Alta capacidad (~100 kg a varias toneladas).
+      **Banco de colectores** solares de aire en serie/paralelo con caño maestro.
+      Circulación **forzada** con motor eléctrico.
+      Puede incluir calentamiento auxiliar.
+      Orientado a producción agroindustrial.
+esquema:
+  titulo: 📐 Circuito de aire
+  caption_caja: Circuito de aire del secador tipo Caja.
+  caption_armario: Circuito de aire del secador tipo Armario.
+cascada:
+  sin_colector: >-
+    ⚠️ La tipología **Caja** no admite colector externo.
+    La configuración de P3 fue eliminada.
+  sin_motor: >-
+    ⚠️ La tipología **Caja** usa convección natural.
+    La configuración del motor (P6) fue eliminada.
+  preset_gran_escala: >-
+    🏭 Se cargó el **preset de gran escala** (secador híbrido ADITAL, San
+    Carlos): banco de 26 colectores 7.5×0.94 m + caño maestro de 18 m, túnel
+    de 18×3×1.85 m con 24 carros × 14 bandejas, 5000 kg de pimiento y
+    ventilador de 3.8 kg/s. Ajustá lo que necesites en P3–P6.
+subtipo:
+  titulo: Subtipo de secador industrial
+  label: Modo de operación del secador
+  help: |
+    **Batch:** una carga completa se seca por lotes; la producción es la suma de los lotes completados en la ventana.
+
+    **Semicontinuo:** el producto avanza a contracorriente del aire en un túnel de N columnas; produce un caudal sostenido (kg/día).
+  opcion:
+    batch: Batch — secado por lotes (carga → seca → descarga)
+    semicontinuo: >-
+      Semicontinuo — túnel a contracorriente, carga completa con avance
+      de carros (estilo ADITAL)
+  corta:
+    batch: Batch
+    semicontinuo: Semicontinuo
+modo:
+  titulo: Modo de análisis
+  caja_sin_anual: ℹ️ El análisis **Anual** no está disponible para la tipología Caja en v0.
+  label: Tipo de análisis
+  help: |
+    **Diario:** un día seleccionado. Rápido, para prediseño inicial.
+
+    **Ventana de producción:** acumula la producción sobre un lapso (semana, mes, campaña) con clima real horario. Pensado para gran escala.
+
+    **Anual:** integra sobre las 8 760 horas del año.
+  opcion:
+    diario: Diario — un día representativo (datos horarios)
+    ventana: Ventana de producción — lapso [inicio, fin] (clima real horario)
+    anual: Anual — año completo (8 760 horas)
+dia:
+  label: Criterio de selección del día de análisis
+  help: >-
+    Determina qué día del año se usa para el cálculo.
+    Los criterios por temperatura o insolación usan los datos NASA POWER
+    del emplazamiento (requiere que P2 esté configurada).
+  opcion:
+    solsticio_verano: Solsticio de verano (21 dic) — día más largo
+    solsticio_invierno: Solsticio de invierno (21 jun) — día más corto
+    equinoccio_marzo: Equinoccio de otoño — 21 mar (hem. sur)
+    equinoccio_septiembre: Equinoccio de primavera — 21 sep (hem. sur)
+    mas_caluroso: Día más caluroso del año (T_amb máxima)
+    mas_frio: Día más frío del año (T_amb mínima)
+    especifico: Día específico definido por el usuario
+  corta:
+    solsticio_verano: Solsticio de verano
+    solsticio_invierno: Solsticio de invierno
+    equinoccio_marzo: Equinoccio de otoño
+    equinoccio_septiembre: Equinoccio de primavera
+    mas_caluroso: Día más caluroso
+    mas_frio: Día más frío
+    especifico: Día específico
+  fecha:
+    label: Fecha del análisis
+    help: "Fecha concreta del día a analizar. Rango disponible en NASA POWER: {anio_min}–{anio_max}."
+ventana:
+  atajos_caption: "Atajos de duración (el fin sigue a la fecha de inicio):"
+  atajo:
+    semana: 1 semana
+    mes: 1 mes
+    campania: Campaña (5 meses)
+    anio: 1 año
+  inicio: Inicio
+  fin: Fin
+  fin_anterior: ⚠️ La fecha de fin debe ser posterior a la de inicio.
+  lapso_excesivo: >-
+    ⚠️ El lapso de análisis no puede superar **366 días**
+    (elegiste {lapso_dias}). Acortá la ventana o usá un atajo.
+  lapso_caption: "📆 Lapso: **{lapso_dias} días** de clima real horario.{extra}"
+  atajo_activo: " · Atajo activo: fin = inicio + {dur} días (editar el fin lo desactiva)."
+  cruza_anio: >-
+    ⚠️ La ventana cruza el año calendario. Los datos climáticos
+    NASA POWER se descargan por año calendario: elegí una ventana
+    dentro de un mismo año para que P7 encuentre clima en todo el lapso.
+config_invalida: "❌ Configuración inválida: {exc}"
+resumen:
+  titulo: Configuración activa
+  tipologia: Tipología
+  modo: Modo
+  modo_corta:
+    diario: Diario
+    ventana: Ventana
+    anual: Anual
+  dia: Día de análisis
+  ventana: Ventana
+  ventana_valor: "{inicio} → {fin}"
+  ventana_sin_fechas: (definir fechas)
+  periodo: Período
+  anio_completo: Año completo
+  subtipo: "**Subtipo industrial:** {subtipo}"
+  secciones: "**Secciones disponibles según tipología:** {secciones}"
+  secciones_caja: P2 Clima · P4 Cámara
+  secciones_completa: P2 Clima · P3 Colector · P4 Cámara · P5 Auxiliar · P6 Motor

@@ -29,21 +29,16 @@ from calculos.motor_calc import (
     estimar_delta_P_singulares,
 )
 from core import catalogo
-from core.advertencias import Severidad
 from core.chimenea import Chimenea, advertencias_chimenea
 from core.motor import Motor, TipoAccionamiento
+from ui.componentes.advertencias_widget import render_advertencias
+from ui.componentes.idiomas import t, t_catalogo
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 
 # ---------------------------------------------------------------------------
 # Constantes de UI
 # ---------------------------------------------------------------------------
-
-_ICONOS_SEVERIDAD = {
-    Severidad.INFO: "ℹ️",
-    Severidad.WARNING: "⚠️",
-    Severidad.CRITICAL: "🚨",
-}
 
 _T_MEDIA_DEFAULT_K: float = 323.15  # 50 °C — temperatura media del sistema
 
@@ -54,15 +49,8 @@ _T_MEDIA_DEFAULT_K: float = 323.15  # 50 °C — temperatura media del sistema
 
 
 def _mostrar_advertencias(adv_list: list) -> None:
-    for adv in adv_list:
-        icono = _ICONOS_SEVERIDAD.get(adv.severidad, "•")
-        msg = f"{icono} **{adv.codigo}** — {adv.mensaje}"
-        if adv.severidad == Severidad.CRITICAL:
-            st.error(msg)
-        elif adv.severidad == Severidad.WARNING:
-            st.warning(msg)
-        else:
-            st.info(msg)
+    """Muestra la lista de Advertencia traducida por código (widget único, F5)."""
+    render_advertencias(adv_list, con_sugerencia=False)
 
 
 # ---------------------------------------------------------------------------
@@ -418,10 +406,10 @@ def _condiciones_representativas_chimenea(
             v_arr = datos["WS_ms"].to_numpy()
             T_amb_K = float(T_arr.mean())
             v_viento = float(v_arr.mean())
-            return T_amb_K, v_viento, "media anual NASA POWER (P2)"
+            return T_amb_K, v_viento, t("p6.condiciones.media_anual")
         except Exception:
             pass
-    return 293.15, 2.0, "fallback (T=20 °C, v=2 m/s)"
+    return 293.15, 2.0, t("p6.condiciones.fallback")
 
 
 def _render_calcular_chimenea(proyecto, chimenea) -> None:
@@ -437,16 +425,13 @@ def _render_calcular_chimenea(proyecto, chimenea) -> None:
 
     requisitos_ok = proyecto.camara is not None
     if not requisitos_ok:
-        st.warning(
-            "⚠️ Configurá la cámara (P4) antes de evaluar la chimenea — su "
-            "caudal de diseño y ΔP son inputs del lazo natural."
-        )
+        st.warning(t("p6.chimenea.calcular.falta_camara"))
         return
 
     es_caja = getattr(getattr(proyecto, "configuracion", None), "tipologia", None) == Tipologia.CAJA
     delta_T_chim_K = 25.0 if es_caja else 30.0
 
-    if st.button("🌪️ Calcular chimenea", type="primary", key="p6_btn_calc_chimenea"):
+    if st.button(t("p6.chimenea.calcular.boton"), type="primary", key="p6_btn_calc_chimenea"):
         from calculos.balance_global import (
             _caudal_natural_loop,
             presion_representativa_proyecto,
@@ -457,7 +442,7 @@ def _render_calcular_chimenea(proyecto, chimenea) -> None:
         P_proyecto_Pa, P_origen = presion_representativa_proyecto(proyecto)
 
         try:
-            with st.spinner("Resolviendo lazo natural por chimenea..."):
+            with st.spinner(t("p6.chimenea.calcular.spinner")):
                 res_chim = _caudal_natural_loop(
                     proyecto=proyecto,
                     T_amb_K=T_amb_K,
@@ -467,7 +452,7 @@ def _render_calcular_chimenea(proyecto, chimenea) -> None:
                     v_viento_ms=v_viento_ms,
                 )
         except Exception as exc:
-            st.error(f"❌ Error en el cálculo: {exc}")
+            st.error(t("p6.chimenea.calcular.error_calculo", exc=exc))
             return
 
         st.session_state["p6_chimenea_eval"] = {
@@ -484,74 +469,76 @@ def _render_calcular_chimenea(proyecto, chimenea) -> None:
 
     ev = st.session_state.get("p6_chimenea_eval")
     if ev is None:
-        st.caption(
-            "Presioná **Calcular chimenea** para resolver el lazo natural con "
-            "condiciones representativas. El resultado queda persistido y se "
-            "muestra en P7 como sección evaluada."
-        )
+        st.caption(t("p6.chimenea.calcular.prompt"))
         return
 
     res = ev["resultado"]
-    st.subheader("Resultados del lazo natural")
+    st.subheader(t("p6.chimenea.calcular.titulo"))
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
-        "Caudal natural",
+        t("p6.chimenea.calcular.caudal_natural.label"),
         f"{res['m_punto_kgs'] * 1000:.2f} g/s",
-        help="ṁ de equilibrio del lazo (cámara + colector + chimenea).",
+        help=t("p6.chimenea.calcular.caudal_natural.help"),
     )
     c2.metric(
-        "v en chimenea",
+        t("p6.chimenea.calcular.v_chim.label"),
         f"{res['v_chim_ms']:.2f} m/s",
-        help="Velocidad media en la sección de la chimenea.",
+        help=t("p6.chimenea.calcular.v_chim.help"),
     )
     c3.metric(
-        "Re chimenea",
+        t("p6.chimenea.calcular.re.label"),
         f"{res['Re_chimenea']:.0f}",
-        help="Re > 4000: turbulento. Re < 2300: laminar.",
+        help=t("p6.chimenea.calcular.re.help"),
     )
     c4.metric(
-        "ΔP tiro térmico",
+        t("p6.chimenea.calcular.dp_tiro.label"),
         f"{res['delta_P_tiro_Pa']:.2f} Pa",
-        help="Empuje hidrostático = g·H_eff·(ρ_amb − ρ_chim).",
+        help=t("p6.chimenea.calcular.dp_tiro.help"),
     )
 
     c5, c6, c7, c8 = st.columns(4)
     c5.metric(
-        "ΔP ducto chimenea",
+        t("p6.chimenea.calcular.dp_ducto.label"),
         f"{res['delta_P_chimenea_Pa']:.2f} Pa",
-        help="Fricción + singulares del ducto de chimenea.",
+        help=t("p6.chimenea.calcular.dp_ducto.help"),
     )
     c6.metric(
-        "ΔP resto (col+cam)",
+        t("p6.chimenea.calcular.dp_resto.label"),
         f"{res['delta_P_resto_Pa']:.2f} Pa",
-        help="ΔP de colector + cámara escalado cuadrático al caudal de equilibrio.",
+        help=t("p6.chimenea.calcular.dp_resto.help"),
     )
     dP_turb = float(res.get("delta_P_turbina_motriz_Pa", 0.0))
     if dP_turb > 0.0:
         c7.metric(
-            "ΔP motriz turbina",
+            t("p6.chimenea.calcular.dp_turbina.label"),
             f"{dP_turb:.2f} Pa",
-            help=f"Extractor eólico a v_local={res.get('v_viento_local_ms', 0.0):.2f} m/s.",
+            help=t("p6.chimenea.calcular.dp_turbina.help", v=res.get("v_viento_local_ms", 0.0)),
         )
-    c8.metric("H efectiva", f"{res['H_eff_m']:.2f} m")
+    c8.metric(t("p6.chimenea.calcular.h_eff"), f"{res['H_eff_m']:.2f} m")
 
     advs = res.get("advertencias", []) or []
     if advs:
-        with st.expander(f"⚠️ {len(advs)} advertencia(s) del lazo natural"):
+        with st.expander(t("p6.chimenea.calcular.advertencias", n=len(advs))):
             for a in advs:
-                st.warning(a)
+                st.warning(a)  # i18n: exento (mensaje de calculos/, queda ES)
 
     st.caption(
-        f"Inputs: T_amb={ev['T_amb_K'] - 273.15:.1f} °C, "
-        f"T_chim={ev['T_chim_K'] - 273.15:.1f} °C "
-        f"(heurística ΔT={ev['delta_T_chim_K']:.0f} K para "
-        f"{'CAJA' if ev['es_caja'] else 'ARMARIO/GRAN_ESCALA'}), "
-        f"v_viento={ev['v_viento_ms']:.1f} m/s, "
-        f"P={ev['P_amb_Pa'] / 1000:.2f} kPa. "
-        f"Clima: {ev['origen_clima']}. Presión: {ev['P_origen']}. "
-        "En P7 se vuelve a resolver con el lazo Picard completo (T_chim de la "
-        "cámara realimenta el cálculo)."
+        t(
+            "p6.chimenea.calcular.inputs",
+            t_amb=ev["T_amb_K"] - 273.15,
+            t_chim=ev["T_chim_K"] - 273.15,
+            dt=ev["delta_T_chim_K"],
+            tipo=(
+                t("p6.chimenea.calcular.tipo_caja")
+                if ev["es_caja"]
+                else t("p6.chimenea.calcular.tipo_otro")
+            ),
+            v=ev["v_viento_ms"],
+            p=ev["P_amb_Pa"] / 1000,
+            clima=ev["origen_clima"],
+            presion=ev["P_origen"],
+        )
     )
 
 
@@ -570,60 +557,54 @@ def _render_chimenea_section(proyecto) -> None:
     P_proyecto_Pa, _ = presion_representativa_proyecto(proyecto)
 
     st.divider()
-    st.subheader("Chimenea solar")
+    st.subheader(t("p6.chimenea.titulo"))
 
     # --- Cargar configuración guardada ---
-    with st.expander("📥 Cargar configuración de chimenea (.json)", expanded=False):
+    with st.expander(t("p6.chimenea.cargar.titulo"), expanded=False):
         from ui.componentes.serializacion import (
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
 
         archivo = st.file_uploader(
-            "Subí un archivo .json de chimenea previamente guardado",
+            t("p6.chimenea.cargar.uploader"),
             type=["json"],
             key="p6_chim_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "chimenea")
             if err:
-                st.error(f"❌ {err}")
+                st.error(f"❌ {err}")  # i18n: exento (mensaje de serializacion, F4)
             else:
                 try:
                     ch_cargada = _from_json_chimenea(data)
                 except (KeyError, ValueError, TypeError) as exc:
-                    st.error(f"❌ Error reconstruyendo la chimenea: {exc}")
+                    st.error(t("p6.chimenea.cargar.error_reconstruccion", exc=exc))
                 else:
                     proyecto.chimenea = ch_cargada
                     n_borr = limpiar_session_state_prefijo(st.session_state, "p6_chim_")
                     st.session_state.pop("p6_chim_cargar_json", None)
-                    st.success(
-                        f"✅ Chimenea cargada desde JSON " f"(se reiniciaron {n_borr} valores)."
-                    )
+                    st.success(t("p6.chimenea.cargar.exito", n=n_borr))
                     st.rerun()
 
     usar_chimenea = st.toggle(
-        "Incorporar chimenea solar",
+        t("p6.chimenea.usar.label"),
         value=proyecto.chimenea is not None,
         key="p6_usar_chimenea",
-        help=(
-            "Una chimenea genera tiraje térmico por diferencia de densidad entre "
-            "el aire caliente (cámara + chimenea) y el ambiente. Modelo en "
-            "`calculos.chimenea_calc`."
-        ),
+        help=t("p6.chimenea.usar.help"),
     )
 
     if not usar_chimenea:
         proyecto.chimenea = None
         st.session_state.pop("p6_chimenea_eval", None)
-        st.caption("Sin chimenea. El aire se moverá solo por difusión libre.")
+        st.caption(t("p6.chimenea.sin_chimenea"))
         return
 
     ch_ref = proyecto.chimenea or Chimenea()
     c1, c2, c3 = st.columns(3)
     with c1:
         diam = st.number_input(
-            "Diámetro interno [m]",
+            t("p6.chimenea.diametro"),
             min_value=0.05,
             max_value=2.0,
             value=float(ch_ref.diametro_m),
@@ -633,7 +614,7 @@ def _render_chimenea_section(proyecto) -> None:
         )
     with c2:
         alt = st.number_input(
-            "Altura [m]",
+            t("p6.chimenea.altura"),
             min_value=0.1,
             max_value=20.0,
             value=float(ch_ref.altura_m),
@@ -643,12 +624,12 @@ def _render_chimenea_section(proyecto) -> None:
         )
     with c3:
         opciones = {
-            id_mat: datos.get("descripcion", id_mat) for id_mat, datos in catalogo.FONDOS.items()
+            id_mat: t_catalogo(datos, default=id_mat) for id_mat, datos in catalogo.FONDOS.items()
         }
         ids = list(opciones.keys())
         idx = ids.index(ch_ref.id_material) if ch_ref.id_material in ids else 0
         mat = st.selectbox(
-            "Material",
+            t("p6.chimenea.material"),
             options=ids,
             index=idx,
             format_func=lambda x: opciones[x],
@@ -659,29 +640,11 @@ def _render_chimenea_section(proyecto) -> None:
     ch_ref_ext = proyecto.chimenea
     extractor_prev = bool(ch_ref_ext.extractor_activo) if ch_ref_ext else False
 
-    ext_help = (
-        "Turbina pasiva tipo 'sombrero chino' montada en el tope de la "
-        "chimenea. Agrega un término motriz ΔP = Cp·ρ·v_viento²/2 al lazo "
-        "natural, donde v_viento se corrige del valor NASA POWER (10 m) a "
-        "la altura del tope via perfil logarítmico de capa límite. Tambien "
-        "introduce una resistencia adicional Kt·ρ·v_flujo²/2 al flujo "
-        "ascendente.\n\n"
-        "**Casos límite:**\n"
-        "• v_viento = 0 (calma): la turbina sólo agrega resistencia → peor "
-        "que chimenea desnuda.\n"
-        "• Sin sol (noche/nublado): si hay viento, la turbina sigue moviendo "
-        "aire — robustez del sistema.\n"
-        "• v_viento alto + sol: efectos se suman, caudal mayor.\n\n"
-        "Sin correlación específica de literatura; los rangos de Cp y Kt son "
-        "anclajes de orden de magnitud (Idelchik / hojas técnicas de turbinas "
-        "comerciales)."
-    )
-
     extractor_activo = st.checkbox(
-        "Agregar extractor eólico en el tope",
+        t("p6.chimenea.extractor.check"),
         value=extractor_prev,
         key="p6_chim_ext_activo",
-        help=ext_help,
+        help=t("p6.chimenea.extractor.check_help"),
     )
 
     diam_ext_val: float | None = None
@@ -690,7 +653,7 @@ def _render_chimenea_section(proyecto) -> None:
     z0_val: float = 0.05
 
     if extractor_activo:
-        with st.expander("Parámetros del extractor eólico", expanded=False):
+        with st.expander(t("p6.chimenea.extractor.titulo"), expanded=False):
             ec1, ec2 = st.columns(2)
             with ec1:
                 diam_ext_default = (
@@ -699,76 +662,61 @@ def _render_chimenea_section(proyecto) -> None:
                     else max(diam, 0.30)
                 )
                 diam_ext_val = st.number_input(
-                    "Diámetro del extractor [m]",
+                    t("p6.chimenea.extractor.diam.label"),
                     min_value=0.10,
                     max_value=2.0,
                     value=diam_ext_default,
                     step=0.05,
                     format="%.2f",
                     key="p6_chim_ext_diam",
-                    help=(
-                        "Diámetro del orificio del extractor. Tallas comerciales "
-                        "típicas: 0.30 / 0.45 / 0.60 m. Recomendado ≥ al "
-                        "diámetro de la chimenea para evitar estrangulamiento."
-                    ),
+                    help=t("p6.chimenea.extractor.diam.help"),
                 )
             with ec2:
                 Cp_val = st.number_input(
-                    "Cp turbina [adim]",
+                    t("p6.chimenea.extractor.cp.label"),
                     min_value=0.05,
                     max_value=2.0,
                     value=float(ch_ref_ext.Cp_turbina) if ch_ref_ext else 0.4,
                     step=0.05,
                     format="%.2f",
                     key="p6_chim_ext_Cp",
-                    help=(
-                        "Coeficiente de presión motriz: ΔP_motriz = Cp·ρ·v² / 2. "
-                        "Rango típico 0.3–0.6 para turbinas sombrero chino. "
-                        "Valores más altos sólo con datos de fabricante."
-                    ),
+                    help=t("p6.chimenea.extractor.cp.help"),
                 )
             ec3, ec4 = st.columns(2)
             with ec3:
                 Kt_val = st.number_input(
-                    "Kt turbina (resistencia) [adim]",
+                    t("p6.chimenea.extractor.kt.label"),
                     min_value=0.0,
                     max_value=5.0,
                     value=float(ch_ref_ext.Kt_turbina) if ch_ref_ext else 1.0,
                     step=0.1,
                     format="%.2f",
                     key="p6_chim_ext_Kt",
-                    help=(
-                        "Coeficiente resistivo: ΔP_resistencia = Kt·ρ·v_flujo²/2 "
-                        "sobre la velocidad del aire en el extractor. "
-                        "1.0 (default) cubre expansión + obstrucción de álabes."
-                    ),
+                    help=t("p6.chimenea.extractor.kt.help"),
                 )
             with ec4:
-                z0_opciones = {
-                    "Mar/lago (0.001 m)": 0.001,
-                    "Campo abierto (0.03 m)": 0.03,
-                    "Rural medio (0.05 m)": 0.05,
-                    "Suburbano (0.20 m)": 0.20,
-                    "Urbano denso (0.50 m)": 0.50,
-                }
+                # (id_estable, z0 [m]) — el label sale de t().
+                _z0_items = [
+                    ("mar", 0.001),
+                    ("campo", 0.03),
+                    ("rural", 0.05),
+                    ("suburbano", 0.20),
+                    ("urbano", 0.50),
+                ]
                 z0_prev_val = float(ch_ref_ext.z0_terreno_m) if ch_ref_ext else 0.05
-                z0_prev_label = next(
-                    (k for k, v in z0_opciones.items() if abs(v - z0_prev_val) < 1e-6),
-                    "Rural medio (0.05 m)",
+                _z0_idx = next(
+                    (i for i, (_, v) in enumerate(_z0_items) if abs(v - z0_prev_val) < 1e-6),
+                    2,
                 )
-                z0_label = st.selectbox(
-                    "Tipo de terreno (z₀)",
-                    options=list(z0_opciones.keys()),
-                    index=list(z0_opciones.keys()).index(z0_prev_label),
+                z0_id = st.selectbox(
+                    t("p6.chimenea.extractor.z0.label"),
+                    options=[cid for cid, _ in _z0_items],
+                    index=_z0_idx,
+                    format_func=lambda cid: t(f"p6.chimenea.extractor.z0.{cid}"),
                     key="p6_chim_ext_z0",
-                    help=(
-                        "Longitud de rugosidad aerodinámica del terreno. Se "
-                        "usa para corregir el viento de NASA POWER (a 10 m) "
-                        "a la altura del tope de chimenea via perfil "
-                        "logarítmico v(z) = v(10)·ln(z/z₀)/ln(10/z₀)."
-                    ),
+                    help=t("p6.chimenea.extractor.z0.help"),
                 )
-                z0_val = z0_opciones[z0_label]
+                z0_val = dict(_z0_items)[z0_id]
 
             # Preview: viento corregido a la altura del tope.
             v_viento_10m: float | None = None
@@ -795,16 +743,16 @@ def _render_chimenea_section(proyecto) -> None:
                     v_loc, Cp_val, T_amb_K=293.15, P_amb_Pa=P_proyecto_Pa
                 )
                 st.caption(
-                    f"Viento medio del sitio (P2, a 10 m): "
-                    f"**{v_viento_10m:.1f} m/s** → corregido a {z_tope:.1f} m del "
-                    f"tope: **{v_loc:.2f} m/s** → ΔP motriz turbina (a T_amb 20 °C): "
-                    f"**{dP_turb:.2f} Pa**."
+                    t(
+                        "p6.chimenea.extractor.preview_viento",
+                        v10=v_viento_10m,
+                        z=z_tope,
+                        vloc=v_loc,
+                        dp=dP_turb,
+                    )
                 )
             else:
-                st.caption(
-                    "Cargar datos de clima en P2 para previsualizar el efecto "
-                    "del viento a la altura del tope de la chimenea."
-                )
+                st.caption(t("p6.chimenea.extractor.preview_sin_clima"))
 
     try:
         nueva = Chimenea(
@@ -818,7 +766,7 @@ def _render_chimenea_section(proyecto) -> None:
             z0_terreno_m=z0_val,
         )
     except ValueError as err:
-        st.error(f"**Error de validación** — {err}")
+        st.error(t("p6.chimenea.error_validacion", err=err))
         return
     proyecto.chimenea = nueva
 
@@ -829,7 +777,7 @@ def _render_chimenea_section(proyecto) -> None:
             _mostrar_advertencias([a])
 
     # --- Preview de tiro térmico ---
-    st.markdown("**Tiro térmico estimado** (cámara + chimenea como columna ascendente)")
+    st.markdown(t("p6.chimenea.tiro.titulo"))
     H_camara_default = 1.5  # m, placeholder hasta integrar con P4
     if proyecto.camara is not None and getattr(proyecto.camara, "geometria", None) is not None:
         try:
@@ -847,11 +795,14 @@ def _render_chimenea_section(proyecto) -> None:
             H_eff_m=H_eff,
             P_amb_Pa=P_proyecto_Pa,
         )
-        col_w.metric(f"ΔT = +{dT:.0f} K", f"{dP:.2f} Pa")
+        col_w.metric(t("p6.chimenea.tiro.metric_dt", dt=dT), f"{dP:.2f} Pa")
     st.caption(
-        f"Cálculo informativo con T_amb=20 °C, H_efectiva = altura_chimenea ({nueva.altura_m:.1f} m) "
-        f"+ alto_cámara ({H_camara_default:.2f} m) = {H_eff:.2f} m. El caudal de equilibrio "
-        f"se resuelve en `balance_global` con T_chim del lazo y pérdidas reales."
+        t(
+            "p6.chimenea.tiro.caption",
+            alt=nueva.altura_m,
+            hcam=H_camara_default,
+            heff=H_eff,
+        )
     )
 
     # --- Botón: calcular chimenea (lazo natural con condiciones representativas) ---
@@ -865,7 +816,7 @@ def _render_chimenea_section(proyecto) -> None:
     col_txt, col_json = st.columns(2)
     with col_txt:
         st.download_button(
-            "Guardar configuración de chimenea (.txt)",
+            t("p6.chimenea.guardar.txt"),
             data=_texto_config_chimenea(nueva),
             file_name=nombre_archivo_descarga(proyecto, "chimenea", "txt"),
             mime="text/plain",
@@ -873,7 +824,7 @@ def _render_chimenea_section(proyecto) -> None:
         )
     with col_json:
         st.download_button(
-            "Guardar configuración de chimenea (.json)",
+            t("p6.chimenea.guardar.json"),
             data=dump_json(_json_config_chimenea(nueva)),
             file_name=nombre_archivo_descarga(proyecto, "chimenea", "json"),
             mime="application/json",
@@ -888,17 +839,10 @@ def _render_chimenea_section(proyecto) -> None:
 
 def render() -> None:
     """Renderiza la Pestaña 6 — Motor / Ventilador."""
-    st.header("6 · Motor / Ventilador")
+    st.header(t("p6.header"))
     boton_manual(SLUG_POR_SECCION["p6"])
 
-    st.caption(
-        "El aire se mueve por **convección forzada** (motor/ventilador) o **natural** "
-        "(chimenea solar, sin consumo eléctrico). Forzada: mayor control del caudal y "
-        "capacidad para vencer pérdidas de carga altas (lechos gruesos, banco de "
-        "colectores, escala industrial), a costa de energía. Natural: sin electricidad, "
-        "caudal menor y variable con el sol y el viento — requiere chimenea para inducir "
-        "tiraje. Elegí con el toggle de abajo."
-    )
+    st.caption(t("p6.intro"))
 
     proyecto = st.session_state.proyecto
 
@@ -911,26 +855,26 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Cargar configuración guardada (.json)
     # -----------------------------------------------------------------------
-    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+    with st.expander(t("p6.cargar.titulo"), expanded=False):
         from ui.componentes.serializacion import (
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
 
         archivo = st.file_uploader(
-            "Subí un archivo .json del motor previamente guardado",
+            t("p6.cargar.uploader"),
             type=["json"],
             key="p6_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "motor")
             if err:
-                st.error(f"❌ {err}")
+                st.error(f"❌ {err}")  # i18n: exento (mensaje de serializacion, F4)
             else:
                 try:
                     mot_cargado, chim_migrada, aviso_migracion = _from_json_motor(data)
                 except (KeyError, ValueError, TypeError) as exc:
-                    st.error(f"❌ Error reconstruyendo el motor: {exc}")
+                    st.error(t("p6.cargar.error_reconstruccion", exc=exc))
                 else:
                     proyecto.motor = mot_cargado
                     if chim_migrada is not None:
@@ -938,32 +882,24 @@ def render() -> None:
                     n_borr = limpiar_session_state_prefijo(st.session_state, "p6_")
                     st.session_state.pop("p6_cargar_json", None)
                     if aviso_migracion:
-                        st.warning(f"⚠️ {aviso_migracion}")
-                    st.success(
-                        f"✅ Motor cargado desde JSON "
-                        f"(se reiniciaron {n_borr} valores de la sesión)."
-                    )
+                        st.warning(
+                            f"⚠️ {aviso_migracion}"
+                        )  # i18n: exento (aviso de _from_json_motor, ES)
+                    st.success(t("p6.cargar.exito", n=n_borr))
                     st.rerun()
 
     # -----------------------------------------------------------------------
     # Toggle: ¿usar motor?
     # -----------------------------------------------------------------------
     usar_motor = st.toggle(
-        "Incorporar sistema de convección forzada (motor / ventilador)",
+        t("p6.usar.label"),
         value=proyecto.motor is not None,
-        help=(
-            "Desactivar para tipologías de convección natural "
-            "(secador de tipo caja con chimenea, o armario sin motor)."
-        ),
+        help=t("p6.usar.help"),
     )
 
     if not usar_motor:
         proyecto.motor = None
-        st.info(
-            "Sin motor. El secador opera por convección natural. "
-            "Configurá la chimenea solar abajo para inducir tiraje térmico, "
-            "o activá el toggle para dimensionar un ventilador."
-        )
+        st.info(t("p6.usar.sin_motor"))
         _render_chimenea_section(proyecto)
         return
 
@@ -972,29 +908,25 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección A: Tipo de accionamiento
     # -----------------------------------------------------------------------
-    st.subheader("Tipo de accionamiento")
+    st.subheader(t("p6.accionamiento.titulo"))
 
     # Sólo queda un tipo de motor: eléctrico. El extractor eólico se modela
     # como accesorio de la chimenea, no como tipo de motor (ver P6 sección
     # de chimenea cuando motor=None).
     tipo = TipoAccionamiento.MOTOR_ELECTRICO
-    st.caption(
-        "Motor eléctrico (ventilador axial o centrífugo). Para convección "
-        "natural — eventualmente con extractor eólico en el tope de chimenea "
-        "— desactivar el motor en el toggle de arriba."
-    )
+    st.caption(t("p6.accionamiento.caption"))
 
     # -----------------------------------------------------------------------
     # Sección B: Caudal volumétrico
     # -----------------------------------------------------------------------
-    with st.expander("Caudal de diseño", expanded=False):
+    with st.expander(t("p6.caudal.titulo"), expanded=False):
         Q_vol_sugerido = mot_prev.caudal_volumetrico_m3_s if mot_prev is not None else 0.020
         hint_caudal = ""
 
         if proyecto.colector is not None:
             Q_col = proyecto.colector.caudal_total_m3_s()
             Q_vol_sugerido = Q_col
-            hint_caudal = f"Colector (P3): {Q_col * 1000:.1f} L/s"
+            hint_caudal = t("p6.caudal.hint_colector", q=Q_col * 1000)
 
         if proyecto.camara is not None:
             Q_vol_cam = caudal_masico_a_volumetrico(
@@ -1003,42 +935,41 @@ def render() -> None:
                 P_proyecto_Pa,
             )
             Q_vol_sugerido = Q_vol_cam
-            hint_caudal = (
-                f"Cámara (P4): {proyecto.camara.flujo.caudal_masico_kg_s * 1000:.1f} g/s "
-                f"→ {Q_vol_cam * 1000:.1f} L/s (a 50 °C)"
+            hint_caudal = t(
+                "p6.caudal.hint_camara",
+                g=proyecto.camara.flujo.caudal_masico_kg_s * 1000,
+                l=Q_vol_cam * 1000,
             )
 
         c1, c2 = st.columns(2)
         with c1:
             Q_vol_ls = st.number_input(
-                "Caudal volumétrico [L/s]",
+                t("p6.caudal.label"),
                 min_value=0.1,
                 max_value=10000.0,
                 value=round(Q_vol_sugerido * 1000.0, 1),
                 step=0.5,
                 format="%.1f",
-                help=hint_caudal or "Caudal que debe mover el ventilador.",
+                help=hint_caudal or t("p6.caudal.help_default"),
             )
             Q_vol_m3s = Q_vol_ls / 1000.0
         with c2:
             if hint_caudal:
-                st.info(f"💡 {hint_caudal}")
-            st.metric("Caudal", f"{Q_vol_ls:.1f} L/s", help=f"{Q_vol_m3s:.5f} m³/s")
+                st.info(f"💡 {hint_caudal}")  # i18n: exento (hint_caudal ya traducido)
+            _q_m3s_help = f"{Q_vol_m3s:.5f} m³/s"  # solo unidad, no se traduce
+            st.metric(t("p6.caudal.metric"), f"{Q_vol_ls:.1f} L/s", help=_q_m3s_help)
 
     # -----------------------------------------------------------------------
     # Sección C: Pérdidas de carga
     # -----------------------------------------------------------------------
-    with st.expander("Pérdidas de carga del sistema", expanded=False):
+    with st.expander(t("p6.perdidas.titulo"), expanded=False):
 
         modo_dP = st.radio(
-            "Ingreso de pérdidas de carga",
-            options=["Por componentes (auto-estimado)", "ΔP total directo"],
+            t("p6.perdidas.modo.label"),
+            options=["componentes", "total"],
             horizontal=True,
-            help=(
-                "**Por componentes:** estima ΔP_colector (Darcy-Weisbach) y ΔP_cámara "
-                "(resistencia de bandejas) desde P3 y P4, más 20% de margen de ductos.\n\n"
-                "**ΔP total directo:** ingresá el valor medido en campo o de catálogo."
-            ),
+            format_func=lambda k: t(f"p6.perdidas.modo.{k}"),
+            help=t("p6.perdidas.modo.help"),
         )
 
         dP_total_override: float | None = None
@@ -1047,9 +978,9 @@ def render() -> None:
         dP_ductos_val: float | None = None
         dP_singulares_val: float | None = None
 
-        if modo_dP == "ΔP total directo":
+        if modo_dP == "total":
             dP_total_override = st.number_input(
-                "ΔP total del sistema [Pa]",
+                t("p6.perdidas.total.label"),
                 min_value=1.0,
                 max_value=100000.0,
                 value=float(
@@ -1059,7 +990,7 @@ def render() -> None:
                 ),
                 step=1.0,
                 format="%.1f",
-                help="Incluye colector, cámara y ductos.",
+                help=t("p6.perdidas.total.help"),
             )
 
         else:
@@ -1080,24 +1011,21 @@ def render() -> None:
             )
             with c1:
                 dP_col_input = st.number_input(
-                    "ΔP colector [Pa]",
+                    t("p6.perdidas.colector.label"),
                     min_value=0.0,
                     max_value=50000.0,
                     value=dP_col_default,
                     step=1.0,
                     format="%.1f",
                     help=(
-                        "Pérdida de carga en el banco de colectores (Darcy-Weisbach). "
-                        + (
-                            f"Auto (P3): {dP_col_auto:.1f} Pa."
-                            if dP_col_auto is not None
-                            else "Configurar P3 para auto-estimación."
-                        )
+                        t("p6.perdidas.colector.help_auto", v=dP_col_auto)
+                        if dP_col_auto is not None
+                        else t("p6.perdidas.colector.help_sin")
                     ),
                 )
                 dP_colector_val = dP_col_input if dP_col_input > 0 else None
                 if dP_col_auto is not None:
-                    st.caption(f"Auto P3: **{dP_col_auto:.1f} Pa**")
+                    st.caption(t("p6.perdidas.colector.auto_caption", v=dP_col_auto))
 
             # ΔP cámara
             dP_cam_auto: float | None = None
@@ -1114,34 +1042,31 @@ def render() -> None:
             )
             with c2:
                 dP_cam_input = st.number_input(
-                    "ΔP cámara [Pa]",
+                    t("p6.perdidas.camara.label"),
                     min_value=0.0,
                     max_value=50000.0,
                     value=dP_cam_default,
                     step=1.0,
                     format="%.1f",
                     help=(
-                        "Pérdida de carga en las bandejas de la cámara. "
-                        + (
-                            f"Auto (P4): {dP_cam_auto:.1f} Pa (K_malla=2.0)."
-                            if dP_cam_auto is not None
-                            else "Configurar P4 para auto-estimación."
-                        )
+                        t("p6.perdidas.camara.help_auto", v=dP_cam_auto)
+                        if dP_cam_auto is not None
+                        else t("p6.perdidas.camara.help_sin")
                     ),
                 )
                 dP_camara_val = dP_cam_input if dP_cam_input > 0 else None
                 if dP_cam_auto is not None:
-                    st.caption(f"Auto P4: **{dP_cam_auto:.1f} Pa**")
+                    st.caption(t("p6.perdidas.camara.auto_caption", v=dP_cam_auto))
 
             # ΔP ductos
             with c3:
                 usar_ductos_manual = st.checkbox(
-                    "Especificar ΔP ductos",
+                    t("p6.perdidas.ductos.check"),
                     value=(mot_prev is not None and mot_prev.delta_P_ductos_Pa is not None),
                 )
                 if usar_ductos_manual:
                     dP_duc_input = st.number_input(
-                        "ΔP ductos [Pa]",
+                        t("p6.perdidas.ductos.label"),
                         min_value=0.0,
                         max_value=10000.0,
                         value=(
@@ -1155,7 +1080,7 @@ def render() -> None:
                     dP_ductos_val = dP_duc_input
                 else:
                     dP_duc_est = 0.20 * (dP_col_input + dP_cam_input)
-                    st.caption(f"Auto 20%: **{dP_duc_est:.1f} Pa**")
+                    st.caption(t("p6.perdidas.ductos.auto_caption", v=dP_duc_est))
 
             # --- ΔP singulares (entrada, salida, codos, manifold) ---
             # v_ducto = velocidad típica en ductos de aire de secadores solares
@@ -1177,22 +1102,17 @@ def render() -> None:
             )
             dP_singulares_val = sing["total"]
             with st.expander(
-                f"ΔP singulares (entrada, salida, codos, manifold, difusor): "
-                f"**{dP_singulares_val:.1f} Pa**",
+                t("p6.perdidas.singulares.titulo", v=dP_singulares_val),
                 expanded=False,
             ):
                 v_ducto_input = st.number_input(
-                    "Velocidad del aire en ducto principal [m/s]",
+                    t("p6.perdidas.singulares.v_label"),
                     min_value=1.0,
                     max_value=20.0,
                     value=v_ducto,
                     step=0.5,
                     format="%.1f",
-                    help=(
-                        "Velocidad típica en ductos de secadores solares: 5–10 m/s. "
-                        "Más alta → más pérdida singular. Para ductos de ø≈15 cm con "
-                        "Q≈900 m³/h, v ≈ 14 m/s."
-                    ),
+                    help=t("p6.perdidas.singulares.v_help"),
                 )
                 if abs(v_ducto_input - v_ducto) > 1e-6:
                     st.session_state["p6_v_ducto"] = v_ducto_input
@@ -1207,13 +1127,15 @@ def render() -> None:
                     dP_singulares_val = sing["total"]
                     v_ducto = v_ducto_input
                 st.caption(
-                    f"n_paralelo = {n_paralelo} · n_codos asumidos = 2 "
-                    "· coeficientes C de ASHRAE cap. 21 / Idelchik\n\n"
-                    f"- Entrada (C=0.5): {sing['entrada']:.1f} Pa\n"
-                    f"- Salida descarga libre (C=1.0): {sing['salida']:.1f} Pa\n"
-                    f"- 2 codos 90° (C=0.9 c/u): {sing['codos']:.1f} Pa\n"
-                    f"- Manifold banco→caño, confluencia (C=1.5): {sing['manifold']:.1f} Pa\n"
-                    f"- Difusor de entrada a cámara (C=0.3): {sing['difusor']:.1f} Pa"
+                    t(
+                        "p6.perdidas.singulares.detalle",
+                        n_par=n_paralelo,
+                        entrada=sing["entrada"],
+                        salida=sing["salida"],
+                        codos=sing["codos"],
+                        manifold=sing["manifold"],
+                        difusor=sing["difusor"],
+                    )
                 )
 
             dP_ductos_efectivo = (
@@ -1240,69 +1162,71 @@ def render() -> None:
 
             dP_tot_preview = dP_col_input + dP_cam_input + dP_ductos_efectivo + dP_singulares_val
             st.caption(
-                f"**ΔP total estimada: {dP_tot_preview:.1f} Pa** "
-                f"(col={dP_col_input:.1f} + cam={dP_cam_input:.1f} + "
-                f"duc={dP_ductos_efectivo:.1f} + sing={dP_singulares_val:.1f})"
+                t(
+                    "p6.perdidas.total_preview",
+                    total=dP_tot_preview,
+                    col=dP_col_input,
+                    cam=dP_cam_input,
+                    duc=dP_ductos_efectivo,
+                    sing=dP_singulares_val,
+                )
             )
             if dP_cano > 0:
-                st.caption(
-                    f"↳ ΔP ductos incluye el **caño maestro** (P3): {dP_cano:.1f} Pa "
-                    "del manifold del banco."
-                )
+                st.caption(t("p6.perdidas.cano_caption", v=dP_cano))
 
     # -----------------------------------------------------------------------
     # Sección D: Parámetros del ventilador / motor
     # -----------------------------------------------------------------------
-    with st.expander("Parámetros del ventilador y motor", expanded=False):
+    with st.expander(t("p6.ventilador.titulo"), expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             eta_vent = (
                 st.slider(
-                    "η ventilador [%]",
+                    t("p6.ventilador.eta_vent.label"),
                     min_value=20,
                     max_value=85,
                     value=int(
                         (mot_prev.eficiencia_ventilador if mot_prev is not None else 0.55) * 100
                     ),
                     step=5,
-                    help="Axial simple: 45–60%. Centrífugo media presión: 60–75%.",
+                    help=t("p6.ventilador.eta_vent.help"),
                 )
                 / 100.0
             )
         with c2:
             eta_motor_val = (
                 st.slider(
-                    "η motor eléctrico [%]",
+                    t("p6.ventilador.eta_motor.label"),
                     min_value=50,
                     max_value=97,
                     value=int((mot_prev.eficiencia_motor if mot_prev is not None else 0.85) * 100),
                     step=5,
-                    help="Motores < 1 kW: 75–85%.",
+                    help=t("p6.ventilador.eta_motor.help"),
                 )
                 / 100.0
             )
         with c3:
             fs = st.number_input(
-                "Factor de servicio [-]",
+                t("p6.ventilador.fs.label"),
                 min_value=1.0,
                 max_value=2.0,
                 value=mot_prev.factor_servicio if mot_prev is not None else 1.15,
                 step=0.05,
                 format="%.2f",
-                help="Sobredimensionamiento del motor. Estándar NEMA continuo: 1.15.",
+                help=t("p6.ventilador.fs.help"),
             )
 
         tension_val: float | None = None
         if tipo == TipoAccionamiento.MOTOR_ELECTRICO:
             usar_tension = st.checkbox(
-                "Especificar tensión de alimentación",
+                t("p6.ventilador.usar_tension"),
                 value=mot_prev is not None and mot_prev.tension_V is not None,
                 key="motor_usar_tension",
             )
             if usar_tension:
                 tension_val = float(
                     st.selectbox(
-                        "Tensión [V]",
+                        t("p6.ventilador.tension"),
                         options=[220, 380],
                         index=0 if (mot_prev is None or mot_prev.tension_V != 380.0) else 1,
                     )
@@ -1312,7 +1236,7 @@ def render() -> None:
     # Botón: calcular
     # -----------------------------------------------------------------------
     st.divider()
-    if st.button("⚙️ Calcular motor", type="primary"):
+    if st.button(t("p6.calcular"), type="primary"):
         try:
             motor = Motor(
                 tipo_accionamiento=tipo,
@@ -1332,61 +1256,64 @@ def render() -> None:
             )
             proyecto.motor = motor
         except (ValueError, NotImplementedError) as exc:
-            st.error(f"❌ Error de configuración: {exc}")
+            st.error(t("p6.error_config", exc=exc))
             return
 
         if motor.advertencias:
-            st.subheader("Advertencias de diseño")
+            st.subheader(t("p6.advertencias_titulo"))
             _mostrar_advertencias(motor.advertencias)
         else:
-            st.success("✅ Motor dimensionado sin advertencias.")
+            st.success(t("p6.sin_advertencias"))
 
         # Resultados
-        st.subheader("Resultados del dimensionamiento")
+        st.subheader(t("p6.resultados.titulo"))
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("ΔP total", f"{motor.perdida_carga_total_Pa:.1f} Pa")
+        c1.metric(t("p6.resultados.dp_total"), f"{motor.perdida_carga_total_Pa:.1f} Pa")
         c2.metric(
-            "P hidráulica",
+            t("p6.resultados.p_hidraulica.label"),
             f"{motor.potencia_hidraulica_W:.1f} W" if motor.potencia_hidraulica_W else "—",
-            help="Q × ΔP",
+            help=t("p6.resultados.p_hidraulica.help"),
         )
         c3.metric(
-            "P eléctrica",
+            t("p6.resultados.p_electrica.label"),
             f"{motor.potencia_electrica_W:.1f} W" if motor.potencia_electrica_W else "—",
-            help=f"P_hid / (η_vent={eta_vent:.0%} × η_motor={eta_motor_val:.0%})",
+            help=t("p6.resultados.p_electrica.help", eta_vent=eta_vent, eta_motor=eta_motor_val),
         )
         c4.metric(
-            "P a instalar",
+            t("p6.resultados.p_instalar.label"),
             f"{motor.potencia_a_instalar_W:.1f} W" if motor.potencia_a_instalar_W else "—",
-            help=f"P_elec × FS={fs:.2f}. Potencia nominal del motor a comprar.",
+            help=t("p6.resultados.p_instalar.help", fs=fs),
         )
 
         if motor.corriente_nominal_A is not None:
             st.info(
-                f"⚡ Corriente nominal estimada: **{motor.corriente_nominal_A:.2f} A** "
-                f"a {int(motor.tension_V)} V (cos φ = 0.85)"
+                t(
+                    "p6.resultados.corriente",
+                    i=motor.corriente_nominal_A,
+                    v=int(motor.tension_V),
+                )
             )
 
-        with st.expander("Resumen de la configuración"):
+        with st.expander(t("p6.resumen.titulo")):
             c1, c2 = st.columns(2)
             with c1:
-                st.write("**Tipo:** Motor eléctrico")
-                st.write(f"**Caudal:** {Q_vol_ls:.1f} L/s")
-                st.write(f"**ΔP total:** {motor.perdida_carga_total_Pa:.1f} Pa")
-                st.write(f"**η ventilador:** {eta_vent:.0%}")
-                st.write(f"**η motor:** {eta_motor_val:.0%}")
-                st.write(f"**Factor servicio:** {fs:.2f}")
+                st.write(t("p6.resumen.tipo"))
+                st.write(t("p6.resumen.caudal", v=Q_vol_ls))
+                st.write(t("p6.resumen.dp_total", v=motor.perdida_carga_total_Pa))
+                st.write(t("p6.resumen.eta_vent", v=eta_vent))
+                st.write(t("p6.resumen.eta_motor", v=eta_motor_val))
+                st.write(t("p6.resumen.fs", v=fs))
             with c2:
                 if motor.potencia_hidraulica_W:
-                    st.write(f"**P hidráulica:** {motor.potencia_hidraulica_W:.1f} W")
+                    st.write(t("p6.resumen.p_hidraulica", v=motor.potencia_hidraulica_W))
                 if motor.potencia_eje_W:
-                    st.write(f"**P eje:** {motor.potencia_eje_W:.1f} W")
+                    st.write(t("p6.resumen.p_eje", v=motor.potencia_eje_W))
                 if motor.potencia_electrica_W:
-                    st.write(f"**P eléctrica:** {motor.potencia_electrica_W:.1f} W")
+                    st.write(t("p6.resumen.p_electrica", v=motor.potencia_electrica_W))
                 if motor.potencia_a_instalar_W:
-                    st.write(f"**P a instalar:** {motor.potencia_a_instalar_W:.1f} W")
+                    st.write(t("p6.resumen.p_instalar", v=motor.potencia_a_instalar_W))
                 if motor.corriente_nominal_A:
-                    st.write(f"**Corriente:** {motor.corriente_nominal_A:.2f} A")
+                    st.write(t("p6.resumen.corriente", v=motor.corriente_nominal_A))
 
     # --- Guardar configuración ---
     if proyecto.motor is not None:
@@ -1396,7 +1323,7 @@ def render() -> None:
         col_txt, col_json = st.columns(2)
         with col_txt:
             st.download_button(
-                "Guardar configuración del motor (.txt)",
+                t("p6.guardar.txt"),
                 data=_texto_config_motor(proyecto.motor),
                 file_name=nombre_archivo_descarga(proyecto, "motor", "txt"),
                 mime="text/plain",
@@ -1404,7 +1331,7 @@ def render() -> None:
             )
         with col_json:
             st.download_button(
-                "Guardar configuración del motor (.json)",
+                t("p6.guardar.json"),
                 data=dump_json(_json_config_motor(proyecto.motor)),
                 file_name=nombre_archivo_descarga(proyecto, "motor", "json"),
                 mime="application/json",

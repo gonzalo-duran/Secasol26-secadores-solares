@@ -1,0 +1,4 @@
+espesor:
+  otro: Otro (personalizado)…
+  personalizado: Espesor personalizado [mm]
+esquema_no_encontrado: "[esquema '{nombre}' no encontrado]"

@@ -1,0 +1,39 @@
+caption: Prediseño de secadores solares
+manual: 📖 Manual del usuario
+nav:
+  label: Secciones del proyecto
+  p1: 1 · Tipología
+  p2: 2 · Emplazamiento y Clima
+  p3: 3 · Colector
+  p4: 4 · Cámara de Secado
+  p5: 5 · Auxiliar
+  p6: 6 · Motor
+  p7: 7 · Resultados
+como_empezar:
+  titulo: 👋 Cómo empezar
+  cuerpo: |
+    **Secasol** predimensiona secadores solares paso a paso. Recorré las secciones en orden:
+
+    1. **Tipología** — tipo de secador y modo de análisis.
+    2. **Emplazamiento** — coordenadas del sitio y descarga del clima (NASA POWER).
+    3. **Colector** — materiales, geometría y velocidad de aire.
+    4. **Cámara** — geometría, producto a secar y carga.
+    5. **Auxiliar** — calentamiento de respaldo (opcional).
+    6. **Motor** — ventilador o chimenea solar para mover el aire.
+    7. **Resultados** — corre el prediseño completo y exporta el reporte.
+
+    **Tené a mano:** latitud/longitud del sitio y el producto a secar.
+
+    ℹ️ Es una herramienta de **prediseño** (orden de magnitud), no de certificación.
+entorno:
+  titulo: 🔧 Entorno
+  caption: >-
+    Versión de Python y de las librerías de cálculo que está corriendo
+    esta instancia. Útil para comparar el repo local con el despliegue
+    remoto: mismos números requieren el mismo entorno.
+  no_instalado: no instalado
+contacto:
+  titulo: 📬 Contacto
+  cuerpo: "**Gonzalo J. Durán**  \nGEEDSP · INENCO · CONICET-UNSa  \n✉️ [{mail}](mailto:{mail})\n\n\
+    Escribime para **citar** el programa en un trabajo, **reportar un problema** o acercar\
+    \ **sugerencias**. ¡Todo feedback es bienvenido!"

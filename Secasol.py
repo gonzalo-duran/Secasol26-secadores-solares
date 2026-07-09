@@ -13,6 +13,7 @@ import streamlit as st
 
 from core.proyecto import Proyecto
 from ui.componentes.header import render_header
+from ui.componentes.idiomas import idioma_actual, selector_idioma, t
 
 
 def _diagnostico_entorno() -> str:
@@ -33,7 +34,7 @@ def _diagnostico_entorno() -> str:
         try:
             ver = importlib.metadata.version(nombre)
         except importlib.metadata.PackageNotFoundError:
-            ver = "no instalado"
+            ver = t("sidebar.entorno.no_instalado")
         lineas.append(f"**{nombre}** `{ver}`")
     return "  \n".join(lineas)
 
@@ -75,57 +76,51 @@ if "proyecto" not in st.session_state:
 # ---------------------------------------------------------------------------
 # Navegación lateral (sidebar) — persistente al scrollear (mejora 20)
 # ---------------------------------------------------------------------------
-# Cada sección es (rótulo, módulo). El sidebar de Streamlit queda fijo al
-# scrollear el cuerpo, así que el menú está siempre a mano. Se renderiza solo
-# la sección activa (no las 7), lo que acelera y aísla efectos colaterales
-# entre secciones; el estado vive en st.session_state.proyecto y persiste al
-# cambiar de sección.
+# Cada sección es (clave estable, módulo). El sidebar de Streamlit queda fijo
+# al scrollear el cuerpo, así que el menú está siempre a mano. Se renderiza
+# solo la sección activa (no las 7), lo que acelera y aísla efectos
+# colaterales entre secciones; el estado vive en st.session_state.proyecto y
+# persiste al cambiar de sección. Las options del radio son claves estables
+# (p1..p7) con format_func: el valor guardado en `nav_seccion` no depende del
+# idioma, así la selección sobrevive a un cambio de idioma (plan i18n, F1).
 
-_SECCIONES = [
-    ("1 · Tipología", "ui.p1_tipologia"),
-    ("2 · Emplazamiento y Clima", "ui.p2_emplazamiento"),
-    ("3 · Colector", "ui.p3_colector"),
-    ("4 · Cámara de Secado", "ui.p4_camara"),
-    ("5 · Auxiliar", "ui.p5_auxiliar"),
-    ("6 · Motor", "ui.p6_motor"),
-    ("7 · Resultados", "ui.p7_resultados"),
-]
+_SECCIONES = {
+    "p1": "ui.p1_tipologia",
+    "p2": "ui.p2_emplazamiento",
+    "p3": "ui.p3_colector",
+    "p4": "ui.p4_camara",
+    "p5": "ui.p5_auxiliar",
+    "p6": "ui.p6_motor",
+    "p7": "ui.p7_resultados",
+}
 
-st.sidebar.title("Secasol26")
-st.sidebar.caption("Prediseño de secadores solares")
+st.sidebar.title("Secasol26")  # i18n: exento (marca)
+st.sidebar.caption(t("sidebar.caption"))
+selector_idioma()
 # Punto de entrada global al manual: siempre en pestaña nueva (target=_blank)
 # para no recargar la app y perder el proyecto en curso.
 st.sidebar.markdown(
-    '<a href="?manual=indice" target="_blank" rel="noopener">📖 Manual del usuario</a>',
+    f'<a href="?manual=indice&lang={idioma_actual()}" target="_blank" rel="noopener">'
+    f'{t("sidebar.manual")}</a>',
     unsafe_allow_html=True,
 )
-_rotulo = st.sidebar.radio(
-    "Secciones del proyecto",
-    options=[r for r, _ in _SECCIONES],
+# Migración: sesiones abiertas antes del cambio a claves estables pueden
+# guardar el rótulo viejo en nav_seccion; un valor fuera de options lanza
+# StreamlitAPIException, así que se descarta y el radio vuelve a p1.
+if st.session_state.get("nav_seccion") not in _SECCIONES:
+    st.session_state.pop("nav_seccion", None)
+_seccion = st.sidebar.radio(
+    t("sidebar.nav.label"),
+    options=list(_SECCIONES),
     key="nav_seccion",
+    format_func=lambda k: t(f"sidebar.nav.{k}"),
 )
 
-with st.sidebar.expander("👋 Cómo empezar", expanded=False):
-    st.markdown(
-        "**Secasol** predimensiona secadores solares paso a paso. Recorré las "
-        "secciones en orden:\n\n"
-        "1. **Tipología** — tipo de secador y modo de análisis.\n"
-        "2. **Emplazamiento** — coordenadas del sitio y descarga del clima (NASA POWER).\n"
-        "3. **Colector** — materiales, geometría y velocidad de aire.\n"
-        "4. **Cámara** — geometría, producto a secar y carga.\n"
-        "5. **Auxiliar** — calentamiento de respaldo (opcional).\n"
-        "6. **Motor** — ventilador o chimenea solar para mover el aire.\n"
-        "7. **Resultados** — corre el prediseño completo y exporta el reporte.\n\n"
-        "**Tené a mano:** latitud/longitud del sitio y el producto a secar.\n\n"
-        "ℹ️ Es una herramienta de **prediseño** (orden de magnitud), no de certificación."
-    )
+with st.sidebar.expander(t("sidebar.como_empezar.titulo"), expanded=False):
+    st.markdown(t("sidebar.como_empezar.cuerpo"))
 
-with st.sidebar.expander("🔧 Entorno", expanded=False):
-    st.caption(
-        "Versión de Python y de las librerías de cálculo que está corriendo "
-        "esta instancia. Útil para comparar el repo local con el despliegue "
-        "remoto: mismos números requieren el mismo entorno."
-    )
+with st.sidebar.expander(t("sidebar.entorno.titulo"), expanded=False):
+    st.caption(t("sidebar.entorno.caption"))
     st.markdown(_diagnostico_entorno())
 
 # Contacto institucional (S46) — visible en todas las secciones porque el sidebar
@@ -134,17 +129,11 @@ with st.sidebar.expander("🔧 Entorno", expanded=False):
 # el autor ni con el grupo.
 _CONTACTO_MAIL = "gonzalo.jose.duran@gmail.com"
 
-with st.sidebar.expander("📬 Contacto", expanded=False):
-    st.markdown(
-        "**Gonzalo J. Durán**  \n"
-        "GEEDSP · INENCO · CONICET-UNSa  \n"
-        f"✉️ [{_CONTACTO_MAIL}](mailto:{_CONTACTO_MAIL})\n\n"
-        "Escribime para **citar** el programa en un trabajo, **reportar un "
-        "problema** o acercar **sugerencias**. ¡Todo feedback es bienvenido!"
-    )
+with st.sidebar.expander(t("sidebar.contacto.titulo"), expanded=False):
+    st.markdown(t("sidebar.contacto.cuerpo", mail=_CONTACTO_MAIL))
 
 # Pie discreto del sidebar: mail siempre a la vista sin desplegar el expander.
-st.sidebar.caption(f"✉️ [{_CONTACTO_MAIL}](mailto:{_CONTACTO_MAIL})")
+st.sidebar.caption(f"✉️ [{_CONTACTO_MAIL}](mailto:{_CONTACTO_MAIL})")  # i18n: exento (mail)
 
 # Persistencia de widget-keys entre secciones (mejora 28). En esta arquitectura
 # de render condicional, Streamlit purga al fin del run las widget-keys de la
@@ -165,5 +154,4 @@ for _k in _KEYS_PERSISTENTES:
     if _k in st.session_state:
         st.session_state[_k] = st.session_state[_k]
 
-_modulo = dict(_SECCIONES)[_rotulo]
-importlib.import_module(_modulo).render()
+importlib.import_module(_SECCIONES[_seccion]).render()

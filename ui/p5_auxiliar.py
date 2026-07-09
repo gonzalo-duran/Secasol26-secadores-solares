@@ -13,7 +13,6 @@ from __future__ import annotations
 import streamlit as st
 
 from calculos.auxiliar_calc import calcular_auxiliar
-from core.advertencias import Severidad
 from core.auxiliar import (
     Auxiliar,
     CargaArranque,
@@ -21,6 +20,8 @@ from core.auxiliar import (
     TipoAuxiliar,
     advertencias_auxiliar,
 )
+from ui.componentes.advertencias_widget import render_advertencias
+from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
@@ -28,12 +29,6 @@ from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
 # ---------------------------------------------------------------------------
 # Constantes de UI
 # ---------------------------------------------------------------------------
-
-_ICONOS_SEVERIDAD = {
-    Severidad.INFO: "ℹ️",
-    Severidad.WARNING: "⚠️",
-    Severidad.CRITICAL: "🚨",
-}
 
 _T_SALIDA_DEFAULT_C: float = 60.0
 _T_AMB_DEFAULT_C: float = 25.0
@@ -46,15 +41,8 @@ _T_MAX_DEFAULT_C: float = 70.0
 
 
 def _mostrar_advertencias(adv_list: list) -> None:
-    for adv in adv_list:
-        icono = _ICONOS_SEVERIDAD.get(adv.severidad, "•")
-        msg = f"{icono} **{adv.codigo}** — {adv.mensaje}"
-        if adv.severidad == Severidad.CRITICAL:
-            st.error(msg)
-        elif adv.severidad == Severidad.WARNING:
-            st.warning(msg)
-        else:
-            st.info(msg)
+    """Muestra la lista de Advertencia traducida por código (widget único, F5)."""
+    render_advertencias(adv_list, con_sugerencia=False)
 
 
 def _T_entrada_sugerida() -> float:
@@ -275,7 +263,7 @@ def _json_config_auxiliar(aux: "Auxiliar") -> dict:
 
 def render() -> None:
     """Renderiza la Pestaña 5 — Calentamiento Auxiliar."""
-    st.header("5 · Calentamiento Auxiliar")
+    st.header(t("p5.header"))
     boton_manual(SLUG_POR_SECCION["p5"])
 
     proyecto = st.session_state.proyecto
@@ -283,56 +271,47 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Cargar configuración guardada (.json)
     # -----------------------------------------------------------------------
-    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+    with st.expander(t("p5.cargar.titulo"), expanded=False):
         from ui.componentes.serializacion import (
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
 
         archivo = st.file_uploader(
-            "Subí un archivo .json del auxiliar previamente guardado",
+            t("p5.cargar.uploader"),
             type=["json"],
             key="p5_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "auxiliar")
             if err:
-                st.error(f"❌ {err}")
+                st.error(f"❌ {err}")  # i18n: exento (mensaje de serializacion, F4)
             else:
                 try:
                     aux_cargado = _from_json_auxiliar(data)
                 except (KeyError, ValueError, TypeError) as exc:
-                    st.error(f"❌ Error reconstruyendo el auxiliar: {exc}")
+                    st.error(t("p5.cargar.error_reconstruccion", exc=exc))
                 else:
                     proyecto.auxiliar = aux_cargado
                     n_borr = limpiar_session_state_prefijo(st.session_state, "p5_")
                     # También aux_*: claves auxiliares usadas por widgets
                     limpiar_session_state_prefijo(st.session_state, "aux_")
                     st.session_state.pop("p5_cargar_json", None)
-                    st.success(
-                        f"✅ Auxiliar cargado desde JSON "
-                        f"(se reiniciaron {n_borr} valores de la sesión)."
-                    )
+                    st.success(t("p5.cargar.exito", n=n_borr))
                     st.rerun()
 
     # -----------------------------------------------------------------------
     # Toggle principal: ¿usar auxiliar?
     # -----------------------------------------------------------------------
     usar_auxiliar = st.toggle(
-        "Incorporar sistema de calentamiento auxiliar",
+        t("p5.usar.label"),
         value=proyecto.auxiliar is not None,
-        help=(
-            "Activa un sistema de calentamiento auxiliar (resistencia eléctrica o quemador "
-            "de biomasa) para extender el horario de secado o reforzar en días nublados."
-        ),
+        help=t("p5.usar.help"),
     )
 
     if not usar_auxiliar:
         proyecto.auxiliar = None
-        st.info(
-            "Sin calentamiento auxiliar. El secador opera únicamente con energía solar. "
-            "Activar el toggle para configurar un auxiliar."
-        )
+        st.info(t("p5.usar.sin_auxiliar"))
         return
 
     aux_prev = proyecto.auxiliar
@@ -340,90 +319,66 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Sección A: Tipo y modo de operación
     # -----------------------------------------------------------------------
-    st.subheader("Tipo y modo de operación")
+    st.subheader(t("p5.tipo_modo.titulo"))
     col1, col2 = st.columns(2)
 
     with col1:
-        tipo_opciones = {
-            "Resistencia eléctrica": TipoAuxiliar.RESISTENCIA_ELECTRICA,
-            "Quemador de biomasa": TipoAuxiliar.QUEMADOR_BIOMASA,
-        }
-        tipo_prev_label = next(
-            (k for k, v in tipo_opciones.items() if aux_prev is not None and v == aux_prev.tipo),
-            "Resistencia eléctrica",
+        tipo_opts = [TipoAuxiliar.RESISTENCIA_ELECTRICA, TipoAuxiliar.QUEMADOR_BIOMASA]
+        tipo_idx = tipo_opts.index(aux_prev.tipo) if aux_prev is not None else 0
+        tipo = st.selectbox(
+            t("p5.tipo_modo.tipo.label"),
+            options=tipo_opts,
+            index=tipo_idx,
+            format_func=lambda e: t(f"p5.tipo_modo.tipo.{e.value.lower()}"),
+            help=t("p5.tipo_modo.tipo.help"),
         )
-        tipo_label = st.selectbox(
-            "Tipo de fuente de calor auxiliar",
-            options=list(tipo_opciones.keys()),
-            index=list(tipo_opciones.keys()).index(tipo_prev_label),
-            help=(
-                "Resistencia eléctrica: η ≈ 1, control preciso, requiere red eléctrica.\n"
-                "Quemador de biomasa: η ≈ 0.60–0.75, combustible local, control más simple."
-            ),
-        )
-        tipo = tipo_opciones[tipo_label]
 
     with col2:
-        modo_opciones = {
-            "Serie post-colector": ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
-            "Respaldo independiente": ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
-        }
-        modo_prev_label = next(
-            (
-                k
-                for k, v in modo_opciones.items()
-                if aux_prev is not None and v == aux_prev.modo_operacion
-            ),
-            "Serie post-colector",
+        modo_opts = [
+            ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
+            ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
+        ]
+        modo_idx = modo_opts.index(aux_prev.modo_operacion) if aux_prev is not None else 0
+        modo = st.selectbox(
+            t("p5.tipo_modo.modo.label"),
+            options=modo_opts,
+            index=modo_idx,
+            format_func=lambda e: t(f"p5.tipo_modo.modo.{e.value.lower()}"),
+            help=t("p5.tipo_modo.modo.help"),
         )
-        modo_label = st.selectbox(
-            "Modo de operación",
-            options=list(modo_opciones.keys()),
-            index=list(modo_opciones.keys()).index(modo_prev_label),
-            help=(
-                "**Serie post-colector:** el auxiliar calienta el aire luego del colector. "
-                "Úselo como refuerzo en días nublados o para alcanzar temperaturas más altas.\n\n"
-                "**Respaldo independiente:** el auxiliar tiene su propio circuito de aire. "
-                "Úselo para secado nocturno o días sin sol."
-            ),
-        )
-        modo = modo_opciones[modo_label]
 
     # -----------------------------------------------------------------------
     # Sección B: Parámetros comunes
     # -----------------------------------------------------------------------
-    with st.expander("Parámetros de operación", expanded=False):
+    with st.expander(t("p5.operacion.titulo"), expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             potencia_kW = st.number_input(
-                "Potencia nominal [kW]",
+                t("p5.operacion.potencia.label"),
                 min_value=0.05,
                 max_value=100.0,
                 value=(aux_prev.potencia_nominal_W / 1000.0 if aux_prev is not None else 1.0),
                 step=0.05,
                 format="%.2f",
-                help=(
-                    "Potencia térmica nominal entregada al aire. "
-                    "Para resistencia eléctrica: potencia eléctrica = potencia térmica."
-                ),
+                help=t("p5.operacion.potencia.help"),
             )
             potencia_W = potencia_kW * 1000.0
 
             fraccion = st.slider(
-                "Fracción de potencia en operación [%]",
+                t("p5.operacion.fraccion.label"),
                 min_value=10,
                 max_value=100,
                 value=int(
                     (aux_prev.fraccion_potencia_operacion if aux_prev is not None else 1.0) * 100
                 ),
                 step=5,
-                help="Permite modelar operación parcial del auxiliar.",
+                help=t("p5.operacion.fraccion.help"),
             )
             fraccion_f = fraccion / 100.0
 
         with c2:
             T_max_C = st.number_input(
-                "T máxima de salida [°C]",
+                t("p5.operacion.t_max.label"),
                 min_value=30.0,
                 max_value=200.0,
                 value=kelvin_a_celsius(
@@ -433,25 +388,19 @@ def render() -> None:
                 ),
                 step=1.0,
                 format="%.0f",
-                help=(
-                    "Límite de seguridad para proteger el producto. "
-                    "Para frutas y hortalizas: ≤ 60–70 °C."
-                ),
+                help=t("p5.operacion.t_max.help"),
             )
             T_max_K = celsius_a_kelvin(T_max_C)
 
             usar_set_point = st.checkbox(
-                "Control por set point de temperatura",
+                t("p5.operacion.set_point.check"),
                 value=aux_prev is not None and aux_prev.set_point_T_K is not None,
-                help=(
-                    "Si está activo, el auxiliar regula su potencia para mantener "
-                    "la temperatura de salida en el valor objetivo."
-                ),
+                help=t("p5.operacion.set_point.check_help"),
             )
             set_point_K: float | None = None
             if usar_set_point:
                 sp_C = st.number_input(
-                    "Set point [°C]",
+                    t("p5.operacion.set_point.label"),
                     min_value=30.0,
                     max_value=T_max_C,
                     value=min(
@@ -468,12 +417,9 @@ def render() -> None:
                 set_point_K = celsius_a_kelvin(sp_C)
 
         disponible_nocturno = st.checkbox(
-            "Disponible para operación nocturna",
+            t("p5.operacion.nocturno.label"),
             value=aux_prev.disponible_nocturno if aux_prev is not None else False,
-            help=(
-                "Resistencia eléctrica: disponible si hay red eléctrica. "
-                "Quemador de biomasa: generalmente disponible."
-            ),
+            help=t("p5.operacion.nocturno.help"),
         )
 
     # -----------------------------------------------------------------------
@@ -487,34 +433,42 @@ def render() -> None:
     corriente_val: float | None = None
 
     if tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
-        with st.expander("Parámetros del quemador de biomasa", expanded=False):
-            _COMBUSTIBLES = {
-                "Leña seca (~20% HR)": (14.5, 0.65),
-                "Pellets de madera": (17.5, 0.70),
-                "Cáscara de girasol": (16.0, 0.65),
-                "Bagazo de caña (seco)": (17.0, 0.65),
-                "Otro (ingresar manualmente)": (None, None),
-            }
-            combustible_prev = (
-                aux_prev.tipo_biomasa
-                if aux_prev is not None and aux_prev.tipo_biomasa
-                else "Leña seca (~20% HR)"
-            )
+        with st.expander(t("p5.biomasa.titulo"), expanded=False):
+            # (id_estable, PCI_MJ_kg, η). El id "otro" es sentinel de entrada manual.
+            _COMBUSTIBLES = [
+                ("lena", 14.5, 0.65),
+                ("pellets", 17.5, 0.70),
+                ("girasol", 16.0, 0.65),
+                ("bagazo", 17.0, 0.65),
+                ("otro", None, None),
+            ]
+            _ids_comb = [c[0] for c in _COMBUSTIBLES]
+
+            def _label_comb(cid: str) -> str:
+                return t("p5.biomasa.otro") if cid == "otro" else t(f"p5.biomasa.opcion.{cid}")
+
+            # El nombre previo puede ser un label traducido guardado; se busca por
+            # coincidencia con cualquier idioma o cae a "lena".
+            _prev_nombre = aux_prev.tipo_biomasa if aux_prev is not None else None
+            _idx_comb = 0
+            if _prev_nombre:
+                for i, cid in enumerate(_ids_comb):
+                    if cid != "otro" and _label_comb(cid) == _prev_nombre:
+                        _idx_comb = i
+                        break
             combustible_sel = st.selectbox(
-                "Combustible",
-                options=list(_COMBUSTIBLES.keys()),
-                index=(
-                    0
-                    if combustible_prev not in _COMBUSTIBLES
-                    else list(_COMBUSTIBLES.keys()).index(combustible_prev)
-                ),
+                t("p5.biomasa.combustible"),
+                options=_ids_comb,
+                index=_idx_comb,
+                format_func=_label_comb,
             )
-            PCI_default, eta_default = _COMBUSTIBLES[combustible_sel]
+            _map_comb = {c[0]: (c[1], c[2]) for c in _COMBUSTIBLES}
+            PCI_default, eta_default = _map_comb[combustible_sel]
 
             c1, c2 = st.columns(2)
             with c1:
                 PCI_val = st.number_input(
-                    "PCI [MJ/kg]",
+                    t("p5.biomasa.pci.label"),
                     min_value=5.0,
                     max_value=40.0,
                     value=float(
@@ -524,17 +478,17 @@ def render() -> None:
                     ),
                     step=0.5,
                     format="%.1f",
-                    help="Poder calorífico inferior del combustible.",
+                    help=t("p5.biomasa.pci.help"),
                 )
                 tipo_biomasa_val = (
-                    combustible_sel
-                    if combustible_sel != "Otro (ingresar manualmente)"
-                    else st.text_input("Nombre del combustible", value="")
+                    _label_comb(combustible_sel)
+                    if combustible_sel != "otro"
+                    else st.text_input(t("p5.biomasa.nombre_combustible"), value="")
                 )
             with c2:
                 eta_quemador_val = (
                     st.slider(
-                        "Eficiencia del quemador [%]",
+                        t("p5.biomasa.eficiencia"),
                         min_value=30,
                         max_value=95,
                         value=int(
@@ -557,62 +511,56 @@ def render() -> None:
             if PCI_val and eta_quemador_val:
                 consumo_est = potencia_W * fraccion_f * 3600.0 / (PCI_val * 1e6 * eta_quemador_val)
                 st.caption(
-                    f"💡 Consumo estimado a potencia efectiva "
-                    f"({potencia_W * fraccion_f / 1000:.2f} kW): "
-                    f"**{consumo_est:.2f} kg/h** de {combustible_sel.lower()}"
+                    t(
+                        "p5.biomasa.consumo_estimado",
+                        potencia=potencia_W * fraccion_f / 1000,
+                        consumo=consumo_est,
+                        combustible=_label_comb(combustible_sel).lower(),
+                    )
                 )
 
     elif tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
-        with st.expander("Parámetros de la resistencia eléctrica", expanded=False):
+        with st.expander(t("p5.resistencia.titulo"), expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                tension_opciones = [None, 220.0, 380.0]
                 tension_prev = aux_prev.tension_V if aux_prev is not None else 220.0
                 usar_tension = st.checkbox(
-                    "Especificar tensión de alimentación",
+                    t("p5.resistencia.especificar_tension"),
                     value=tension_prev is not None,
                 )
                 if usar_tension:
                     tension_val = st.selectbox(
-                        "Tensión [V]",
+                        t("p5.resistencia.tension.label"),
                         options=[220, 380],
                         index=0 if (tension_prev is None or tension_prev == 220) else 1,
-                        help="220 V monofásico o 380 V trifásico.",
+                        help=t("p5.resistencia.tension.help"),
                     )
                     tension_val = float(tension_val)
             with c2:
                 if tension_val is not None:
                     corriente_est = potencia_W * fraccion_f / (tension_val * 0.85)
                     st.metric(
-                        "Corriente estimada",
+                        t("p5.resistencia.corriente.label"),
                         f"{corriente_est:.1f} A",
-                        help="I = P / (V × cos_phi), cos_phi = 0.85.",
+                        help=t("p5.resistencia.corriente.help"),
                     )
 
     # -----------------------------------------------------------------------
     # Calendario de arranque (híbrido mañana/tarde) — opcional
     # -----------------------------------------------------------------------
     cargas_list: list[CargaArranque] = []
-    with st.expander("🌅 Calendario de arranque (híbrido mañana/tarde)", expanded=False):
-        st.caption(
-            "Por defecto el auxiliar opera **de día** (cuando hay sol, según I_g) "
-            "salvo que habilites operación nocturna. Si en cambio cargás un "
-            "**calendario de arranque**, el quemador opera **solo en esas ventanas "
-            "horarias** (mañana y/o atardecer), independiente del sol — el patrón del "
-            "secador híbrido solar-biomasa estilo ADITAL, donde el colector cubre el "
-            "mediodía y la leña arranca/refuerza en los bordes del día. Aplica a los "
-            "modos transitorios (Día real, multi-día y ventana de producción)."
-        )
+    with st.expander(t("p5.calendario.titulo"), expanded=False):
+        st.caption(t("p5.calendario.intro"))
         cargas_prev = aux_prev.cargas_arranque if aux_prev is not None else []
         usar_cal = st.checkbox(
-            "Usar calendario de arranque",
+            t("p5.calendario.usar.label"),
             value=bool(cargas_prev),
-            help="Sin tildar: el auxiliar opera por irradiancia (comportamiento por defecto).",
+            help=t("p5.calendario.usar.help"),
         )
         if usar_cal:
             n_def = len(cargas_prev) if cargas_prev else 2
             n_cargas = st.number_input(
-                "Número de cargas diarias",
+                t("p5.calendario.n_cargas"),
                 min_value=1,
                 max_value=6,
                 value=int(n_def),
@@ -624,7 +572,7 @@ def render() -> None:
                 d_prev = cargas_prev[i].duracion_h if i < len(cargas_prev) else _def[i % 2][1]
                 cc1, cc2 = st.columns(2)
                 hi = cc1.number_input(
-                    f"Carga {i + 1} — hora de inicio [h]",
+                    t("p5.calendario.carga_inicio", i=i + 1),
                     min_value=0.0,
                     max_value=23.5,
                     value=float(h_prev),
@@ -633,7 +581,7 @@ def render() -> None:
                     key=f"p5_carga_hi_{i}",
                 )
                 du = cc2.number_input(
-                    f"Carga {i + 1} — duración [h]",
+                    t("p5.calendario.carga_duracion", i=i + 1),
                     min_value=0.5,
                     max_value=24.0,
                     value=float(d_prev),
@@ -643,16 +591,13 @@ def render() -> None:
                 )
                 cargas_list.append(CargaArranque(hora_inicio_h=float(hi), duracion_h=float(du)))
             horas_cubiertas = sum(c.duracion_h for c in cargas_list)
-            st.caption(
-                f"⏱️ Cobertura total: **{horas_cubiertas:.1f} h/día** en "
-                f"{len(cargas_list)} ventana(s). Fuera de ellas el auxiliar queda apagado."
-            )
+            st.caption(t("p5.calendario.cobertura", horas=horas_cubiertas, n=len(cargas_list)))
 
     # -----------------------------------------------------------------------
     # Botón: aplicar configuración del auxiliar
     # -----------------------------------------------------------------------
     st.divider()
-    calcular = st.button("⚙️ Aplicar auxiliar", type="primary")
+    calcular = st.button(t("p5.aplicar"), type="primary")
 
     if calcular:
         try:
@@ -672,31 +617,31 @@ def render() -> None:
             )
             proyecto.auxiliar = auxiliar
         except (ValueError, NotImplementedError) as exc:
-            st.error(f"❌ Error de configuración: {exc}")
+            st.error(t("p5.error_config", exc=exc))
             return
 
         # Advertencias estáticas
         adv_list = advertencias_auxiliar(auxiliar)
         if adv_list:
-            st.subheader("Advertencias de diseño")
+            st.subheader(t("p5.advertencias_titulo"))
             _mostrar_advertencias(adv_list)
         else:
-            st.success("✅ Auxiliar configurado sin advertencias.")
+            st.success(t("p5.sin_advertencias"))
 
         # -----------------------------------------------------------------------
         # Sección D: Condiciones de operación y resultados
         # -----------------------------------------------------------------------
-        st.subheader("Estimación del efecto térmico")
+        st.subheader(t("p5.efecto.titulo"))
 
         col_op1, col_op2 = st.columns(2)
         with col_op1:
             T_entrada_hint = (
-                "T_salida del colector (modo serie)."
+                t("p5.efecto.t_entrada.hint_serie")
                 if modo == ModoOperacionAuxiliar.SERIE_POSCOLECTOR
-                else "T_ambiente (modo respaldo independiente)."
+                else t("p5.efecto.t_entrada.hint_respaldo")
             )
             T_entrada_C = st.number_input(
-                "Temperatura de entrada al auxiliar [°C]",
+                t("p5.efecto.t_entrada.label"),
                 min_value=-10.0,
                 max_value=120.0,
                 value=st.session_state.get("aux_T_entrada_C", _T_SALIDA_DEFAULT_C),
@@ -713,99 +658,105 @@ def render() -> None:
             if proyecto.colector is not None:
                 Q_m3s = proyecto.colector.caudal_total_m3_s()
                 caudal_default = Q_m3s * 1.1  # ρ ≈ 1.1 kg/m³
-                caudal_hint = (
-                    f"Tomado del colector: {Q_m3s * 1000:.1f} L/s → " f"~{caudal_default:.3f} kg/s"
-                )
+                caudal_hint = t("p5.efecto.caudal.hint_colector", q=Q_m3s * 1000, kg=caudal_default)
             if proyecto.camara is not None:
                 caudal_default = proyecto.camara.flujo.caudal_masico_kg_s
-                caudal_hint = "Tomado de la cámara de secado."
+                caudal_hint = t("p5.efecto.caudal.hint_camara")
 
             caudal_kg_s = st.number_input(
-                "Caudal másico [kg/s]",
+                t("p5.efecto.caudal.label"),
                 min_value=0.001,
                 max_value=10.0,
                 value=caudal_default,
                 step=0.001,
                 format="%.4f",
-                help=caudal_hint or "Caudal de aire seco que pasa por el auxiliar.",
+                help=caudal_hint or t("p5.efecto.caudal.hint_default"),
             )
             if caudal_hint:
-                st.caption(f"💡 {caudal_hint}")
+                st.caption(f"💡 {caudal_hint}")  # i18n: exento (caudal_hint ya traducido)
 
         T_entrada_K = celsius_a_kelvin(T_entrada_C)
         try:
             res = calcular_auxiliar(auxiliar, T_entrada_K, caudal_kg_s)
         except Exception as exc:
-            st.error(f"❌ Error en el cálculo: {exc}")
+            st.error(t("p5.efecto.error_calculo", exc=exc))
             return
 
         if res.advertencias:
             for msg in res.advertencias:
-                st.warning(f"⚠️ {msg}")
+                st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, queda ES)
 
         # Métricas de resultado
         col_r1, col_r2, col_r3, col_r4 = st.columns(4)
         col_r1.metric(
-            "T entrada",
+            t("p5.efecto.t_entrada_metric"),
             f"{kelvin_a_celsius(res.T_entrada_K):.1f} °C",
         )
         col_r2.metric(
-            "T salida",
+            t("p5.efecto.t_salida"),
             f"{kelvin_a_celsius(res.T_salida_K):.1f} °C",
             delta=f"+{res.delta_T_K:.1f} °C",
         )
         col_r3.metric(
-            "Potencia efectiva",
+            t("p5.efecto.potencia_efectiva.label"),
             f"{res.Q_efectivo_W / 1000:.2f} kW",
-            help=f"Fracción activa: {res.fraccion_activa:.0%}",
+            help=t("p5.efecto.potencia_efectiva.help", frac=res.fraccion_activa),
         )
         if res.consumo_biomasa_kg_h is not None:
             col_r4.metric(
-                "Consumo biomasa",
+                t("p5.efecto.consumo_biomasa.label"),
                 f"{res.consumo_biomasa_kg_h:.3f} kg/h",
-                help="A la potencia efectiva de operación.",
+                help=t("p5.efecto.consumo_biomasa.help"),
             )
         elif res.consumo_electrico_W is not None:
             col_r4.metric(
-                "Consumo eléctrico",
+                t("p5.efecto.consumo_electrico"),
                 f"{res.consumo_electrico_W / 1000:.2f} kW",
             )
 
         if res.set_point_activo:
             st.info(
-                f"ℹ️ Control de set point activo: el auxiliar opera al "
-                f"{res.fraccion_activa:.0%} de su potencia nominal para mantener "
-                f"{kelvin_a_celsius(res.T_salida_K):.1f} °C a la salida."
+                t(
+                    "p5.efecto.set_point_activo",
+                    frac=res.fraccion_activa,
+                    t_salida=kelvin_a_celsius(res.T_salida_K),
+                )
             )
 
         # Resumen compacto
-        with st.expander("Resumen de la configuración"):
+        with st.expander(t("p5.resumen.titulo")):
+            _si = t("p5.si")
+            _no = t("p5.no")
             c1, c2 = st.columns(2)
             with c1:
-                st.write(f"**Tipo:** {tipo_label}")
-                st.write(f"**Modo:** {modo_label}")
-                st.write(f"**Potencia nominal:** {potencia_kW:.2f} kW")
-                st.write(f"**Fracción operación:** {fraccion} %")
-                st.write(f"**T_max salida:** {T_max_C:.0f} °C")
+                st.write(t("p5.resumen.tipo", v=t(f"p5.tipo_modo.tipo.{tipo.value.lower()}")))
+                st.write(t("p5.resumen.modo", v=t(f"p5.tipo_modo.modo.{modo.value.lower()}")))
+                st.write(t("p5.resumen.potencia", v=potencia_kW))
+                st.write(t("p5.resumen.fraccion", v=fraccion))
+                st.write(t("p5.resumen.t_max", v=T_max_C))
                 st.write(
-                    f"**Set point:** "
-                    + (f"{kelvin_a_celsius(set_point_K):.0f} °C" if set_point_K else "No definido")
+                    t(
+                        "p5.resumen.set_point",
+                        v=t("p5.resumen.set_point_valor", v=kelvin_a_celsius(set_point_K)),
+                    )
+                    if set_point_K
+                    else t("p5.resumen.set_point", v=t("p5.resumen.set_point_no"))
                 )
             with c2:
-                st.write(f"**Disponible nocturno:** {'Sí' if disponible_nocturno else 'No'}")
+                st.write(t("p5.resumen.nocturno", v=_si if disponible_nocturno else _no))
                 if tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
-                    st.write(f"**Combustible:** {tipo_biomasa_val or '—'}")
-                    st.write(f"**PCI:** {PCI_val:.1f} MJ/kg" if PCI_val else "**PCI:** —")
+                    st.write(t("p5.resumen.combustible", v=tipo_biomasa_val or "—"))
+                    st.write(t("p5.resumen.pci", v=PCI_val) if PCI_val else t("p5.resumen.pci_no"))
                     st.write(
-                        f"**η quemador:** {eta_quemador_val:.0%}"
+                        t("p5.resumen.eta", v=eta_quemador_val)
                         if eta_quemador_val
-                        else "**η quemador:** —"
+                        else t("p5.resumen.eta_no")
                     )
                 elif tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
                     st.write(
-                        f"**Tensión:** {tension_val:.0f} V"
+                        t("p5.resumen.tension", v=tension_val)
                         if tension_val
-                        else "**Tensión:** No especificada"
+                        else t("p5.resumen.tension_no")
                     )
 
     # --- Guardar configuración ---
@@ -816,7 +767,7 @@ def render() -> None:
         col_txt, col_json = st.columns(2)
         with col_txt:
             st.download_button(
-                "Guardar configuración del auxiliar (.txt)",
+                t("p5.guardar.txt"),
                 data=_texto_config_auxiliar(proyecto.auxiliar),
                 file_name=nombre_archivo_descarga(proyecto, "auxiliar", "txt"),
                 mime="text/plain",
@@ -824,7 +775,7 @@ def render() -> None:
             )
         with col_json:
             st.download_button(
-                "Guardar configuración del auxiliar (.json)",
+                t("p5.guardar.json"),
                 data=dump_json(_json_config_auxiliar(proyecto.auxiliar)),
                 file_name=nombre_archivo_descarga(proyecto, "auxiliar", "json"),
                 mime="application/json",

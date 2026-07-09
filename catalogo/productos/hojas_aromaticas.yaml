@@ -11,6 +11,8 @@
 # =============================================================================
 te_yerba:
   descripcion: "Yerba mate (Ilex paraguariensis), hojas y tallos finos. Decisión Sesión 6: entrada única con default = yerba mate. Té negro (Camellia sinensis) queda como update futuro o carga manual. Producto importante de la región litoral y Misiones; secado solar complementario al proceso industrial (sapeco + secado)."
+  descripcion_en: "Yerba mate (Ilex paraguariensis), leaves and thin stems. Session 6 decision: single entry defaulting to yerba mate. Black tea (Camellia sinensis) is left as a future update or manual entry. Important product of the Litoral region and Misiones; solar drying complements the industrial process (sapeco + drying)."
+  descripcion_pt: "Erva-mate (Ilex paraguariensis), folhas e talos finos. Decisão Sessão 6: entrada única com padrão = erva-mate. Chá preto (Camellia sinensis) fica como atualização futura ou carga manual. Produto importante da região do Litoral e de Misiones; a secagem solar complementa o processo industrial (sapeco + secagem)."
   categoria: HOJA_AROMATICA
   tipo_secado: CAPA_FINA
   fotosensible: true   # clorofila y cafeína sensibles a sobreexposición térmica/UV
@@ -90,6 +92,8 @@ te_yerba:
 # =============================================================================
 oregano:
   descripcion: "Orégano (Origanum vulgare), hojas y tallos finos. Producción relevante en NOA (Salta, Jujuy, La Rioja). Principal producto de exportación de hierbas secas de Argentina. Calidad determinada por contenido de aceites esenciales (timol, carvacrol) — sensible a temperatura alta."
+  descripcion_en: "Oregano (Origanum vulgare), leaves and thin stems. Significant production in the NOA (Salta, Jujuy, La Rioja). Argentina's main dried-herb export. Quality determined by essential-oil content (thymol, carvacrol) — sensitive to high temperature."
+  descripcion_pt: "Orégano (Origanum vulgare), folhas e talos finos. Produção relevante no NOA (Salta, Jujuy, La Rioja). Principal produto de exportação de ervas secas da Argentina. Qualidade determinada pelo teor de óleos essenciais (timol, carvacrol) — sensível a temperatura alta."
   categoria: HOJA_AROMATICA
   tipo_secado: CAPA_FINA
   fotosensible: true   # aceites esenciales (timol, carvacrol) sensibles a UV y calor > 50°C
@@ -162,6 +166,8 @@ oregano:
 # =============================================================================
 coca:
   descripcion: "Hoja de coca (Erythroxylum coca). Producción en NOA (Jujuy, Salta). Literatura científica de cinética de secado escasa por restricciones legales internacionales. Parámetros ESTIMADOS POR ANALOGÍA con yerba mate (hojas de arbusto similar tamaño, estructura laminar comparable, rango de humedad similar). Usar con precaución extrema."
+  descripcion_en: "Coca leaf (Erythroxylum coca). Production in the NOA (Jujuy, Salta). Scientific drying-kinetics literature is scarce due to international legal restrictions. Parameters ESTIMATED BY ANALOGY with yerba mate (shrub leaves of similar size, comparable laminar structure, similar moisture range). Use with extreme caution."
+  descripcion_pt: "Folha de coca (Erythroxylum coca). Produção no NOA (Jujuy, Salta). Literatura científica de cinética de secagem escassa por restrições legais internacionais. Parâmetros ESTIMADOS POR ANALOGIA com a erva-mate (folhas de arbusto de tamanho similar, estrutura laminar comparável, faixa de umidade similar). Usar com precaução extrema."
   categoria: HOJA_AROMATICA
   tipo_secado: CAPA_FINA
   fotosensible: true   # cocaína y alcaloides degradan con UV; clorofila también

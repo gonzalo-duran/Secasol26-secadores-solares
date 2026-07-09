@@ -138,4 +138,4 @@ def _mostrar_logo(ruta: Path, alt: str) -> None:
     # Si el archivo no existe, la columna queda vacía sin error visible.
     # Para depurar, descomentar:
     # else:
-    #     st.caption(f"[logo no encontrado: {ruta.name}]")
+    #     st.caption(f"[logo no encontrado: {ruta.name}]")  # i18n: exento (código comentado de debug)

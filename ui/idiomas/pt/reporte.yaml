@@ -1,0 +1,279 @@
+# Relatório PDF (plano i18n, F6). O idioma é passado explicitamente a
+# generar_reporte_pdf(..., idioma). Valores numéricos, unidades e códigos de
+# enum/estado ficam como estão (v1). As mensagens da tabela de advertências
+# são retraduzidas por código reusando o namespace `advertencias.*` (F5).
+
+cab:
+  titulo_marca: Secasol26 — Pré-projeto de Secadores Solares
+  institucion: GEEDSP · INENCO · CONICET-UNSa
+  proyecto: "Projeto: {titulo}"
+  pagina: "Página {n}"
+  doc_titulo: "Pré-projeto — {titulo}"
+  doc_titulo_default: Secador solar
+
+comun:
+  si: Sim
+  "no": "Não"
+  opaca: "(opaca)"
+  fallback: "(fallback)"
+  ok: OK
+  notas_prefijo: "Notas:"
+  graficas_no_calc: "Sem gráficos: o cálculo não foi executado."
+
+portada:
+  resumen: Resumo do projeto
+  meta:
+    proyecto: Projeto
+    autor: Autor
+    fecha_creacion: Data de criação
+    fecha_modif: Última modificação
+    version: Versão do software
+    notas: Notas
+  p1:
+    titulo: Tipologia e análise (P1)
+    tipologia: Tipologia
+    modo: Modo de análise
+    dia: Dia de análise
+    fecha_esp: Data específica
+  empl:
+    titulo: Localização (P2)
+    pendiente: Localização não configurada em P2.
+    latitud: Latitude
+    longitud: Longitude
+    altitud: Altitude
+    acimut_col: Azimute do coletor (Duffie)
+    sur_nota: 0°=Sul
+    pendiente_col: Inclinação do coletor
+    albedo: Albedo do solo
+    tz: Fuso horário
+  clima:
+    titulo: Recurso climático (NASA POWER)
+    pendiente: Dados climáticos não baixados.
+    anio: Ano fonte
+    altitud_nasa: Altitude da grade NASA
+    horas: Horas disponíveis
+    t_media: T ambiente média
+    ghi_media: GHI média
+    huecos: Lacunas originais
+    horas_interp: Horas interpoladas
+    horas_bloq: Horas bloqueadas
+    mayor_hueco: Maior lacuna (h)
+
+p2:
+  titulo: Recurso solar e clima — gráficos (P2)
+  pendiente: "Sem gráficos: clima não baixado em P2."
+  fig:
+    temperatura: Temperatura ambiente — médias diária e mensal
+    irradiacion: Irradiação mensal GHI / DNI / DHI
+    viento_hr: Velocidade do vento e umidade relativa mensal
+    poa_techo: "Irradiação: plano horizontal vs teto da câmara"
+    poa_colector: "Irradiação: plano horizontal vs plano do coletor"
+
+colector:
+  titulo: Coletor solar (P3)
+  pendiente_sin: Tipologia sem coletor externo (CAIXA) ou coletor não configurado.
+  materiales: Materiais
+  mat:
+    cubierta: Cobertura
+    placa: Placa
+    aislante: Isolante
+    fondo: Fundo
+  geo_banco: Geometria e banco
+  tipo_col: Tipo de coletor
+  ancho_largo: Largura × comprimento
+  espaciado: Espaçamento do canal
+  n_cubiertas: N° coberturas
+  vel: Velocidade de projeto
+  banco: Banco
+  banco_val: "{serie} série × {paralelo} paralelo"
+  area: Área de captação total
+  caudal: Vazão total
+  camino: Caminho do ar
+  res_titulo: Resultados da simulação
+  res_pendiente: "Cálculo do coletor não executado. Volte a P3 e pressione 'Calcular desempenho do coletor'."
+  dia_rep: Dia representativo
+  t_sal_max: T saída máx
+  t_sal_med: T saída meio-dia
+  dt_max: ΔT máx (saída − amb)
+  horas_sol: Horas com sol
+  mejor_mes: Melhor mês (T saída máx)
+  peor_mes: Pior mês (T saída mín)
+  dt_min: ΔT mín coletor
+  graficas: Gráficos do coletor
+  fig:
+    t_salida_dia: "T saída do coletor — {label}"
+    perfil_dia: "Perfil T do fluido ao meio-dia — {label}"
+    t_salida_anual: T saída do coletor por mês (dia 15)
+    perfil_anual: Perfil T do fluido ao meio-dia por mês
+
+camara:
+  titulo: Câmara de secagem (P4)
+  pendiente_sin: Câmara não configurada em P4.
+  geo_modo: Geometria e modo de cálculo
+  lwh: Comprimento × largura × altura
+  volumen: Volume
+  orient: Orientação da câmara (Duffie)
+  sur_nota: 0°=Sul
+  pend_techo: Inclinação do teto (cai para)
+  motor_num: Motor numérico
+  constr: Construção (parede opaca + superfícies translúcidas)
+  mat_vidr: Material do vidraçado
+  caras_t: Faces translúcidas
+  a_rad: A_rad
+  pared_comp: Parede composta
+  capas: Camadas
+  esp_pared: Espessura da parede
+  r_pared: R parede total
+  u_pared: U parede
+  bandejas_titulo: Bandejas, produto e fluxo
+  n_band: N° bandejas / área c/u
+  esp_capa: Espessura da camada
+  sep_band: Separação entre bandejas
+  producto: Produto
+  masa: Massa total
+  x_obj: X₀ → X_alvo
+  modelo: Modelo camada fina / isoterma
+  caudal_masico: Vazão mássica de ar
+  direccion: Direção do fluxo
+  hr_ent: UR de entrada
+  res_titulo: Resultados da simulação
+  res_pendiente: "Cálculo da câmara não executado nesta sessão. Volte a P4 e pressione 'Calcular câmara'."
+  status: Status
+  t_sim: Tempo de simulação
+  t_secado: Tempo de secagem
+  agua_evap: Água evaporada
+  x_ini_fin: X inicial → final
+  t_prod_fin: T final do produto
+  t_prod_max: T máx do produto
+  hr_max: UR máx na câmara
+  e_rad: Energia radiativa total
+  modelo_aplic: Modelo aplicado
+  x_eq: X_eq
+  agua_extr: Água extraída
+  mr_obj: MR alvo
+  convergencia: Convergência
+  graficas: Gráficos da câmara
+  fig:
+    td: Trajetórias do motor termodinâmico
+    capa_fina: "Curva de secagem (camada fina) — {prod}"
+
+auxiliar:
+  titulo: Aquecimento auxiliar (P5)
+  pendiente_sin: Secador sem sistema auxiliar configurado.
+  tipo: Tipo
+  modo_op: Modo de operação
+  pot_nom: Potência nominal
+  frac_op: Fração de operação
+  pot_efe: Potência efetiva
+  t_max: T máx de saída
+  disp_noct: Disponível à noite
+  combustible: Combustível
+  pci: PCI
+  eta_quem: η queimador
+  consumo: Consumo efetivo
+  tension: Tensão
+  corriente: Corrente estimada
+  nota_p7: "Os resultados de operação do auxiliar (Q_efetivo, ΔT, energia fornecida) integram-se no balanço global de P7. Ver a seção Resultados globais."
+
+motor:
+  titulo: Motor / ventilador (P6)
+  pendiente_sin: Secador sem motor configurado (convecção natural).
+  tipo_acc: Tipo de acionamento
+  caudal_vol: Vazão volumétrica
+  dp_total: ΔP total
+  dp_colector: ΔP coletor
+  dp_camara: ΔP câmara
+  dp_ductos: ΔP dutos
+  dp_singulares: ΔP singulares
+  eta_vent: η ventilador
+  eta_motor: η motor
+  factor_serv: Fator de serviço
+  p_hid: Potência hidráulica
+  p_eje: Potência no eixo
+  p_elec: Potência elétrica
+  p_inst: Potência a instalar
+  corriente_nom: Corrente nominal
+
+chimenea:
+  titulo: Chaminé solar (P6)
+  pendiente_sin: "Sem chaminé configurada. Se o secador opera por convecção forçada, ver a seção Motor; se é difusão livre, não se aplica."
+  geo_mat: Geometria e material
+  diam_int: Diâmetro interno
+  altura: Altura
+  material: Material
+  descripcion: Descrição
+  extractor_titulo: Extrator eólico (turbina chapéu chinês)
+  diam_ext: Diâmetro do extrator
+  cp: Cp motriz (turbina)
+  kt: Kt resistivo (turbina)
+  z0: z₀ rugosidade do terreno
+  sin_extractor: Sem extrator eólico — convecção natural só por tiragem térmica.
+  lazo_titulo: Resultados do laço natural (balanço Picard)
+  lazo_pendiente: "Cálculo do laço natural não executado (motor ativo, ou balanço global não executado em P7)."
+  modo_calc: Modo de cálculo
+  modo_transitorio: Transitório (horizonte horário)
+  modo_constantes: Constante (regime estacionário)
+  caudal_prom: Vazão natural média
+  caudal_max: Vazão natural máxima
+  h_eff: H efetiva
+  iter_picard: Iterações Picard
+  convergio: Convergiu?
+  dt_final: ΔT_chim final entre iterações
+  horas_sin_tiro: Horas sem tiragem (ṁ = 0)
+  caudal_nat: Vazão natural
+  vel_chim: Velocidade na chaminé
+  re_chim: Re na chaminé
+  dp_tiro: ΔP tiragem térmica
+  dp_ducto: ΔP duto da chaminé
+  dp_resto: ΔP resto (col + câm)
+  dp_motriz: ΔP motriz do extrator
+  viento_tope: Vento na altura do topo
+  t_chim: T na chaminé (Picard final)
+  avisos_solver: "Avisos do solver do laço natural:"
+
+global:
+  titulo: Resultados globais (P7)
+  cond_titulo: Condições de operação representativas
+  t_amb: T ambiente
+  irr_poa: Irradiância POA
+  vel_viento: Velocidade do vento
+  hr_cam: UR câmara
+  balance_titulo: Balanço energético
+  e_total: Energia total
+  solar_util: Solar útil
+  auxiliar: Auxiliar
+  motor: Motor
+  secado: Secagem (útil)
+  cop: COP secagem
+  frac_solar: Fração solar
+  t_ent_cam: T entrada câmara
+  col_titulo: Coletor — saída calculada
+  col_t_es: T entrada/saída
+  col_q: Q útil
+  col_eta: η térmica
+  col_regimen: Regime
+  col_re: Re médio
+  col_hint: h_int
+  cam_titulo: Câmara — ciclo simulado
+  cam_modo: Modo
+  cam_modo_td: termodinâmico
+  cam_modo_cf: camada fina
+  cam_t_secado: Tempo de secagem
+  cam_agua_evap: Água evaporada
+  cam_x_final: X final
+  cam_t_prod: T final do produto
+  cam_status: Status
+  cam_agua_extr: Água extraída
+  cam_x_eq: X_eq
+  cam_conv: Convergência
+  graficas: Gráficos globais
+  graficas_pendiente: Sem gráfico global disponível.
+  fig:
+    sankey: Balanço energético do ciclo de secagem
+    carta: Carta psicrométrica do processo de secagem
+
+adv:
+  titulo: Advertências estáticas de projeto
+  sev: Sev.
+  codigo: Código
+  mensaje: Mensagem

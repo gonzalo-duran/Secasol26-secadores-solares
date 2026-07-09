@@ -38,6 +38,7 @@ from core.colector import (
     advertencias_colector,
 )
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
+from ui.componentes.advertencias_widget import render_advertencias
 from ui.componentes.espesores import (
     ESPESORES_MADERA_MM,
     MATERIALES_MADERA,
@@ -45,6 +46,7 @@ from ui.componentes.espesores import (
 )
 from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.graficas import mostrar_plotly
+from ui.componentes.idiomas import t, t_catalogo
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import kelvin_a_celsius
@@ -53,43 +55,11 @@ from ui.componentes.unidades import kelvin_a_celsius
 # Helpers de UI
 # ---------------------------------------------------------------------------
 
-_ICONOS_SEVERIDAD = {
-    Severidad.INFO: "ℹ️",
-    Severidad.WARNING: "⚠️",
-    Severidad.CRITICAL: "🚨",
-}
 
 _ID_USUARIO = "__usuario__"
 
-_TIPOS_COLECTOR = {
-    1: "Tipo 1 — Canal único, absorbedor en el fondo",
-    2: "Tipo 2 — Absorbedor a media altura, ambos canales activos",
-    3: "Tipo 3 — Absorbedor a media altura, canal inferior activo (superior estanco)",
-    4: "Tipo 4 — Absorbedor a media altura, canal superior activo (inferior estanco)",
-}
-
-_TIPOS_HELP = {
-    1: (
-        "El absorbedor está en el fondo del cuerpo del colector. "
-        "El aire circula por el canal único entre la cubierta y el absorbedor. "
-        "Es la configuración más simple y común."
-    ),
-    2: (
-        "El absorbedor divide el cuerpo en dos canales. "
-        "El aire circula por ambos canales simultáneamente, lo que duplica el caudal "
-        "y mejora la extracción de calor."
-    ),
-    3: (
-        "El absorbedor divide el cuerpo en dos canales. "
-        "El aire circula solo por el canal inferior (absorbedor–fondo). "
-        "El canal superior queda estanco y actúa como aislación adicional."
-    ),
-    4: (
-        "El absorbedor divide el cuerpo en dos canales. "
-        "El aire circula solo por el canal superior (cubierta–absorbedor). "
-        "El canal inferior queda estanco."
-    ),
-}
+# Ids de los 4 tipos de colector (rótulos vía t("p3.tipo.opcion.<id>")).
+_IDS_TIPOS_COLECTOR = (1, 2, 3, 4)
 
 
 def _opciones_material(catalogo_dict: dict) -> dict[str, str]:
@@ -101,7 +71,7 @@ def _opciones_material(catalogo_dict: dict) -> dict[str, str]:
     Returns:
         Diccionario ordenado {id_material: descripcion_corta}.
     """
-    return {id_mat: datos.get("descripcion", id_mat) for id_mat, datos in catalogo_dict.items()}
+    return {id_mat: t_catalogo(datos, default=id_mat) for id_mat, datos in catalogo_dict.items()}
 
 
 def _tabla_propiedades_cubierta(id_mat: str) -> None:
@@ -148,7 +118,7 @@ def _tabla_propiedades_fondo(id_mat: str) -> None:
 
 
 def _inputs_cubierta_usuario(key_prefix: str) -> dict:
-    st.caption("Propiedades de la cubierta definida por el usuario:")
+    st.caption(t("p3.materiales.props_cubierta"))
     cols = st.columns(4)
     tau = cols[0].number_input(
         "τ solar",
@@ -192,7 +162,7 @@ def _inputs_cubierta_usuario(key_prefix: str) -> dict:
 
 
 def _inputs_placa_usuario(key_prefix: str) -> dict:
-    st.caption("Propiedades de la placa absorbedora definida por el usuario:")
+    st.caption(t("p3.materiales.props_placa"))
     cols = st.columns(4)
     alfa = cols[0].number_input(
         "α solar",
@@ -236,7 +206,7 @@ def _inputs_placa_usuario(key_prefix: str) -> dict:
 
 
 def _inputs_aislante_usuario(key_prefix: str) -> dict:
-    st.caption("Propiedades del aislante definido por el usuario:")
+    st.caption(t("p3.materiales.props_aislante"))
     cols = st.columns(3)
     k = cols[0].number_input(
         "k [W/m·K]",
@@ -269,7 +239,7 @@ def _inputs_aislante_usuario(key_prefix: str) -> dict:
 
 
 def _inputs_fondo_usuario(key_prefix: str) -> dict:
-    st.caption("Propiedades del fondo/carcasa definido por el usuario:")
+    st.caption(t("p3.materiales.props_fondo"))
     cols = st.columns(3)
     eps = cols[0].number_input(
         "ε IR",
@@ -444,7 +414,7 @@ def _texto_config_colector(
         *material_block("Fondo", catalogo.FONDOS, u.id_fondo, u.espesor_fondo_m, "mm"),
         "",
         "TIPO DE COLECTOR",
-        f"  {_TIPOS_COLECTOR.get(u.tipo_colector, f'Tipo {u.tipo_colector}')}",
+        f"  {t(f'p3.tipo.opcion.{u.tipo_colector}', default=f'Tipo {u.tipo_colector}')}",
         "",
         "GEOMETRÍA Y CONDICIÓN DE DISEÑO",
         f"  Ancho           : {u.ancho_m:.3f} m",
@@ -678,7 +648,7 @@ def _json_config_colector(
             "espaciado_entre_cubiertas_m": u.espaciado_entre_cubiertas_m,
             "velocidad_diseno_ms": u.velocidad_diseno_ms,
             "tipo_colector": u.tipo_colector,
-            "tipo_colector_descripcion": _TIPOS_COLECTOR.get(u.tipo_colector),
+            "tipo_colector_descripcion": t(f"p3.tipo.opcion.{u.tipo_colector}", default=None),
             "k_cubierta_efectivo_W_mK": u.k_cubierta_efectivo_W_mK,
         },
         "materiales": {
@@ -774,7 +744,6 @@ def _json_config_colector(
 # Evaluación del colector — cálculo y figuras
 # ---------------------------------------------------------------------------
 
-_MES_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 _COLORES_MESES = [
     "#e6194b",
     "#3cb44b",
@@ -820,20 +789,17 @@ def _render_albedo_suelo(proyecto, empl) -> None:
     col_sel, col_val = st.columns([2, 1])
     with col_sel:
         seleccion = st.selectbox(
-            "Albedo del suelo (superficie circundante)",
+            t("p3.eval.albedo.label"),
             options=opciones,
             index=opciones.index(etiqueta_actual),
             key="p3_albedo_superficie",
-            help="Reflectancia solar del suelo que rodea al colector. Alimenta la "
-            "componente reflejada de la POA (GHI·ρ·(1−cos β)/2). Su efecto crece "
-            "con la inclinación: en un colector vertical, la mitad de GHI·ρ "
-            "llega al plano del colector.",
+            help=t("p3.eval.albedo.help"),
         )
 
     if seleccion == ETIQUETA_PERSONALIZADO:
         with col_val:
             nuevo_albedo = st.number_input(
-                "ρ personalizado",
+                t("p3.eval.albedo.personalizado"),
                 min_value=0.0,
                 max_value=1.0,
                 value=float(empl.albedo_suelo),
@@ -1094,7 +1060,7 @@ def _fig_T_salida_ventana(r, lapso_label):
             fill="tozeroy",
             fillcolor="rgba(245,166,35,0.15)",
             line=dict(color="rgba(245,166,35,0.5)", width=1),
-            name="POA [W/m²]",
+            name=t("p3.figuras.poa_wm2"),
         ),
         secondary_y=True,
     )
@@ -1105,7 +1071,7 @@ def _fig_T_salida_ventana(r, lapso_label):
                 y=T_abs,
                 mode="lines",
                 line=dict(color="#8e44ad", width=1.2),
-                name="T absorbedor [°C]",
+                name=t("p3.figuras.t_absorbedor"),
             ),
             secondary_y=False,
         )
@@ -1115,7 +1081,7 @@ def _fig_T_salida_ventana(r, lapso_label):
             y=T_sal,
             mode="lines",
             line=dict(color="#e05c2a", width=1.8),
-            name="T salida colector [°C]",
+            name=t("p3.figuras.t_salida"),
         ),
         secondary_y=False,
     )
@@ -1125,7 +1091,7 @@ def _fig_T_salida_ventana(r, lapso_label):
             y=T_amb,
             mode="lines",
             line=dict(color="#1f77b4", width=1.2, dash="dash"),
-            name="T ambiente [°C]",
+            name=t("p3.figuras.t_ambiente"),
         ),
         secondary_y=False,
     )
@@ -1138,7 +1104,7 @@ def _fig_T_salida_ventana(r, lapso_label):
                 y=[val for _, val in marcas_poa],
                 mode="markers",
                 marker=dict(color="#f5a623", symbol="diamond", size=7),
-                name="POA máx (día)",
+                name=t("p3.figuras.poa_max_dia"),
             ),
             secondary_y=True,
         )
@@ -1150,15 +1116,17 @@ def _fig_T_salida_ventana(r, lapso_label):
                 y=[0.0] * len(marcas_md),
                 mode="markers",
                 marker=dict(color="#c0392b", symbol="triangle-up", size=8),
-                name="Mediodía solar",
+                name=t("p3.figuras.mediodia_solar"),
             ),
             secondary_y=True,
         )
-    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
-    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
+    fig.update_yaxes(title_text=t("graficas.eje.temperatura_c"), secondary_y=False)
+    fig.update_yaxes(
+        title_text=t("p3.figuras.poa_wm2"), color="#f5a623", secondary_y=True, rangemode="tozero"
+    )
     fig.update_xaxes(tickformat="%d-%b")
     fig.update_layout(
-        title_text=f"Desempeño del colector sobre la ventana {lapso_label}",
+        title_text=t("p3.figuras.titulo_ventana", lapso=lapso_label),
         height=420,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1188,7 +1156,10 @@ def _fig_campo_colectores(rc) -> go.Figure:
             specs=[[{"secondary_y": True}], [{"secondary_y": False}]],
             row_heights=[0.62, 0.38],
             vertical_spacing=0.12,
-            subplot_titles=("Reparto de caudal y temperatura por rama", "Velocidad en el troncal"),
+            subplot_titles=(
+                t("p3.figuras.subtitulo_reparto"),
+                t("p3.figuras.subtitulo_v_troncal"),
+            ),
         )
     else:
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -1197,7 +1168,7 @@ def _fig_campo_colectores(rc) -> go.Figure:
         go.Bar(
             x=bocas,
             y=[float(q) * 1000.0 for q in rc.q_ramas_m3_s],
-            name="Caudal por rama [L/s]",
+            name=t("p3.figuras.caudal_rama"),
             marker_color="#4caf50",
             opacity=0.75,
         ),
@@ -1210,7 +1181,7 @@ def _fig_campo_colectores(rc) -> go.Figure:
                 x=bocas,
                 y=[float(t) - 273.15 for t in rc.T_salida_ramas_K],
                 mode="lines+markers",
-                name="T salida rama [°C]",
+                name=t("p3.figuras.t_salida_rama"),
                 line=dict(color="#e05c2a", width=2),
                 marker=dict(size=6),
             ),
@@ -1224,7 +1195,7 @@ def _fig_campo_colectores(rc) -> go.Figure:
                 x=bocas,
                 y=[float(v) for v in _vp],
                 mode="lines+markers",
-                name="v troncal [m/s]",
+                name=t("p3.figuras.v_troncal"),
                 line=dict(color="#1f77b4", width=2),
                 marker=dict(size=6),
                 fill="tozeroy",
@@ -1234,28 +1205,32 @@ def _fig_campo_colectores(rc) -> go.Figure:
             col=1,
         )
         fig.update_yaxes(
-            title_text="v troncal [m/s]", row=2, col=1, rangemode="tozero", color="#1f77b4"
+            title_text=t("p3.figuras.v_troncal"), row=2, col=1, rangemode="tozero", color="#1f77b4"
         )
         fig.update_xaxes(
-            title_text="Boca / tramo (1 = extremo lejano al ventilador)",
+            title_text=t("p3.figuras.eje_boca_tramo"),
             tickmode="linear",
             dtick=1,
             row=2,
             col=1,
         )
-        fig.update_yaxes(title_text="Caudal por rama [L/s]", secondary_y=False, row=1, col=1)
+        fig.update_yaxes(title_text=t("p3.figuras.caudal_rama"), secondary_y=False, row=1, col=1)
         fig.update_yaxes(
-            title_text="T salida [°C]", color="#e05c2a", secondary_y=True, row=1, col=1
+            title_text=t("p3.figuras.eje_t_salida"),
+            color="#e05c2a",
+            secondary_y=True,
+            row=1,
+            col=1,
         )
     else:
-        fig.update_xaxes(
-            title_text="Boca (1 = extremo lejano al ventilador)", tickmode="linear", dtick=1
+        fig.update_xaxes(title_text=t("p3.figuras.eje_boca"), tickmode="linear", dtick=1)
+        fig.update_yaxes(
+            title_text=t("p3.figuras.caudal_rama"), secondary_y=False, rangemode="tozero"
         )
-        fig.update_yaxes(title_text="Caudal por rama [L/s]", secondary_y=False, rangemode="tozero")
-        fig.update_yaxes(title_text="T salida [°C]", color="#e05c2a", secondary_y=True)
+        fig.update_yaxes(title_text=t("p3.figuras.eje_t_salida"), color="#e05c2a", secondary_y=True)
 
     fig.update_layout(
-        title_text="Campo de colectores — reparto, temperatura y velocidad del troncal",
+        title_text=t("p3.figuras.titulo_campo"),
         height=560 if tiene_perfil else 400,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1274,6 +1249,7 @@ def _evaluar_anual(colector, datos_local, empl, anio):
     """
     poa_all = _poa_serie(datos_local, empl)
     tipo = colector.unidad.tipo_colector
+    meses_abbr = t("graficas.meses_abbr").split(",")
 
     meses, T_sal_C, T_amb_C, poa_noon_list, perfiles_C = [], [], [], [], []
     x_m = None
@@ -1315,7 +1291,7 @@ def _evaluar_anual(colector, datos_local, empl, anio):
         if res is None:
             continue
 
-        meses.append(_MES_ABBR[mes_num - 1])
+        meses.append(meses_abbr[mes_num - 1])
         T_sal_C.append(_T_salida_res(res, tipo) - 273.15)
         T_amb_C.append(T_amb - 273.15)
         poa_noon_list.append(I_g)
@@ -1388,7 +1364,7 @@ def _fig_T_salida_dia(r, fecha_label):
             fill="tozeroy",
             fillcolor="rgba(245,166,35,0.15)",
             line=dict(color="rgba(245,166,35,0.5)", width=1),
-            name="POA [W/m²]",
+            name=t("p3.figuras.poa_wm2"),
         ),
         secondary_y=True,
     )
@@ -1400,7 +1376,7 @@ def _fig_T_salida_dia(r, fecha_label):
             mode="lines+markers",
             line=dict(color="#e05c2a", width=2),
             marker=dict(size=4),
-            name="T salida colector [°C]",
+            name=t("p3.figuras.t_salida"),
         ),
         secondary_y=False,
     )
@@ -1411,7 +1387,7 @@ def _fig_T_salida_dia(r, fecha_label):
             y=T_amb,
             mode="lines",
             line=dict(color="#1f77b4", width=1.5, dash="dash"),
-            name="T ambiente [°C]",
+            name=t("p3.figuras.t_ambiente"),
         ),
         secondary_y=False,
     )
@@ -1420,7 +1396,7 @@ def _fig_T_salida_dia(r, fecha_label):
         _add_vline_datetime(
             fig,
             x=r["hora_transit"],
-            text=f"Mediodía ({r['hora_transit'].strftime('%H:%M')})",
+            text=t("p3.figuras.marca_mediodia", hora=r["hora_transit"].strftime("%H:%M")),
             color="#9c27b0",
             dash="dot",
             width=1.8,
@@ -1434,18 +1410,20 @@ def _fig_T_salida_dia(r, fecha_label):
             _add_vline_datetime(
                 fig,
                 x=r["hora_poa_max"],
-                text=f"POA máx ({r['hora_poa_max'].strftime('%H:%M')})",
+                text=t("p3.figuras.marca_poa_max", hora=r["hora_poa_max"].strftime("%H:%M")),
                 color="#ff7f0e",
                 dash="dash",
                 width=1.3,
                 xanchor="right",
             )
 
-    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
-    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
+    fig.update_yaxes(title_text=t("graficas.eje.temperatura_c"), secondary_y=False)
+    fig.update_yaxes(
+        title_text=t("p3.figuras.poa_wm2"), color="#f5a623", secondary_y=True, rangemode="tozero"
+    )
     fig.update_xaxes(tickformat="%H:%M")
     fig.update_layout(
-        title_text=f"Temperatura de salida del colector — {fecha_label}",
+        title_text=t("p3.figuras.titulo_salida_dia", fecha=fecha_label),
         height=400,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1466,18 +1444,18 @@ def _fig_T_fluido_dia(r, fecha_label):
             y=list(T),
             mode="lines",
             line=dict(color="#e05c2a", width=2),
-            name="T fluido [°C]",
+            name=t("p3.figuras.t_fluido"),
         )
     )
     fig.add_hline(
         y=float(T[0]),
         line=dict(color="#1f77b4", dash="dash", width=1),
-        annotation_text=f"T entrada = {T[0]:.1f} °C",
+        annotation_text=t("p3.figuras.t_entrada_annot", v=T[0]),
     )
-    fig.update_xaxes(title_text="Posición x a lo largo del colector [m]")
-    fig.update_yaxes(title_text="Temperatura del fluido [°C]")
+    fig.update_xaxes(title_text=t("p3.figuras.eje_x_colector"))
+    fig.update_yaxes(title_text=t("p3.figuras.eje_t_fluido"))
     fig.update_layout(
-        title_text=f"Perfil de temperatura del fluido — mediodía solar — {fecha_label}",
+        title_text=t("p3.figuras.titulo_perfil_dia", fecha=fecha_label),
         height=350,
         showlegend=True,
     )
@@ -1496,7 +1474,7 @@ def _fig_T_salida_anual(r):
         go.Bar(
             x=meses,
             y=poa,
-            name="POA mediodía [W/m²]",
+            name=t("p3.figuras.poa_mediodia"),
             marker=dict(
                 color="rgba(245,166,35,0.2)", line=dict(color="rgba(245,166,35,0.5)", width=1)
             ),
@@ -1511,7 +1489,7 @@ def _fig_T_salida_anual(r):
             mode="lines+markers",
             line=dict(color="#e05c2a", width=2),
             marker=dict(symbol="circle", size=6),
-            name="T salida colector — mediodía [°C]",
+            name=t("p3.figuras.t_salida_mediodia"),
         ),
         secondary_y=False,
     )
@@ -1523,15 +1501,17 @@ def _fig_T_salida_anual(r):
             mode="lines+markers",
             line=dict(color="#1f77b4", width=1.5, dash="dash"),
             marker=dict(symbol="square", size=4),
-            name="T ambiente — mediodía [°C]",
+            name=t("p3.figuras.t_amb_mediodia"),
         ),
         secondary_y=False,
     )
 
-    fig.update_yaxes(title_text="Temperatura [°C]", secondary_y=False)
-    fig.update_yaxes(title_text="POA [W/m²]", color="#f5a623", secondary_y=True, rangemode="tozero")
+    fig.update_yaxes(title_text=t("graficas.eje.temperatura_c"), secondary_y=False)
+    fig.update_yaxes(
+        title_text=t("p3.figuras.poa_wm2"), color="#f5a623", secondary_y=True, rangemode="tozero"
+    )
     fig.update_layout(
-        title_text="Temperatura de salida del colector — mediodía solar por mes (día 15)",
+        title_text=t("p3.figuras.titulo_salida_anual"),
         height=400,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1559,10 +1539,10 @@ def _fig_T_fluido_anual(r):
             )
         )
 
-    fig.update_xaxes(title_text="Posición x a lo largo del colector [m]")
-    fig.update_yaxes(title_text="Temperatura del fluido [°C]")
+    fig.update_xaxes(title_text=t("p3.figuras.eje_x_colector"))
+    fig.update_yaxes(title_text=t("p3.figuras.eje_t_fluido"))
     fig.update_layout(
-        title_text="Perfil de temperatura del fluido — mediodía solar por mes",
+        title_text=t("p3.figuras.titulo_perfil_anual"),
         height=400,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -1578,7 +1558,7 @@ def _fig_T_fluido_anual(r):
 def render() -> None:
     """Renderiza la pestaña 3: Colector Solar."""
 
-    st.header("Colector Solar de Aire")
+    st.header(t("p3.header"))
     boton_manual(SLUG_POR_SECCION["p3"])
 
     proyecto = st.session_state.proyecto
@@ -1586,10 +1566,7 @@ def render() -> None:
 
     # La tipología CAJA no tiene colector externo
     if tipologia == Tipologia.CAJA:
-        st.info(
-            "La tipología **Caja** no tiene colector solar externo: "
-            "la cámara actúa como colector. Esta pestaña no aplica."
-        )
+        st.info(t("p3.caja_no_aplica"))
         return
 
     # Inicializar colector si es la primera vez
@@ -1599,26 +1576,26 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Cargar configuración guardada (.json)
     # -----------------------------------------------------------------------
-    with st.expander("📥 Cargar configuración guardada (.json)", expanded=False):
+    with st.expander(t("p3.cargar.titulo"), expanded=False):
         from ui.componentes.serializacion import (
             limpiar_session_state_prefijo,
             parsear_json_seccion,
         )
 
         archivo = st.file_uploader(
-            "Subí un archivo .json del colector previamente guardado",
+            t("p3.cargar.uploader"),
             type=["json"],
             key="p3_cargar_json",
         )
         if archivo is not None:
             data, err = parsear_json_seccion(archivo, "colector")
             if err:
-                st.error(f"❌ {err}")
+                st.error(f"❌ {err}")  # i18n: exento (mensaje de serializacion, F4)
             else:
                 try:
                     col_cargado = _from_json_colector(data)
                 except (KeyError, ValueError, TypeError) as exc:
-                    st.error(f"❌ Error reconstruyendo el colector: {exc}")
+                    st.error(t("p3.cargar.error_reconstruccion", exc=exc))
                 else:
                     proyecto.colector = col_cargado
                     # Backward compat: .json viejos guardaban chimenea como
@@ -1643,10 +1620,7 @@ def render() -> None:
                     # quedaría en estado "no hay archivo" y al hacer
                     # rerun la siguiente render trataría de cargar de nuevo).
                     st.session_state.pop("p3_cargar_json", None)
-                    st.success(
-                        f"✅ Colector cargado desde JSON "
-                        f"(se reiniciaron {n_borr} valores de la sesión)."
-                    )
+                    st.success(t("p3.cargar.exito", n=n_borr))
                     st.rerun()
 
     colector: Colector = proyecto.colector
@@ -1655,42 +1629,42 @@ def render() -> None:
     # Sección 0: Tipo de colector
     # -----------------------------------------------------------------------
 
-    with st.expander("Tipo de colector", expanded=False):
-        ids_tipo = list(_TIPOS_COLECTOR.keys())
+    with st.expander(t("p3.tipo.titulo"), expanded=False):
+        ids_tipo = list(_IDS_TIPOS_COLECTOR)
         idx_tipo = (
             ids_tipo.index(colector.unidad.tipo_colector)
             if colector.unidad.tipo_colector in ids_tipo
             else 0
         )
         tipo_colector = st.selectbox(
-            "Configuración del canal de flujo",
+            t("p3.tipo.label"),
             options=ids_tipo,
             index=idx_tipo,
-            format_func=lambda x: _TIPOS_COLECTOR[x],
+            format_func=lambda x: t(f"p3.tipo.opcion.{x}"),
             key="p3_tipo_colector",
         )
-        st.info(_TIPOS_HELP[tipo_colector])
+        st.info(t(f"p3.tipo.ayuda.{tipo_colector}"))
 
-        with st.expander("📐 Sección transversal de los 4 tipos", expanded=False):
+        with st.expander(t("p3.tipo.esquema_titulo"), expanded=False):
             mostrar_esquema(
                 "colectores_seccion_transversal",
                 max_ancho_px=600,
-                caption="Sección transversal comparativa de los 4 tipos de colector.",
+                caption=t("p3.tipo.esquema_caption"),
             )
 
     # -----------------------------------------------------------------------
     # Sección 1: Colector unitario — materiales
     # -----------------------------------------------------------------------
 
-    with st.expander("Materiales del colector unitario", expanded=False):
+    with st.expander(t("p3.materiales.titulo"), expanded=False):
 
-        st.subheader("Cubierta transparente")
+        st.subheader(t("p3.materiales.cubierta_titulo"))
         c1, c2 = st.columns([3, 1])
         with c1:
             opciones_cub = {
                 k: v for k, v in _opciones_material(catalogo.CUBIERTAS).items() if k != _ID_USUARIO
             }
-            opciones_cub[_ID_USUARIO] = "Definido por el usuario"
+            opciones_cub[_ID_USUARIO] = t("p3.materiales.usuario")
             ids_cub = list(opciones_cub.keys())
             idx_cub = (
                 ids_cub.index(colector.unidad.id_cubierta)
@@ -1698,7 +1672,7 @@ def render() -> None:
                 else 0
             )
             id_cubierta = st.selectbox(
-                "Material de cubierta",
+                t("p3.materiales.cubierta_label"),
                 options=ids_cub,
                 index=idx_cub,
                 format_func=lambda x: opciones_cub[x],
@@ -1715,7 +1689,7 @@ def render() -> None:
                 else None
             )
             espesor_cubierta_mm = selector_espesor_mm(
-                "Espesor [mm]",
+                t("p3.materiales.espesor_mm"),
                 colector.unidad.espesor_cubierta_m,
                 key="p3_esp_cubierta",
                 opciones_mm=opciones_cub_mm,
@@ -1729,25 +1703,21 @@ def render() -> None:
                 mapa_k_pc.get(int(round(espesor_cubierta_mm))) if mapa_k_pc else None
             )
             n_cubiertas = st.selectbox(
-                "N° cubiertas",
+                t("p3.materiales.n_cubiertas.label"),
                 options=[1, 2],
                 index=colector.unidad.n_cubiertas - 1,
                 key="p3_n_cubiertas",
-                help="1 cubierta es lo estándar. 2 cubiertas reduce pérdidas "
-                "superiores (mejor en climas fríos o ventosos) pero baja la "
-                "transmitancia solar.",
+                help=t("p3.materiales.n_cubiertas.help"),
             )
             if n_cubiertas == 2:
                 esp_cub_cub_mm = st.number_input(
-                    "Espaciado entre cubiertas [mm]",
+                    t("p3.materiales.esp_cub_cub.label"),
                     min_value=10.0,
                     max_value=50.0,
                     value=colector.unidad.espaciado_entre_cubiertas_m * 1000,
                     step=1.0,
                     key="p3_esp_cub_cub",
-                    help="Cavidad de aire entre las dos cubiertas. Rango "
-                    "óptimo 20–40 mm (Duffie & Beckman): minimiza convección "
-                    "natural manteniendo la resistencia conductiva.",
+                    help=t("p3.materiales.esp_cub_cub.help"),
                 )
             else:
                 esp_cub_cub_mm = colector.unidad.espaciado_entre_cubiertas_m * 1000
@@ -1756,13 +1726,13 @@ def render() -> None:
         _tabla_propiedades_cubierta(id_cubierta)
 
         st.divider()
-        st.subheader("Placa absorbedora")
+        st.subheader(t("p3.materiales.placa_titulo"))
         c1, c2 = st.columns([3, 1])
         with c1:
             opciones_pla = {
                 k: v for k, v in _opciones_material(catalogo.PLACAS).items() if k != _ID_USUARIO
             }
-            opciones_pla[_ID_USUARIO] = "Definido por el usuario"
+            opciones_pla[_ID_USUARIO] = t("p3.materiales.usuario")
             ids_pla = list(opciones_pla.keys())
             idx_pla = (
                 ids_pla.index(colector.unidad.id_placa)
@@ -1770,7 +1740,7 @@ def render() -> None:
                 else 0
             )
             id_placa = st.selectbox(
-                "Material de placa",
+                t("p3.materiales.placa_label"),
                 options=ids_pla,
                 index=idx_pla,
                 format_func=lambda x: opciones_pla[x],
@@ -1778,31 +1748,26 @@ def render() -> None:
             )
         with c2:
             espesor_placa_mm = st.number_input(
-                "Espesor [mm]",
+                t("p3.materiales.espesor_mm"),
                 min_value=0.3,
                 max_value=5.0,
                 value=colector.unidad.espesor_placa_m * 1000,
                 step=0.1,
                 key="p3_esp_placa",
-                help=(
-                    "Dato geométrico/diagnóstico: el modelo es cuasi-estacionario y "
-                    "asume capacitancia térmica de la placa despreciable, así que este "
-                    "espesor **no entra al balance térmico** ni cambia el rendimiento "
-                    "calculado."
-                ),
+                help=t("p3.materiales.placa_espesor_help"),
             )
         if id_placa == _ID_USUARIO:
             catalogo.PLACAS[_ID_USUARIO] = _inputs_placa_usuario("p3_upla")
         _tabla_propiedades_placa(id_placa)
 
         st.divider()
-        st.subheader("Aislante térmico")
+        st.subheader(t("p3.materiales.aislante_titulo"))
         c1, c2 = st.columns([3, 1])
         with c1:
             opciones_ais = {
                 k: v for k, v in _opciones_material(catalogo.AISLANTES).items() if k != _ID_USUARIO
             }
-            opciones_ais[_ID_USUARIO] = "Definido por el usuario"
+            opciones_ais[_ID_USUARIO] = t("p3.materiales.usuario")
             ids_ais = list(opciones_ais.keys())
             idx_ais = (
                 ids_ais.index(colector.unidad.id_aislante)
@@ -1810,7 +1775,7 @@ def render() -> None:
                 else 0
             )
             id_aislante = st.selectbox(
-                "Material aislante",
+                t("p3.materiales.aislante_label"),
                 options=ids_ais,
                 index=idx_ais,
                 format_func=lambda x: opciones_ais[x],
@@ -1818,7 +1783,7 @@ def render() -> None:
             )
         with c2:
             espesor_aislante_cm = st.number_input(
-                "Espesor [cm]",
+                t("p3.materiales.espesor_cm"),
                 min_value=1.0,
                 max_value=20.0,
                 value=colector.unidad.espesor_aislante_m * 100,
@@ -1830,13 +1795,13 @@ def render() -> None:
         _tabla_propiedades_aislante(id_aislante)
 
         st.divider()
-        st.subheader("Fondo / Carcasa")
+        st.subheader(t("p3.materiales.fondo_titulo"))
         c1, c2 = st.columns([3, 1])
         with c1:
             opciones_fon = {
                 k: v for k, v in _opciones_material(catalogo.FONDOS).items() if k != _ID_USUARIO
             }
-            opciones_fon[_ID_USUARIO] = "Definido por el usuario"
+            opciones_fon[_ID_USUARIO] = t("p3.materiales.usuario")
             ids_fon = list(opciones_fon.keys())
             idx_fon = (
                 ids_fon.index(colector.unidad.id_fondo)
@@ -1844,7 +1809,7 @@ def render() -> None:
                 else 0
             )
             id_fondo = st.selectbox(
-                "Material de fondo",
+                t("p3.materiales.fondo_label"),
                 options=ids_fon,
                 index=idx_fon,
                 format_func=lambda x: opciones_fon[x],
@@ -1856,7 +1821,7 @@ def render() -> None:
             # entraba en el viejo límite de 5 mm).
             es_madera_fondo = id_fondo in MATERIALES_MADERA
             espesor_fondo_mm = selector_espesor_mm(
-                "Espesor [mm]",
+                t("p3.materiales.espesor_mm"),
                 colector.unidad.espesor_fondo_m,
                 key="p3_esp_fondo",
                 opciones_mm=ESPESORES_MADERA_MM if es_madera_fondo else None,
@@ -1872,130 +1837,109 @@ def render() -> None:
     # Sección 2: Colector unitario — geometría y velocidad
     # -----------------------------------------------------------------------
 
-    with st.expander("Geometría y condición de diseño", expanded=False):
+    with st.expander(t("p3.geometria.titulo"), expanded=False):
         c1, c2, c3 = st.columns(3)
         with c1:
             ancho_m = st.number_input(
-                "Ancho del canal [m]",
+                t("p3.geometria.ancho.label"),
                 min_value=0.1,
                 max_value=5.0,
                 value=float(colector.unidad.ancho_m),
                 step=0.05,
                 format="%.2f",
                 key="p3_ancho",
-                help=(
-                    "Ancho interior del canal de flujo de un módulo unitario "
-                    "(perpendicular al flujo). En un banco, el ancho total resulta "
-                    "de los módulos en paralelo."
-                ),
+                help=t("p3.geometria.ancho.help"),
             )
             largo_m = st.number_input(
-                "Largo del colector [m]",
+                t("p3.geometria.largo.label"),
                 min_value=0.1,
                 max_value=20.0,
                 value=float(colector.unidad.largo_m),
                 step=0.1,
                 format="%.2f",
                 key="p3_largo",
-                help=(
-                    "Largo del módulo en la dirección del flujo. Es la principal "
-                    "variable de diseño: a mayor largo, mayor salto térmico del aire "
-                    "pero también más pérdida de carga. La evaluación gráfica de abajo "
-                    "ayuda a encontrar el largo óptimo."
-                ),
+                help=t("p3.geometria.largo.help"),
             )
         with c2:
-            _label_esp = (
-                "Espaciado cubierta–placa [mm]"
+            _clave_esp = (
+                "p3.geometria.espaciado_t1"
                 if tipo_colector == 1
-                else "Canal superior cubierta–absorbedor [mm]"
-            )
-            _help_esp = (
-                "Altura del canal único de flujo. Típico: 15–50 mm."
-                if tipo_colector == 1
-                else "Altura del canal superior (cubierta–absorbedor). Típico: 15–50 mm."
+                else ("p3.geometria.espaciado_t234")
             )
             espaciado_mm = st.number_input(
-                _label_esp,
+                t(f"{_clave_esp}.label"),
                 min_value=5.0,
                 max_value=200.0,
                 value=colector.unidad.espaciado_m * 1000,
                 step=1.0,
                 format="%.1f",
                 key="p3_espaciado",
-                help=_help_esp,
+                help=t(f"{_clave_esp}.help"),
             )
             if tipo_colector in (2, 3, 4):
                 espaciado_inferior_mm = st.number_input(
-                    "Canal inferior absorbedor–fondo [mm]",
+                    t("p3.geometria.espaciado_inferior.label"),
                     min_value=5.0,
                     max_value=200.0,
                     value=colector.unidad.espaciado_inferior_m * 1000,
                     step=1.0,
                     format="%.1f",
                     key="p3_espaciado_inferior",
-                    help="Altura del canal inferior (absorbedor–fondo). Típico: 15–50 mm.",
+                    help=t("p3.geometria.espaciado_inferior.help"),
                 )
             else:
                 espaciado_inferior_mm = colector.unidad.espaciado_inferior_m * 1000
         with c3:
             velocidad_ms = st.number_input(
-                "Velocidad de diseño [m/s]",
+                t("p3.geometria.velocidad.label"),
                 min_value=0.01,
                 max_value=10.0,
                 value=float(colector.unidad.velocidad_diseno_ms),
                 step=0.05,
                 format="%.2f",
                 key="p3_velocidad",
-                help=(
-                    "Velocidad superficial del aire en el canal activo. "
-                    "Determina el caudal por unidad y la pérdida de carga. "
-                    "Rango recomendado: 0.3–3.0 m/s."
-                ),
+                help=t("p3.geometria.velocidad.help"),
             )
 
         # Preview rápido
         seccion_m2 = ancho_m * (espaciado_mm / 1000)
         caudal_unit_m3s = velocidad_ms * seccion_m2
-        _caption = (
-            f"Sección del canal: {seccion_m2*10000:.1f} cm²  |  "
-            f"Caudal por unidad: {caudal_unit_m3s*1000:.2f} L/s  |  "
-            f"Área de captación: {ancho_m * largo_m:.2f} m²"
+        _caption = t(
+            "p3.geometria.preview",
+            seccion=seccion_m2 * 10000,
+            caudal=caudal_unit_m3s * 1000,
+            area=ancho_m * largo_m,
         )
         if tipo_colector in (2, 3, 4):
             seccion_inf_m2 = ancho_m * (espaciado_inferior_mm / 1000)
-            _caption += f"  |  Sección inferior: {seccion_inf_m2*10000:.1f} cm²"
+            _caption += t("p3.geometria.preview_inferior", seccion=seccion_inf_m2 * 10000)
         st.caption(_caption)
 
     # -----------------------------------------------------------------------
     # Sección 3: Banco de colectores
     # -----------------------------------------------------------------------
 
-    with st.expander("Banco de colectores", expanded=False):
+    with st.expander(t("p3.banco.titulo"), expanded=False):
         c1, c2 = st.columns(2)
         with c1:
             n_serie = st.number_input(
-                "Colectores en serie por rama",
+                t("p3.banco.n_serie.label"),
                 min_value=1,
                 max_value=20,
                 value=colector.banco.n_serie,
                 step=1,
                 key="p3_n_serie",
-                help="El aire pasa por N colectores consecutivos. Aumenta ΔT de salida.",
+                help=t("p3.banco.n_serie.help"),
             )
         with c2:
             n_paralelo = st.number_input(
-                "Ramas en paralelo",
+                t("p3.banco.n_paralelo.label"),
                 min_value=1,
                 max_value=200,
                 value=colector.banco.n_paralelo,
                 step=1,
                 key="p3_n_paralelo",
-                help=(
-                    "Ramas paralelas. El motor mueve la suma de los caudales de "
-                    "todas las ramas. En gran escala puede haber decenas de ramas "
-                    "(ej. ADITAL: 26 colectores descargando al caño maestro)."
-                ),
+                help=t("p3.banco.n_paralelo.help"),
             )
 
         caudal_total = n_paralelo * caudal_unit_m3s
@@ -2004,15 +1948,15 @@ def render() -> None:
 
         col_m1, col_m2, col_m3 = st.columns(3)
         col_m1.metric(
-            "Caudal total al motor",
+            t("p3.banco.caudal_total.label"),
             f"{caudal_total*1000:.1f} L/s",
-            help="n_paralelo × caudal por unidad. Caudal volumétrico a condiciones de diseño.",
+            help=t("p3.banco.caudal_total.help"),
         )
-        col_m2.metric("Área de captación total", f"{area_total:.2f} m²")
+        col_m2.metric(t("p3.banco.area_total"), f"{area_total:.2f} m²")
         col_m3.metric(
-            "Camino del aire",
+            t("p3.banco.camino.label"),
             f"{largo_camino:.1f} m",
-            help="n_serie × largo de unidad. Longitud total que recorre el aire.",
+            help=t("p3.banco.camino.help"),
         )
 
         # -------------------------------------------------------------------
@@ -2020,98 +1964,60 @@ def render() -> None:
         # -------------------------------------------------------------------
         cano_maestro_cfg = None
         if tipologia == Tipologia.GRAN_ESCALA:
-            st.markdown("**Caño maestro (manifold del banco)**")
-            st.caption(
-                "En gran escala las ramas no descargan directo al ventilador: cada "
-                "rama entrega su aire por una **boca** (con campana de reducción y "
-                "llave mariposa de regulación) a un **caño maestro** que corre a lo "
-                "largo del banco y conduce el caudal acumulado hasta el ventilador "
-                "(estilo túnel ADITAL). Trabaja **en depresión** (aguas arriba del "
-                "ventilador) y su sección crece hacia el ventilador para mantener "
-                "la velocidad acotada a medida que suma caudal. Su ΔP se suma a lo "
-                "que ve el ventilador (se muestra en **P6**) y su pérdida/aporte "
-                "térmico entra al pipeline de ventana de producción."
-            )
+            st.markdown(t("p3.cano.titulo"))
+            st.caption(t("p3.cano.intro"))
             cm_prev = colector.banco.cano_maestro
             usar_cano = st.checkbox(
-                "Incluir caño maestro",
+                t("p3.cano.usar.label"),
                 value=cm_prev is not None,
                 key="p3_usar_cano",
-                help=(
-                    "Tildado: el manifold se modela explícitamente (fricción + "
-                    "accesorios de boca + balance térmico con el ambiente). "
-                    "Sin tildar: conexión directa simple (el ΔP de distribución "
-                    "cae en la heurística de ductos del motor en P6)."
-                ),
+                help=t("p3.cano.usar.help"),
             )
             if usar_cano:
                 cm = cm_prev or CanoMaestro()
                 cc1, cc2, cc3 = st.columns(3)
                 cm_largo = cc1.number_input(
-                    "Largo [m]",
+                    t("p3.cano.largo.label"),
                     min_value=0.5,
                     max_value=100.0,
                     value=cm.largo_m,
                     step=0.5,
                     format="%.1f",
                     key="p3_cm_largo",
-                    help=(
-                        "Longitud total del caño, que recorre el banco juntando "
-                        "las bocas de las ramas (≈ el ancho del campo de "
-                        "colectores). ADITAL: 18 m. La fricción se evalúa sobre "
-                        "este largo."
-                    ),
+                    help=t("p3.cano.largo.help"),
                 )
                 cm_ancho = cc2.number_input(
-                    "Ancho sección [m]",
+                    t("p3.cano.ancho.label"),
                     min_value=0.1,
                     max_value=5.0,
                     value=cm.ancho_m,
                     step=0.05,
                     format="%.2f",
                     key="p3_cm_ancho",
-                    help=(
-                        "Ancho de la sección transversal rectangular en el "
-                        "**extremo del ventilador**, donde ya circula el caudal "
-                        "total del banco (sección representativa del modelo de "
-                        "prediseño). ADITAL: 1.0 m."
-                    ),
+                    help=t("p3.cano.ancho.help"),
                 )
                 cm_alto = cc3.number_input(
-                    "Alto sección [m]",
+                    t("p3.cano.alto.label"),
                     min_value=0.1,
                     max_value=5.0,
                     value=cm.alto_m,
                     step=0.05,
                     format="%.2f",
                     key="p3_cm_alto",
-                    help=(
-                        "Alto de la sección transversal en el extremo del "
-                        "ventilador. Junto con el ancho define la velocidad "
-                        "troncal v = Q_total / (ancho × alto). ADITAL: 0.90 m."
-                    ),
+                    help=t("p3.cano.alto.help"),
                 )
                 cd1, cd2 = st.columns(2)
                 cm_aislado = cd1.checkbox(
-                    "Aislado térmicamente",
+                    t("p3.cano.aislado.label"),
                     value=cm.aislado,
                     key="p3_cm_aislado",
-                    help=(
-                        "El caño pierde calor al ambiente por convección externa "
-                        "(viento), pero si su cara superior está al sol también "
-                        "gana radiación: la pérdida neta suele ser chica. "
-                        "ADITAL: no aislado, ΔT neta ≈ −3 °C."
-                    ),
+                    help=t("p3.cano.aislado.help"),
                 )
                 cm_aporte = cd2.checkbox(
-                    "Aporte solar (cara superior expuesta)",
+                    t("p3.cano.aporte.label"),
                     value=cm.aporte_solar,
                     key="p3_cm_aporte",
-                    help=(
-                        "La cara superior del caño expuesta al cielo colecta "
-                        "radiación solar y compensa parte de la pérdida "
-                        "convectiva. ADITAL: expuesta (chapa galvanizada)."
-                    ),
+                    help=t("p3.cano.aporte.help"),
                 )
                 cm_esp_m = 0.0
                 cm_mat_aisl = None
@@ -2124,20 +2030,16 @@ def render() -> None:
                         else 0
                     )
                     cm_mat_aisl = cd1.selectbox(
-                        "Material aislante",
+                        t("p3.cano.mat_aisl.label"),
                         options=_ids_aisl,
                         index=_idx_aisl,
                         format_func=lambda i: _ops_aisl[i],
                         key="p3_cm_mat_aisl",
-                        help=(
-                            "Material del catálogo de aislantes (mismo catálogo "
-                            "que colector y cámara). Define la conductividad k "
-                            "de la capa."
-                        ),
+                        help=t("p3.cano.mat_aisl.help"),
                     )
                     cm_esp_m = (
                         cd1.number_input(
-                            "Espesor aislante [cm]",
+                            t("p3.cano.esp_aisl"),
                             min_value=0.5,
                             max_value=20.0,
                             value=max(0.5, cm.espesor_aislante_m * 100.0),
@@ -2151,66 +2053,50 @@ def render() -> None:
                 cm_cubierta = None
                 if cm_aporte:
                     cm_absort = cd2.number_input(
-                        "Absortancia solar de la cara superior [-]",
+                        t("p3.cano.absort.label"),
                         min_value=0.05,
                         max_value=1.0,
                         value=float(cm.absortancia_solar),
                         step=0.05,
                         format="%.2f",
                         key="p3_cm_absort",
-                        help=(
-                            "Absortancia solar de la superficie que recibe el "
-                            "sol. Chapa pintada oscura ≈ 0.90 (default); "
-                            "galvanizado desnudo brillante ≈ 0.35 (caso ADITAL)."
-                        ),
+                        help=t("p3.cano.absort.help"),
                     )
-                    _ops_cub = {"(sin cubierta)": "(sin cubierta — chapa desnuda)"}
+                    _ops_cub = {"(sin cubierta)": t("p3.cano.sin_cubierta")}
                     _ops_cub.update(_opciones_material(catalogo.CUBIERTAS))
                     _ids_cub = list(_ops_cub.keys())
                     _idx_cub = _ids_cub.index(cm.cubierta) if cm.cubierta in _ids_cub else 0
                     _sel_cub = cd2.selectbox(
-                        "Cubierta translúcida (opcional)",
+                        t("p3.cano.cubierta.label"),
                         options=_ids_cub,
                         index=_idx_cub,
                         format_func=lambda i: _ops_cub[i],
                         key="p3_cm_cubierta",
-                        help=(
-                            "Cubierta transparente sobre la cara superior "
-                            "(catálogo de cubiertas del colector): la ganancia "
-                            "se afecta por τ y la cavidad de aire reduce la "
-                            "pérdida convectiva (mini-colector)."
-                        ),
+                        help=t("p3.cano.cubierta.help"),
                     )
                     cm_cubierta = None if _sel_cub == "(sin cubierta)" else _sel_cub
 
                 cm_sec_var = st.checkbox(
-                    "Sección creciente (variable a lo largo del caño)",
+                    t("p3.cano.sec_var.label"),
                     value=cm.seccion_variable,
                     key="p3_cm_sec_var",
-                    help=(
-                        "El caño arranca con sección chica en el extremo lejano "
-                        "y crece hacia el ventilador para mantener la velocidad "
-                        "acotada a medida que acumula caudal (interpolación "
-                        "lineal). Mejora la uniformidad de reparto frente a un "
-                        "caño constante chico, con menos material que uno "
-                        "constante grande."
-                    ),
+                    help=t("p3.cano.sec_var.help"),
                 )
                 cm_ancho_ini = cm_alto_ini = None
                 if cm_sec_var:
                     cv1, cv2 = st.columns(2)
                     cm_ancho_ini = cv1.number_input(
-                        "Ancho sección inicial [m]",
+                        t("p3.cano.ancho_ini.label"),
                         min_value=0.05,
                         max_value=5.0,
                         value=float(cm.ancho_inicio_m or cm.ancho_m / 2.0),
                         step=0.05,
                         format="%.2f",
                         key="p3_cm_ancho_ini",
-                        help="Sección en el extremo lejano al ventilador (primera boca).",
+                        help=t("p3.cano.ancho_ini.help"),
                     )
                     cm_alto_ini = cv2.number_input(
-                        "Alto sección inicial [m]",
+                        t("p3.cano.alto_ini"),
                         min_value=0.05,
                         max_value=5.0,
                         value=float(cm.alto_inicio_m or cm.alto_m / 2.0),
@@ -2236,29 +2122,31 @@ def render() -> None:
 
                     _dP = estimar_delta_P_cano_maestro(cano_maestro_cfg, caudal_total)
                     if cano_maestro_cfg.seccion_variable:
-                        _sec_txt = (
-                            f"Sección crece "
-                            f"{cano_maestro_cfg.area_seccion_inicio_m2:.2f} → "
-                            f"{cano_maestro_cfg.area_seccion_m2:.2f} m² · "
-                            f"v acotada a **{_dP['v_max_ms']:.1f} m/s** "
-                            f"(extremo ventilador {_dP['v_fin_ms']:.1f} m/s)"
+                        _sec_txt = t(
+                            "p3.cano.preview_crece",
+                            a_ini=cano_maestro_cfg.area_seccion_inicio_m2,
+                            a_fin=cano_maestro_cfg.area_seccion_m2,
+                            v_max=_dP["v_max_ms"],
+                            v_fin=_dP["v_fin_ms"],
                         )
                     else:
-                        _sec_txt = (
-                            f"Sección constante {cano_maestro_cfg.area_seccion_m2:.2f} m² · "
-                            f"v máx **{_dP['v_max_ms']:.1f} m/s** "
-                            f"(extremo ventilador {_dP['v_fin_ms']:.1f} m/s)"
+                        _sec_txt = t(
+                            "p3.cano.preview_constante",
+                            a_fin=cano_maestro_cfg.area_seccion_m2,
+                            v_max=_dP["v_max_ms"],
+                            v_fin=_dP["v_fin_ms"],
                         )
                     st.caption(
-                        f"{_sec_txt} · "
-                        f"ΔP caño maestro ≈ **{_dP['total']:.0f} Pa** "
-                        f"(fricción {_dP['friccion']:.1f} + accesorios "
-                        f"{_dP['accesorios']:.1f}). Flujo acumulado a lo largo del "
-                        f"caño: la sección creciente mantiene la velocidad acotada "
-                        f"con menos material que un caño grande constante."
+                        t(
+                            "p3.cano.preview_dp",
+                            sec=_sec_txt,
+                            total=_dP["total"],
+                            friccion=_dP["friccion"],
+                            accesorios=_dP["accesorios"],
+                        )
                     )
                 except ValueError as _e:
-                    st.error(f"Caño maestro inválido: {_e}")
+                    st.error(t("p3.cano.invalido", e=_e))
                     cano_maestro_cfg = None
 
     # -----------------------------------------------------------------------
@@ -2303,7 +2191,7 @@ def render() -> None:
 
     except ValueError as err:
         codigo = str(err).split(":")[0]
-        st.error(f"**Error de validación** ({codigo})\n\n{err}")
+        st.error(t("p3.error_validacion", codigo=codigo, err=err))
         return  # No mostrar advertencias ni resumen si hay error duro
 
     # -----------------------------------------------------------------------
@@ -2320,30 +2208,22 @@ def render() -> None:
         # Resumen visible de un vistazo antes del expander, para que las
         # advertencias importantes no pasen desapercibidas si queda colapsado.
         if criticas:
-            st.error(
-                f"🚨 El diseño del colector tiene **{len(criticas)} advertencia(s) "
-                "crítica(s)**. Revisá el detalle abajo antes de calcular."
-            )
+            st.error(t("p3.advertencias.resumen_criticas", n=len(criticas)))
         elif warnings:
-            st.warning(
-                f"⚠️ El diseño del colector tiene **{len(warnings)} advertencia(s)**. "
-                "Conviene revisar el detalle abajo."
-            )
+            st.warning(t("p3.advertencias.resumen_warnings", n=len(warnings)))
 
         with st.expander(
-            f"Advertencias de diseño ({len(criticas)} críticas, {len(warnings)} warnings, {len(infos)} info)",
+            t(
+                "p3.advertencias.titulo_expander",
+                nc=len(criticas),
+                nw=len(warnings),
+                ni=len(infos),
+            ),
             expanded=bool(criticas),
         ):
-            for adv in adv_list:
-                icono = _ICONOS_SEVERIDAD[adv.severidad]
-                if adv.severidad == Severidad.CRITICAL:
-                    st.error(f"{icono} **{adv.codigo}** — {adv.mensaje}\n\n💡 {adv.sugerencia}")
-                elif adv.severidad == Severidad.WARNING:
-                    st.warning(f"{icono} **{adv.codigo}** — {adv.mensaje}\n\n💡 {adv.sugerencia}")
-                else:
-                    st.info(f"{icono} **{adv.codigo}** — {adv.mensaje}\n\n💡 {adv.sugerencia}")
+            render_advertencias(adv_list, con_sugerencia=True)
     else:
-        st.success("Diseño del colector sin advertencias.")
+        st.success(t("p3.advertencias.sin_advertencias"))
 
     # -----------------------------------------------------------------------
     # Sección 5b: Evaluación del desempeño del colector unitario
@@ -2351,7 +2231,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
 
     st.divider()
-    st.subheader("Evaluación del desempeño del colector")
+    st.subheader(t("p3.eval.titulo"))
 
     _empl = proyecto.emplazamiento
     _clima = proyecto.clima
@@ -2359,26 +2239,29 @@ def render() -> None:
     _prereq_ok = True
 
     if _empl is None:
-        st.warning("Configurá el emplazamiento (P2) para habilitar la evaluación.")
+        st.warning(t("p3.eval.falta_emplazamiento"))
         _prereq_ok = False
     if _clima is None or _clima.datos is None:
-        st.warning("Descargá los datos climáticos (P2) para habilitar la evaluación.")
+        st.warning(t("p3.eval.falta_clima"))
         _prereq_ok = False
 
     if _prereq_ok:
         _modo_label = {
-            ModoAnalisis.DIARIO: "Diario",
-            ModoAnalisis.VENTANA: "Ventana de producción",
-        }.get(_cfg.modo_analisis, "Anual")
+            ModoAnalisis.DIARIO: t("p3.eval.modo.diario"),
+            ModoAnalisis.VENTANA: t("p3.eval.modo.ventana"),
+        }.get(_cfg.modo_analisis, t("p3.eval.modo.anual"))
         st.caption(
-            f"Modo de análisis: **{_modo_label}** (configurado en P1)  |  "
-            f"Pendiente: {_empl.pendiente_colector_deg:.0f}°  |  "
-            f"Año climático: {_clima.anio}"
+            t(
+                "p3.eval.modo_caption",
+                modo=_modo_label,
+                pend=_empl.pendiente_colector_deg,
+                anio=_clima.anio,
+            )
         )
 
         _render_albedo_suelo(proyecto, _empl)
 
-        if st.button("Calcular desempeño del colector", type="primary", key="p3_calcular_eval"):
+        if st.button(t("p3.eval.boton"), type="primary", key="p3_calcular_eval"):
             _datos_local = _clima.datos.tz_convert(_empl.zona_horaria)
             _datos_local = _datos_local[_datos_local.index.year == _clima.anio]
 
@@ -2386,9 +2269,9 @@ def render() -> None:
                 _datos_dia, _fecha = _seleccionar_dia(_datos_local, _cfg, _clima.anio)
                 _fecha_label = str(_fecha)
                 if len(_datos_dia) == 0:
-                    st.error(f"No hay datos para el día {_fecha_label} en el archivo climático.")
+                    st.error(t("p3.eval.sin_datos_dia", fecha=_fecha_label))
                 else:
-                    with st.spinner(f"Evaluando colector para el {_fecha_label}..."):
+                    with st.spinner(t("p3.eval.spinner_dia", fecha=_fecha_label)):
                         _r = _evaluar_diario(proyecto.colector, _datos_dia, _empl)
                     st.session_state["p3_eval"] = {"modo": "diario", "r": _r, "label": _fecha_label}
             elif _cfg.modo_analisis == ModoAnalisis.VENTANA:
@@ -2396,13 +2279,11 @@ def render() -> None:
 
                 _df_v, _msg_v = slice_clima_ventana(_clima, _cfg.ventana_inicio, _cfg.ventana_fin)
                 if _df_v is None:
-                    st.error(f"No se pudo recortar la ventana: {_msg_v}")
+                    st.error(t("p3.eval.ventana_error", msg=_msg_v))
                 else:
                     _datos_v = _df_v.tz_convert(_empl.zona_horaria)
                     _lapso_label = f"{_cfg.ventana_inicio} → {_cfg.ventana_fin}"
-                    with st.spinner(
-                        f"Evaluando colector sobre la ventana ({len(_datos_v)} horas)..."
-                    ):
+                    with st.spinner(t("p3.eval.spinner_ventana", horas=len(_datos_v))):
                         _r = _evaluar_ventana(proyecto.colector, _datos_v, _empl)
                     st.session_state["p3_eval"] = {
                         "modo": "ventana",
@@ -2410,7 +2291,7 @@ def render() -> None:
                         "label": _lapso_label,
                     }
             else:
-                with st.spinner("Evaluando colector para los 12 meses representativos..."):
+                with st.spinner(t("p3.eval.spinner_anual")):
                     _r = _evaluar_anual(proyecto.colector, _datos_local, _empl, _clima.anio)
                 st.session_state["p3_eval"] = {"modo": "anual", "r": _r}
 
@@ -2420,7 +2301,7 @@ def render() -> None:
         _r = _ev["r"]
         _modo = _ev["modo"]
 
-        st.markdown("#### Resultados de la evaluación")
+        st.markdown(t("p3.eval.resultados_titulo"))
 
         if _modo == "diario":
             _lbl = _ev["label"]
@@ -2429,9 +2310,9 @@ def render() -> None:
             _T_sal_vals = [t for t in _r["T_salida_C"] if t is not None]
             if _T_sal_vals:
                 c1, c2, c3 = st.columns(3)
-                c1.metric("T salida máx (día)", f"{max(_T_sal_vals):.1f} °C")
+                c1.metric(t("p3.eval.diario.t_max"), f"{max(_T_sal_vals):.1f} °C")
                 c2.metric(
-                    "T salida en mediodía",
+                    t("p3.eval.diario.t_mediodia"),
                     (
                         f"{_T_sal_vals[len(_T_sal_vals)//2]:.1f} °C"
                         if _r["hora_transit"] is not None
@@ -2439,11 +2320,11 @@ def render() -> None:
                     ),
                 )
                 c3.metric(
-                    "ΔT máx (salida − ambiente)",
+                    t("p3.eval.diario.dt_max"),
                     f"{max(ts - ta for ts, ta in zip(_T_sal_vals, [_r['T_amb_C'][i] for i, t in enumerate(_r['T_salida_C']) if t is not None])):.1f} °C",
                 )
 
-            tab_a, tab_b = st.tabs(["9a · T salida vs hora", "9b · Perfil T fluido en mediodía"])
+            tab_a, tab_b = st.tabs([t("p3.eval.diario.tab_a"), t("p3.eval.diario.tab_b")])
 
             with tab_a:
                 _fig_a = _fig_T_salida_dia(_r, _lbl)
@@ -2454,7 +2335,7 @@ def render() -> None:
                 if _fig_b is not None:
                     mostrar_plotly(_fig_b, nombre="colector_Tfluido_dia")
                 else:
-                    st.info("No hay radiación solar suficiente a mediodía para calcular el perfil.")
+                    st.info(t("p3.eval.diario.sin_radiacion"))
 
         elif _modo == "ventana":
             _lbl = _ev["label"]
@@ -2466,75 +2347,59 @@ def render() -> None:
                     if ts is not None and p > 50.0
                 ]
                 c1, c2, c3 = st.columns(3)
-                c1.metric("T salida máx (ventana)", f"{max(_T_vals):.1f} °C")
+                c1.metric(t("p3.eval.ventana.t_max"), f"{max(_T_vals):.1f} °C")
                 c2.metric(
-                    "ΔT medio diurno (POA > 50)",
+                    t("p3.eval.ventana.dt_medio"),
                     f"{sum(ts - ta for ts, ta in _pares) / len(_pares):.1f} °C" if _pares else "—",
                 )
                 c3.metric(
-                    "Horas con T salida > 40 °C",
+                    t("p3.eval.ventana.horas_40"),
                     f"{sum(1 for t in _T_vals if t > 40.0)} h",
                 )
             _tab_v1, _tab_v2 = st.tabs(
-                ["Series sobre la ventana", "Perfil T fluido (mediodía 1er día)"]
+                [t("p3.eval.ventana.tab_series"), t("p3.eval.ventana.tab_perfil")]
             )
             with _tab_v1:
                 mostrar_plotly(_fig_T_salida_ventana(_r, _lbl), nombre="colector_Tsalida_ventana")
-                st.caption(
-                    "Series horarias de **día y noche** (de noche el aire no se "
-                    "calienta → T_salida ≈ T_amb). Marcas: POA máx (◆) y mediodía "
-                    "solar (▲) de cada día."
-                )
+                st.caption(t("p3.eval.ventana.caption_series"))
             with _tab_v2:
-                _fig_perfil_v = _fig_T_fluido_dia(_r, f"primer día de {_lbl}")
+                _fig_perfil_v = _fig_T_fluido_dia(_r, t("p3.eval.ventana.perfil_label", lapso=_lbl))
                 if _fig_perfil_v is not None:
                     mostrar_plotly(_fig_perfil_v, nombre="colector_Tfluido_ventana")
-                    st.caption(
-                        "⚠️ Esta gráfica representa **sólo el mediodía solar del "
-                        "primer día** de la ventana de producción."
-                    )
+                    st.caption(t("p3.eval.ventana.caption_perfil"))
                 else:
-                    st.info(
-                        "No hay radiación suficiente a mediodía del primer día para "
-                        "calcular el perfil T(x)."
-                    )
-            st.caption(
-                "Vista previa a **velocidad de diseño** del módulo. El cálculo de "
-                "producción (P7) re-corre el colector al caudal real que impone el "
-                "ventilador del sistema."
-            )
+                    st.info(t("p3.eval.ventana.sin_radiacion"))
+            st.caption(t("p3.eval.ventana.caption_vista_previa"))
 
         else:  # anual
             if _r["meses"]:
                 c1, c2, c3 = st.columns(3)
                 c1.metric(
-                    "T salida máx (mejor mes)",
+                    t("p3.eval.anual.t_max_mes"),
                     f"{max(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(max(_r['T_salida_noon_C']))]}",
                 )
                 c2.metric(
-                    "T salida mín (peor mes)",
+                    t("p3.eval.anual.t_min_mes"),
                     f"{min(_r['T_salida_noon_C']):.1f} °C — {_r['meses'][_r['T_salida_noon_C'].index(min(_r['T_salida_noon_C']))]}",
                 )
                 c3.metric(
-                    "ΔT mín colector",
+                    t("p3.eval.anual.dt_min"),
                     f"{min(ts - ta for ts, ta in zip(_r['T_salida_noon_C'], _r['T_amb_noon_C'])):.1f} °C",
                 )
 
-                tab_a, tab_b = st.tabs(["9a · T salida vs mes", "9b · Perfil T fluido por mes"])
+                tab_a, tab_b = st.tabs([t("p3.eval.anual.tab_a"), t("p3.eval.anual.tab_b")])
 
                 with tab_a:
                     _fig_a = _fig_T_salida_anual(_r)
                     mostrar_plotly(_fig_a, nombre="colector_Tsalida_anual")
-                    st.caption("Evaluación en el mediodía solar del día 15 de cada mes.")
+                    st.caption(t("p3.eval.anual.caption_mediodia"))
 
                 with tab_b:
                     _fig_b = _fig_T_fluido_anual(_r)
                     if _fig_b is not None:
                         mostrar_plotly(_fig_b, nombre="colector_Tfluido_anual")
             else:
-                st.warning(
-                    "No se obtuvieron resultados válidos. Verificá que el clima tenga radiación suficiente."
-                )
+                st.warning(t("p3.eval.anual.sin_resultados"))
 
     # -----------------------------------------------------------------------
     # Sección 5c: Evaluación del campo de colectores (banco, gran escala, S41)
@@ -2543,36 +2408,30 @@ def render() -> None:
 
     if tipologia == Tipologia.GRAN_ESCALA:
         st.divider()
-        st.subheader("Evaluación del campo de colectores")
-        st.caption(
-            "Red hidráulica del **banco + caño maestro** (metodología ASHRAE "
-            "cap. 21: fricción Darcy-Weisbach por tramo + pérdidas singulares "
-            "de boca): reparto real de caudal entre ramas, temperatura de "
-            "salida de cada rama a su caudal propio, mezcla en el manifold y "
-            "T del flujo a la salida del caño maestro."
-        )
+        st.subheader(t("p3.campo.titulo"))
+        st.caption(t("p3.campo.intro"))
 
         _cam_p4 = getattr(proyecto, "camara", None)
         _rho_ref_campo = 1.05  # kg/m³ ~45 °C — solo para el default del widget
         if _cam_p4 is not None and _cam_p4.flujo.caudal_masico_kg_s > 0:
             _q_def_Ls = _cam_p4.flujo.caudal_masico_kg_s / _rho_ref_campo * 1000.0
-            _origen_q = "el caudal del sistema configurado en P4 (caudal único S41)"
+            _origen_q = t("p3.campo.origen_p4")
         else:
             _q_def_Ls = caudal_total * 1000.0
-            _origen_q = "el caudal de diseño del banco (no hay cámara configurada)"
+            _origen_q = t("p3.campo.origen_banco")
 
         ci1, ci2, ci3, ci4 = st.columns(4)
         _q_Ls = ci1.number_input(
-            "Caudal total [L/s]",
+            t("p3.campo.q.label"),
             min_value=1.0,
             max_value=50000.0,
             value=float(max(1.0, _q_def_Ls)),
             step=10.0,
             key="p3_campo_q",
-            help=f"Caudal que mueve el ventilador. Default: {_origen_q}.",
+            help=t("p3.campo.q.help", origen=_origen_q),
         )
         _T_amb_campo = ci2.number_input(
-            "T ambiente [°C]",
+            t("p3.campo.t_amb"),
             min_value=-10.0,
             max_value=50.0,
             value=25.0,
@@ -2580,16 +2439,16 @@ def render() -> None:
             key="p3_campo_tamb",
         )
         _poa_campo = ci3.number_input(
-            "POA [W/m²]",
+            t("p3.campo.poa.label"),
             min_value=0.0,
             max_value=1400.0,
             value=900.0,
             step=50.0,
             key="p3_campo_poa",
-            help="Irradiancia sobre el plano del colector (punto de operación representativo).",
+            help=t("p3.campo.poa.help"),
         )
         _vw_campo = ci4.number_input(
-            "Viento [m/s]",
+            t("p3.campo.viento"),
             min_value=0.0,
             max_value=20.0,
             value=2.0,
@@ -2597,7 +2456,7 @@ def render() -> None:
             key="p3_campo_vw",
         )
 
-        if st.button("Evaluar campo de colectores", type="primary", key="p3_btn_campo"):
+        if st.button(t("p3.campo.boton"), type="primary", key="p3_btn_campo"):
             from calculos.balance_global import presion_representativa_proyecto
             from calculos.campo_colectores_calc import evaluar_campo_colectores
 
@@ -2608,7 +2467,7 @@ def render() -> None:
                 else 25.0
             )
             _n_ramas = proyecto.colector.banco.n_paralelo
-            with st.spinner(f"Resolviendo red hidráulica + térmica de {_n_ramas} ramas..."):
+            with st.spinner(t("p3.campo.spinner", n=_n_ramas)):
                 _rc = evaluar_campo_colectores(
                     proyecto.colector,
                     Q_total_m3_s=_q_Ls / 1000.0,
@@ -2623,30 +2482,32 @@ def render() -> None:
         _rc = st.session_state.get("p3_campo")
         if _rc is not None:
             for _a in _rc.advertencias:
-                st.warning(f"⚠️ {_a}")
+                st.warning(f"⚠️ {_a}")  # i18n: exento (mensaje de calculos/, queda ES)
             cm1, cm2, cm3, cm4 = st.columns(4)
             cm1.metric(
-                "T salida caño maestro",
+                t("p3.campo.t_salida_cano"),
                 (
                     f"{_rc.T_salida_cano_K - 273.15:.1f} °C"
                     if _rc.T_salida_cano_K is not None
                     else "—"
                 ),
-                delta=(f"{_rc.dT_cano_K:+.1f} K en el caño" if _rc.dT_cano_K is not None else None),
+                delta=(
+                    t("p3.campo.delta_cano", v=_rc.dT_cano_K) if _rc.dT_cano_K is not None else None
+                ),
             )
             cm2.metric(
-                "T mezcla del banco",
+                t("p3.campo.t_mezcla"),
                 f"{_rc.T_mezcla_K - 273.15:.1f} °C" if _rc.T_mezcla_K is not None else "—",
             )
             cm3.metric(
-                "Desuniformidad de reparto",
+                t("p3.campo.desuniformidad.label"),
                 f"{_rc.uniformidad['desviacion_max_pct']:.1f} %",
-                help="(q_máx − q_mín) / q_medio. Bajo 10 % se considera buen reparto.",
+                help=t("p3.campo.desuniformidad.help"),
             )
             cm4.metric(
-                "ΔP del sistema (campo)",
+                t("p3.campo.dp_sistema.label"),
                 f"{_rc.dP_sistema_Pa:.0f} Pa",
-                help="ΔP de trayectoria igualada: rama + troncal del caño maestro.",
+                help=t("p3.campo.dp_sistema.help"),
             )
             # Compensación de sección del caño (mejora 32): el ΔP del troncal
             # aislado de la rama + el rango de velocidad hacen visible si la
@@ -2655,30 +2516,26 @@ def render() -> None:
             if _vp is not None and len(_vp) > 0:
                 cn1, cn2 = st.columns(2)
                 cn1.metric(
-                    "ΔP troncal del caño",
+                    t("p3.campo.dp_troncal.label"),
                     f"{_rc.dP_troncal_Pa:.1f} Pa",
-                    help=(
-                        "Pérdida del manifold solo (boca 1 lejana → ventilador), "
-                        "aislada de la rama. Es lo que responde a la compensación "
-                        "de sección del caño."
-                    ),
+                    help=t("p3.campo.dp_troncal.help"),
                 )
                 cn2.metric(
-                    "v troncal (mín → máx)",
+                    t("p3.campo.v_troncal.label"),
                     f"{float(_vp.min()):.2f} → {float(_vp.max()):.2f} m/s",
-                    help=(
-                        "Velocidad del aire a lo largo del caño (extremo lejano → "
-                        "ventilador). Una sección creciente la mantiene acotada al "
-                        "acumular caudal; una sección chica constante la dispara "
-                        "cerca del ventilador."
-                    ),
+                    help=t("p3.campo.v_troncal.help"),
                 )
             mostrar_plotly(_fig_campo_colectores(_rc), nombre="campo_colectores")
             st.caption(
-                f"Reparto resuelto en {_rc.n_iter} iteraciones "
-                f"({'convergió' if _rc.convergio else '**no convergió**'}). "
-                f"q por rama: {_rc.uniformidad['q_min_m3_s']*1000:.1f} – "
-                f"{_rc.uniformidad['q_max_m3_s']*1000:.1f} L/s."
+                t(
+                    "p3.campo.caption_reparto",
+                    n=_rc.n_iter,
+                    estado=(
+                        t("p3.campo.convergio") if _rc.convergio else t("p3.campo.no_convergio")
+                    ),
+                    qmin=_rc.uniformidad["q_min_m3_s"] * 1000,
+                    qmax=_rc.uniformidad["q_max_m3_s"] * 1000,
+                )
             )
 
     # --- Guardar configuración (mejora 4) ---
@@ -2689,7 +2546,7 @@ def render() -> None:
     col_txt, col_json = st.columns(2)
     with col_txt:
         st.download_button(
-            "Guardar configuración del colector (.txt)",
+            t("p3.guardar.txt"),
             data=_texto_config_colector(proyecto.colector, _eval_p3),
             file_name=nombre_archivo_descarga(proyecto, "colector", "txt"),
             mime="text/plain",
@@ -2697,7 +2554,7 @@ def render() -> None:
         )
     with col_json:
         st.download_button(
-            "Guardar configuración del colector (.json)",
+            t("p3.guardar.json"),
             data=dump_json(_json_config_colector(proyecto.colector, _eval_p3)),
             file_name=nombre_archivo_descarga(proyecto, "colector", "json"),
             mime="application/json",

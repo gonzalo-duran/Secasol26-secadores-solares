@@ -11,6 +11,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from ui.componentes.idiomas import t
+
 if TYPE_CHECKING:
     from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 
@@ -170,7 +172,7 @@ def grafica_termodinamica_camara(
             y=list(res.X_prod_kg_kg),
             mode="lines",
             line=dict(color="#1f77b4", width=2),
-            name="X(t)",
+            name=t("graficas.termo.curva_x"),
         ),
         row=1,
         col=1,
@@ -178,7 +180,7 @@ def grafica_termodinamica_camara(
     fig.add_hline(
         y=X_obj,
         line=dict(color="red", dash="dot", width=1.5),
-        annotation_text=f"X_obj={X_obj:.3f}",
+        annotation_text=t("graficas.termo.x_obj", v=X_obj),
         row=1,
         col=1,
     )
@@ -187,7 +189,7 @@ def grafica_termodinamica_camara(
         fig.add_vline(
             x=t_sec_h,
             line=dict(color="orange", dash="dashdot", width=1.5),
-            annotation_text=f"t={t_sec_h:.1f}h",
+            annotation_text=t("graficas.termo.t_marca", v=t_sec_h),
             row=1,
             col=1,
         )
@@ -201,7 +203,7 @@ def grafica_termodinamica_camara(
             y=list(T_prod_C),
             mode="lines",
             line=dict(color="#d62728", width=2),
-            name="T producto [°C]",
+            name=t("graficas.termo.t_producto"),
         ),
         row=2,
         col=1,
@@ -213,7 +215,7 @@ def grafica_termodinamica_camara(
             y=list(T_flujo_C),
             mode="lines",
             line=dict(color="#2ca02c", width=1.5, dash="dash"),
-            name="T aire cámara [°C]",
+            name=t("graficas.termo.t_aire_camara"),
         ),
         row=2,
         col=1,
@@ -227,7 +229,7 @@ def grafica_termodinamica_camara(
             y=list(res.q_prod_W),
             mode="lines",
             line=dict(color="#ff7f0e", width=1.5),
-            name="q aire→producto [W]",
+            name=t("graficas.termo.q_prod"),
         ),
         row=3,
         col=1,
@@ -238,19 +240,23 @@ def grafica_termodinamica_camara(
             y=list(res.q_pared_W),
             mode="lines",
             line=dict(color="#9467bd", width=1.5),
-            name="q pérdida pared [W]",
+            name=t("graficas.termo.q_pared"),
         ),
         row=3,
         col=1,
     )
 
-    fig.update_yaxes(title_text="X [kg agua / kg ms]", rangemode="tozero", row=1, col=1)
-    fig.update_yaxes(title_text="T producto [°C]", color="#d62728", row=2, col=1, secondary_y=False)
-    fig.update_yaxes(title_text="T aire [°C]", color="#2ca02c", row=2, col=1, secondary_y=True)
-    fig.update_yaxes(title_text="Calor [W]", row=3, col=1)
-    fig.update_xaxes(title_text="Tiempo [h]", row=3, col=1)
+    fig.update_yaxes(title_text=t("graficas.termo.eje_x"), rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(
+        title_text=t("graficas.termo.eje_t_prod"), color="#d62728", row=2, col=1, secondary_y=False
+    )
+    fig.update_yaxes(
+        title_text=t("graficas.termo.eje_t_aire"), color="#2ca02c", row=2, col=1, secondary_y=True
+    )
+    fig.update_yaxes(title_text=t("graficas.termo.eje_calor"), row=3, col=1)
+    fig.update_xaxes(title_text=t("graficas.termo.eje_tiempo"), row=3, col=1)
     fig.update_layout(
-        title_text=f"Motor termodinámico — {prod_id} (status: {res.status})",
+        title_text=t("graficas.termo.titulo", prod=prod_id, status=res.status),
         height=700,
         showlegend=True,
     )

@@ -1,0 +1,170 @@
+header: Emplazamiento y Recursos Climáticos
+error_validacion: "Error de validación ({codigo}): {err}"
+ubicacion:
+  titulo: Ubicación geográfica
+  lat:
+    label: Latitud [°]
+    help: "Norte positivo. Rango: −90° a +90°."
+  lon:
+    label: Longitud [°]
+    help: "Este positivo. Rango: −180° a +180°."
+  alt:
+    label: Altitud [m s.n.m.]
+    help: Altitud del sitio. NASA POWER reporta la altitud de su punto de grilla.
+  zona:
+    label: Zona horaria
+    help: Identificador IANA de zona horaria local.
+  referencia: Referencia geográfica
+  hemisferio_norte: Norte
+  hemisferio_sur: Sur
+  meridiano_este: Este
+  meridiano_oeste: Oeste
+  resumen: "**Lat:** {lat:.4f}° {hemisferio}\n\n**Lon:** {lon:.4f}° {meridiano}\n\n**Alt:** {alt:.0f} m"
+orientacion:
+  titulo: Orientación del colector
+  nota_caja: >-
+    🧊 Tipología **Caja**: no hay colector externo — la cámara actúa
+    como colector. Su orientación, pendiente de techo y superficies
+    translúcidas se configuran en **P4 · Cámara**.
+  acimut:
+    label: Acimut del colector [°]  —  0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste
+    help: "Convención: 0° = Sur, 90° = Este, 180° = Norte, 270° = Oeste.\nEn el hemisferio sur, un colector óptimo apunta al Norte (180°)."
+  pendiente:
+    label: Pendiente / inclinación [°]  —  0° = horizontal, 90° = vertical
+    help: Ángulo entre el plano del colector y la horizontal.
+  caption: Orientación del colector
+  puntos:
+    sur: Sur
+    se: SE
+    este: Este
+    ne: NE
+    norte: Norte
+    "no": "NO"
+    oeste: Oeste
+    so: SO
+  aprox: Orientación aproximada
+  acimut_pvlib: "Acimut pvlib (interno): {v:.1f}°"
+  inclinacion: "Inclinación: {v:.1f}°"
+clima:
+  titulo: Datos climáticos NASA POWER
+  anio:
+    label: Año de referencia
+    help_base: "Año calendario de los datos horarios. Rango disponible en NASA POWER: {anio_min}–{anio_max}. "
+    help_sync: Sincronizado con P1 ({sync}). Podés sobreescribirlo.
+    help_sin_sync: >-
+      Cuando elijas un día específico o una ventana de producción en P1,
+      este año se ajusta automáticamente.
+  sync_ventana: ventana de producción desde {fecha}
+  sync_dia: día específico {fecha}
+  forzar:
+    label: Forzar re-descarga
+    help: Ignora el caché local y descarga nuevamente desde NASA POWER.
+  descargar: Descargar datos
+  spinner: "Descargando datos NASA POWER para ({lat:.4f}, {lon:.4f}), año {anio}..."
+  exito: "Datos cargados: {n:,} registros horarios. Altitud NASA POWER: {alt:.0f} m s.n.m."
+  error_descarga: "Error de descarga: {err}"
+calidad:
+  registros: Registros totales
+  anio_datos: Año de datos
+  interpoladas:
+    label: Horas interpoladas
+    help: Huecos ≤ 3 h corregidos por interpolación.
+  bloqueadas:
+    label: Horas bloqueadas
+    help: Huecos > 3 h que requieren decisión del usuario.
+  anio_distinto_ventana: >-
+    ⚠️ El clima descargado es del año **{anio_clima}**, pero la ventana
+    de producción de P1 empieza en **{anio_ventana}**.
+    P7 evaluará la ventana con los datos del año descargado.
+    Para usar el clima correcto, descargá el año {anio_ventana}.
+  huecos_warning: >-
+    Se detectaron {n} horas con datos faltantes
+    (hueco máximo: {mayor} h > límite de 3 h para interpolación).
+    Los cálculos posteriores pueden fallar si se procesan esas horas.
+  como_continuar: ¿Cómo continuar?
+  opcion_aceptar_con_nulos: Continuar con horas faltantes (NaN). Los cálculos ignorarán esos instantes.
+  opcion_descargar_nuevo_anio: Seleccionar otro año y volver a descargar.
+  confirmar: Confirmar decisión
+  decision_guardada: Decisión guardada. Podés continuar con el prediseño.
+  nulos_aceptados: "{n} horas con NaN aceptadas. Los cálculos ignorarán esos instantes."
+anual:
+  titulo: Recurso climático anual
+  caption: "Datos horarios NASA POWER — Año {anio} — ({lat:.4f}°, {lon:.4f}°)"
+  poa_plano_colector: el plano del colector
+  poa_techo_camara: el techo de la cámara
+  spinner_poa: Calculando irradiancia sobre {plano}...
+  ghi_anual: GHI anual
+  poa_anual: POA anual (plano colector)
+  delta_vs_ghi: "{delta:+.0f} vs GHI"
+  pend_acimut: Pendiente / Acimut
+  nota_transposicion: >-
+    Plano horizontal: datos directos de NASA POWER (GHI, DNI, DHI).
+    Plano del colector: irradiancia transpuesta con modelo Hay-Davies (pvlib),
+    usando la pendiente e inclinación configuradas arriba.
+tabs:
+  temperatura: Temperatura
+  irradiancia: Irradiancia solar
+  viento_hr: Viento y Humedad
+  tabla: Tabla mensual
+dia:
+  titulo: Recurso climático del día de diseño
+  caption: "Perfil horario para el {fecha} ({criterio}) — ({lat:.4f}°, {lon:.4f}°)"
+  criterio:
+    especifico: día específico
+    solsticio_verano: solsticio de verano
+    solsticio_invierno: solsticio de invierno
+    equinoccio_marzo: equinoccio de otoño (hem. sur)
+    equinoccio_septiembre: equinoccio de primavera (hem. sur)
+    mas_caluroso: día más caluroso
+    mas_frio: día más frío
+    default: día de diseño
+  sin_datos: >-
+    No hay datos para el {fecha} en el año {anio}. Verificá que el año de
+    la serie climática coincida con el año del día de diseño.
+  t_media: T media
+  t_min_max: T min / max
+  ghi_dia: GHI día
+  poa_dia: POA día
+  viento_medio: Viento medio
+  nota_transposicion: >-
+    Plano horizontal: datos directos de NASA POWER.
+    Plano del colector: modelo Hay-Davies (pvlib),
+    con la pendiente e inclinación configuradas arriba.
+  csv: Descargar CSV del día ({fecha})
+ventana:
+  titulo: Recurso climático de la ventana de producción
+  caption: >-
+    Lapso {inicio} → {fin} ({dias} días, {horas} horas de clima real,
+    año {anio}) — ({lat:.4f}°, {lon:.4f}°)
+  ghi: GHI ventana
+  poa: POA ventana
+  csv: Descargar CSV de la ventana ({inicio} → {fin})
+exportar:
+  titulo: Exportar datos
+  csv: Descargar CSV (unidades de usuario)
+  csv_help: >-
+    Exporta los datos en unidades de usuario: T [°C], GHI/DNI/DHI [W/m²],
+    Viento [m/s], HR [%], Presión [hPa]. Índice en hora local.
+sin_clima: >-
+  Ingresá las coordenadas del emplazamiento y presioná **Descargar datos**
+  para obtener la serie climática anual de NASA POWER.
+tabla:
+  mes: Mes
+  t_prom: T prom [°C]
+  t_min: T min [°C]
+  t_max: T max [°C]
+  ghi: GHI [kWh/m²]
+  dni: DNI [kWh/m²]
+  dhi: DHI [kWh/m²]
+  viento: Viento [m/s]
+  hr: HR [%]
+  presion: Presión [hPa]
+csv:
+  indice: fecha_hora_local
+  t_amb: T_amb [°C]
+  ghi: GHI [W/m²]
+  dni: DNI [W/m²]
+  dhi: DHI [W/m²]
+  viento: Viento [m/s]
+  hr: HR [%]
+  presion: Presión [hPa]

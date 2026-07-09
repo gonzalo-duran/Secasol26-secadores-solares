@@ -1,0 +1,161 @@
+header: 1 · Typology and Analysis Setup
+metadatos:
+  titulo: Project metadata
+  nombre:
+    label: Project name
+    placeholder: "E.g.: Cabinet dryer for apple — La Esperanza farm"
+  autor:
+    label: Author / responsible
+    placeholder: "E.g.: Juan García"
+  notas:
+    label: Free notes
+    placeholder: Observations, design conditions, references, etc.
+tipologia:
+  titulo: Dryer typology
+  guia:
+    titulo: Which typology should I choose?
+    cuerpo: |
+      The typology defines the dryer architecture and which subsystems are enabled in the pre-design:
+
+      | Typology | What it is | When | Subsystems |
+      |---|---|---|---|
+      | **Box** | Collector and chamber integrated; sunlight enters the chamber directly (translucent roof). Usually runs on natural convection. | Small scale, low investment (fruits, herbs). | Chamber (+ optional chimney) |
+      | **Cabinet** | External collector + chamber with trays; forced or natural airflow. | Medium scale, better temperature control. | Collector + chamber + fan/chimney (+ auxiliary) |
+      | **Large scale** | Collector bank + industrial chamber (batches or semi-continuous tunnel). | Commercial production (hundreds–thousands of kg). | Collector bank + main duct + chamber + fan + auxiliary |
+  label: Select the typology
+  help: The typology defines which subsystems are available in the pre-design.
+  opcion:
+    caja: Box (natural convection, no external collector)
+    armario: Cabinet (external collector, 10–100 kg)
+    gran_escala: Large scale (collector bank, 100 kg+)
+  corta:
+    caja: Box
+    armario: Cabinet
+    gran_escala: Large scale
+  desc:
+    caja: >-
+      **Box-type dryer** — Small scale (~1–10 kg of fresh product).
+      The chamber acts as the collector: direct greenhouse effect on the product.
+      No external collector. Air moves by **natural convection**
+      (a solar chimney can be added).
+      Typical for household use or small producers.
+    armario: >-
+      **Cabinet-type dryer** — Medium scale (~10–100 kg of fresh product).
+      Separate drying chamber with one or two external **solar air collectors**.
+      Natural (chimney) or forced circulation (fan / wind extractor).
+      Auxiliary heating can be added (electric resistance or biomass).
+      Suitable for small and medium producers.
+    gran_escala: >-
+      **Large-scale dryer** — High capacity (~100 kg to several tonnes).
+      **Bank of solar air collectors** in series/parallel with a main duct.
+      **Forced** circulation with an electric fan.
+      May include auxiliary heating.
+      Aimed at agro-industrial production.
+esquema:
+  titulo: 📐 Air circuit
+  caption_caja: Air circuit of the Box-type dryer.
+  caption_armario: Air circuit of the Cabinet-type dryer.
+cascada:
+  sin_colector: >-
+    ⚠️ The **Box** typology does not support an external collector.
+    The P3 configuration was removed.
+  sin_motor: >-
+    ⚠️ The **Box** typology uses natural convection.
+    The fan configuration (P6) was removed.
+  preset_gran_escala: >-
+    🏭 The **large-scale preset** was loaded (ADITAL hybrid dryer, San
+    Carlos): bank of 26 collectors 7.5×0.94 m + 18 m main duct, an
+    18×3×1.85 m tunnel with 24 trolleys × 14 trays, 5000 kg of pepper and
+    a 3.8 kg/s fan. Adjust whatever you need in P3–P6.
+subtipo:
+  titulo: Industrial dryer subtype
+  label: Dryer operation mode
+  help: |
+    **Batch:** a full load dries in batches; production is the sum of the batches completed within the window.
+
+    **Semi-continuous:** the product advances counter-current to the air in an N-column tunnel; it delivers a sustained output (kg/day).
+  opcion:
+    batch: Batch — drying in batches (load → dry → unload)
+    semicontinuo: >-
+      Semi-continuous — counter-current tunnel, full load with trolley
+      advance (ADITAL style)
+  corta:
+    batch: Batch
+    semicontinuo: Semi-continuous
+modo:
+  titulo: Analysis mode
+  caja_sin_anual: ℹ️ The **Annual** analysis is not available for the Box typology in v0.
+  label: Analysis type
+  help: |
+    **Daily:** one selected day. Fast, for initial pre-design.
+
+    **Production window:** accumulates production over a time span (week, month, campaign) with real hourly climate. Intended for large scale.
+
+    **Annual:** integrates over the 8,760 hours of the year.
+  opcion:
+    diario: Daily — one representative day (hourly data)
+    ventana: Production window — span [start, end] (real hourly climate)
+    anual: Annual — full year (8,760 hours)
+dia:
+  label: Criterion to select the analysis day
+  help: >-
+    Determines which day of the year is used for the calculation.
+    Temperature- or insolation-based criteria use the site's NASA POWER
+    data (requires P2 to be configured).
+  opcion:
+    solsticio_verano: Summer solstice (Dec 21) — longest day
+    solsticio_invierno: Winter solstice (Jun 21) — shortest day
+    equinoccio_marzo: Autumn equinox — Mar 21 (southern hemisphere)
+    equinoccio_septiembre: Spring equinox — Sep 21 (southern hemisphere)
+    mas_caluroso: Hottest day of the year (max T_amb)
+    mas_frio: Coldest day of the year (min T_amb)
+    especifico: Specific day defined by the user
+  corta:
+    solsticio_verano: Summer solstice
+    solsticio_invierno: Winter solstice
+    equinoccio_marzo: Autumn equinox
+    equinoccio_septiembre: Spring equinox
+    mas_caluroso: Hottest day
+    mas_frio: Coldest day
+    especifico: Specific day
+  fecha:
+    label: Analysis date
+    help: "Exact date of the day to analyse. Range available in NASA POWER: {anio_min}–{anio_max}."
+ventana:
+  atajos_caption: "Duration shortcuts (the end follows the start date):"
+  atajo:
+    semana: 1 week
+    mes: 1 month
+    campania: Campaign (5 months)
+    anio: 1 year
+  inicio: Start
+  fin: End
+  fin_anterior: ⚠️ The end date must be later than the start date.
+  lapso_excesivo: >-
+    ⚠️ The analysis span cannot exceed **366 days**
+    (you chose {lapso_dias}). Shorten the window or use a shortcut.
+  lapso_caption: "📆 Span: **{lapso_dias} days** of real hourly climate.{extra}"
+  atajo_activo: " · Shortcut active: end = start + {dur} days (editing the end disables it)."
+  cruza_anio: >-
+    ⚠️ The window crosses the calendar year. NASA POWER climate data is
+    downloaded per calendar year: choose a window within a single year so
+    that P7 finds climate for the whole span.
+config_invalida: "❌ Invalid configuration: {exc}"
+resumen:
+  titulo: Active configuration
+  tipologia: Typology
+  modo: Mode
+  modo_corta:
+    diario: Daily
+    ventana: Window
+    anual: Annual
+  dia: Analysis day
+  ventana: Window
+  ventana_valor: "{inicio} → {fin}"
+  ventana_sin_fechas: (set the dates)
+  periodo: Period
+  anio_completo: Full year
+  subtipo: "**Industrial subtype:** {subtipo}"
+  secciones: "**Sections available for this typology:** {secciones}"
+  secciones_caja: P2 Climate · P4 Chamber
+  secciones_completa: P2 Climate · P3 Collector · P4 Chamber · P5 Auxiliary · P6 Fan

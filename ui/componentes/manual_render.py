@@ -186,7 +186,7 @@ def extraer_esquemas(texto: str) -> list[str]:
     return [m.group("nombre") for m in (_RE_ESQUEMA.match(li) for li in texto.splitlines()) if m]
 
 
-def render_bloques(bloques: list[Bloque]) -> None:
+def render_bloques(bloques: list[Bloque], label_profundidad: str = "🔬 En profundidad") -> None:
     """Renderiza la lista de bloques en la UI de Streamlit.
 
     Un ``st.markdown`` por bloque (no un mega-string): acota el costo de
@@ -195,6 +195,8 @@ def render_bloques(bloques: list[Bloque]) -> None:
 
     Args:
         bloques: Salida de :func:`parsear_capitulo`.
+        label_profundidad: Rótulo del expander "En profundidad" en el idioma
+            activo (F8); el visor lo pasa traducido, el default es ES.
     """
     import streamlit as st
 
@@ -204,7 +206,10 @@ def render_bloques(bloques: list[Bloque]) -> None:
         if b.tipo == "markdown":
             st.markdown(b.contenido)
         elif b.tipo == "profundidad":
-            with st.expander(f"🔬 En profundidad — {b.titulo}", expanded=False):
+            titulo_exp = (
+                f"{label_profundidad} — {b.titulo}"  # i18n: exento (label + título ya resueltos)
+            )
+            with st.expander(titulo_exp, expanded=False):
                 st.markdown(b.contenido)
         elif b.tipo == "esquema":
             mostrar_esquema(b.contenido, caption=b.titulo or None)

@@ -11,6 +11,8 @@
 # =============================================================================
 algarroba:
   descripcion: "Algarroba (Prosopis alba/nigra), vaina entera o partida. Producto nativo del NOA y Chaco, de alta importancia cultural y económica (harina, patay, arrope). Literatura argentina disponible — incluye trabajos del INENCO y grupos de UNCa/UNLP. Vaina dura con alta concentración de azúcares y proteínas."
+  descripcion_en: "Carob / algarroba (Prosopis alba/nigra), whole or split pod. Native product of the NOA and Chaco, of high cultural and economic importance (flour, patay, arrope). Argentine literature available — includes work by INENCO and UNCa/UNLP groups. Hard pod with high concentration of sugars and proteins."
+  descripcion_pt: "Algarroba (Prosopis alba/nigra), vagem inteira ou partida. Produto nativo do NOA e do Chaco, de alta importância cultural e econômica (farinha, patay, arrope). Literatura argentina disponível — inclui trabalhos do INENCO e de grupos da UNCa/UNLP. Vagem dura com alta concentração de açúcares e proteínas."
   categoria: LEGUMBRE_FRUTO
   tipo_secado: CAPA_FINA
   fotosensible: false

@@ -1,0 +1,27 @@
+# Visor do manual (plano i18n, F8 — infraestrutura). Apenas o "chrome" do
+# visor. Os títulos/descrições do TOC resolvem-se com
+# traducir("manual.toc.<slug>.titulo", lang, default=cap.titulo): o ES canônico
+# vive na tupla CAPITULOS (por isso não há chaves manual.toc.* aqui) e EN/PT
+# caem ao ES até que os capítulos sejam traduzidos (F9).
+
+ui:
+  sidebar_titulo: 📖 Manual do Secasol
+  volver: ⬅ Voltar ao projetista
+  indice: 🏠 Índice
+  sidebar_caption: >-
+    Os links do manual navegam nesta mesma aba. Seu projeto continua aberto na
+    aba original do Secasol; "Voltar ao projetista" abre a vista de projeto aqui
+    (sessão nova, não toca no seu projeto).
+  indice_titulo: 📖 Manual do Secasol
+  indice_intro: >-
+    Referência de uso e dos modelos físicos do **Secasol**, o pré-projetista de
+    secadores solares. Cada capítulo abre com a ideia geral e desdobra os
+    detalhes (equações, correlações, decisões de modelo) em blocos
+    **🔬 Em profundidade**. Os capítulos da Parte IV são a referência técnica
+    completa de cada subsistema.
+  breadcrumb_manual: 📖 Manual
+  en_profundidad: 🔬 Em profundidade
+  sin_contenido: "O capítulo '{slug}' ainda não tem conteúdo ({archivo})."
+  no_existe: "O capítulo '{slug}' não existe. Este é o índice do manual."
+  solo_es: >-
+    Este capítulo ainda não está traduzido para o seu idioma; é exibido em espanhol.

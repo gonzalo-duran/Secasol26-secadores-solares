@@ -3,6 +3,32 @@
 > Plan acordado en la S47 (2026-07-07), para ejecutar en fases DESPUÉS de la
 > integración S48 (cámara ampliada + manual → main; ver
 > `plan_integracion_S48.md`). No abrir la rama i18n antes de ese merge.
+>
+> **ESTADO (S49, 2026-07-09):** F0–F8 IMPLEMENTADAS en working tree (sin
+> commitear). **Toda la UI visible de las 7 pestañas + los componentes
+> compartidos** (carta psicrométrica, panel TD de cámara, selector de
+> espesores, esquemas) están traducidos, las **43 advertencias de diseño por
+> código** (F5: widget único `advertencias_widget.py::render_advertencias` +
+> `advertencias.yaml`) y el **reporte PDF completo** (F6: `generar_reporte_pdf
+> (..., idioma)` con closure `tr` a todas las secciones + namespace `reporte.*`
+> de 244 claves; la tabla de advertencias del PDF retraduce por código) y los
+> **catálogos** (F7: `descripcion_en`/`descripcion_pt` en los 39 items de
+> `catalogo/materiales|productos/` + helper `t_catalogo` en los selectores de
+> P3/P4/P6 y en el PDF; `notas`/`fuente` quedan ES) y la **infraestructura
+> multiidioma del manual** (F8: capítulos movidos a `manual/capitulos/<lang>/`,
+> `ruta_capitulo` con fallback a ES + aviso, chrome del visor vía `manual.ui.*`,
+> TOC vía `manual.toc.*` con fallback, y `&lang=` propagado en todos los
+> enlaces). El **`auditar_i18n.py` llega a 0** literales pendientes. Suite 1262.
+> Convenciones/gotchas ganados en la memoria `reference-i18n-convenciones` y en
+> `CLAUDE.md` §Internacionalización (incl. el gotcha de coerción bool/None de
+> YAML — clave/valor `no`/`Yes`/`NO` sin comillas — con guard
+> `test_yaml_sin_coercion_de_tipos`). **Pendiente: F9** (traducción de los 22
+> capítulos del manual a EN/PT, capítulo a capítulo — el único trabajo grande
+> que queda). El residuo de
+> `scripts/auditar_i18n.py` (9) es solo la vista del manual (`ui/manual.py`,
+> `manual_render.py`, `header.py`), que es F8. Se ejecutó en el working tree
+> local (no en rama aparte): el usuario recuperó la notebook y se volvió al
+> workflow habitual.
 
 ## Contexto y decisiones cerradas
 

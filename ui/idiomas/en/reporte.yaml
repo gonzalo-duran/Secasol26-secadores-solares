@@ -1,0 +1,279 @@
+# PDF report (i18n plan, F6). Language is passed explicitly to
+# generar_reporte_pdf(..., idioma). Numeric values, units and enum/status
+# codes stay as-is (v1). Warning-table messages are re-translated by code
+# reusing the `advertencias.*` namespace (F5).
+
+cab:
+  titulo_marca: Secasol26 — Solar Dryer Predesign
+  institucion: GEEDSP · INENCO · CONICET-UNSa
+  proyecto: "Project: {titulo}"
+  pagina: "Page {n}"
+  doc_titulo: "Predesign — {titulo}"
+  doc_titulo_default: Solar dryer
+
+comun:
+  si: "Yes"
+  "no": "No"
+  opaca: "(opaque)"
+  fallback: "(fallback)"
+  ok: OK
+  notas_prefijo: "Notes:"
+  graficas_no_calc: "No charts: the calculation was not run."
+
+portada:
+  resumen: Project summary
+  meta:
+    proyecto: Project
+    autor: Author
+    fecha_creacion: Creation date
+    fecha_modif: Last modified
+    version: Software version
+    notas: Notes
+  p1:
+    titulo: Typology and analysis (P1)
+    tipologia: Typology
+    modo: Analysis mode
+    dia: Analysis day
+    fecha_esp: Specific date
+  empl:
+    titulo: Location (P2)
+    pendiente: Location not configured in P2.
+    latitud: Latitude
+    longitud: Longitude
+    altitud: Altitude
+    acimut_col: Collector azimuth (Duffie)
+    sur_nota: 0°=South
+    pendiente_col: Collector tilt
+    albedo: Ground albedo
+    tz: Time zone
+  clima:
+    titulo: Climate resource (NASA POWER)
+    pendiente: Climate data not downloaded.
+    anio: Source year
+    altitud_nasa: NASA grid altitude
+    horas: Available hours
+    t_media: Mean ambient T
+    ghi_media: Mean GHI
+    huecos: Original gaps
+    horas_interp: Interpolated hours
+    horas_bloq: Blocked hours
+    mayor_hueco: Largest gap (h)
+
+p2:
+  titulo: Solar resource and climate — charts (P2)
+  pendiente: "No charts: climate not downloaded in P2."
+  fig:
+    temperatura: Ambient temperature — daily and monthly averages
+    irradiacion: Monthly irradiation GHI / DNI / DHI
+    viento_hr: Monthly wind speed and relative humidity
+    poa_techo: "Irradiation: horizontal plane vs chamber roof"
+    poa_colector: "Irradiation: horizontal plane vs collector plane"
+
+colector:
+  titulo: Solar collector (P3)
+  pendiente_sin: Typology without external collector (BOX) or collector not configured.
+  materiales: Materials
+  mat:
+    cubierta: Cover
+    placa: Plate
+    aislante: Insulation
+    fondo: Back
+  geo_banco: Geometry and bank
+  tipo_col: Collector type
+  ancho_largo: Width × length
+  espaciado: Channel spacing
+  n_cubiertas: No. covers
+  vel: Design velocity
+  banco: Bank
+  banco_val: "{serie} series × {paralelo} parallel"
+  area: Total capture area
+  caudal: Total flow rate
+  camino: Air path
+  res_titulo: Simulation results
+  res_pendiente: "Collector calculation not run. Go back to P3 and press 'Compute collector performance'."
+  dia_rep: Representative day
+  t_sal_max: T outlet max
+  t_sal_med: T outlet noon
+  dt_max: ΔT max (out − amb)
+  horas_sol: Sunlit hours
+  mejor_mes: Best month (T out max)
+  peor_mes: Worst month (T out min)
+  dt_min: ΔT min collector
+  graficas: Collector charts
+  fig:
+    t_salida_dia: "Collector outlet T — {label}"
+    perfil_dia: "Fluid T profile at noon — {label}"
+    t_salida_anual: Collector outlet T per month (day 15)
+    perfil_anual: Fluid T profile at noon per month
+
+camara:
+  titulo: Drying chamber (P4)
+  pendiente_sin: Chamber not configured in P4.
+  geo_modo: Geometry and calculation mode
+  lwh: Length × width × height
+  volumen: Volume
+  orient: Chamber orientation (Duffie)
+  sur_nota: 0°=South
+  pend_techo: Roof slope (falls toward)
+  motor_num: Numerical engine
+  constr: Construction (opaque wall + translucent surfaces)
+  mat_vidr: Glazing material
+  caras_t: Translucent faces
+  a_rad: A_rad
+  pared_comp: Composite wall
+  capas: Layers
+  esp_pared: Wall thickness
+  r_pared: Total wall R
+  u_pared: Wall U
+  bandejas_titulo: Trays, product and flow
+  n_band: No. trays / area each
+  esp_capa: Bed thickness
+  sep_band: Tray spacing
+  producto: Product
+  masa: Total mass
+  x_obj: X₀ → X_target
+  modelo: Thin-layer / isotherm model
+  caudal_masico: Air mass flow
+  direccion: Flow direction
+  hr_ent: Inlet RH
+  res_titulo: Simulation results
+  res_pendiente: "Chamber calculation not run in this session. Go back to P4 and press 'Compute chamber'."
+  status: Status
+  t_sim: Simulation time
+  t_secado: Drying time
+  agua_evap: Water evaporated
+  x_ini_fin: X initial → final
+  t_prod_fin: Final product T
+  t_prod_max: Max product T
+  hr_max: Max RH in chamber
+  e_rad: Total radiative energy
+  modelo_aplic: Applied model
+  x_eq: X_eq
+  agua_extr: Water removed
+  mr_obj: Target MR
+  convergencia: Convergence
+  graficas: Chamber charts
+  fig:
+    td: Thermodynamic-engine trajectories
+    capa_fina: "Drying curve (thin layer) — {prod}"
+
+auxiliar:
+  titulo: Auxiliary heating (P5)
+  pendiente_sin: Dryer without an auxiliary system configured.
+  tipo: Type
+  modo_op: Operation mode
+  pot_nom: Rated power
+  frac_op: Operation fraction
+  pot_efe: Effective power
+  t_max: Max outlet T
+  disp_noct: Available at night
+  combustible: Fuel
+  pci: LHV
+  eta_quem: Burner η
+  consumo: Effective consumption
+  tension: Voltage
+  corriente: Estimated current
+  nota_p7: "The auxiliary operation results (Q_effective, ΔT, energy supplied) are integrated in the global balance of P7. See the Global results section."
+
+motor:
+  titulo: Fan / motor (P6)
+  pendiente_sin: Dryer without a motor configured (natural convection).
+  tipo_acc: Drive type
+  caudal_vol: Volumetric flow
+  dp_total: ΔP total
+  dp_colector: ΔP collector
+  dp_camara: ΔP chamber
+  dp_ductos: ΔP ducts
+  dp_singulares: ΔP fittings
+  eta_vent: Fan η
+  eta_motor: Motor η
+  factor_serv: Service factor
+  p_hid: Hydraulic power
+  p_eje: Shaft power
+  p_elec: Electrical power
+  p_inst: Power to install
+  corriente_nom: Rated current
+
+chimenea:
+  titulo: Solar chimney (P6)
+  pendiente_sin: "No chimney configured. If the dryer runs on forced convection, see the Motor section; if it is free diffusion, it does not apply."
+  geo_mat: Geometry and material
+  diam_int: Internal diameter
+  altura: Height
+  material: Material
+  descripcion: Description
+  extractor_titulo: Wind extractor (turbine cowl)
+  diam_ext: Extractor diameter
+  cp: Driving Cp (turbine)
+  kt: Resistive Kt (turbine)
+  z0: z₀ terrain roughness
+  sin_extractor: No wind extractor — natural convection by thermal draft only.
+  lazo_titulo: Natural-loop results (Picard balance)
+  lazo_pendiente: "Natural-loop calculation not run (motor active, or global balance not run in P7)."
+  modo_calc: Calculation mode
+  modo_transitorio: Transient (hourly horizon)
+  modo_constantes: Constant (steady state)
+  caudal_prom: Mean natural flow
+  caudal_max: Peak natural flow
+  h_eff: Effective H
+  iter_picard: Picard iterations
+  convergio: Converged?
+  dt_final: Final ΔT_chim between iterations
+  horas_sin_tiro: Hours without draft (ṁ = 0)
+  caudal_nat: Natural flow
+  vel_chim: Chimney velocity
+  re_chim: Chimney Re
+  dp_tiro: ΔP thermal draft
+  dp_ducto: ΔP chimney duct
+  dp_resto: ΔP rest (col + cham)
+  dp_motriz: ΔP extractor driving
+  viento_tope: Wind at top height
+  t_chim: Chimney T (final Picard)
+  avisos_solver: "Natural-loop solver notices:"
+
+global:
+  titulo: Global results (P7)
+  cond_titulo: Representative operating conditions
+  t_amb: Ambient T
+  irr_poa: POA irradiance
+  vel_viento: Wind speed
+  hr_cam: Chamber RH
+  balance_titulo: Energy balance
+  e_total: Total energy
+  solar_util: Useful solar
+  auxiliar: Auxiliary
+  motor: Motor
+  secado: Drying (useful)
+  cop: Drying COP
+  frac_solar: Solar fraction
+  t_ent_cam: Chamber inlet T
+  col_titulo: Collector — computed output
+  col_t_es: T inlet/outlet
+  col_q: Q useful
+  col_eta: Thermal η
+  col_regimen: Regime
+  col_re: Mean Re
+  col_hint: h_int
+  cam_titulo: Chamber — simulated cycle
+  cam_modo: Mode
+  cam_modo_td: thermodynamic
+  cam_modo_cf: thin layer
+  cam_t_secado: Drying time
+  cam_agua_evap: Water evaporated
+  cam_x_final: Final X
+  cam_t_prod: Final product T
+  cam_status: Status
+  cam_agua_extr: Water removed
+  cam_x_eq: X_eq
+  cam_conv: Convergence
+  graficas: Global charts
+  graficas_pendiente: No global chart available.
+  fig:
+    sankey: Energy balance of the drying cycle
+    carta: Psychrometric chart of the drying process
+
+adv:
+  titulo: Static design warnings
+  sev: Sev.
+  codigo: Code
+  mensaje: Message

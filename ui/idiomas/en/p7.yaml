@@ -1,0 +1,402 @@
+header: 7 · Pre-design Results
+chimenea:
+  titulo: Solar Chimney (natural convection)
+  caudal_natural:
+    label: Natural flow
+    help: Equilibrium ṁ of the loop (chamber + collector + chimney).
+  q_vol:
+    label: Volumetric Q
+    help: ṁ / ρ_amb (ρ ≈ 1.1 kg/m³).
+  v_chim: Chimney v
+  re: Chimney Re
+  dp_tiro:
+    label: Draft ΔP
+    help: Available hydrostatic buoyancy (g·H_eff·Δρ).
+  dp_chim:
+    label: Chimney ΔP
+    help: Friction + minor losses of the chimney duct.
+  dp_resto:
+    label: Rest-of-loop ΔP
+    help: Collector + chamber losses scaled ∝ (ṁ/ṁ_design)².
+  h_eff:
+    label: Effective H
+    help: chimney_height + chamber_height.
+  balance: >-
+    Loop balance: ΔP_draft = ΔP_chim + ΔP_rest
+    ({tiro:.2f} ≈ {chim:.2f} + {resto:.2f}, error {err:.1%}).
+  desviacion_caudal: >-
+    ⚠️ The natural flow ({nat:.1f} g/s) differs **{desv:.0%}** from the
+    chamber design flow ({design:.1f} g/s). Review the chimney
+    diameter/height in P6 or the design flow in P4 so both are consistent.
+transitorio:
+  advertencias: Calculation warnings
+  resumen: Pre-design summary
+  x_obj:
+    label: X_obj reached
+    help: Time from t=0 when the product moisture drops to X_obj.
+    "no": No (>horizon)
+  masa_agua: Evaporated water mass
+  energia_secado:
+    label: Drying energy
+    help: water_mass × Lv
+  cop: COP_drying
+  e_solar: Useful E_solar
+  e_aux: E_auxiliary
+  e_motor: E_fan
+  fraccion_solar: Solar fraction
+  sin_trayectorias: No trajectories to plot.
+  trayectorias: Horizon trajectories
+  fig1:
+    t_amb: T_amb
+    i_g: I_g (POA)
+    v_viento: v_wind
+    eje_t: T_amb [°C] / v [m/s]
+    eje_ig: I_g [W/m²]
+    titulo: Climate forcing of the horizon
+  fig2:
+    t_sal_col: T_col_outlet
+    t_ent_cam: T_chamber_in (post-aux)
+    dt_aux: ΔT_auxiliary
+    eje: T [°C] / ΔT [K]
+    titulo: Collector → auxiliary → chamber-inlet coupling
+  fig3:
+    t_prod: T_prod
+    x_prod: X_prod
+    eje_t: T_prod [°C]
+    eje_x: X [kg/kg ds]
+    titulo: "Product: temperature and moisture"
+    x_obj_marca: X_obj reached
+  fig4:
+    m_dot: ṁ_w
+    eje: Evaporation rate [kg/h]
+    titulo: Water evaporation rate from the product
+  chim_titulo: Solar Chimney — natural loop (convection)
+  chim_prom: mean ṁ
+  chim_max: max ṁ
+  chim_tminmax: T_chim min/max
+  chim_sin_tiro:
+    label: Hours without draft
+    help: T_chim ≤ T_amb → zero natural flow that hour.
+  chim_iter:
+    label: Picard iterations
+    help: Convergence of the T_chim ↔ ṁ_nat loop.
+  chim_conv:
+    label: Convergence
+    si: ✅ yes
+    "no": ❌ no
+    help: "|final ΔT_chim| = {v:.2f} K"
+  chim_heff: Effective H
+  chim_fig:
+    m_nat: natural ṁ
+    t_chim: T_chim
+    dp_tiro: draft ΔP [Pa]
+    eje_izq: ṁ [g/s]  ·  ΔP_draft [Pa]
+    eje_der: T_chim [°C]
+    titulo: "Natural chimney loop: flow, T_chim and available draft"
+  eje_tiempo: Time [h]
+  diagnosticos: Horizon diagnostics
+  t_prod_max: max T_prod
+  horas_anti_rehum: Anti-rewet hours
+  horas_hr: Hours RH>95%
+  aux_activo: "**Auxiliary active**: {horas:.2f} h (fraction {frac:.0f} %)"
+  aux_dt: "**max ΔT_aux**: {dt:.1f} K  |  **max Q_aux**: {q:.0f} W"
+config:
+  titulo: Configuration status
+  p2_empl: P2 · Site
+  p2_clima: P2 · Climate (NASA POWER)
+  p3_col: P3 · Collector
+  p4_cam: P4 · Drying Chamber
+  p5_aux: P5 · Auxiliary
+  p6_motor: P6 · Fan
+  p6_chim: P6 · Chimney
+  p6_ambos: P6 · Fan / Chimney
+  caption: >-
+    ✅ configured · ❌ pending. **Minimum to compute:** the **Chamber (P4)**.
+    The **Climate (P2)** is mandatory in multi-day/annual/window modes (in
+    Constants, defaults are suggested). The **Collector (P3)** is mandatory
+    except for the Box typology. **Auxiliary (P5)** and **Fan/Chimney (P6)**
+    are optional (no fan → natural convection).
+balance_fig:
+  solar: Solar<br>(collector)
+  auxiliar: Auxiliary
+  motor: Fan
+  evaporacion: Evaporation<br>(useful)
+  eje: Energy [MJ]
+  titulo: Energy balance of the drying cycle
+barridos:
+  titulo: 🔀 Parametric runs
+  caption: >-
+    Vary a parameter and compare up to {max} runs (mode **{modo}**).
+    The results are ephemeral: they live only in this session.
+  sin_params: No sweepable parameters for this typology and mode.
+  configurar: ➕ Configure a new sweep
+  parametro: Parameter to vary
+  minimo: "Minimum [{unidad}]"
+  maximo: "Maximum [{unidad}]"
+  n_puntos: Number of points
+  kpis_avanzados: Additional KPIs (advanced)
+  kpi_check: "{label} [{unidad}]"
+  nombre: Run name
+  t_estimado: "⏱️ Estimated time ≈ {est:.0f} s ({n} × {base:.1f} s base)."
+  t_largo: "The sweep could take ~{est:.0f} s. Reduce the number of points if too much."
+  bloqueado: There are already {max} sweeps. Delete one to run another.
+  correr: ▶ Run sweep
+  progreso_punto: "Point {i}/{n}: {label} = {v:.4g} {unidad}"
+  spinner: Running sweep...
+  activos: "#### Active sweeps"
+  tarjeta: "{nombre} — {param}, {n} points, {t:.1f} s"
+  eliminar: Delete
+  tabla: 📋 Table — {nombre}
+  params_distintos: >-
+    The active sweeps vary different parameters: each chart uses
+    its own X axis and they do not overlap.
+  eje_x_valor: parameter value
+tunel_fig:
+  x_prod: Product X [kg/kg ds]
+  t_aire: Air T [°C]
+  eje_zona: Zone  (1 = fresh/product inlet → N = dry/outlet)
+  eje_x: Product X [kg/kg ds]
+  eje_t: Air T [°C]
+  titulo: Spatial tunnel profile (steady state)
+ventana:
+  produccion: Window production — {subtipo}
+  producto_seco: Dry product
+  tasa_regimen: Steady-state rate
+  agua_evaporada: Evaporated water
+  lena: Firewood consumed
+  simulada: "Simulated window: {dias:.1f} days ({horas:.0f} h)."
+  lotes: Completed batches
+  tiempo_lote: Mean time / batch
+  lote_progreso: Batch in progress
+  columnas_desc: Columns unloaded
+  x_salida: Outlet X (steady)
+  throughput: Fresh throughput
+  titulo: Production window (large scale)
+  sin_fechas: >-
+    ⚠️ Configure the **analysis window** (start/end dates) in **P1**
+    before computing production.
+  lapso: Span
+  desde_hasta: From → To
+  subtipo: Subtype
+  sin_clima: >-
+    ℹ️ Running the window needs real hourly climate. {msg}
+    Download it in **P2 · Site**.
+  clima_lapso: "Span climate: **{n} hours** real (NASA POWER, year {anio})."
+  anio_distinto: >-
+    ⚠️ The window is defined in **{anio_ventana}** but the downloaded
+    climate is from **{anio_clima}**: the {anio_clima} data mapped by
+    month/day is used. For the right climate, download year
+    {anio_ventana} in P2.
+  boton: ▶ Compute production window
+  spinner: Running collector(t) + main duct + auxiliary(t) + chamber...
+  prompt: ℹ️ Press **Compute** to evaluate production over the window.
+  t_calc: "⏱️ Computed in {t:.1f} s."
+  si: "Yes"
+  "no": "No"
+carta:
+  titulo: Process psychrometric chart
+  caption: >-
+    Humid-air states along the process, corrected to the site pressure.
+    Heating in the collector and auxiliary is **sensible** (constant ω →
+    horizontal segments); in the chamber the air **gains humidity**. The
+    dotted isenthalp is the adiabatic reference from the chamber inlet:
+    if the outlet falls on it drying was ≈ adiabatic (indirect chamber);
+    above it, there was heat gain (direct chamber with translucent roof).
+    In time-evolving modes the shown state is the one of maximum irradiance
+    (≈ solar noon).
+sin_camara: >-
+  ⚠️ To compute results you must configure at least the
+  **Drying Chamber (P4)**.
+anual_prompt_detalle: Single representative-day calculation (additional context)
+anual_prompt_detalle_cap: >-
+  Below is the calculation of a single day (constants or transient).
+  It is useful to validate the engine or explore transients — the annual
+  results that matter are above. If you don't want to see it, ignore this
+  section.
+anual_sin_calcular: >-
+  📅 **ANNUAL mode enabled.** To see the monthly and aggregated annual
+  results, go to **P4** and press the '📅 Compute annual operation' button.
+  Meanwhile a single representative-day calculation is shown.
+modo:
+  titulo: Calculation mode
+  label: How do we evaluate the full pre-design?
+  transitorio: Transient (P4 horizon)
+  constantes: Representative constants
+  help: |
+    Transient: uses the hourly forcing you ran the chamber thermodynamic engine with (P4), adds the auxiliary step by step and reports results integrated over the horizon.
+
+    Constants: scalar representative conditions — a single design point.
+  sin_horizonte: >-
+    ℹ️ To enable the **transient mode**, first run the chamber in P4 with
+    'Synthetic day' or 'Real day' forcing. The horizon will propagate
+    automatically here.
+horizonte:
+  titulo: Propagated chamber horizon
+  dias: "{n} day(s)"
+  horizonte: Horizon
+  duracion: Duration
+  forzantes: Forcing
+  caption: >-
+    The forcing T_amb(t), T_col_out(t), v_wind(t), I_g(t), ω(t) comes from
+    P4 exactly as you simulated it. If you configured an **Auxiliary (P5)**,
+    it is applied step by step to the chamber inlet T before re-running the
+    thermodynamic engine.
+  boton: ▶ Compute transient pipeline
+  spinner: Running auxiliary(t) + TD chamber + fan...
+  prompt: ℹ️ Press **Compute** to evaluate the transient pipeline.
+condiciones:
+  titulo: Representative operating conditions
+  caption: >-
+    Enter the conditions of the analysis day / moment.
+    The suggested values come from the NASA POWER data in P2
+    (75th percentile of T, 90th percentile of irradiance).
+  t_amb: Ambient T [°C]
+  irradiancia:
+    label: Irradiance on collector plane [W/m²]
+    help: Global irradiance on the collector plane (POA).
+  viento: Wind speed [m/s]
+  hr:
+    label: Inlet air RH [%]
+    help: >-
+      RH of the air entering the chamber, in the **Representative
+      constants** mode. It fixes the inlet ω. In Transient mode the inlet
+      RH comes from the forcing and this value is not used.
+  boton: ▶ Compute full pre-design
+  spinner: Computing...
+  prompt: ℹ️ Configure the conditions and press **Compute** to see the results.
+errores_fatales: "Errors were detected that prevent the calculation:"
+advertencias_expander: "⚠️ {n} calculation warnings"
+colector:
+  titulo: Solar Collector
+  t_entrada: Inlet T
+  t_salida: Outlet T
+  q_util: Useful Q
+  eta: Thermal η
+  regimen: Regime
+  re_hint: "Re = {re:.0f}  |  h_int = {hint:.1f} W/(m²·K)"
+auxiliar:
+  titulo: Thermal Auxiliary
+  t_entrada: Auxiliary inlet T
+  t_salida: Auxiliary outlet T
+  q_efectivo: Effective Q
+t_entrada_camara: "🌡️ **Chamber inlet temperature: {t:.1f} °C**"
+camara:
+  titulo: Drying Chamber
+  t_secado: Drying time
+  no_convergio_help: "Did not converge: {status}"
+  status: Status
+  agua_evaporada: Evaporated water
+  x_final: Final X
+  t_max_warning: >-
+    ⚠️ The thermodynamic engine did not reach X_target within the
+    maximum simulation time. Energies and COP are not reliable.
+  error: "❌ Thermodynamic-engine error: {status}"
+  caption_taire: >-
+    ℹ️ The **chamber air T** (right axis, green) varies little because the
+    air flow is the dominant term in the energy balance — the air stays
+    near T_inlet. Each curve uses its own scale (left and right axes).
+motor:
+  titulo: Fan / Drive
+  dp: System ΔP
+  p_electrica: Electric power
+  p_instalar: Power to install
+balance:
+  titulo: Global Energy Balance
+  cop:
+    label: Drying COP
+    help: >-
+      water_mass × Lv / total_energy.
+      Typical values: 0.10–0.35 for solar dryers.
+  fraccion_solar:
+    label: Solar fraction
+    help: Collector energy / (collector + auxiliary).
+  e_secado:
+    label: E drying
+    help: water_mass × Lv — energy actually useful for evaporation.
+  e_total:
+    label: E total
+    help: Solar + auxiliary + fan.
+ciclo:
+  titulo: Drying-cycle summary
+  masa_fresco: Fresh product mass
+  masa_seco:
+    label: Dry product mass
+    help: fresh_mass / (1 + X₀)
+  agua_evaporada: Evaporated water
+  rendimiento:
+    label: Mass yield
+    help: kg_dry / kg_fresh
+  t_secado: Drying time
+  no_convergio: did not converge
+tabla:
+  titulo: Full results table
+  col_param: Parameter
+  col_valor: Value
+  col_t_ent: Collector — Inlet T [°C]
+  col_t_sal: Collector — Outlet T [°C]
+  col_q: Collector — Useful Q [W]
+  col_eta: Collector — Thermal η
+  aux_dt: Auxiliary — ΔT [°C]
+  aux_q: Auxiliary — Effective Q [W]
+  cam_top: Chamber — Operating T [°C]
+  cam_t: Chamber — Drying time [h]
+  cam_agua: Chamber — Evaporated water [kg]
+  cam_status: Chamber — Status / convergence
+  cam_xfin: Chamber — Final X [kg/kg ds]
+  cam_tprod: Chamber — Final product T [°C]
+  mot_dp: Fan — ΔP [Pa]
+  mot_pe: Fan — Electric power [W]
+  mot_pi: Fan — Power to install [W]
+  chim_caudal: Chimney — Natural flow [g/s]
+  chim_qvol: Chimney — Vol. flow [m³/h]
+  chim_v: Chimney — v [m/s]
+  chim_re: Chimney — Re
+  chim_tiro: Chimney — Draft ΔP [Pa]
+  chim_ducto: Chimney — Duct ΔP [Pa]
+  chim_resto: Chimney — Rest ΔP [Pa]
+  chim_heff: Chimney — Effective H [m]
+  bal_solar: Balance — Useful E solar [MJ]
+  bal_aux: Balance — E auxiliary [MJ]
+  bal_motor: Balance — E fan [MJ]
+  bal_secado: Balance — E drying [MJ]
+  bal_cop: Balance — COP
+  bal_fs: Balance — Solar fraction
+  no_convergio: did not converge
+anual_det:
+  titulo: Chamber annual operation
+  caption: >-
+    Results of the thermodynamic engine run month by month over the typical
+    day, scaled by the number of batches/month set in P4. Efficiencies per
+    the Augustus Leon method (RSER 2002).
+  kg_anual: kg dried/year
+  eta_media: mean η_total
+  t_prom: mean drying time
+  e_solar: Annual solar energy
+  col_mes: Month
+  col_t: drying t [h]
+  col_conv: Converged
+  col_mevap: m_evap/batch [kg]
+  col_batches: batches/month
+  col_kg: kg/month
+  col_drying: η_drying [%]
+  col_pickup: η_pickup [%]
+  col_termica: η_thermal [%]
+  col_total: η_total [%]
+  fig_kg: kg/month
+  fig_eta: η_total [%]
+  fig_titulo: Monthly production and system efficiency
+  fig_eje_mes: Month
+  fig_eje_kg: Dried product [kg/month]
+  fig_eje_eta: η_total [%]
+guardar:
+  txt: Save full pre-design (.txt)
+  json: Save full pre-design (.json)
+  pdf_titulo: "##### PDF report"
+  pdf_caption: >-
+    Generates a full PDF with all sections, configuration tables and charts.
+    It may take 10–30 s to render the images.
+  pdf_boton: Generate PDF report
+  pdf_spinner: Generating PDF report (includes chart export)...
+  pdf_exito: "✅ Report generated ({kb:.0f} KB). Download with the button below."
+  pdf_error: "❌ Error generating the report: {exc}"
+  pdf_descargar: Download PDF report

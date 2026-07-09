@@ -37,6 +37,8 @@ manzana:
   # METADATOS
   # ---------------------------------------------------------------------------
   descripcion: "Manzana (Malus domestica) en rodajas. Producto típico del cinturón frutícola del Alto Valle del Río Negro y de Mendoza. Variedades comunes secadas: Granny Smith, Red Delicious, Golden Delicious, Golab (en literatura iraní de referencia)."
+  descripcion_en: "Apple (Malus domestica), sliced. Typical product of the fruit belt of the Alto Valle del Río Negro and Mendoza. Common dried varieties: Granny Smith, Red Delicious, Golden Delicious, Golab (in the Iranian reference literature)."
+  descripcion_pt: "Maçã (Malus domestica), em rodelas. Produto típico do cinturão frutícola do Alto Valle del Río Negro e de Mendoza. Variedades comumente secadas: Granny Smith, Red Delicious, Golden Delicious, Golab (na literatura iraniana de referência)."
   categoria: FRUTA
   tipo_secado: CAPA_FINA
   fotosensible: false   # Las pectinas y el oscurecimiento enzimático ocurren con o sin luz; no es producto fotosensible en sentido estricto. Si se desea preservar color, sí se prefiere baja exposición a luz UV pero esto es una decisión de proceso, no una restricción físico-fotoquímica.

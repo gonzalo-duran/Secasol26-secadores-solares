@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import streamlit as st
 
+from ui.componentes.idiomas import idioma_actual
+
 _ESTILO_PILL = (
     "display:inline-block;padding:0.15em 0.75em;border:1px solid rgba(128,128,128,0.45);"
     "border-radius:999px;text-decoration:none;font-size:0.9em;"
@@ -30,7 +32,7 @@ def boton_manual(slug: str, texto: str = "📖 Manual") -> None:
     """
     st.markdown(
         f'<div style="text-align:right;margin-top:-0.5em;">'
-        f'<a href="?manual={slug}" target="_blank" rel="noopener" '
+        f'<a href="?manual={slug}&lang={idioma_actual()}" target="_blank" rel="noopener" '
         f'style="{_ESTILO_PILL}">{texto}</a></div>',
         unsafe_allow_html=True,
     )
@@ -49,4 +51,7 @@ def enlace_manual_inline(slug: str, texto: str) -> str:
     Returns:
         HTML del anchor con ``target="_blank"``.
     """
-    return f'<a href="?manual={slug}" target="_blank" rel="noopener">{texto}</a>'
+    return (
+        f'<a href="?manual={slug}&lang={idioma_actual()}" '
+        f'target="_blank" rel="noopener">{texto}</a>'
+    )

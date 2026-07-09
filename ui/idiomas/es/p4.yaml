@@ -1,0 +1,504 @@
+header: 4 · Cámara de Secado
+info_caja: >-
+  📦 **Tipología CAJA**: la cámara actúa como secador directo.
+  El techo translúcido es obligatorio (única fuente de energía)
+  y la temperatura de operación es la del aire ambiente.
+info_semicontinuo: >-
+  🏭 **Gran escala — Semicontinuo (túnel a contracorriente)**: la carga
+  total y la geometría de abajo se reparten en N columnas en serie; el
+  aire entra caliente por la columna seca y sale húmedo por la fresca.
+  Configurá la topología del túnel en su sección.
+cargar:
+  titulo: 📥 Cargar configuración guardada (.json)
+  uploader: Subí un archivo .json de la cámara previamente guardado
+  error_reconstruccion: "❌ Error reconstruyendo la cámara: {exc}"
+  exito: ✅ Cámara cargada desde JSON (se reiniciaron {n} valores de la sesión).
+producto:
+  titulo: Producto a secar
+  sin_productos: >-
+    No se encontraron productos con modelos de capa fina calibrados en el catálogo.
+    Verificar los archivos en catalogo/productos/.
+  label: Producto
+  help: >-
+    Producto a secar. Al elegirlo se cargan su isoterma de sorción (GAB),
+    propiedades básicas y humedad de equilibrio, que alimentan el balance
+    acoplado calor-masa de la cámara. Solo aparecen productos con datos
+    calibrados en el catálogo; si falta el tuyo, hay que calibrarlo antes de usarlo.
+  x_ini:
+    label: Humedad inicial X₀ [kg agua / kg ms]
+    help: "Base seca. Típicamente 4–16 kg/kg ms para frutas y hortalizas frescas."
+  x_obj:
+    label: Humedad objetivo X_obj [kg agua / kg ms]
+    help: >-
+      Humedad final deseada en base seca.
+      Valores típicos de almacenamiento: 0.10–0.20 kg/kg ms.
+  masa: Masa total a secar [kg]
+  gab_ok: ✅ Isoterma GAB calibrada disponible.
+  gab_fallback: "⚠️ Sin isoterma GAB. Se usará X_eq = {x:.3f} kg/kg ms (fallback)."
+geometria:
+  titulo: Geometría de la cámara
+  esquema_titulo: 📐 Esquema de la cámara
+  esquema_caption: Esquema de la cámara de secado con sus dimensiones principales.
+  largo: Largo [m]
+  ancho: Ancho [m]
+  alto: Alto [m]
+  volumen: "Volumen interno: {vol:.3f} m³  |  Área de planta: {area:.3f} m²"
+  orientacion_titulo: "**Orientación y techo a un agua**"
+  orientacion_caption: >-
+    La cámara tiene su propia orientación (independiente de la del banco
+    de colectores en P2). El techo es a un agua: cae desde el alto mayor
+    hasta el alto menor en la cara elegida.
+  pendiente_techo:
+    label: Pendiente del techo [°]
+    help: "0° = techo plano (histórico, sin cambios en el balance)."
+  acimut:
+    label: Acimut de la cámara [°] — 0°=Sur, 90°=Este, 180°=Norte, 270°=Oeste
+    help: Acimut de la normal exterior de la cara 'frente' (misma convención que P2).
+  cara_caida:
+    label: Cara de caída del techo
+    help: >-
+      Cara hacia la que cae el techo (la de menor altura).
+      Izquierda/derecha mirando en la dirección del flujo (de atrás hacia el frente).
+    frente: Frente
+    atras: Atrás
+    lateral_izq: Lateral izquierdo
+    lateral_der: Lateral derecho
+  preview_techo: >-
+    Alto menor: {menor:.2f} m  |  Alto mayor: {mayor:.2f} m  |
+    Área real del techo: {area:.3f} m²  |  Acimut pvlib: {pvlib:.1f}°
+vidriado:
+  opaca: (opaca — sin radiación al producto)
+  material:
+    label: Material de vidriado
+    help: >-
+      Opaca: cámara cerrada al sol (secador indirecto puro).
+      Material translúcido: mismo material y espesor para todas las
+      caras marcadas abajo; cada una ingresa radiación al producto
+      y al aire según su propia orientación
+      (ver calculos/radiacion_camara.py).
+
+      **CAJA**: obligatoriamente translúcida (al menos una cara), la
+      radiación es la única fuente de energía sin colector externo.
+  tau: "τ_solar = {v:.2f} (del catálogo)"
+  espesor: Espesor del vidriado [mm]
+  k_efectivo: "k_efectivo = {v:.3f} W/(m·K) (del catálogo)"
+  caras_titulo: "**Superficies translúcidas**"
+  caras_caption: >-
+    Caras que llevan el vidriado elegido (mismo material/espesor en
+    todas). El piso siempre es opaco. Default: solo techo
+    (comportamiento histórico).
+  cara_techo: Techo
+  cara_frente: Frente
+  cara_atras: Atrás
+  cara_lat_izq: Lat. izq.
+  cara_lat_der: Lat. der.
+  sin_caras: >-
+    ⚠️ Ninguna cara está activa: la cámara queda térmicamente opaca
+    (sin ganancia radiativa) aunque el material esté definido.
+  caja_sin_caras: >-
+    ❌ Tipología CAJA requiere al menos una cara translúcida.
+    Sin colector externo, la radiación es la única fuente de energía.
+  caja_sin_techo: >-
+    ❌ Tipología CAJA requiere techo translúcido. Sin colector externo
+    y con cubierta opaca, el secador no recibe ninguna energía.
+  preview:
+    cara: Cara
+    area: Área [m²]
+    inclinacion: Inclinación [°]
+    acimut: Acimut UI360 [°]
+    translucida: Translúcida
+materiales:
+  titulo: "**Materiales de la cámara**"
+  caption: >-
+    La composición elegida aplica a paredes laterales, piso y techo
+    (salvo cuando el techo es translúcido, en cuyo caso ese se trata
+    aparte arriba).
+  tipo_pared:
+    label: Tipo de pared
+    simple: Simple (1 material + espesor)
+    compuesta: Compuesta (cara externa + aislante + cara interna)
+    help: >-
+      Simple: una sola capa estructural.
+      Compuesta: cara externa + aislante + cara interna,
+      resistencias térmicas en serie.
+  catalogo:
+    label: Catálogo
+    help: "fondos = chapa/madera estructural; aislantes = lana, EPS, PUR."
+  material: Material
+  material_estructural: Material (estructural)
+  material_aislante: Material (aislante)
+  espesor_mm: Espesor [mm]
+  cara_externa: "**Cara externa**"
+  espesor_externa: Espesor externa [mm]
+  aislante: "**Aislante**"
+  espesor_aislante: Espesor aislante [mm]
+  cara_interna: "**Cara interna**"
+  espesor_interna: Espesor interna [mm]
+  resumen_u: >-
+    📐 **U_pared (sólo conducción)** = {u:.2f} W/(m²·K)  |
+    R = {r:.3f} m²·K/W  |  Espesor total = {esp:.1f} mm
+  resumen_u_nota: >-
+    Nota: este U corresponde sólo a la conducción de la pared.
+    El motor termodinámico le suma los films convectivos interior y
+    exterior (h_int + R_pared + h_w) en cada paso de integración.
+bandejas:
+  titulo_carros: Configuración de carros y bandejas
+  titulo: Configuración de bandejas
+  n_carros:
+    label: Número de carros
+    help: >-
+      Carros móviles con bandejas dentro de la cámara/túnel.
+      ADITAL: 24 carros. En semicontinuo define también el
+      número de zonas del túnel (1 carro por zona).
+  band_por_carro:
+    label: Bandejas por carro
+    help: "Pila vertical de bandejas de cada carro. ADITAL: ~14."
+  bandejas_totales: "Bandejas totales: **{n}** (= carros × bandejas/carro)"
+  n_bandejas: Número de bandejas
+  area_bandeja: Área por bandeja [m²]
+  espesor_capa:
+    label: Espesor de capa de producto [m]
+    help: Modelos de capa fina válidos para espesor ≤ 5 cm.
+  separacion:
+    label: Separación entre bandejas [m]
+    help: Distancia libre entre superficies de bandejas consecutivas.
+  resumen: >-
+    Altura de la pila{sufijo}: {altura:.2f} m  |
+    Área total de bandeja: {area:.2f} m²  |
+    Carga estimada: {carga:.1f} kg/m²/bandeja
+  sufijo_carro: " por carro"
+  perdida_titulo: "**Pérdida de carga por el producto (cross-flow)**"
+  k_rug_help: >-
+    Coeficiente de obstrucción por bloqueo C_obs, aplicado como C·ρv²/2
+    sobre el canal entre bandejas, para capturar la pérdida de forma del
+    lecho de producto en cross-flow (HORIZONTAL). Se combina con la
+    fricción de pared rugosa (Colebrook con ε = tamaño del producto), que
+    captura el roce sobre la superficie del lecho.
+
+    **Default automático** (mejora 29, modelo general): contracción +
+    expansión Borda-Carnot con β = espesor_capa/separación (fracción del
+    gap ocupada por el producto):
+    • C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
+    • Crece con β y diverge cuando el gap se bloquea (β→1).
+
+    En VERTICAL_ASCENDENTE este término no aplica: la ecuación de Ergun
+    ya captura la resistencia del lecho atravesado vía Φ_s y d_p.
+  forzar_k: Forzar C_obstrucción (override del default automático)
+  c_obstruccion:
+    label: C_obstrucción [adim]
+    help: "Se aplica como C·ρv²/2 sobre la velocidad del canal entre bandejas."
+  k_auto: >-
+    C_obstrucción estimado automáticamente: **{k:.2f}**
+    (β = espesor/separación = {beta:.2f}; rugosidad del lecho d_p = {dp:.1f} mm)
+tunel:
+  titulo: 🏭 Topología del túnel (semicontinuo)
+  zonas_carros:
+    label: Zonas del túnel (= carros)
+    help: >-
+      Cada zona del túnel aloja exactamente un carro: el
+      número de zonas queda definido por el número de
+      carros de la sección 'Carros y bandejas'.
+  n_zonas:
+    label: Número de columnas (zonas en serie)
+    help: >-
+      Columnas de carros en serie a lo largo del túnel. El aire
+      circula a contracorriente: entra caliente por la columna
+      seca (zona N) y sale húmedo por la fresca (zona 1).
+  cadencia:
+    label: Cadencia de avance [h]
+    help: >-
+      Cada cuántas horas avanza una columna una posición. La
+      columna seca se descarga y entra una fresca. La sequedad de
+      salida es emergente (no se fuerza X_objetivo).
+  resumen: >-
+    ⏱️ Residencia total de un carro: **{res:.1f} h** (≈ {dias:.1f} días)  |
+    Carga por columna: **{carga:.1f} kg**  |
+    Un carro descargado cada **{cadencia:.1f} h**.
+flujo:
+  titulo: Flujo de aire
+  hint_colector: "El colector entrega {q:.1f} L/s → ~{kg:.3f} kg/s (a ρ≈{rho} kg/m³)."
+  caudal:
+    label: Caudal másico [kg/s]
+    help_default: Caudal de aire seco que circula por la cámara.
+  direccion:
+    label: Dirección del flujo
+    horizontal: HORIZONTAL
+    vertical_ascendente: VERTICAL_ASCENDENTE
+  usar_hr:
+    label: Especificar HR de entrada
+    help: Si no se especifica, el cálculo usa el fallback escalar del catálogo.
+  hr_entrada: HR del aire en entrada a la cámara [%]
+  velocidad: "Velocidad superficial estimada: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
+borde:
+  titulo: Aire de entrada a la cámara (condición de borde)
+  no_aplica: >-
+    Modo **Día real** activo: la temperatura y la humedad del aire de
+    entrada salen del clima/colector, y los coeficientes de transporte se
+    recalculan en el tiempo. Estos valores no se configuran en este modo.
+  caption: >-
+    Estos valores describen el aire que **entra** a la cámara, no la
+    temperatura/HR **dentro** de ella (que el motor calcula y varían en el
+    tiempo). Son la condición de borde de los modos **Constantes** y
+    **Sintético**.
+  hint_t_caja: >-
+    Tipología CAJA: el aire entrante es el ambiente (sin colector).
+    Configurar T ≈ T_amb representativa del emplazamiento.
+  hint_t_otro: >-
+    Temperatura del aire que entra a la cámara. Típicamente ≈ T_salida
+    del colector. La T dentro de la cámara es una salida dinámica del motor.
+  t_op: Temperatura del aire de entrada [°C]
+  hr_op:
+    label: HR del aire de entrada [%]
+    help: >-
+      Humedad relativa del aire que entra a la cámara; fija su humedad
+      absoluta ω de entrada. La HR dentro de la cámara es dinámica (salida
+      del motor termodinámico). En modo Día real no se usa: ω de entrada
+      sale del clima.
+forzantes:
+  titulo: Forzantes del aire y horizonte de simulación
+  ventana_info: >-
+    🗓️ **Ventana de producción**: el horizonte es el lapso definido en
+    P1 ({vi} → {vf}, {ndias} días) con clima real horario (multidía). {borde}
+  ventana_borde_caja: T_entrada = T_amb(t) (la cámara actúa como colector).
+  ventana_borde_otro: Forzantes = colector hora a hora (día y noche) + clima NASA POWER.
+  ventana_sin_clima: >-
+    ⚠️ La ventana de producción necesita clima real cargado en
+    **P2 · Emplazamiento**.
+  real_caja: Día real (clima ambiente)
+  real_otro: Día real (clima + colector)
+  op_constantes: Constantes (rápido)
+  op_sintetico: Día sintético (senoidal)
+  help_real_caja: >-
+    **Día real:** serie horaria de T_amb, ω, viento e I_g del
+    clima NASA POWER de P2 para el día seleccionado en P1.
+    T_entrada al lecho = T_amb (la cámara actúa como colector).
+  help_real_otro: >-
+    **Día real:** serie horaria del colector calculada en P3 +
+    clima NASA POWER de P2.
+  radio:
+    label: Forzantes del aire de entrada
+    help: >-
+      **Constantes:** T_ent, ω y T_amb fijos al valor de diseño.
+      Equivale a una corrida puntual.
+
+      **Día sintético:** curva senoidal día/noche (pico al mediodía,
+      ±15 K en T_sal_col, ±5 K en T_amb). Captura ciclo diurno.
+
+      {real}
+  real_no_disp: "⚠️ Día real no disponible: {motivo} Cae a 'Día sintético'."
+  hz:
+    label: Horizonte de secado
+    un_dia: 1 día
+    multidia: Multi-día
+    help: |
+      1 día: 24 h de simulación. Multi-día: 24 h × N (1–21).
+
+      Constantes: define el `t_max_s` de la corrida.
+
+      Sintético/Real: define cuántos días tipo se replican.
+  n_dias: Número de días
+  composicion:
+    label: Composición del horizonte
+    repetir: Repetir día típico
+    consecutivos: Días reales consecutivos
+    help: >-
+      Repetir día típico: el día de diseño se repite N veces
+      (forzante periódico).
+
+      Días reales consecutivos: N días calendario del clima NASA
+      a partir del día de diseño (variabilidad real día a día).
+      Si el rango cruza el 31-dic se recorta y se avisa.
+  reales_caja: >-
+    📅 Forzantes reales (CAJA): T_entrada(t) = T_amb(t) y
+    ω(t), v_viento(t) e I_g(t) del clima NASA POWER de P2
+    para el día de análisis seleccionado en P1.
+  reales_otro: >-
+    📅 Forzantes reales: T_sal_col(t) del cálculo P3,
+    ω_amb(t), T_amb(t), v_viento(t) e I_g(t) del clima NASA POWER de P2.
+  i_g_max:
+    label: I_g pico al mediodía [W/m²]
+    help: >-
+      Pico de irradiancia global horizontal sobre el techo.
+      Típico día claro: 800–1000 W/m². Curva diaria: semicampana
+      sinusoidal positiva (sol entre 6 h y 18 h).
+  t_amb_repr: >-
+    📍 T ambiente representativa: **{t:.1f} °C** ({origen}). Se usa para
+    pérdidas a paredes y como T inicial del producto si no se define
+    explícitamente.
+  t_prod_check: Definir T inicial del producto explícitamente (refrigerado, precalentado, etc.)
+  t_prod:
+    label: T inicial del producto [°C]
+    help: "Rango razonable: −10 °C (refrigerado) a +70 °C (precalentado)."
+  sin_gab: >-
+    ⚠️ El producto seleccionado **no tiene parámetros GAB calibrados**.
+    El motor termodinámico usará un fallback no-físico (rampa lineal
+    `a_w = X / X_inicial`) que sobrestima el secado en X bajo. Para
+    resultados confiables, cargar parámetros GAB en el catálogo o
+    elegir otro producto.
+t_amb_origen:
+  media_anual: "media anual NASA POWER = {t:.1f} °C"
+  fallback: "fallback 25 °C (sin clima cargado)"
+anual:
+  sin_clima: ℹ️ **Operación anual** disponible solo con clima NASA POWER cargado en P2.
+  sin_colector: >-
+    ⚠️ La operación anual de cámara requiere un colector configurado
+    en P3 (modelo lineal de prediseño).
+  titulo: "### 📅 Operación anual de cámara (cascada A + B)"
+  caption: >-
+    Corre el motor termodinámico sobre el día típico de cada mes, calcula
+    las 4 eficiencias de Augustus Leon (RSER 2002) y escala a operación
+    mensual con la cantidad de batches configurada. El detalle por mes
+    se muestra en P7.
+  batches:
+    label: Batches del producto por mes
+    help: >-
+      Cantidad de batches completos del producto que se asume
+      operar por mes. 10 batches/mes ≈ 1 batch cada 3 días.
+  dias_batch:
+    label: Días/batch (aprox.)
+    help: 30 días/mes ÷ batches/mes
+  calcular:
+    label: 📅 Calcular operación anual
+    help: >-
+      Construye la cámara con los valores actuales de los widgets,
+      fija modo_calculo=termodinamico y corre 12 simulaciones (~30 s).
+  error_config: "❌ Error de configuración: {exc}"
+  error: "❌ {exc}"
+  error_calculo: "❌ Error en cálculo anual: {exc}"
+  spinner: Corriendo motor termodinámico mes a mes...
+  exito: ✅ Operación anual calculada. Ver detalle mensual en P7.
+  resumen: "**Resumen anual**"
+  kg_secados:
+    label: kg secados/año
+    help: Suma de kg de producto fresco secados en los 12 meses.
+  eta_total:
+    label: η_total media
+    help: Eficiencia global del sistema ponderada por kg/mes.
+  t_secado:
+    label: t_secado promedio
+    help: Promedio sobre meses que convergieron al X_objetivo.
+  e_solar:
+    label: Energía solar anual
+    help: Sobre el plano del colector durante batches operativos.
+error_config: "❌ Error de configuración: {exc}"
+advertencias_titulo: Advertencias de diseño
+sin_advertencias: ✅ Diseño sin advertencias.
+presion_usada: "Presión atmosférica usada: {origen}."
+horizonte_recortado: >-
+  ⚠️ El horizonte se recortó a {n} día(s): el día de diseño + {solicitado}
+  días cruza el fin del año climático ({anio}). Elegí un día de inicio más
+  temprano (P1) o menos días para el horizonte completo.
+spinner_integrando: Integrando motor termodinámico...
+error_calculo: "❌ Error en el cálculo: {exc}"
+advertencias_calculo: Advertencias del cálculo
+test_puntual:
+  titulo: "### Test puntual de un día (opcional)"
+  caption: >-
+    Permite correr un batch único con día sintético o real para
+    validar el motor o explorar transitorios de un día. **No**
+    alimenta los resultados anuales — esos salen del botón
+    'Calcular operación anual' de arriba.
+calcular:
+  label: ⚙️ Calcular cámara
+  help_bloqueo: Tipología CAJA requiere al menos una cara translúcida para poder calcular.
+resultados_td:
+  titulo: Resultados del motor termodinámico
+  t_secado: Tiempo de secado
+  no_alcanzado: no alcanzado
+  status: Status
+  agua_evaporada:
+    label: Agua evaporada
+    help: Integral de ṁ_w(t) sobre la simulación.
+  x_final:
+    label: X final
+    help: Humedad del producto al final de la integración.
+  t_max:
+    label: T_max producto
+    help: Máxima T_prod registrada en la trayectoria.
+  horas_anti_rehum:
+    label: Horas anti-rehumectación
+    help: Tiempo con política B activa (dX/dt clipeado a 0).
+  horas_hr:
+    label: Horas HR > 95 %
+    help: Tiempo con HR del aire en cámara > 95 % (riesgo saturación).
+  energia_rad:
+    label: Energía radiativa directa
+    help: >-
+      ∫ Q_rad(t) dt — aporte solar directo al producto a través
+      del techo translúcido. 0 en cámaras opacas.
+  no_convergio: >-
+    ⚠️ En {dias:.1f} día(s) no se alcanzó X_obj = {x_obj:.3f} kg/kg ms.
+    Humedad final: {x_fin:.3f} kg/kg ms. Aumentar el horizonte o mejorar
+    las condiciones.
+  curva_expander: ℹ️ Sobre la forma de la curva de ṁ_w (modelo difusivo)
+  curva_md: |
+    El motor termodinámico modela la evaporación como
+
+    $$\dot m_w = K_m \cdot A_{prod} \cdot (\omega_{sup} - \omega_{flujo})$$
+
+    con $\omega_{sup} = \omega_{sat}(T_{prod}) \cdot a_w(X_{prod})$.
+
+    **Período de calentamiento (warming-up):** al inicio el producto está más frío que el aire. ω_sat(T_prod) es chica (crece exponencialmente con T por Clausius-Clapeyron), así que ω_sup ≈ ω_ent y ṁ_w arranca cerca de cero. A medida que T_prod sube, ω_sup crece rápido y ṁ_w escala con él. Esto se ve como una **rampa inicial creciente**, no como el clásico "velocidad constante desde t=0" de los modelos empíricos (Lewis, Page).
+
+    **Período de velocidad decreciente:** aparece sólo cuando X cruza X_m (humedad de monocapa GAB). Recién ahí a_w empieza a caer y arrastra a ω_sup hacia abajo. Si tu X_objetivo > X_m, terminás el secado antes de entrar a esta zona y nunca ves la caída.
+
+    **Pico al final de la corrida:** si el evento X_obj se dispara cerca del mediodía solar, T_prod (y por ende ṁ_w) está en su máximo justo cuando la integración se corta. El último punto guardado coincide con el pico — no es un artefacto de graficación.
+
+    Los modelos empíricos de capa fina (Lewis/Page/etc.) **absorben el warming-up dentro del parámetro k**, por eso muestran MR cayendo desde 1 desde t=0. El motor difusivo modela el balance de energía explícitamente — es más realista pero la forma de la curva difiere.
+resultados_cf:
+  titulo: Resultados del prediseño
+  t_secado:
+    label: Tiempo de secado
+    help: Tiempo estimado para reducir X₀ a X_obj.
+  x_eq:
+    label: X_eq
+    help: "Humedad de equilibrio ({fuente})."
+  agua_extraida:
+    label: Agua extraída
+    help: Masa de agua que debe evaporarse.
+  mr_obj:
+    label: MR objetivo
+    help: Razón de humedad al final del secado.
+resumen:
+  titulo: Resumen de la configuración
+  producto: "**Producto:** {v}"
+  masa: "**Masa:** {v:.1f} kg"
+  x_ini: "**X₀:** {v:.2f} kg/kg ms"
+  x_obj: "**X_obj:** {v:.3f} kg/kg ms"
+  modelo_cf: "**Modelo capa fina (catálogo):** {v}"
+  motor: "**Motor numérico:** {v}"
+  t_op: "**T_operación:** {v} °C"
+  hr_op: "**HR_operación:** {v} %"
+  camara: "**Cámara:** {largo}×{ancho}×{alto} m"
+  bandejas: "**Bandejas:** {n} × {area:.2f} m²"
+  espesor_capa: "**Espesor capa:** {v:.1f} cm"
+  caudal: "**Caudal:** {v:.4f} kg/s"
+  direccion: "**Dirección:** {v}"
+  t_amb: "**T_amb (cálculo):** {v:.1f} °C"
+guardar:
+  txt: Guardar configuración de la cámara (.txt)
+  json: Guardar configuración de la cámara (.json)
+graficas:
+  curva_x: X(t)
+  x_eq: "X_eq={v:.3f}"
+  x_obj: "X_obj={v:.3f}"
+  x_0: "X₀={v:.3f}"
+  t_marca: "t={v:.1f}h"
+  eje_tiempo: Tiempo [h]
+  eje_x: Humedad X [kg agua / kg ms]
+  titulo_curva: "Curva de secado — {prod} · modelo {modelo}"
+  panel_x: Humedad del producto X(t)
+  panel_temps: "Temperaturas: producto, aire y paredes"
+  panel_hr: HR del aire en cámara
+  panel_evap: Tasa de evaporación
+  t_producto: T_producto
+  t_aire: T_aire (flujo)
+  t_pared_int: T_pared interna
+  t_pared_ext: T_pared externa
+  hr_flujo: HR_flujo [%]
+  m_dot: ṁ_w [g/h]
+  eje_x_ms: X [kg/kg ms]
+  eje_t: T [°C]
+  eje_hr: HR [%]
+  eje_m_dot: ṁ_w [g/h]
+  titulo_td: "Motor termodinámico — {prod}"

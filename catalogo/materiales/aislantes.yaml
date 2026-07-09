@@ -3,6 +3,8 @@
 
 lana_vidrio_media:
   descripcion: "Lana de vidrio densidad media (rollos de construcción)"
+  descripcion_en: "Medium-density glass wool (construction rolls)"
+  descripcion_pt: "Lã de vidro de densidade média (rolos de construção)"
   conductividad_termica: 0.040     # W/m·K
   densidad: 20                     # kg/m³
   calor_especifico: 670
@@ -12,6 +14,8 @@ lana_vidrio_media:
 
 lana_vidrio_alta:
   descripcion: "Lana de vidrio alta densidad (paneles rígidos)"
+  descripcion_en: "High-density glass wool (rigid panels)"
+  descripcion_pt: "Lã de vidro de alta densidade (painéis rígidos)"
   conductividad_termica: 0.034
   densidad: 60
   calor_especifico: 670
@@ -21,6 +25,8 @@ lana_vidrio_alta:
 
 eps:
   descripcion: "Poliestireno expandido (telgopor)"
+  descripcion_en: "Expanded polystyrene (EPS/styrofoam)"
+  descripcion_pt: "Poliestireno expandido (isopor)"
   conductividad_termica: 0.038
   densidad: 20
   calor_especifico: 1300
@@ -32,6 +38,8 @@ eps:
 
 poliuretano_expandido:
   descripcion: "Espuma rígida de poliuretano (PUR/PIR)"
+  descripcion_en: "Rigid polyurethane foam (PUR/PIR)"
+  descripcion_pt: "Espuma rígida de poliuretano (PUR/PIR)"
   conductividad_termica: 0.025
   densidad: 35
   calor_especifico: 1500
@@ -41,6 +49,8 @@ poliuretano_expandido:
 
 lana_mineral_roca:
   descripcion: "Lana mineral de roca (basalto)"
+  descripcion_en: "Rock mineral wool (basalt)"
+  descripcion_pt: "Lã mineral de rocha (basalto)"
   conductividad_termica: 0.038
   densidad: 80
   calor_especifico: 840

@@ -24,6 +24,7 @@ import plotly.graph_objects as go
 
 from calculos.balance_global import presion_representativa_proyecto
 from calculos.carta_psicrometrica import curvas_fondo, estados_proceso, isentalpica
+from ui.componentes.idiomas import t
 
 # Colores del proceso (coherentes con la paleta del proyecto).
 _COLOR_SAT = "#1f77b4"
@@ -79,7 +80,7 @@ def fig_carta_psicrometrica(
             x=T_C,
             y=fondo["omega_sat"] * 1000.0,
             mode="lines",
-            name="Saturación (HR 100 %)",
+            name=t("graficas.carta.saturacion"),
             line=dict(color=_COLOR_SAT, width=2),
             hoverinfo="skip",
         )
@@ -93,7 +94,7 @@ def fig_carta_psicrometrica(
                 x=T_C,
                 y=y,
                 mode="lines",
-                name=f"HR {int(hr * 100)} %",
+                name=t("graficas.carta.hr", hr=int(hr * 100)),
                 line=dict(color=_COLOR_HR, width=1),
                 showlegend=False,
                 hoverinfo="skip",
@@ -121,7 +122,7 @@ def fig_carta_psicrometrica(
             x=T_iso,
             y=w_iso * 1000.0,
             mode="lines",
-            name="Isentálpica (referencia adiabática)",
+            name=t("graficas.carta.isentalpica"),
             line=dict(color=_COLOR_ISENT, width=1.4, dash="dot"),
             hoverinfo="skip",
         )
@@ -139,7 +140,7 @@ def fig_carta_psicrometrica(
             x=xs,
             y=ys,
             mode="lines+markers+text",
-            name="Proceso del secador",
+            name=t("graficas.carta.proceso"),
             line=dict(color=_COLOR_PROC, width=2.5),
             marker=dict(size=10, color=_COLOR_PROC, line=dict(color="white", width=1)),
             text=[e.nombre for e in estados],
@@ -152,16 +153,14 @@ def fig_carta_psicrometrica(
 
     # --- Anotaciones de contexto ---
     nota_camara = (
-        "cámara directa (no adiabática: el techo translúcido aporta calor)"
-        if camara_directa
-        else "cámara indirecta (≈ adiabática: el punto de salida cae sobre la isentálpica)"
+        t("graficas.carta.nota_directa") if camara_directa else t("graficas.carta.nota_indirecta")
     )
     fig.add_annotation(
         xref="paper",
         yref="paper",
         x=0.01,
         y=0.99,
-        text=(f"P = {P_Pa / 1000:.1f} kPa (altitud del emplazamiento) · " f"{nota_camara}"),
+        text=t("graficas.carta.nota", p=P_Pa / 1000, camara=nota_camara),
         showarrow=False,
         align="left",
         font=dict(size=10, color="#555"),
@@ -170,9 +169,9 @@ def fig_carta_psicrometrica(
     )
 
     fig.update_layout(
-        title_text="Carta psicrométrica del proceso de secado",
-        xaxis_title="Temperatura de bulbo seco [°C]",
-        yaxis_title="Humedad absoluta ω [g/kg aire seco]",
+        title_text=t("graficas.carta.titulo"),
+        xaxis_title=t("graficas.carta.eje_t"),
+        yaxis_title=t("graficas.carta.eje_omega"),
         height=520,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )

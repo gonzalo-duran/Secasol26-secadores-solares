@@ -1,0 +1,237 @@
+# Warning templates by code (i18n plan, F5). Placeholders are keys of the
+# source `adv.contexto`; kept identical to the ES set for parity.
+
+# --- Collector (core/colector.py) ---
+GEO_LARGO_PEQUENO:
+  mensaje: >-
+    Collector length ({largo_m:.2f} m) below the recommended minimum ({largo_min_m} m).
+    It may not be enough to raise the air temperature.
+  sugerencia: Increase the length or check whether the typology should be BOX.
+GEO_LARGO_GRANDE:
+  mensaje: >-
+    Collector length ({largo_m:.1f} m) exceeds {largo_max_m} m. This may lead to
+    structural or maintenance issues.
+  sugerencia: Consider splitting into more units in series or reviewing the structural design.
+GEO_ESPACIADO_PEQUENO:
+  mensaje: >-
+    Cover-to-plate spacing ({espaciado_mm:.1f} mm) below {umbral_mm:.0f} mm. Expect high
+    pressure drop in the channel.
+  sugerencia: Increase the spacing or lower the design velocity to compensate.
+GEO_ESPACIADO_GRANDE:
+  mensaje: >-
+    Cover-to-plate spacing ({espaciado_mm:.0f} mm) above {umbral_mm:.0f} mm. The
+    plate-to-air convective coefficient will be low.
+  sugerencia: Reduce the spacing to improve convective heat transfer.
+GEO_ESPACIADO_INF_PEQUENO:
+  mensaje: >-
+    Lower absorber–back spacing ({espaciado_inf_mm:.1f} mm) below {umbral_mm:.0f} mm.
+    Expect high pressure drop in the lower channel.
+  sugerencia: Increase the lower spacing or lower the design velocity.
+GEO_ESPACIADO_INF_GRANDE:
+  mensaje: >-
+    Lower absorber–back spacing ({espaciado_inf_mm:.0f} mm) above {umbral_mm:.0f} mm.
+    The convective coefficient will be low.
+  sugerencia: Reduce the lower spacing to improve convective heat transfer.
+GEO_VELOCIDAD_BAJA:
+  mensaje: >-
+    Design velocity ({velocidad_ms:.2f} m/s) below {v_min_ms} m/s. The regime may be
+    laminar with poor convective coefficients.
+  sugerencia: >-
+    Raise the design velocity above {v_min_ms} m/s for good performance.
+GEO_VELOCIDAD_ALTA:
+  mensaje: >-
+    Design velocity ({velocidad_ms:.2f} m/s) above {v_max_ms} m/s. High pressure drop →
+    oversized fan and noise.
+  sugerencia: Reduce the velocity or enlarge the channel cross-section (width × spacing).
+MAT_CUBIERTA_T_MAX_BAJA:
+  mensaje: >-
+    The cover's maximum service temperature may be exceeded under stagnation conditions
+    (no air flow).
+  sugerencia: Check that the material withstands the collector's stagnation temperature.
+MAT_AISLANTE_T_MAX_BAJA:
+  mensaje: >-
+    The maximum service temperature of insulation '{material}' is too low. It may degrade
+    or deform in contact with the hot plate.
+  sugerencia: >-
+    Use rock mineral wool or high-density glass wool instead of EPS or PUR.
+COHE_AISLANTE_T_MAX_INSUFICIENTE:
+  mensaje: >-
+    The insulation T_max is less than 75% of the plate T_max (ratio {ratio:.2f}). The
+    insulation cannot handle the temperatures the plate can generate.
+  sugerencia: >-
+    Select an insulation with a higher service T_max, such as rock mineral wool.
+GEO_ESP_CUB_CUB_PEQUENO:
+  mensaje: >-
+    Gap between covers ({espaciado_mm:.1f} mm) below {minimo_mm:.0f} mm. A very narrow
+    cavity: natural convection is negligible but air conduction dominates, reducing the
+    double-cover effect.
+  sugerencia: Increase the gap to 20–40 mm to minimize top losses.
+GEO_ESP_CUB_CUB_GRANDE:
+  mensaje: >-
+    Gap between covers ({espaciado_mm:.0f} mm) above {maximo_mm:.0f} mm. Natural convection
+    in the cavity may set in and reduce the double-cover benefit.
+  sugerencia: >-
+    Reduce the gap to 20–40 mm to keep the cavity in a mostly conductive regime.
+MAT_PLACA_NO_SELECTIVA_CON_DOBLE_CUBIERTA:
+  mensaje: >-
+    Double cover with a non-selective plate (ε_ir={emisividad_placa:.2f}). The double
+    cover reduces convective losses but the plate's high emissivity limits the gain. The
+    added cost may not be justified.
+  sugerencia: >-
+    Consider a selective plate (TiNOX or black chrome) to leverage the double cover.
+BANCO_SERIE_ALTO:
+  mensaje: >-
+    n_series={n_serie} collectors in series. With more than {n_serie_max_recomendado} in
+    series the outlet temperature may be very high and stress the downstream materials.
+  sugerencia: >-
+    Check that materials and joints withstand the expected outlet temperature.
+
+# --- Chamber (core/camara.py) ---
+GEO_RELACION_ASPECTO_EXTREMA:
+  mensaje: >-
+    Length/width ratio = {ratio_largo_ancho:.1f}, outside the recommended range. A very
+    elongated or square chamber may produce non-uniform flow.
+  sugerencia: Check air-flow uniformity over the trays.
+GEO_ALTO_INUSUAL:
+  mensaje: >-
+    Chamber height {alto_m:.2f} m outside the typical range for solar dryers.
+  sugerencia: Check the vertical sizing of the dryer.
+CAM_PENDIENTE_TECHO_EXTREMA:
+  mensaje: >-
+    Roof slope {pendiente_techo_deg:.1f}° above 45°. Unusual in box dryers; check
+    constructibility and the resulting lower height.
+  sugerencia: Review whether the slope is constructively reasonable.
+CAM_VIDRIADO_SIN_CARAS:
+  mensaje: >-
+    Translucent cover '{cubierta_id}' defined but no face is marked as translucent: the
+    chamber remains thermally opaque (no radiative gain).
+  sugerencia: Activate at least one face (roof, front, back or side).
+CAM_A_RAD_MAYOR_QUE_TECHO:
+  mensaje: >-
+    A_rad = {A_rad_m2:.2f} m² greater than the actual roof area ({A_techo_geom_m2:.2f} m²).
+    The physical bound on radiative gain (Q_rad ≤ intercepted power) is no longer guaranteed.
+  sugerencia: Check that A_rad does not exceed the geometric roof area.
+CAM_CARA_ORIENTACION_DESFAVORABLE:
+  mensaje: >-
+    Translucent face '{cara}' oriented toward the pole (azimuth {acimut_deg:.0f}°). It will
+    receive little direct radiation for most of the year.
+  sugerencia: Reorient the chamber or deactivate that face.
+CONS_CUBIERTA_TRANSLUCIDA_FOTOSENSIBLE:
+  mensaje: >-
+    Photosensitive product '{producto_id}' with translucent cover '{cubierta_id}'. UV
+    exposure may degrade pigments or essential oils.
+  sugerencia: Consider an opaque cover or a UV filter.
+CONS_SIN_AISLACION_LATERAL:
+  mensaje: >-
+    Side walls with U = {U_muros:.1f} W/(m²·K), above the recommended threshold. Low
+    thermal resistance.
+  sugerencia: Add insulation to improve the dryer's thermal efficiency.
+BAND_ESPESOR_CAPA_GRANDE:
+  mensaje: >-
+    Bed thickness {espesor_m:.3f} m above the recommended limit ({limite_m:.2f} m). In thick
+    beds the internal resistance to moisture diffusion grows and actual drying may be slower
+    than estimated.
+  sugerencia: Reduce the bed thickness to speed up and even out drying.
+BAND_N_BANDEJAS_ELEVADO:
+  mensaje: "{n_bandejas} trays. Check flow uniformity between trays."
+  sugerencia: With many trays in series, the last one receives more humid air.
+BAND_MALLA_SIN_ESPECIFICAR:
+  mensaje: Tray mesh type not specified. It affects the pressure drop.
+  sugerencia: Specify the mesh type to estimate the fan pressure drop.
+FLUJO_VELOCIDAD_SUPERFICIAL_BAJA:
+  mensaje: >-
+    Superficial air velocity {v_sup_m_s:.2f} m/s below the recommended minimum. The external
+    convective coefficient may be low and the drying rate may be overestimated.
+  sugerencia: >-
+    Increase the air flow to exceed the recommended minimum superficial velocity.
+FLUJO_VELOCIDAD_SUPERFICIAL_ALTA:
+  mensaje: >-
+    Superficial air velocity {v_sup_m_s:.2f} m/s above the recommended maximum. Check the
+    fan's compatibility with the pressure drop.
+  sugerencia: Reduce the flow or enlarge the chamber cross-section.
+FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA:
+  mensaje: >-
+    Inlet air RH not specified. The X_eq calculation will use the catalog scalar fallback.
+  sugerencia: Specify the inlet RH for greater accuracy in the X_eq calculation.
+PROD_ISOTERMA_FALLBACK:
+  mensaje: >-
+    No calibrated GAB isotherm for the product. X_eq = {X_eq_fallback:.3f} kg/kg db will be
+    used (scalar fallback). The real equilibrium moisture depends on the air RH.
+  sugerencia: Load GAB parameters in the catalog for greater accuracy.
+PROD_HUMEDAD_OBJETIVO_INALCANZABLE:
+  mensaje: >-
+    Target moisture {X_objetivo:.3f} kg/kg db below the estimated X_eq
+    ({X_eq_estimado:.3f} kg/kg db). The dryer may not reach that target under the operating
+    conditions.
+  sugerencia: Increase X_target or improve the dryer's operating conditions.
+INIO_PRODUCTO_CARNE_SIN_ISOTERMA:
+  mensaje: >-
+    SAFETY ALERT: '{producto_id}' (MEAT) without a calibrated isotherm. It is not possible
+    to verify that a_w < 0.85 in the dried product.
+  sugerencia: >-
+    Load a meat isotherm with the salt level equivalent to the product before using the
+    results for decision-making.
+
+# --- Auxiliary (core/auxiliar.py) ---
+AUX_T_MAX_ALTA_PARA_PRODUCTO:
+  mensaje: >-
+    Maximum auxiliary outlet temperature {T_max_C:.1f} °C may damage heat-sensitive products
+    (carotenoids, essential oils, FOS). Check against the product's recommended T_max.
+  sugerencia: Reduce T_max or check compatibility with the product to be dried.
+AUX_BIOMASA_EFICIENCIA_BAJA:
+  mensaje: >-
+    Burner efficiency {eficiencia:.0%} very low. Simple rocket-type burners reach 60–75%.
+  sugerencia: >-
+    Improve the burner design: preheating of combustion air, insulation of the burner body.
+AUX_RESISTENCIA_SIN_TENSION:
+  mensaje: >-
+    Supply voltage not specified. Maximum current for electrical sizing will not be computed.
+  sugerencia: Specify tension_V (220 or 380 V) to compute the rated current.
+AUX_RESPALDO_SIN_DISPONIBILIDAD_NOCTURNA:
+  mensaje: >-
+    Auxiliary in INDEPENDENT_BACKUP mode marked as not available at night. Backup mode is
+    usually used to extend drying outside solar hours.
+  sugerencia: >-
+    Check whether this is intentional. If the auxiliary can operate at night, enable
+    disponible_nocturno=True.
+
+# --- Fan/motor (core/motor.py) ---
+MOT_DUCTOS_ESTIMADOS:
+  mensaje: >-
+    Duct ΔP not specified. Estimated as 20% of (ΔP_collector + ΔP_chamber)
+    = {dP_ductos_estimado_Pa:.1f} Pa.
+  sugerencia: >-
+    Specify delta_P_ductos_Pa for a more accurate result, or accept the 20% estimate.
+MOT_POTENCIA_BAJA:
+  mensaje: >-
+    Power to install {potencia_W:.0f} W very low. Natural convection (solar chimney,
+    optionally with a wind extractor) could be enough, avoiding the cost of electrical
+    installation.
+  sugerencia: Evaluate natural convection with a solar chimney (proyecto.motor = None).
+MOT_POTENCIA_ALTA:
+  mensaje: >-
+    Power to install {potencia_W:.0f} W high for a solar dryer. Review the pressure drops —
+    the collector or chamber geometry may be suboptimal.
+  sugerencia: >-
+    Reduce the design velocity, enlarge the channel cross-section, or split the bank into
+    more parallel branches.
+MOT_SIN_TENSION:
+  mensaje: Supply voltage not specified. Rated current will not be computed.
+  sugerencia: Specify tension_V (220 or 380 V) to compute current.
+
+# --- Chimney (core/chimenea.py) ---
+CHIM_DIAMETRO_PEQUENO:
+  mensaje: >-
+    Chimney diameter {diametro_m:.2f} m below the recommended minimum ({minimo_m:.2f} m).
+    It may be insufficient for the required draft.
+  sugerencia: Use a diameter ≥ {minimo_m:.2f} m to ensure effective draft.
+CHIM_ALTURA_PEQUENA:
+  mensaje: >-
+    Chimney height {altura_m:.1f} m below {minima_m:.1f} m. Natural draft may be insufficient
+    to move the air.
+  sugerencia: Raise the height to ≥ {minima_m:.1f} m to ensure natural convection.
+CHIM_EXTRACTOR_DIAMETRO_PEQUENO:
+  mensaje: >-
+    Extractor diameter {d_extractor_m:.2f} m below the chimney diameter {d_chimenea_m:.2f} m.
+    It creates a throttling at the top and reduces the flow.
+  sugerencia: Use an extractor with a diameter ≥ the chimney's to avoid throttling the flow.

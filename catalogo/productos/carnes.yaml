@@ -20,6 +20,8 @@
 # =============================================================================
 charqui_vacuno:
   descripcion: "Charqui vacuno (carne bovina deshidratada y salada). Producto tradicional NOA, especialmente Puna jujeña y salteña. La sal (NaCl) modifica significativamente la isoterma de sorción respecto de carne sin sal — los parámetros de isoterma deben corresponderse con el nivel de sal usado. Humedad inicial depende del corte y pre-salado."
+  descripcion_en: "Beef charqui (dehydrated, salted beef). Traditional product of Argentina's Northwest (NOA), especially the Jujuy and Salta Puna. Salt (NaCl) significantly shifts the sorption isotherm relative to unsalted meat — the isotherm parameters must match the salt level used. Initial moisture depends on the cut and pre-salting."
+  descripcion_pt: "Charque bovino (carne bovina desidratada e salgada). Produto tradicional do Noroeste argentino (NOA), especialmente a Puna de Jujuy e Salta. O sal (NaCl) modifica significativamente a isoterma de sorção em relação à carne sem sal — os parâmetros da isoterma devem corresponder ao nível de sal usado. A umidade inicial depende do corte e da pré-salga."
   categoria: CARNE
   tipo_secado: CAPA_FINA
   fotosensible: false

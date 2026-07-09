@@ -1,0 +1,238 @@
+# Modelos de advertências por código (plano i18n, F5). Os placeholders são
+# chaves de `adv.contexto`; mantidos idênticos ao conjunto ES para paridade.
+
+# --- Coletor (core/colector.py) ---
+GEO_LARGO_PEQUENO:
+  mensaje: >-
+    Comprimento do coletor ({largo_m:.2f} m) abaixo do mínimo recomendado ({largo_min_m} m).
+    Pode não ser suficiente para elevar a temperatura do ar.
+  sugerencia: Aumente o comprimento ou verifique se a tipologia deve ser CAIXA.
+GEO_LARGO_GRANDE:
+  mensaje: >-
+    Comprimento do coletor ({largo_m:.1f} m) ultrapassa {largo_max_m} m. Pode implicar
+    problemas estruturais ou de manutenção.
+  sugerencia: Considere dividir em mais unidades em série ou revisar o projeto estrutural.
+GEO_ESPACIADO_PEQUENO:
+  mensaje: >-
+    Espaçamento cobertura-placa ({espaciado_mm:.1f} mm) abaixo de {umbral_mm:.0f} mm.
+    Esperar alta perda de carga no canal.
+  sugerencia: Aumente o espaçamento ou reduza a velocidade de projeto para compensar.
+GEO_ESPACIADO_GRANDE:
+  mensaje: >-
+    Espaçamento cobertura-placa ({espaciado_mm:.0f} mm) acima de {umbral_mm:.0f} mm. O
+    coeficiente convectivo placa-ar será baixo.
+  sugerencia: Reduza o espaçamento para melhorar a transferência de calor convectiva.
+GEO_ESPACIADO_INF_PEQUENO:
+  mensaje: >-
+    Espaçamento inferior absorvedor–fundo ({espaciado_inf_mm:.1f} mm) abaixo de
+    {umbral_mm:.0f} mm. Esperar alta perda de carga no canal inferior.
+  sugerencia: Aumente o espaçamento inferior ou reduza a velocidade de projeto.
+GEO_ESPACIADO_INF_GRANDE:
+  mensaje: >-
+    Espaçamento inferior absorvedor–fundo ({espaciado_inf_mm:.0f} mm) acima de
+    {umbral_mm:.0f} mm. O coeficiente convectivo será baixo.
+  sugerencia: Reduza o espaçamento inferior para melhorar a transferência de calor convectiva.
+GEO_VELOCIDAD_BAJA:
+  mensaje: >-
+    Velocidade de projeto ({velocidad_ms:.2f} m/s) abaixo de {v_min_ms} m/s. O regime pode
+    ser laminar com coeficientes de convecção pobres.
+  sugerencia: >-
+    Aumente a velocidade de projeto para superar {v_min_ms} m/s e obter bom desempenho.
+GEO_VELOCIDAD_ALTA:
+  mensaje: >-
+    Velocidade de projeto ({velocidad_ms:.2f} m/s) acima de {v_max_ms} m/s. Alta perda de
+    carga → motor superdimensionado e ruído.
+  sugerencia: Reduza a velocidade ou aumente a seção do canal (largura × espaçamento).
+MAT_CUBIERTA_T_MAX_BAJA:
+  mensaje: >-
+    A temperatura máxima de serviço da cobertura pode ser excedida em condições de
+    estagnação (sem fluxo de ar).
+  sugerencia: Verifique se o material suporta a temperatura de estagnação do coletor.
+MAT_AISLANTE_T_MAX_BAJA:
+  mensaje: >-
+    A temperatura máxima de serviço do isolante '{material}' é baixa demais. Pode degradar-se
+    ou deformar-se em contato com a placa quente.
+  sugerencia: >-
+    Use lã mineral de rocha ou lã de vidro de alta densidade em vez de EPS ou PUR.
+COHE_AISLANTE_T_MAX_INSUFICIENTE:
+  mensaje: >-
+    A T_max do isolante é menos de 75% da T_max da placa (razão {ratio:.2f}). O isolante não
+    consegue lidar com as temperaturas que a placa pode gerar.
+  sugerencia: >-
+    Selecione um isolante com T_max de serviço mais alta, como lã mineral de rocha.
+GEO_ESP_CUB_CUB_PEQUENO:
+  mensaje: >-
+    Separação entre coberturas ({espaciado_mm:.1f} mm) abaixo de {minimo_mm:.0f} mm.
+    Cavidade muito estreita: a convecção natural é desprezível mas a condução do ar domina,
+    reduzindo o efeito da cobertura dupla.
+  sugerencia: Aumente a separação para 20–40 mm para minimizar perdas superiores.
+GEO_ESP_CUB_CUB_GRANDE:
+  mensaje: >-
+    Separação entre coberturas ({espaciado_mm:.0f} mm) acima de {maximo_mm:.0f} mm. A
+    convecção natural na cavidade pode ativar-se e reduzir o benefício da cobertura dupla.
+  sugerencia: >-
+    Reduza a separação para 20–40 mm para manter a cavidade em regime principalmente condutivo.
+MAT_PLACA_NO_SELECTIVA_CON_DOBLE_CUBIERTA:
+  mensaje: >-
+    Cobertura dupla com placa não seletiva (ε_ir={emisividad_placa:.2f}). A cobertura dupla
+    reduz perdas por convecção mas a alta emissividade da placa limita o ganho. O custo
+    adicional pode não se justificar.
+  sugerencia: >-
+    Considere placa seletiva (TiNOX ou cromo negro) para aproveitar a cobertura dupla.
+BANCO_SERIE_ALTO:
+  mensaje: >-
+    n_série={n_serie} coletores em série. Com mais de {n_serie_max_recomendado} em série a
+    temperatura de saída pode ser muito alta e estressar os materiais a jusante.
+  sugerencia: >-
+    Verifique se os materiais e as juntas suportam a temperatura de saída esperada.
+
+# --- Câmara (core/camara.py) ---
+GEO_RELACION_ASPECTO_EXTREMA:
+  mensaje: >-
+    Razão comprimento/largura = {ratio_largo_ancho:.1f}, fora da faixa recomendada. Uma
+    câmara muito alongada ou quadrada pode gerar fluxo não uniforme.
+  sugerencia: Verifique a uniformidade do fluxo de ar sobre as bandejas.
+GEO_ALTO_INUSUAL:
+  mensaje: >-
+    Altura da câmara {alto_m:.2f} m fora da faixa típica para secadores solares.
+  sugerencia: Verifique o dimensionamento vertical do secador.
+CAM_PENDIENTE_TECHO_EXTREMA:
+  mensaje: >-
+    Inclinação do teto {pendiente_techo_deg:.1f}° acima de 45°. Pouco comum em secadores de
+    caixa; verifique a construtibilidade e a altura menor resultante.
+  sugerencia: Revise se a inclinação é construtivamente razoável.
+CAM_VIDRIADO_SIN_CARAS:
+  mensaje: >-
+    Cobertura translúcida '{cubierta_id}' definida mas nenhuma face está marcada como
+    translúcida: a câmara fica termicamente opaca (sem ganho radiativo).
+  sugerencia: Ative pelo menos uma face (teto, frente, traseira ou lateral).
+CAM_A_RAD_MAYOR_QUE_TECHO:
+  mensaje: >-
+    A_rad = {A_rad_m2:.2f} m² maior que a área real do teto ({A_techo_geom_m2:.2f} m²). O
+    limite físico do ganho radiativo (Q_rad ≤ potência interceptada) deixa de estar garantido.
+  sugerencia: Verifique que A_rad não exceda a área geométrica do teto.
+CAM_CARA_ORIENTACION_DESFAVORABLE:
+  mensaje: >-
+    Face '{cara}' translúcida orientada para o polo (azimute {acimut_deg:.0f}°). Receberá
+    pouca radiação direta na maior parte do ano.
+  sugerencia: Reoriente a câmara ou desative essa face.
+CONS_CUBIERTA_TRANSLUCIDA_FOTOSENSIBLE:
+  mensaje: >-
+    Produto fotossensível '{producto_id}' com cobertura translúcida '{cubierta_id}'. A
+    exposição à radiação UV pode degradar pigmentos ou óleos essenciais.
+  sugerencia: Considere cobertura opaca ou filtro UV.
+CONS_SIN_AISLACION_LATERAL:
+  mensaje: >-
+    Paredes laterais com U = {U_muros:.1f} W/(m²·K), acima do limite recomendado. Baixa
+    resistência térmica.
+  sugerencia: Adicione isolamento para melhorar a eficiência térmica do secador.
+BAND_ESPESOR_CAPA_GRANDE:
+  mensaje: >-
+    Espessura de camada {espesor_m:.3f} m acima do limite recomendado ({limite_m:.2f} m). Em
+    leitos espessos a resistência interna à difusão de umidade cresce e a secagem real pode
+    ser mais lenta que a estimada.
+  sugerencia: Reduza a espessura da camada para acelerar e uniformizar a secagem.
+BAND_N_BANDEJAS_ELEVADO:
+  mensaje: "{n_bandejas} bandejas. Verifique a uniformidade do fluxo entre bandejas."
+  sugerencia: Com muitas bandejas em série, a última recebe ar mais úmido.
+BAND_MALLA_SIN_ESPECIFICAR:
+  mensaje: Tipo de malha da bandeja não especificado. Afeta a perda de pressão.
+  sugerencia: Especifique o tipo de malha para estimar a perda de carga no motor.
+FLUJO_VELOCIDAD_SUPERFICIAL_BAJA:
+  mensaje: >-
+    Velocidade superficial do ar {v_sup_m_s:.2f} m/s abaixo do mínimo recomendado. O
+    coeficiente convectivo externo pode ser baixo e a taxa de secagem pode ser superestimada.
+  sugerencia: >-
+    Aumente o fluxo de ar para superar a velocidade superficial mínima recomendada.
+FLUJO_VELOCIDAD_SUPERFICIAL_ALTA:
+  mensaje: >-
+    Velocidade superficial do ar {v_sup_m_s:.2f} m/s acima do máximo recomendado. Verifique a
+    compatibilidade do motor com a perda de pressão.
+  sugerencia: Reduza o fluxo ou aumente a seção transversal da câmara.
+FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA:
+  mensaje: >-
+    UR de entrada do ar não especificada. O cálculo de X_eq usará o fallback escalar do catálogo.
+  sugerencia: Especifique a UR de entrada para maior precisão no cálculo de X_eq.
+PROD_ISOTERMA_FALLBACK:
+  mensaje: >-
+    Sem isoterma GAB calibrada para o produto. Será usado X_eq = {X_eq_fallback:.3f} kg/kg bs
+    (fallback escalar). A umidade de equilíbrio real depende da UR do ar.
+  sugerencia: Carregue parâmetros GAB no catálogo para maior precisão.
+PROD_HUMEDAD_OBJETIVO_INALCANZABLE:
+  mensaje: >-
+    Umidade alvo {X_objetivo:.3f} kg/kg bs abaixo do X_eq estimado ({X_eq_estimado:.3f} kg/kg bs).
+    O secador pode não alcançar esse alvo nas condições de operação.
+  sugerencia: Aumente X_alvo ou melhore as condições de operação do secador.
+INIO_PRODUCTO_CARNE_SIN_ISOTERMA:
+  mensaje: >-
+    ALERTA DE INOCUIDADE: '{producto_id}' (CARNE) sem isoterma calibrada. Não é possível
+    verificar que a_w < 0.85 no produto seco.
+  sugerencia: >-
+    Carregue a isoterma de carne com o nível de sal equivalente ao produto antes de usar os
+    resultados para tomada de decisões.
+
+# --- Auxiliar (core/auxiliar.py) ---
+AUX_T_MAX_ALTA_PARA_PRODUCTO:
+  mensaje: >-
+    Temperatura máxima de saída do auxiliar {T_max_C:.1f} °C pode danificar produtos sensíveis
+    ao calor (carotenoides, óleos essenciais, FOS). Verifique com a T_max recomendada do produto.
+  sugerencia: Reduza a T_max ou verifique a compatibilidade com o produto a secar.
+AUX_BIOMASA_EFICIENCIA_BAJA:
+  mensaje: >-
+    Eficiência do queimador {eficiencia:.0%} muito baixa. Queimadores simples tipo rocket
+    alcançam 60–75%.
+  sugerencia: >-
+    Melhore o projeto do queimador: pré-aquecimento do ar de combustão, isolamento do corpo
+    do queimador.
+AUX_RESISTENCIA_SIN_TENSION:
+  mensaje: >-
+    Tensão de alimentação não especificada. Não será calculada a corrente máxima para o
+    dimensionamento elétrico.
+  sugerencia: Especifique tension_V (220 ou 380 V) para calcular a corrente nominal.
+AUX_RESPALDO_SIN_DISPONIBILIDAD_NOCTURNA:
+  mensaje: >-
+    Auxiliar em modo RESPALDO_INDEPENDIENTE marcado como não disponível à noite. O modo de
+    reserva costuma ser usado para estender a secagem fora do horário solar.
+  sugerencia: >-
+    Verifique se é intencional. Se o auxiliar pode operar à noite, ative disponible_nocturno=True.
+
+# --- Motor/ventilador (core/motor.py) ---
+MOT_DUCTOS_ESTIMADOS:
+  mensaje: >-
+    ΔP de dutos não especificada. Estimada como 20% de (ΔP_coletor + ΔP_câmara)
+    = {dP_ductos_estimado_Pa:.1f} Pa.
+  sugerencia: >-
+    Especifique delta_P_ductos_Pa para um resultado mais preciso, ou aceite a estimativa de 20%.
+MOT_POTENCIA_BAJA:
+  mensaje: >-
+    Potência a instalar {potencia_W:.0f} W muito baixa. Convecção natural (chaminé solar,
+    eventualmente com extrator eólico) poderia ser suficiente, evitando o custo de instalação
+    elétrica.
+  sugerencia: Avalie convecção natural com chaminé solar (proyecto.motor = None).
+MOT_POTENCIA_ALTA:
+  mensaje: >-
+    Potência a instalar {potencia_W:.0f} W elevada para um secador solar. Revise as perdas de
+    carga — possivelmente a geometria do coletor ou da câmara está subótima.
+  sugerencia: >-
+    Reduza a velocidade de projeto, aumente a seção do canal ou divida o banco em mais ramos
+    paralelos.
+MOT_SIN_TENSION:
+  mensaje: Tensão de alimentação não especificada. Não será calculada a corrente nominal.
+  sugerencia: Especifique tension_V (220 ou 380 V) para calcular a corrente.
+
+# --- Chaminé (core/chimenea.py) ---
+CHIM_DIAMETRO_PEQUENO:
+  mensaje: >-
+    Diâmetro da chaminé {diametro_m:.2f} m abaixo do mínimo recomendado ({minimo_m:.2f} m).
+    Pode ser insuficiente para a tiragem necessária.
+  sugerencia: Use um diâmetro ≥ {minimo_m:.2f} m para garantir tiragem efetiva.
+CHIM_ALTURA_PEQUENA:
+  mensaje: >-
+    Altura da chaminé {altura_m:.1f} m abaixo de {minima_m:.1f} m. A tiragem natural pode ser
+    insuficiente para mover o ar.
+  sugerencia: Aumente a altura para ≥ {minima_m:.1f} m para assegurar convecção natural.
+CHIM_EXTRACTOR_DIAMETRO_PEQUENO:
+  mensaje: >-
+    Diâmetro do extrator {d_extractor_m:.2f} m abaixo do diâmetro da chaminé {d_chimenea_m:.2f} m.
+    Gera estrangulamento no topo e reduz o fluxo.
+  sugerencia: Use um extrator com diâmetro ≥ ao da chaminé para não estrangular o fluxo.

@@ -1,0 +1,367 @@
+header: Solar Air Collector
+caja_no_aplica: >-
+  The **Box** typology has no external solar collector:
+  the chamber acts as the collector. This section does not apply.
+cargar:
+  titulo: 📥 Load saved configuration (.json)
+  uploader: Upload a previously saved collector .json file
+  error_reconstruccion: "❌ Error rebuilding the collector: {exc}"
+  exito: ✅ Collector loaded from JSON ({n} session values were reset).
+tipo:
+  titulo: Collector type
+  label: Flow channel configuration
+  opcion:
+    "1": Type 1 — Single channel, absorber at the bottom
+    "2": Type 2 — Mid-height absorber, both channels active
+    "3": Type 3 — Mid-height absorber, lower channel active (upper sealed)
+    "4": Type 4 — Mid-height absorber, upper channel active (lower sealed)
+  ayuda:
+    "1": >-
+      The absorber sits at the bottom of the collector body.
+      Air flows through the single channel between cover and absorber.
+      It is the simplest and most common configuration.
+    "2": >-
+      The absorber splits the body into two channels.
+      Air flows through both channels simultaneously, doubling the flow
+      and improving heat extraction.
+    "3": >-
+      The absorber splits the body into two channels.
+      Air flows only through the lower channel (absorber–bottom).
+      The upper channel is sealed and acts as extra insulation.
+    "4": >-
+      The absorber splits the body into two channels.
+      Air flows only through the upper channel (cover–absorber).
+      The lower channel is sealed.
+  esquema_titulo: 📐 Cross-section of the 4 types
+  esquema_caption: Comparative cross-section of the 4 collector types.
+materiales:
+  titulo: Unit collector materials
+  usuario: User defined
+  props_cubierta: "Properties of the user-defined cover:"
+  props_placa: "Properties of the user-defined absorber plate:"
+  props_aislante: "Properties of the user-defined insulation:"
+  props_fondo: "Properties of the user-defined bottom/casing:"
+  cubierta_titulo: Transparent cover
+  cubierta_label: Cover material
+  espesor_mm: Thickness [mm]
+  espesor_cm: Thickness [cm]
+  n_cubiertas:
+    label: Number of covers
+    help: >-
+      1 cover is standard. 2 covers reduce top losses
+      (better in cold or windy climates) but lower the
+      solar transmittance.
+  esp_cub_cub:
+    label: Cover-to-cover gap [mm]
+    help: >-
+      Air cavity between the two covers. Optimal range
+      20–40 mm (Duffie & Beckman): minimizes natural convection
+      while keeping conductive resistance.
+  placa_titulo: Absorber plate
+  placa_label: Plate material
+  placa_espesor_help: >-
+    Geometric/diagnostic input: the model is quasi-steady and
+    assumes negligible plate thermal capacitance, so this
+    thickness **does not enter the thermal balance** nor change the
+    computed performance.
+  aislante_titulo: Thermal insulation
+  aislante_label: Insulation material
+  fondo_titulo: Bottom / Casing
+  fondo_label: Bottom material
+geometria:
+  titulo: Geometry and design condition
+  ancho:
+    label: Channel width [m]
+    help: >-
+      Inner width of the flow channel of one unit module
+      (perpendicular to the flow). In a bank, the total width comes
+      from the parallel modules.
+  largo:
+    label: Collector length [m]
+    help: >-
+      Module length along the flow direction. It is the main design
+      variable: a longer collector gives a larger air temperature rise
+      but also more pressure drop. The graphical evaluation below
+      helps find the optimal length.
+  espaciado_t1:
+    label: Cover–plate gap [mm]
+    help: "Height of the single flow channel. Typical: 15–50 mm."
+  espaciado_t234:
+    label: Upper channel cover–absorber [mm]
+    help: "Height of the upper channel (cover–absorber). Typical: 15–50 mm."
+  espaciado_inferior:
+    label: Lower channel absorber–bottom [mm]
+    help: "Height of the lower channel (absorber–bottom). Typical: 15–50 mm."
+  velocidad:
+    label: Design velocity [m/s]
+    help: >-
+      Superficial air velocity in the active channel.
+      Sets the flow per unit and the pressure drop.
+      Recommended range: 0.3–3.0 m/s.
+  preview: >-
+    Channel section: {seccion:.1f} cm²  |  Flow per unit:
+    {caudal:.2f} L/s  |  Collection area: {area:.2f} m²
+  preview_inferior: "  |  Lower section: {seccion:.1f} cm²"
+banco:
+  titulo: Collector bank
+  n_serie:
+    label: Collectors in series per branch
+    help: Air flows through N consecutive collectors. Increases the outlet ΔT.
+  n_paralelo:
+    label: Parallel branches
+    help: >-
+      Parallel branches. The fan moves the sum of the flows of
+      all branches. At large scale there can be dozens of branches
+      (e.g. ADITAL: 26 collectors discharging into the main duct).
+  caudal_total:
+    label: Total flow to the fan
+    help: n_parallel × flow per unit. Volumetric flow at design conditions.
+  area_total: Total collection area
+  camino:
+    label: Air path
+    help: n_series × unit length. Total length travelled by the air.
+cano:
+  titulo: "**Main duct (bank manifold)**"
+  intro: >-
+    At large scale the branches do not discharge straight into the fan: each
+    branch delivers its air through an **inlet port** (with a reducing hood and
+    a butterfly damper) into a **main duct** that runs along the bank and
+    carries the accumulated flow to the fan (ADITAL tunnel style). It works
+    **under suction** (upstream of the fan) and its cross-section grows toward
+    the fan to keep the velocity bounded as it gathers flow. Its ΔP adds to
+    what the fan sees (shown in **P6**) and its thermal loss/gain enters the
+    production-window pipeline.
+  usar:
+    label: Include main duct
+    help: >-
+      Checked: the manifold is modelled explicitly (friction +
+      port fittings + thermal balance with the environment).
+      Unchecked: simple direct connection (the distribution ΔP
+      falls into the duct heuristic of the fan in P6).
+  largo:
+    label: Length [m]
+    help: >-
+      Total duct length, running along the bank collecting
+      the branch ports (≈ the width of the collector field).
+      ADITAL: 18 m. Friction is evaluated over this length.
+  ancho:
+    label: Section width [m]
+    help: >-
+      Width of the rectangular cross-section at the **fan
+      end**, where the full bank flow already circulates
+      (representative section of the pre-design model).
+      ADITAL: 1.0 m.
+  alto:
+    label: Section height [m]
+    help: >-
+      Height of the cross-section at the fan end. Together
+      with the width it sets the trunk velocity
+      v = Q_total / (width × height). ADITAL: 0.90 m.
+  aislado:
+    label: Thermally insulated
+    help: >-
+      The duct loses heat to the environment by external convection
+      (wind), but if its top face is in the sun it also gains
+      radiation: the net loss is usually small.
+      ADITAL: not insulated, net ΔT ≈ −3 °C.
+  aporte:
+    label: Solar gain (exposed top face)
+    help: >-
+      The duct's top face exposed to the sky collects solar
+      radiation and offsets part of the convective loss.
+      ADITAL: exposed (galvanized sheet).
+  mat_aisl:
+    label: Insulation material
+    help: >-
+      Material from the insulation catalogue (same catalogue
+      as collector and chamber). Sets the conductivity k
+      of the layer.
+  esp_aisl: Insulation thickness [cm]
+  absort:
+    label: Solar absorptance of the top face [-]
+    help: >-
+      Solar absorptance of the sunlit surface.
+      Dark painted sheet ≈ 0.90 (default);
+      bright bare galvanized ≈ 0.35 (ADITAL case).
+  cubierta:
+    label: Translucent cover (optional)
+    help: >-
+      Transparent cover over the top face
+      (collector cover catalogue): the gain is
+      affected by τ and the air cavity reduces the
+      convective loss (mini-collector).
+  sin_cubierta: (no cover — bare sheet)
+  sec_var:
+    label: Growing section (variable along the duct)
+    help: >-
+      The duct starts with a small section at the far end
+      and grows toward the fan to keep the velocity bounded
+      as it accumulates flow (linear interpolation). It improves
+      the flow distribution compared with a small constant duct,
+      with less material than a large constant one.
+  ancho_ini:
+    label: Initial section width [m]
+    help: Section at the far end from the fan (first port).
+  alto_ini: Initial section height [m]
+  preview_crece: >-
+    Section grows {a_ini:.2f} → {a_fin:.2f} m² ·
+    v bounded to **{v_max:.1f} m/s** (fan end {v_fin:.1f} m/s)
+  preview_constante: >-
+    Constant section {a_fin:.2f} m² ·
+    v max **{v_max:.1f} m/s** (fan end {v_fin:.1f} m/s)
+  preview_dp: >-
+    {sec} · Main-duct ΔP ≈ **{total:.0f} Pa**
+    (friction {friccion:.1f} + fittings {accesorios:.1f}).
+    Accumulated flow along the duct: a growing section keeps the
+    velocity bounded with less material than a large constant duct.
+  invalido: "Invalid main duct: {e}"
+error_validacion: "**Validation error** ({codigo})\n\n{err}"
+advertencias:
+  resumen_criticas: >-
+    🚨 The collector design has **{n} critical warning(s)**.
+    Review the detail below before computing.
+  resumen_warnings: >-
+    ⚠️ The collector design has **{n} warning(s)**.
+    It is worth reviewing the detail below.
+  titulo_expander: Design warnings ({nc} critical, {nw} warnings, {ni} info)
+  sin_advertencias: Collector design with no warnings.
+eval:
+  titulo: Collector performance evaluation
+  falta_emplazamiento: Configure the site (P2) to enable the evaluation.
+  falta_clima: Download the climate data (P2) to enable the evaluation.
+  modo:
+    diario: Daily
+    ventana: Production window
+    anual: Annual
+  modo_caption: >-
+    Analysis mode: **{modo}** (set in P1)  |
+    Tilt: {pend:.0f}°  |  Climate year: {anio}
+  albedo:
+    label: Ground albedo (surrounding surface)
+    help: >-
+      Solar reflectance of the ground around the collector. It feeds the
+      ground-reflected POA component (GHI·ρ·(1−cos β)/2). Its effect grows
+      with tilt: for a vertical collector, half of GHI·ρ
+      reaches the collector plane.
+    personalizado: custom ρ
+  boton: Compute collector performance
+  sin_datos_dia: There is no data for day {fecha} in the climate file.
+  spinner_dia: Evaluating collector for {fecha}...
+  spinner_ventana: Evaluating collector over the window ({horas} hours)...
+  spinner_anual: Evaluating collector for the 12 representative months...
+  ventana_error: "Could not slice the window: {msg}"
+  resultados_titulo: "#### Evaluation results"
+  diario:
+    t_max: Max outlet T (day)
+    t_mediodia: Outlet T at solar noon
+    dt_max: Max ΔT (outlet − ambient)
+    tab_a: 9a · Outlet T vs hour
+    tab_b: 9b · Fluid T profile at noon
+    sin_radiacion: There is not enough solar radiation at noon to compute the profile.
+  ventana:
+    t_max: Max outlet T (window)
+    dt_medio: Mean daytime ΔT (POA > 50)
+    horas_40: Hours with outlet T > 40 °C
+    tab_series: Series over the window
+    tab_perfil: Fluid T profile (noon, 1st day)
+    caption_series: >-
+      Hourly series **day and night** (at night the air is not
+      heated → T_out ≈ T_amb). Marks: daily max POA (◆) and solar
+      noon (▲) of each day.
+    perfil_label: first day of {lapso}
+    caption_perfil: >-
+      ⚠️ This chart represents **only the solar noon of the
+      first day** of the production window.
+    sin_radiacion: >-
+      There is not enough radiation at noon of the first day to
+      compute the T(x) profile.
+    caption_vista_previa: >-
+      Preview at the module's **design velocity**. The production
+      calculation (P7) re-runs the collector at the real flow imposed by
+      the system fan.
+  anual:
+    t_max_mes: Max outlet T (best month)
+    t_min_mes: Min outlet T (worst month)
+    dt_min: Min collector ΔT
+    tab_a: 9a · Outlet T vs month
+    tab_b: 9b · Fluid T profile per month
+    caption_mediodia: Evaluation at solar noon of the 15th of each month.
+    sin_resultados: No valid results were obtained. Check that the climate has enough radiation.
+campo:
+  titulo: Collector field evaluation
+  intro: >-
+    Hydraulic network of the **bank + main duct** (ASHRAE ch. 21
+    methodology: Darcy-Weisbach friction per segment + port minor
+    losses): real flow distribution among branches, outlet temperature
+    of each branch at its own flow, mixing in the manifold and
+    flow T at the main-duct outlet.
+  origen_p4: the system flow configured in P4 (single flow S41)
+  origen_banco: the bank design flow (no chamber configured)
+  q:
+    label: Total flow [L/s]
+    help: "Flow moved by the fan. Default: {origen}."
+  t_amb: Ambient T [°C]
+  poa:
+    label: POA [W/m²]
+    help: Irradiance on the collector plane (representative operating point).
+  viento: Wind [m/s]
+  boton: Evaluate collector field
+  spinner: Solving hydraulic + thermal network of {n} branches...
+  t_salida_cano: Main-duct outlet T
+  delta_cano: "{v:+.1f} K along the duct"
+  t_mezcla: Bank mixing T
+  desuniformidad:
+    label: Flow distribution non-uniformity
+    help: (q_max − q_min) / q_mean. Below 10 % is considered good distribution.
+  dp_sistema:
+    label: System ΔP (field)
+    help: "Balanced-path ΔP: branch + main-duct trunk."
+  dp_troncal:
+    label: Duct trunk ΔP
+    help: >-
+      Manifold-only loss (far port 1 → fan), isolated from the
+      branch. It is what responds to the duct section compensation.
+  v_troncal:
+    label: Trunk v (min → max)
+    help: >-
+      Air velocity along the duct (far end → fan). A growing
+      section keeps it bounded while gathering flow; a small
+      constant section makes it spike near the fan.
+  convergio: converged
+  no_convergio: "**did not converge**"
+  caption_reparto: >-
+    Distribution solved in {n} iterations ({estado}).
+    q per branch: {qmin:.1f} – {qmax:.1f} L/s.
+figuras:
+  poa_wm2: POA [W/m²]
+  t_absorbedor: Absorber T [°C]
+  t_salida: Collector outlet T [°C]
+  t_ambiente: Ambient T [°C]
+  poa_max_dia: Daily max POA
+  mediodia_solar: Solar noon
+  titulo_ventana: Collector performance over the window {lapso}
+  caudal_rama: Flow per branch [L/s]
+  t_salida_rama: Branch outlet T [°C]
+  v_troncal: trunk v [m/s]
+  subtitulo_reparto: Flow and temperature distribution per branch
+  subtitulo_v_troncal: Velocity along the trunk
+  eje_boca_tramo: Port / segment (1 = far end from the fan)
+  eje_boca: Port (1 = far end from the fan)
+  eje_t_salida: Outlet T [°C]
+  titulo_campo: Collector field — distribution, temperature and trunk velocity
+  marca_mediodia: Solar noon ({hora})
+  marca_poa_max: Max POA ({hora})
+  t_fluido: Fluid T [°C]
+  t_entrada_annot: Inlet T = {v:.1f} °C
+  eje_x_colector: Position x along the collector [m]
+  eje_t_fluido: Fluid temperature [°C]
+  titulo_salida_dia: Collector outlet temperature — {fecha}
+  titulo_perfil_dia: Fluid temperature profile — solar noon — {fecha}
+  poa_mediodia: Noon POA [W/m²]
+  t_salida_mediodia: Collector outlet T — noon [°C]
+  t_amb_mediodia: Ambient T — noon [°C]
+  titulo_salida_anual: Collector outlet temperature — solar noon per month (day 15)
+  titulo_perfil_anual: Fluid temperature profile — solar noon per month
+guardar:
+  txt: Save collector configuration (.txt)
+  json: Save collector configuration (.json)

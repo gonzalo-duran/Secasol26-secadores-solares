@@ -1,0 +1,153 @@
+header: 5 · Auxiliary Heating
+cargar:
+  titulo: 📥 Load saved configuration (.json)
+  uploader: Upload a previously saved auxiliary .json file
+  error_reconstruccion: "❌ Error rebuilding the auxiliary: {exc}"
+  exito: ✅ Auxiliary loaded from JSON ({n} session values were reset).
+usar:
+  label: Add auxiliary heating system
+  help: >-
+    Enables an auxiliary heating system (electric resistance or biomass
+    burner) to extend the drying schedule or reinforce on cloudy days.
+  sin_auxiliar: >-
+    No auxiliary heating. The dryer runs on solar energy only.
+    Toggle it on to configure an auxiliary.
+tipo_modo:
+  titulo: Type and operation mode
+  tipo:
+    label: Auxiliary heat source type
+    help: |
+      Electric resistance: η ≈ 1, precise control, needs mains power.
+      Biomass burner: η ≈ 0.60–0.75, local fuel, simpler control.
+    resistencia_electrica: Electric resistance
+    quemador_biomasa: Biomass burner
+  modo:
+    label: Operation mode
+    help: |
+      **Post-collector series:** the auxiliary heats the air after the collector. Use it as reinforcement on cloudy days or to reach higher temperatures.
+
+      **Independent backup:** the auxiliary has its own air circuit. Use it for night drying or sunless days.
+    serie_poscolector: Post-collector series
+    respaldo_independiente: Independent backup
+operacion:
+  titulo: Operation parameters
+  potencia:
+    label: Nominal power [kW]
+    help: >-
+      Nominal thermal power delivered to the air.
+      For electric resistance: electric power = thermal power.
+  fraccion:
+    label: Power fraction in operation [%]
+    help: Lets you model partial operation of the auxiliary.
+  t_max:
+    label: Max outlet T [°C]
+    help: >-
+      Safety limit to protect the product.
+      For fruits and vegetables: ≤ 60–70 °C.
+  set_point:
+    check: Temperature set-point control
+    check_help: >-
+      If active, the auxiliary regulates its power to keep the
+      outlet temperature at the target value.
+    label: Set point [°C]
+  nocturno:
+    label: Available for night operation
+    help: >-
+      Electric resistance: available if there is mains power.
+      Biomass burner: generally available.
+biomasa:
+  titulo: Biomass burner parameters
+  combustible: Fuel
+  otro: Other (enter manually)
+  opcion:
+    lena: Dry firewood (~20% RH)
+    pellets: Wood pellets
+    girasol: Sunflower husk
+    bagazo: Cane bagasse (dry)
+  pci:
+    label: LHV [MJ/kg]
+    help: Lower heating value of the fuel.
+  nombre_combustible: Fuel name
+  eficiencia: Burner efficiency [%]
+  consumo_estimado: >-
+    💡 Estimated consumption at effective power ({potencia:.2f} kW):
+    **{consumo:.2f} kg/h** of {combustible}
+resistencia:
+  titulo: Electric resistance parameters
+  especificar_tension: Specify supply voltage
+  tension:
+    label: Voltage [V]
+    help: 220 V single-phase or 380 V three-phase.
+  corriente:
+    label: Estimated current
+    help: I = P / (V × cos_phi), cos_phi = 0.85.
+calendario:
+  titulo: 🌅 Start-up calendar (morning/evening hybrid)
+  intro: >-
+    By default the auxiliary runs **during the day** (when there is sun,
+    per I_g) unless you enable night operation. If instead you set a
+    **start-up calendar**, the burner runs **only in those time windows**
+    (morning and/or evening), regardless of the sun — the pattern of the
+    ADITAL-style solar-biomass hybrid dryer, where the collector covers
+    midday and firewood starts/reinforces at the edges of the day. It
+    applies to transient modes (Real day, multi-day and production window).
+  usar:
+    label: Use start-up calendar
+    help: "Unchecked: the auxiliary runs by irradiance (default behaviour)."
+  n_cargas: Number of daily loads
+  carga_inicio: Load {i} — start hour [h]
+  carga_duracion: Load {i} — duration [h]
+  cobertura: >-
+    ⏱️ Total coverage: **{horas:.1f} h/day** in {n} window(s).
+    Outside them the auxiliary stays off.
+aplicar: ⚙️ Apply auxiliary
+error_config: "❌ Configuration error: {exc}"
+advertencias_titulo: Design warnings
+sin_advertencias: ✅ Auxiliary configured with no warnings.
+efecto:
+  titulo: Thermal effect estimate
+  t_entrada:
+    label: Auxiliary inlet temperature [°C]
+    hint_serie: Collector outlet T (series mode).
+    hint_respaldo: Ambient T (independent backup mode).
+  caudal:
+    label: Mass flow [kg/s]
+    hint_colector: "Taken from the collector: {q:.1f} L/s → ~{kg:.3f} kg/s"
+    hint_camara: Taken from the drying chamber.
+    hint_default: Dry-air flow through the auxiliary.
+  error_calculo: "❌ Calculation error: {exc}"
+  t_entrada_metric: Inlet T
+  t_salida: Outlet T
+  potencia_efectiva:
+    label: Effective power
+    help: "Active fraction: {frac:.0%}"
+  consumo_biomasa:
+    label: Biomass consumption
+    help: At the effective operating power.
+  consumo_electrico: Electric consumption
+  set_point_activo: >-
+    ℹ️ Set-point control active: the auxiliary runs at {frac:.0%} of its
+    nominal power to keep {t_salida:.1f} °C at the outlet.
+resumen:
+  titulo: Configuration summary
+  tipo: "**Type:** {v}"
+  modo: "**Mode:** {v}"
+  potencia: "**Nominal power:** {v:.2f} kW"
+  fraccion: "**Operation fraction:** {v} %"
+  t_max: "**Max outlet T:** {v:.0f} °C"
+  set_point: "**Set point:** {v}"
+  set_point_valor: "{v:.0f} °C"
+  set_point_no: Not defined
+  nocturno: "**Night available:** {v}"
+  combustible: "**Fuel:** {v}"
+  pci: "**LHV:** {v:.1f} MJ/kg"
+  pci_no: "**LHV:** —"
+  eta: "**Burner η:** {v:.0%}"
+  eta_no: "**Burner η:** —"
+  tension: "**Voltage:** {v:.0f} V"
+  tension_no: "**Voltage:** Not specified"
+si: "Yes"
+"no": "No"
+guardar:
+  txt: Save auxiliary configuration (.txt)
+  json: Save auxiliary configuration (.json)

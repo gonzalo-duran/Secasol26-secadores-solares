@@ -46,6 +46,8 @@
 manzana:
 
   descripcion: "Manzana (Malus domestica) en rodajas. Producto típico del cinturón frutícola del Alto Valle del Río Negro y de Mendoza. Variedades comunes secadas: Granny Smith, Red Delicious, Golden Delicious, Starking (referencia de Sacilik 2006), Golab (referencia de Meisami-Asl 2009)."
+  descripcion_en: "Apple (Malus domestica), sliced. Typical product of the fruit belt of the Alto Valle del Río Negro and Mendoza. Common dried varieties: Granny Smith, Red Delicious, Golden Delicious, Starking (Sacilik 2006 reference), Golab (Meisami-Asl 2009 reference)."
+  descripcion_pt: "Maçã (Malus domestica), em rodelas. Produto típico do cinturão frutícola do Alto Valle del Río Negro e de Mendoza. Variedades comumente secadas: Granny Smith, Red Delicious, Golden Delicious, Starking (referência de Sacilik 2006), Golab (referência de Meisami-Asl 2009)."
   categoria: FRUTA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -237,6 +239,8 @@ manzana:
 durazno:
 
   descripcion: "Durazno (Prunus persica) en rodajas. Producto estacional del NOA y Cuyo. Variedad de referencia para los datos cinéticos: Shan-e-Punjab (India) por Kingsly et al. 2006. Producción argentina dominada por variedades como Caldesi, San Pedro, Flordaking."
+  descripcion_en: "Peach (Prunus persica), sliced. Seasonal product of Argentina's Northwest (NOA) and Cuyo. Reference variety for the kinetic data: Shan-e-Punjab (India) per Kingsly et al. 2006. Argentine production dominated by varieties such as Caldesi, San Pedro, Flordaking."
+  descripcion_pt: "Pêssego (Prunus persica), em rodelas. Produto sazonal do Noroeste argentino (NOA) e de Cuyo. Variedade de referência para os dados cinéticos: Shan-e-Punjab (Índia) por Kingsly et al. 2006. Produção argentina dominada por variedades como Caldesi, San Pedro, Flordaking."
   categoria: FRUTA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -336,6 +340,8 @@ durazno:
 yacon:
 
   descripcion: "Yacón (Smallanthus sonchifolius) en rodajas. Tubérculo andino con alto contenido de fructooligosacáridos (FOS). Producción tradicional NOA en Bárcena (Jujuy) y valles de Salta. Producto sensible al pardeado enzimático y de alta humedad inicial (~90% bh)."
+  descripcion_en: "Yacón (Smallanthus sonchifolius), sliced. Andean tuber with a high content of fructooligosaccharides (FOS). Traditional NOA production in Bárcena (Jujuy) and the valleys of Salta. Product prone to enzymatic browning and with high initial moisture (~90% wb)."
+  descripcion_pt: "Yacón (Smallanthus sonchifolius), em rodelas. Tubérculo andino com alto teor de fruto-oligossacarídeos (FOS). Produção tradicional do NOA em Bárcena (Jujuy) e nos vales de Salta. Produto sensível ao escurecimento enzimático e de alta umidade inicial (~90% bu)."
   categoria: FRUTA
   # Nota: yacón es botánicamente raíz tuberosa, no fruta. Lo agrupamos en
   # frutas.yaml por su tratamiento culinario y comportamiento de secado
@@ -587,6 +593,8 @@ yacon:
 # =============================================================================
 granada:
   descripcion: "Granada (Punica granatum) — arilos (semillas con pulpa). Originaria de regiones tropicales y subtropicales. La porción comestible son los arilos. El producto seco se conoce como 'anardana' en cocina india y se usa como condimento ácido. Producción argentina: emergente en Mendoza, Catamarca y NOA."
+  descripcion_en: "Pomegranate (Punica granatum) — arils (seeds with pulp). Native to tropical and subtropical regions. The edible portion are the arils. The dried product is known as 'anardana' in Indian cuisine and used as a sour condiment. Argentine production: emerging in Mendoza, Catamarca and the NOA."
+  descripcion_pt: "Romã (Punica granatum) — arilos (sementes com polpa). Originária de regiões tropicais e subtropicais. A porção comestível são os arilos. O produto seco é conhecido como 'anardana' na culinária indiana e usado como condimento ácido. Produção argentina: emergente em Mendoza, Catamarca e no NOA."
   categoria: FRUTA
   tipo_secado: CAPA_FINA
   fotosensible: false
@@ -668,6 +676,8 @@ granada:
 # =============================================================================
 ciruela:
   descripcion: "Ciruela (Prunus domestica) en rodajas. Fruta de zona templada, alta humedad inicial (~90% bh), rica en azúcares, carotenos y compuestos fenólicos. La ciruela seca (passa) es producto tradicional de Mendoza (variedad d'Agen). El paper de referencia usa variedad Sutlej purple (India)."
+  descripcion_en: "Plum (Prunus domestica), sliced. Temperate-zone fruit, high initial moisture (~90% wb), rich in sugars, carotenes and phenolic compounds. The dried plum (prune) is a traditional product of Mendoza (d'Agen variety). The reference paper uses the Sutlej purple variety (India)."
+  descripcion_pt: "Ameixa (Prunus domestica), em rodelas. Fruta de zona temperada, alta umidade inicial (~90% bu), rica em açúcares, carotenos e compostos fenólicos. A ameixa seca (passa) é produto tradicional de Mendoza (variedade d'Agen). O artigo de referência usa a variedade Sutlej purple (Índia)."
   categoria: FRUTA
   tipo_secado: CAPA_FINA
   fotosensible: false

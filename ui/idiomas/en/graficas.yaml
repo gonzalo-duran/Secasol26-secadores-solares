@@ -1,0 +1,42 @@
+meses_abbr: Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec
+eje:
+  temperatura_c: Temperature [°C]
+  irradiacion_mensual: Monthly irradiation [kWh/m²]
+  viento_ms: Wind speed [m/s]
+  hr_pct: Relative humidity [%]
+serie:
+  media_diaria: Daily mean
+  media_mensual: Monthly mean
+  poa_global: Global POA
+  poa: POA
+  viento_ms: Wind [m/s]
+  hr_pct: RH [%]
+  t_amb: T amb [°C]
+subplot:
+  plano_horizontal: Horizontal plane (GHI / DNI / DHI)
+  plano_colector: Collector plane (global POA)
+carta:
+  saturacion: Saturation (RH 100 %)
+  hr: "RH {hr} %"
+  isentalpica: Isenthalp (adiabatic reference)
+  proceso: Dryer process
+  nota_directa: "direct chamber (non-adiabatic: the translucent roof adds heat)"
+  nota_indirecta: "indirect chamber (≈ adiabatic: the outlet point falls on the isenthalp)"
+  nota: "P = {p:.1f} kPa (site altitude) · {camara}"
+  titulo: Psychrometric chart of the drying process
+  eje_t: Dry-bulb temperature [°C]
+  eje_omega: Absolute humidity ω [g/kg dry air]
+termo:
+  curva_x: X(t)
+  x_obj: "X_obj={v:.3f}"
+  t_marca: "t={v:.1f}h"
+  t_producto: Product T [°C]
+  t_aire_camara: Chamber air T [°C]
+  q_prod: q air→product [W]
+  q_pared: q wall loss [W]
+  eje_x: X [kg water / kg ds]
+  eje_t_prod: Product T [°C]
+  eje_t_aire: Air T [°C]
+  eje_calor: Heat [W]
+  eje_tiempo: Time [h]
+  titulo: "Thermodynamic engine — {prod} (status: {status})"

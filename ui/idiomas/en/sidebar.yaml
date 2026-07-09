@@ -1,0 +1,39 @@
+caption: Solar dryer pre-design
+manual: 📖 User manual
+nav:
+  label: Project sections
+  p1: 1 · Typology
+  p2: 2 · Site and Climate
+  p3: 3 · Collector
+  p4: 4 · Drying Chamber
+  p5: 5 · Auxiliary
+  p6: 6 · Fan / Drive
+  p7: 7 · Results
+como_empezar:
+  titulo: 👋 Getting started
+  cuerpo: |
+    **Secasol** pre-sizes solar dryers step by step. Go through the sections in order:
+
+    1. **Typology** — dryer type and analysis mode.
+    2. **Site** — site coordinates and climate download (NASA POWER).
+    3. **Collector** — materials, geometry and air velocity.
+    4. **Chamber** — geometry, product to dry and load.
+    5. **Auxiliary** — backup heating (optional).
+    6. **Fan / Drive** — fan or solar chimney to move the air.
+    7. **Results** — runs the full pre-design and exports the report.
+
+    **Have at hand:** the site latitude/longitude and the product to dry.
+
+    ℹ️ This is a **pre-design** tool (order of magnitude), not a certification tool.
+entorno:
+  titulo: 🔧 Environment
+  caption: >-
+    Python and calculation-library versions running in this instance.
+    Useful to compare the local repo against the remote deployment:
+    identical numbers require identical environments.
+  no_instalado: not installed
+contacto:
+  titulo: 📬 Contact
+  cuerpo: "**Gonzalo J. Durán**  \nGEEDSP · INENCO · CONICET-UNSa  \n✉️ [{mail}](mailto:{mail})\n\n\
+    Write to me to **cite** the program in a publication, **report an issue** or share\
+    \ **suggestions**. All feedback is welcome!"

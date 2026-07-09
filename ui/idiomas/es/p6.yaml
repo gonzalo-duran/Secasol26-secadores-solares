@@ -1,0 +1,256 @@
+header: 6 · Motor / Ventilador
+intro: >-
+  El aire se mueve por **convección forzada** (motor/ventilador) o **natural**
+  (chimenea solar, sin consumo eléctrico). Forzada: mayor control del caudal y
+  capacidad para vencer pérdidas de carga altas (lechos gruesos, banco de
+  colectores, escala industrial), a costa de energía. Natural: sin electricidad,
+  caudal menor y variable con el sol y el viento — requiere chimenea para inducir
+  tiraje. Elegí con el toggle de abajo.
+cargar:
+  titulo: 📥 Cargar configuración guardada (.json)
+  uploader: Subí un archivo .json del motor previamente guardado
+  error_reconstruccion: "❌ Error reconstruyendo el motor: {exc}"
+  exito: ✅ Motor cargado desde JSON (se reiniciaron {n} valores de la sesión).
+usar:
+  label: Incorporar sistema de convección forzada (motor / ventilador)
+  help: >-
+    Desactivar para tipologías de convección natural
+    (secador de tipo caja con chimenea, o armario sin motor).
+  sin_motor: >-
+    Sin motor. El secador opera por convección natural.
+    Configurá la chimenea solar abajo para inducir tiraje térmico,
+    o activá el toggle para dimensionar un ventilador.
+accionamiento:
+  titulo: Tipo de accionamiento
+  caption: >-
+    Motor eléctrico (ventilador axial o centrífugo). Para convección
+    natural — eventualmente con extractor eólico en el tope de chimenea
+    — desactivar el motor en el toggle de arriba.
+caudal:
+  titulo: Caudal de diseño
+  hint_colector: "Colector (P3): {q:.1f} L/s"
+  hint_camara: "Cámara (P4): {g:.1f} g/s → {l:.1f} L/s (a 50 °C)"
+  label: Caudal volumétrico [L/s]
+  help_default: Caudal que debe mover el ventilador.
+  metric: Caudal
+perdidas:
+  titulo: Pérdidas de carga del sistema
+  modo:
+    label: Ingreso de pérdidas de carga
+    help: |
+      **Por componentes:** estima ΔP_colector (Darcy-Weisbach) y ΔP_cámara (resistencia de bandejas) desde P3 y P4, más 20% de margen de ductos.
+
+      **ΔP total directo:** ingresá el valor medido en campo o de catálogo.
+    componentes: Por componentes (auto-estimado)
+    total: ΔP total directo
+  total:
+    label: ΔP total del sistema [Pa]
+    help: Incluye colector, cámara y ductos.
+  colector:
+    label: ΔP colector [Pa]
+    help_auto: "Pérdida de carga en el banco de colectores (Darcy-Weisbach). Auto (P3): {v:.1f} Pa."
+    help_sin: Pérdida de carga en el banco de colectores (Darcy-Weisbach). Configurar P3 para auto-estimación.
+    auto_caption: "Auto P3: **{v:.1f} Pa**"
+  camara:
+    label: ΔP cámara [Pa]
+    help_auto: "Pérdida de carga en las bandejas de la cámara. Auto (P4): {v:.1f} Pa (K_malla=2.0)."
+    help_sin: Pérdida de carga en las bandejas de la cámara. Configurar P4 para auto-estimación.
+    auto_caption: "Auto P4: **{v:.1f} Pa**"
+  ductos:
+    check: Especificar ΔP ductos
+    label: ΔP ductos [Pa]
+    auto_caption: "Auto 20%: **{v:.1f} Pa**"
+  singulares:
+    titulo: "ΔP singulares (entrada, salida, codos, manifold, difusor): **{v:.1f} Pa**"
+    v_label: Velocidad del aire en ducto principal [m/s]
+    v_help: >-
+      Velocidad típica en ductos de secadores solares: 5–10 m/s.
+      Más alta → más pérdida singular. Para ductos de ø≈15 cm con
+      Q≈900 m³/h, v ≈ 14 m/s.
+    detalle: |
+      n_paralelo = {n_par} · n_codos asumidos = 2 · coeficientes C de ASHRAE cap. 21 / Idelchik
+
+      - Entrada (C=0.5): {entrada:.1f} Pa
+      - Salida descarga libre (C=1.0): {salida:.1f} Pa
+      - 2 codos 90° (C=0.9 c/u): {codos:.1f} Pa
+      - Manifold banco→caño, confluencia (C=1.5): {manifold:.1f} Pa
+      - Difusor de entrada a cámara (C=0.3): {difusor:.1f} Pa
+  total_preview: >-
+    **ΔP total estimada: {total:.1f} Pa** (col={col:.1f} + cam={cam:.1f} +
+    duc={duc:.1f} + sing={sing:.1f})
+  cano_caption: "↳ ΔP ductos incluye el **caño maestro** (P3): {v:.1f} Pa del manifold del banco."
+ventilador:
+  titulo: Parámetros del ventilador y motor
+  eta_vent:
+    label: η ventilador [%]
+    help: "Axial simple: 45–60%. Centrífugo media presión: 60–75%."
+  eta_motor:
+    label: η motor eléctrico [%]
+    help: "Motores < 1 kW: 75–85%."
+  fs:
+    label: Factor de servicio [-]
+    help: "Sobredimensionamiento del motor. Estándar NEMA continuo: 1.15."
+  usar_tension: Especificar tensión de alimentación
+  tension: Tensión [V]
+calcular: ⚙️ Calcular motor
+error_config: "❌ Error de configuración: {exc}"
+advertencias_titulo: Advertencias de diseño
+sin_advertencias: ✅ Motor dimensionado sin advertencias.
+resultados:
+  titulo: Resultados del dimensionamiento
+  dp_total: ΔP total
+  p_hidraulica:
+    label: P hidráulica
+    help: Q × ΔP
+  p_electrica:
+    label: P eléctrica
+    help: "P_hid / (η_vent={eta_vent:.0%} × η_motor={eta_motor:.0%})"
+  p_instalar:
+    label: P a instalar
+    help: "P_elec × FS={fs:.2f}. Potencia nominal del motor a comprar."
+  corriente: "⚡ Corriente nominal estimada: **{i:.2f} A** a {v} V (cos φ = 0.85)"
+resumen:
+  titulo: Resumen de la configuración
+  tipo: "**Tipo:** Motor eléctrico"
+  caudal: "**Caudal:** {v:.1f} L/s"
+  dp_total: "**ΔP total:** {v:.1f} Pa"
+  eta_vent: "**η ventilador:** {v:.0%}"
+  eta_motor: "**η motor:** {v:.0%}"
+  fs: "**Factor servicio:** {v:.2f}"
+  p_hidraulica: "**P hidráulica:** {v:.1f} W"
+  p_eje: "**P eje:** {v:.1f} W"
+  p_electrica: "**P eléctrica:** {v:.1f} W"
+  p_instalar: "**P a instalar:** {v:.1f} W"
+  corriente: "**Corriente:** {v:.2f} A"
+guardar:
+  txt: Guardar configuración del motor (.txt)
+  json: Guardar configuración del motor (.json)
+chimenea:
+  titulo: Chimenea solar
+  cargar:
+    titulo: 📥 Cargar configuración de chimenea (.json)
+    uploader: Subí un archivo .json de chimenea previamente guardado
+    error_reconstruccion: "❌ Error reconstruyendo la chimenea: {exc}"
+    exito: ✅ Chimenea cargada desde JSON (se reiniciaron {n} valores).
+  usar:
+    label: Incorporar chimenea solar
+    help: >-
+      Una chimenea genera tiraje térmico por diferencia de densidad entre
+      el aire caliente (cámara + chimenea) y el ambiente. Modelo en
+      `calculos.chimenea_calc`.
+  sin_chimenea: Sin chimenea. El aire se moverá solo por difusión libre.
+  diametro: Diámetro interno [m]
+  altura: Altura [m]
+  material: Material
+  extractor:
+    check: Agregar extractor eólico en el tope
+    check_help: >-
+      Turbina pasiva tipo 'sombrero chino' montada en el tope de la
+      chimenea. Agrega un término motriz ΔP = Cp·ρ·v_viento²/2 al lazo
+      natural, donde v_viento se corrige del valor NASA POWER (10 m) a
+      la altura del tope via perfil logarítmico de capa límite. Tambien
+      introduce una resistencia adicional Kt·ρ·v_flujo²/2 al flujo
+      ascendente.
+
+      **Casos límite:**
+      • v_viento = 0 (calma): la turbina sólo agrega resistencia → peor que chimenea desnuda.
+      • Sin sol (noche/nublado): si hay viento, la turbina sigue moviendo aire — robustez del sistema.
+      • v_viento alto + sol: efectos se suman, caudal mayor.
+
+      Sin correlación específica de literatura; los rangos de Cp y Kt son anclajes de orden de magnitud (Idelchik / hojas técnicas de turbinas comerciales).
+    titulo: Parámetros del extractor eólico
+    diam:
+      label: Diámetro del extractor [m]
+      help: >-
+        Diámetro del orificio del extractor. Tallas comerciales
+        típicas: 0.30 / 0.45 / 0.60 m. Recomendado ≥ al
+        diámetro de la chimenea para evitar estrangulamiento.
+    cp:
+      label: Cp turbina [adim]
+      help: >-
+        Coeficiente de presión motriz: ΔP_motriz = Cp·ρ·v² / 2.
+        Rango típico 0.3–0.6 para turbinas sombrero chino.
+        Valores más altos sólo con datos de fabricante.
+    kt:
+      label: Kt turbina (resistencia) [adim]
+      help: >-
+        Coeficiente resistivo: ΔP_resistencia = Kt·ρ·v_flujo²/2
+        sobre la velocidad del aire en el extractor.
+        1.0 (default) cubre expansión + obstrucción de álabes.
+    z0:
+      label: Tipo de terreno (z₀)
+      help: >-
+        Longitud de rugosidad aerodinámica del terreno. Se
+        usa para corregir el viento de NASA POWER (a 10 m)
+        a la altura del tope de chimenea via perfil
+        logarítmico v(z) = v(10)·ln(z/z₀)/ln(10/z₀).
+      mar: Mar/lago (0.001 m)
+      campo: Campo abierto (0.03 m)
+      rural: Rural medio (0.05 m)
+      suburbano: Suburbano (0.20 m)
+      urbano: Urbano denso (0.50 m)
+    preview_viento: >-
+      Viento medio del sitio (P2, a 10 m): **{v10:.1f} m/s** → corregido
+      a {z:.1f} m del tope: **{vloc:.2f} m/s** → ΔP motriz turbina
+      (a T_amb 20 °C): **{dp:.2f} Pa**.
+    preview_sin_clima: >-
+      Cargar datos de clima en P2 para previsualizar el efecto
+      del viento a la altura del tope de la chimenea.
+  error_validacion: "**Error de validación** — {err}"
+  tiro:
+    titulo: "**Tiro térmico estimado** (cámara + chimenea como columna ascendente)"
+    metric_dt: ΔT = +{dt:.0f} K
+    caption: >-
+      Cálculo informativo con T_amb=20 °C, H_efectiva = altura_chimenea
+      ({alt:.1f} m) + alto_cámara ({hcam:.2f} m) = {heff:.2f} m. El caudal
+      de equilibrio se resuelve en `balance_global` con T_chim del lazo y
+      pérdidas reales.
+  guardar:
+    txt: Guardar configuración de chimenea (.txt)
+    json: Guardar configuración de chimenea (.json)
+  calcular:
+    falta_camara: >-
+      ⚠️ Configurá la cámara (P4) antes de evaluar la chimenea — su
+      caudal de diseño y ΔP son inputs del lazo natural.
+    boton: 🌪️ Calcular chimenea
+    spinner: Resolviendo lazo natural por chimenea...
+    error_calculo: "❌ Error en el cálculo: {exc}"
+    prompt: >-
+      Presioná **Calcular chimenea** para resolver el lazo natural con
+      condiciones representativas. El resultado queda persistido y se
+      muestra en P7 como sección evaluada.
+    titulo: Resultados del lazo natural
+    caudal_natural:
+      label: Caudal natural
+      help: ṁ de equilibrio del lazo (cámara + colector + chimenea).
+    v_chim:
+      label: v en chimenea
+      help: Velocidad media en la sección de la chimenea.
+    re:
+      label: Re chimenea
+      help: "Re > 4000: turbulento. Re < 2300: laminar."
+    dp_tiro:
+      label: ΔP tiro térmico
+      help: Empuje hidrostático = g·H_eff·(ρ_amb − ρ_chim).
+    dp_ducto:
+      label: ΔP ducto chimenea
+      help: Fricción + singulares del ducto de chimenea.
+    dp_resto:
+      label: ΔP resto (col+cam)
+      help: ΔP de colector + cámara escalado cuadrático al caudal de equilibrio.
+    dp_turbina:
+      label: ΔP motriz turbina
+      help: "Extractor eólico a v_local={v:.2f} m/s."
+    h_eff: H efectiva
+    advertencias: "⚠️ {n} advertencia(s) del lazo natural"
+    inputs: >-
+      Inputs: T_amb={t_amb:.1f} °C, T_chim={t_chim:.1f} °C
+      (heurística ΔT={dt:.0f} K para {tipo}), v_viento={v:.1f} m/s,
+      P={p:.2f} kPa. Clima: {clima}. Presión: {presion}.
+      En P7 se vuelve a resolver con el lazo Picard completo (T_chim de la
+      cámara realimenta el cálculo).
+    tipo_caja: CAJA
+    tipo_otro: ARMARIO/GRAN_ESCALA
+condiciones:
+  media_anual: media anual NASA POWER (P2)
+  fallback: fallback (T=20 °C, v=2 m/s)

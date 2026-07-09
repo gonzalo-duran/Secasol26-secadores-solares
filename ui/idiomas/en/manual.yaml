@@ -1,0 +1,27 @@
+# Manual viewer (i18n plan, F8 — infrastructure). Only the viewer "chrome".
+# TOC titles/descriptions resolve via traducir("manual.toc.<slug>.titulo", lang,
+# default=cap.titulo): the ES canonical lives in the CAPITULOS tuple, so there
+# are no manual.toc.* keys here and EN/PT fall back to ES until the chapters are
+# translated (F9).
+
+ui:
+  sidebar_titulo: 📖 Secasol Manual
+  volver: ⬅ Back to the designer
+  indice: 🏠 Index
+  sidebar_caption: >-
+    The manual links navigate within this same tab. Your design stays open in
+    the original Secasol tab; "Back to the designer" opens the design view here
+    (a fresh session, it does not touch your project).
+  indice_titulo: 📖 Secasol Manual
+  indice_intro: >-
+    Usage reference and physical-model documentation of **Secasol**, the solar
+    dryer predesigner. Each chapter opens with the general idea and expands the
+    details (equations, correlations, modeling decisions) in **🔬 In depth**
+    blocks. The Part IV chapters are the complete technical reference for each
+    subsystem.
+  breadcrumb_manual: 📖 Manual
+  en_profundidad: 🔬 In depth
+  sin_contenido: "Chapter '{slug}' has no content yet ({archivo})."
+  no_existe: "Chapter '{slug}' does not exist. This is the manual index."
+  solo_es: >-
+    This chapter is not translated into your language yet; it is shown in Spanish.

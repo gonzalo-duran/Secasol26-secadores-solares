@@ -1,0 +1,405 @@
+header: 7 · Resultados del Prediseño
+chimenea:
+  titulo: Chimenea Solar (convección natural)
+  caudal_natural:
+    label: Caudal natural
+    help: ṁ de equilibrio del lazo (cámara + colector + chimenea).
+  q_vol:
+    label: Q volumétrico
+    help: ṁ / ρ_amb (ρ ≈ 1.1 kg/m³).
+  v_chim: v chimenea
+  re: Re chimenea
+  dp_tiro:
+    label: ΔP tiro
+    help: Empuje hidrostático disponible (g·H_eff·Δρ).
+  dp_chim:
+    label: ΔP chimenea
+    help: Fricción + singulares del ducto de chimenea.
+  dp_resto:
+    label: ΔP resto lazo
+    help: Pérdidas de colector + cámara escaladas ∝ (ṁ/ṁ_diseño)².
+  h_eff:
+    label: H efectiva
+    help: altura_chimenea + alto_cámara.
+  balance: >-
+    Balance del lazo: ΔP_tiro = ΔP_chim + ΔP_resto
+    ({tiro:.2f} ≈ {chim:.2f} + {resto:.2f}, error {err:.1%}).
+  desviacion_caudal: >-
+    ⚠️ El caudal natural ({nat:.1f} g/s) difiere **{desv:.0%}** del caudal
+    de diseño de la cámara ({design:.1f} g/s). Revisar diámetro/altura de la
+    chimenea en P6 o el caudal de diseño en P4 para que ambos queden
+    consistentes.
+transitorio:
+  advertencias: Advertencias del cálculo
+  resumen: Resumen del prediseño
+  x_obj:
+    label: X_obj alcanzado
+    help: Tiempo desde t=0 en que la humedad del producto baja a X_obj.
+    "no": No (>horizonte)
+  masa_agua: Masa agua evaporada
+  energia_secado:
+    label: Energía secado
+    help: masa_agua × Lv
+  cop: COP_secado
+  e_solar: E_solar útil
+  e_aux: E_auxiliar
+  e_motor: E_motor
+  fraccion_solar: Fracción solar
+  sin_trayectorias: Sin trayectorias para graficar.
+  trayectorias: Trayectorias del horizonte
+  fig1:
+    t_amb: T_amb
+    i_g: I_g (POA)
+    v_viento: v_viento
+    eje_t: T_amb [°C] / v [m/s]
+    eje_ig: I_g [W/m²]
+    titulo: Forzantes climáticas del horizonte
+  fig2:
+    t_sal_col: T_sal_colector
+    t_ent_cam: T_ent_cámara (post-aux)
+    dt_aux: ΔT_auxiliar
+    eje: T [°C] / ΔT [K]
+    titulo: Acoplamiento colector → auxiliar → entrada de cámara
+  fig3:
+    t_prod: T_prod
+    x_prod: X_prod
+    eje_t: T_prod [°C]
+    eje_x: X [kg/kg ms]
+    titulo: "Producto: temperatura y humedad"
+    x_obj_marca: X_obj alcanzado
+  fig4:
+    m_dot: ṁ_w
+    eje: Tasa evaporación [kg/h]
+    titulo: Tasa de evaporación de agua del producto
+  chim_titulo: Chimenea Solar — lazo natural (convección)
+  chim_prom: ṁ promedio
+  chim_max: ṁ máximo
+  chim_tminmax: T_chim min/max
+  chim_sin_tiro:
+    label: Horas sin tiro
+    help: T_chim ≤ T_amb → caudal natural nulo en esa hora.
+  chim_iter:
+    label: Iteraciones Picard
+    help: Convergencia del lazo T_chim ↔ ṁ_nat.
+  chim_conv:
+    label: Convergencia
+    si: ✅ sí
+    "no": ❌ no
+    help: "|ΔT_chim final| = {v:.2f} K"
+  chim_heff: H efectiva
+  chim_fig:
+    m_nat: ṁ natural
+    t_chim: T_chim
+    dp_tiro: ΔP tiro [Pa]
+    eje_izq: ṁ [g/s]  ·  ΔP_tiro [Pa]
+    eje_der: T_chim [°C]
+    titulo: "Lazo natural por chimenea: caudal, T_chim y tiro disponible"
+  eje_tiempo: Tiempo [h]
+  diagnosticos: Diagnósticos del horizonte
+  t_prod_max: T_prod máx
+  horas_anti_rehum: Horas anti-rehumect.
+  horas_hr: Horas HR>95%
+  aux_activo: "**Auxiliar activo**: {horas:.2f} h (fracción {frac:.0f} %)"
+  aux_dt: "**ΔT_aux máx**: {dt:.1f} K  |  **Q_aux máx**: {q:.0f} W"
+config:
+  titulo: Estado de configuración
+  p2_empl: P2 · Emplazamiento
+  p2_clima: P2 · Clima (NASA POWER)
+  p3_col: P3 · Colector
+  p4_cam: P4 · Cámara de Secado
+  p5_aux: P5 · Auxiliar
+  p6_motor: P6 · Motor
+  p6_chim: P6 · Chimenea
+  p6_ambos: P6 · Motor / Chimenea
+  caption: >-
+    ✅ configurado · ❌ pendiente. **Mínimo para calcular:** la **Cámara (P4)**.
+    El **Clima (P2)** es obligatorio en modos multidía/anual/ventana (en Constantes
+    se sugieren valores por defecto). El **Colector (P3)** es obligatorio salvo
+    tipología Caja. **Auxiliar (P5)** y **Motor/Chimenea (P6)** son opcionales
+    (sin motor → convección natural).
+balance_fig:
+  solar: Solar<br>(colector)
+  auxiliar: Auxiliar
+  motor: Motor
+  evaporacion: Evaporación<br>(útil)
+  eje: Energía [MJ]
+  titulo: Balance energético del ciclo de secado
+barridos:
+  titulo: 🔀 Corridas paramétricas
+  caption: >-
+    Variá un parámetro y compará hasta {max} corridas (modo **{modo}**).
+    Los resultados son efímeros: viven solo en esta sesión.
+  sin_params: No hay parámetros barrideables para esta tipología y modo.
+  configurar: ➕ Configurar un nuevo barrido
+  parametro: Parámetro a variar
+  minimo: "Mínimo [{unidad}]"
+  maximo: "Máximo [{unidad}]"
+  n_puntos: N° de puntos
+  kpis_avanzados: KPIs adicionales (avanzado)
+  kpi_check: "{label} [{unidad}]"
+  nombre: Nombre de la corrida
+  t_estimado: "⏱️ Tiempo estimado ≈ {est:.0f} s ({n} × {base:.1f} s base)."
+  t_largo: "El barrido podría tardar ~{est:.0f} s. Reducí N° de puntos si es mucho."
+  bloqueado: Ya hay {max} barridos. Eliminá uno para correr otro.
+  correr: ▶ Correr barrido
+  progreso_punto: "Punto {i}/{n}: {label} = {v:.4g} {unidad}"
+  spinner: Corriendo barrido...
+  activos: "#### Barridos activos"
+  tarjeta: "{nombre} — {param}, {n} puntos, {t:.1f} s"
+  eliminar: Eliminar
+  tabla: 📋 Tabla — {nombre}
+  params_distintos: >-
+    Los barridos activos varían parámetros distintos: cada gráfica usa
+    su propio eje X y no se superponen.
+  eje_x_valor: valor del parámetro
+tunel_fig:
+  x_prod: X producto [kg/kg ms]
+  t_aire: T aire [°C]
+  eje_zona: Zona  (1 = fresco/entrada producto → N = seco/salida)
+  eje_x: X producto [kg/kg ms]
+  eje_t: T aire [°C]
+  titulo: Perfil espacial del túnel (régimen)
+ventana:
+  produccion: Producción en la ventana — {subtipo}
+  producto_seco: Producto seco
+  tasa_regimen: Tasa de régimen
+  agua_evaporada: Agua evaporada
+  lena: Leña consumida
+  simulada: "Ventana simulada: {dias:.1f} días ({horas:.0f} h)."
+  lotes: Lotes completos
+  tiempo_lote: Tiempo medio / lote
+  lote_progreso: Lote en progreso
+  columnas_desc: Columnas descargadas
+  x_salida: X salida (régimen)
+  throughput: Throughput fresco
+  titulo: Ventana de producción (gran escala)
+  sin_fechas: >-
+    ⚠️ Configurá la **ventana de análisis** (fechas inicio/fin) en **P1**
+    antes de calcular la producción.
+  lapso: Lapso
+  desde_hasta: Desde → Hasta
+  subtipo: Subtipo
+  sin_clima: >-
+    ℹ️ Para correr la ventana hace falta clima real horario. {msg}
+    Descargalo en **P2 · Emplazamiento**.
+  clima_lapso: "Clima del lapso: **{n} horas** reales (NASA POWER, año {anio})."
+  anio_distinto: >-
+    ⚠️ La ventana está definida en **{anio_ventana}** pero el clima
+    descargado es de **{anio_clima}**: se usan los datos de {anio_clima}
+    mapeados por mes/día. Para el clima correcto, descargá el año
+    {anio_ventana} en P2.
+  boton: ▶ Calcular ventana de producción
+  spinner: Corriendo colector(t) + caño maestro + auxiliar(t) + cámara...
+  prompt: ℹ️ Presioná **Calcular** para evaluar la producción sobre la ventana.
+  t_calc: "⏱️ Cálculo en {t:.1f} s."
+  si: "Sí"
+  "no": "No"
+carta:
+  titulo: Carta psicrométrica del proceso
+  caption: >-
+    Estados del aire húmedo a lo largo del proceso, corregidos a la presión
+    del emplazamiento. El calentamiento en colector y auxiliar es **sensible**
+    (ω constante → tramos horizontales); en la cámara el aire **gana humedad**.
+    La isentálpica punteada es la referencia adiabática desde la entrada de
+    cámara: si la salida cae sobre ella el secado fue ≈ adiabático (cámara
+    indirecta); por encima, hubo aporte de calor (cámara directa con techo
+    translúcido). En modos con evolución temporal el estado mostrado es el de
+    máxima irradiancia (≈ mediodía solar).
+sin_camara: >-
+  ⚠️ Para calcular resultados es necesario configurar al menos la
+  **Cámara de Secado (P4)**.
+anual_prompt_detalle: Cálculo de un día representativo (contexto adicional)
+anual_prompt_detalle_cap: >-
+  Debajo aparece el cálculo de un único día (constantes o
+  transitorio). Es útil para validar el motor o explorar
+  transitorios — los resultados anuales que importan están
+  arriba. Si no querés verlo, ignorá esta sección.
+anual_sin_calcular: >-
+  📅 **Modo ANUAL activado.** Para ver los resultados mensuales
+  y agregados anuales, andá a **P4** y apretá el botón
+  '📅 Calcular operación anual'. Mientras tanto se muestra el
+  cálculo de un día representativo.
+modo:
+  titulo: Modo de cálculo
+  label: ¿Cómo evaluamos el prediseño completo?
+  transitorio: Transitorio (horizonte de P4)
+  constantes: Constantes representativas
+  help: |
+    Transitorio: usa las forzantes horarias con las que corriste el motor termodinámico de cámara (P4), suma el auxiliar paso a paso y reporta resultados integrados sobre el horizonte.
+
+    Constantes: condiciones representativas escalares — un punto de diseño único.
+  sin_horizonte: >-
+    ℹ️ Para activar el **modo transitorio** corré primero la cámara
+    en P4 con forzantes 'Día sintético' o 'Día real'. El horizonte
+    se va a propagar automáticamente acá.
+horizonte:
+  titulo: Horizonte propagado de cámara
+  dias: "{n} día(s)"
+  horizonte: Horizonte
+  duracion: Duración
+  forzantes: Forzantes
+  caption: >-
+    Las forzantes T_amb(t), T_sal_col(t), v_viento(t), I_g(t), ω(t)
+    vienen de P4 exactamente como las simulaste. Si configuraste un
+    **Auxiliar (P5)**, se aplica paso a paso a la T_ent de cámara
+    antes de re-correr el motor termodinámico.
+  boton: ▶ Calcular pipeline transitoria
+  spinner: Corriendo auxiliar(t) + cámara TD + motor...
+  prompt: ℹ️ Presioná **Calcular** para evaluar la pipeline transitoria.
+condiciones:
+  titulo: Condiciones de operación representativas
+  caption: >-
+    Ingresá las condiciones del día / momento de análisis.
+    Los valores sugeridos provienen de los datos NASA POWER de P2
+    (percentil 75 de T, percentil 90 de irradiancia).
+  t_amb: T ambiente [°C]
+  irradiancia:
+    label: Irradiancia en plano colector [W/m²]
+    help: Irradiancia global sobre el plano del colector (POA).
+  viento: Velocidad del viento [m/s]
+  hr:
+    label: HR del aire de entrada [%]
+    help: >-
+      HR del aire que entra a la cámara, en el modo **Constantes
+      representativas**. Fija la ω de entrada. En el modo Transitorio la
+      HR de entrada sale de las forzantes y este valor no se usa.
+  boton: ▶ Calcular prediseño completo
+  spinner: Calculando...
+  prompt: ℹ️ Configurá las condiciones y presioná **Calcular** para ver los resultados.
+errores_fatales: "Se detectaron errores que impiden el cálculo:"
+advertencias_expander: "⚠️ {n} advertencias del cálculo"
+colector:
+  titulo: Colector Solar
+  t_entrada: T entrada
+  t_salida: T salida
+  q_util: Q útil
+  eta: η térmica
+  regimen: Régimen
+  re_hint: "Re = {re:.0f}  |  h_int = {hint:.1f} W/(m²·K)"
+auxiliar:
+  titulo: Auxiliar Térmico
+  t_entrada: T entrada auxiliar
+  t_salida: T salida auxiliar
+  q_efectivo: Q efectivo
+t_entrada_camara: "🌡️ **Temperatura de entrada a la cámara: {t:.1f} °C**"
+camara:
+  titulo: Cámara de Secado
+  t_secado: Tiempo de secado
+  no_convergio_help: "No convergió: {status}"
+  status: Status
+  agua_evaporada: Agua evaporada
+  x_final: X final
+  t_max_warning: >-
+    ⚠️ El motor termodinámico no alcanzó X_objetivo dentro del
+    tiempo máximo de simulación. Energías y COP no son confiables.
+  error: "❌ Error en el motor termodinámico: {status}"
+  caption_taire: >-
+    ℹ️ El **T aire en cámara** (eje derecho, verde) varía poco porque el
+    caudal de aire es el término dominante en el balance energético —
+    el aire mantiene la temperatura cercana a T_entrada. Cada curva usa
+    su propia escala (ejes izquierdo y derecho).
+motor:
+  titulo: Motor / Ventilador
+  dp: ΔP sistema
+  p_electrica: P eléctrica
+  p_instalar: P a instalar
+balance:
+  titulo: Balance Energético Global
+  cop:
+    label: COP de secado
+    help: >-
+      masa_agua × Lv / energía_total.
+      Valores típicos: 0.10–0.35 para secadores solares.
+  fraccion_solar:
+    label: Fracción solar
+    help: Energía del colector / (colector + auxiliar).
+  e_secado:
+    label: E secado
+    help: masa_agua × Lv — energía realmente útil para evaporación.
+  e_total:
+    label: E total
+    help: Solar + auxiliar + motor.
+ciclo:
+  titulo: Resumen del ciclo de secado
+  masa_fresco: Masa producto fresco
+  masa_seco:
+    label: Masa producto seco
+    help: masa_fresco / (1 + X₀)
+  agua_evaporada: Agua evaporada
+  rendimiento:
+    label: Rendimiento en masa
+    help: kg_seco / kg_fresco
+  t_secado: Tiempo de secado
+  no_convergio: no convergió
+tabla:
+  titulo: Tabla de resultados completa
+  col_param: Parámetro
+  col_valor: Valor
+  col_t_ent: Colector — T entrada [°C]
+  col_t_sal: Colector — T salida [°C]
+  col_q: Colector — Q útil [W]
+  col_eta: Colector — η térmica
+  aux_dt: Auxiliar — ΔT [°C]
+  aux_q: Auxiliar — Q efectivo [W]
+  cam_top: Cámara — T operación [°C]
+  cam_t: Cámara — Tiempo secado [h]
+  cam_agua: Cámara — Agua evaporada [kg]
+  cam_status: Cámara — Status / convergencia
+  cam_xfin: Cámara — X final [kg/kg ms]
+  cam_tprod: Cámara — T producto final [°C]
+  mot_dp: Motor — ΔP [Pa]
+  mot_pe: Motor — P eléctrica [W]
+  mot_pi: Motor — P a instalar [W]
+  chim_caudal: Chimenea — Caudal natural [g/s]
+  chim_qvol: Chimenea — Caudal vol. [m³/h]
+  chim_v: Chimenea — v [m/s]
+  chim_re: Chimenea — Re
+  chim_tiro: Chimenea — ΔP tiro [Pa]
+  chim_ducto: Chimenea — ΔP ducto [Pa]
+  chim_resto: Chimenea — ΔP resto [Pa]
+  chim_heff: Chimenea — H efectiva [m]
+  bal_solar: Balance — E solar útil [MJ]
+  bal_aux: Balance — E auxiliar [MJ]
+  bal_motor: Balance — E motor [MJ]
+  bal_secado: Balance — E secado [MJ]
+  bal_cop: Balance — COP
+  bal_fs: Balance — Fracción solar
+  no_convergio: no convergió
+anual_det:
+  titulo: Operación anual de cámara
+  caption: >-
+    Resultados del motor termodinámico corrido mes a mes sobre el día
+    típico, escalado por la cantidad de batches/mes configurada en P4.
+    Eficiencias según método Augustus Leon (RSER 2002).
+  kg_anual: kg secados/año
+  eta_media: η_total media
+  t_prom: t_secado promedio
+  e_solar: Energía solar anual
+  col_mes: Mes
+  col_t: t_secado [h]
+  col_conv: Convergió
+  col_mevap: m_evap/batch [kg]
+  col_batches: batches/mes
+  col_kg: kg/mes
+  col_drying: η_drying [%]
+  col_pickup: η_pickup [%]
+  col_termica: η_térmica [%]
+  col_total: η_total [%]
+  fig_kg: kg/mes
+  fig_eta: η_total [%]
+  fig_titulo: Producción mensual y eficiencia del sistema
+  fig_eje_mes: Mes
+  fig_eje_kg: Producto secado [kg/mes]
+  fig_eje_eta: η_total [%]
+guardar:
+  txt: Guardar prediseño completo (.txt)
+  json: Guardar prediseño completo (.json)
+  pdf_titulo: "##### Reporte PDF"
+  pdf_caption: >-
+    Genera un PDF completo con todas las secciones, tablas de configuración
+    y gráficas. Puede tardar 10–30 s al generar las imágenes.
+  pdf_boton: Generar reporte PDF
+  pdf_spinner: Generando reporte PDF (incluye exportación de gráficas)...
+  pdf_exito: "✅ Reporte generado ({kb:.0f} KB). Descargá con el botón debajo."
+  pdf_error: "❌ Error generando el reporte: {exc}"
+  pdf_descargar: Descargar reporte PDF

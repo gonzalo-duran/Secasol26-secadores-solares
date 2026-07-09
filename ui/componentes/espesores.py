@@ -78,9 +78,11 @@ def selector_espesor_mm(
             key=key,
         )
 
+    from ui.componentes.idiomas import t
+
     valores = [mm for mm, _ in opciones_mm]
     etiquetas: dict[object, str] = {mm: et for mm, et in opciones_mm}
-    etiquetas[_OTRO] = "Otro (personalizado)…"
+    etiquetas[_OTRO] = t("comun.espesor.otro")
     opciones: list[object] = [*valores, _OTRO]
 
     # ¿El espesor previo coincide con una medida estándar (dentro de tolerancia)?
@@ -96,7 +98,7 @@ def selector_espesor_mm(
     )
     if seleccion == _OTRO:
         return st.number_input(
-            "Espesor personalizado [mm]",
+            t("comun.espesor.personalizado"),
             min_value=min_mm,
             max_value=max_mm,
             value=valor_seed,

@@ -1,0 +1,39 @@
+caption: Pré-dimensionamento de secadores solares
+manual: 📖 Manual do usuário
+nav:
+  label: Seções do projeto
+  p1: 1 · Tipologia
+  p2: 2 · Local e Clima
+  p3: 3 · Coletor
+  p4: 4 · Câmara de Secagem
+  p5: 5 · Auxiliar
+  p6: 6 · Ventilador
+  p7: 7 · Resultados
+como_empezar:
+  titulo: 👋 Como começar
+  cuerpo: |
+    O **Secasol** pré-dimensiona secadores solares passo a passo. Percorra as seções em ordem:
+
+    1. **Tipologia** — tipo de secador e modo de análise.
+    2. **Local** — coordenadas do sítio e download do clima (NASA POWER).
+    3. **Coletor** — materiais, geometria e velocidade do ar.
+    4. **Câmara** — geometria, produto a secar e carga.
+    5. **Auxiliar** — aquecimento de apoio (opcional).
+    6. **Ventilador** — ventilador ou chaminé solar para mover o ar.
+    7. **Resultados** — roda o pré-dimensionamento completo e exporta o relatório.
+
+    **Tenha à mão:** latitude/longitude do sítio e o produto a secar.
+
+    ℹ️ É uma ferramenta de **pré-dimensionamento** (ordem de grandeza), não de certificação.
+entorno:
+  titulo: 🔧 Ambiente
+  caption: >-
+    Versão do Python e das bibliotecas de cálculo desta instância.
+    Útil para comparar o repositório local com a implantação remota:
+    mesmos números exigem o mesmo ambiente.
+  no_instalado: não instalado
+contacto:
+  titulo: 📬 Contato
+  cuerpo: "**Gonzalo J. Durán**  \nGEEDSP · INENCO · CONICET-UNSa  \n✉️ [{mail}](mailto:{mail})\n\n\
+    Escreva para **citar** o programa em um trabalho, **reportar um problema** ou enviar\
+    \ **sugestões**. Todo feedback é bem-vindo!"
