@@ -133,6 +133,8 @@ def test_back_compat_defaults():
     assert cfg.subtipo_gran_escala == SubtipoGranEscala.BATCH
     assert cfg.ventana_inicio is None
     assert cfg.ventana_fin is None
+    # Fase 1b: paso de trabajo horario por defecto (back-compat de snapshots).
+    assert cfg.paso_trabajo_s == 3600.0
 
 
 def test_modos_diario_anual_no_requieren_ventana():
@@ -141,3 +143,48 @@ def test_modos_diario_anual_no_requieren_ventana():
     cfg_a = Configuracion(tipologia=Tipologia.GRAN_ESCALA, modo_analisis=ModoAnalisis.ANUAL)
     assert cfg_d.ventana_inicio is None
     assert cfg_a.ventana_fin is None
+
+
+# ---------------------------------------------------------------------------
+# Paso de trabajo (mejora 38, fase 1b)
+# ---------------------------------------------------------------------------
+
+
+def test_paso_trabajo_15min_diario_valido():
+    """DIARIO admite paso de 15 min (900 s) sin coacción."""
+    cfg = Configuracion(modo_analisis=ModoAnalisis.DIARIO, paso_trabajo_s=900.0)
+    assert cfg.paso_trabajo_s == 900.0
+
+
+def test_paso_trabajo_10min_diario_valido():
+    """DIARIO admite paso de 10 min (600 s) — común en dataloggers (CR23X)."""
+    cfg = Configuracion(modo_analisis=ModoAnalisis.DIARIO, paso_trabajo_s=600.0)
+    assert cfg.paso_trabajo_s == 600.0
+
+
+def test_paso_trabajo_5min_ventana_valido():
+    """VENTANA admite paso de 5 min (300 s)."""
+    cfg = Configuracion(
+        tipologia=Tipologia.GRAN_ESCALA,
+        modo_analisis=ModoAnalisis.VENTANA,
+        ventana_inicio=date(2020, 1, 1),
+        ventana_fin=date(2020, 1, 8),
+        paso_trabajo_s=300.0,
+    )
+    assert cfg.paso_trabajo_s == 300.0
+
+
+def test_CFG_PASO_TRABAJO_INVALIDO():
+    """Un paso fuera del conjunto admitido {3600, 900, 600, 300} debe fallar."""
+    with pytest.raises(ValueError, match="CFG_PASO_TRABAJO_INVALIDO"):
+        Configuracion(paso_trabajo_s=450.0)
+
+
+def test_paso_trabajo_anual_coaccionado_a_horario():
+    """ANUAL siempre trabaja a paso horario: un paso sub-horario se coacciona a 3600."""
+    cfg = Configuracion(
+        tipologia=Tipologia.GRAN_ESCALA,
+        modo_analisis=ModoAnalisis.ANUAL,
+        paso_trabajo_s=900.0,
+    )
+    assert cfg.paso_trabajo_s == 3600.0

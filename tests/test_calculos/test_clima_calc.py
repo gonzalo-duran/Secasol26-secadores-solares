@@ -14,7 +14,6 @@ import pandas as pd
 import pytest
 
 from calculos.clima_calc import _aplicar_politica_huecos, _hash_cache
-from core.clima import COLUMNAS_SI
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -418,3 +417,141 @@ def test_slice_ventana_lapso_fuera_de_datos():
     df, msg = slice_clima_ventana(clima, date(2022, 3, 1), date(2022, 3, 8))
     assert df is None
     assert "no intersecta" in msg
+
+
+# ---------------------------------------------------------------------------
+# POA medida en plano de colector (mejora 38, F1a)
+# ---------------------------------------------------------------------------
+
+
+def _empl_inclinado() -> Emplazamiento:
+    return Emplazamiento(
+        latitud_deg=-24.79,
+        longitud_deg=-65.41,
+        altitud_m=1200.0,
+        acimut_colector_deg=180.0,
+        pendiente_colector_deg=30.0,
+        zona_horaria="America/Argentina/Salta",
+    )
+
+
+def test_poa_medida_directa_sin_overrides():
+    """Con POA_med_Wm2 presente y sin overrides, la medición manda."""
+    from core.clima import COLUMNA_POA_MEDIDA
+
+    df = _df_clima_dia_claro()
+    df[COLUMNA_POA_MEDIDA] = 555.0
+    poa = calcular_POA_horizonte(df, _empl_inclinado())
+    np.testing.assert_allclose(poa.values, 555.0)
+
+
+def test_poa_medida_ignorada_con_tilt_override():
+    """Con overrides explícitos (caras de cámara) SIEMPRE se transpone."""
+    from core.clima import COLUMNA_POA_MEDIDA
+
+    df = _df_clima_dia_claro()
+    df[COLUMNA_POA_MEDIDA] = 555.0
+    poa = calcular_POA_horizonte(df, _empl_inclinado(), tilt_deg=0.0, acimut_duffie_deg=0.0)
+    # tilt=0 → POA ≈ GHI, no la constante medida
+    diurno = df["GHI_Wm2"] > 50.0
+    np.testing.assert_allclose(poa[diurno].values, df["GHI_Wm2"][diurno].values, rtol=1e-2)
+
+
+def test_poa_medida_nan_cae_a_transposicion():
+    """Las horas con medida NaN se rellenan con la transposición estándar."""
+    from core.clima import COLUMNA_POA_MEDIDA
+
+    df = _df_clima_dia_claro()
+    empl = _empl_inclinado()
+    poa_trans = calcular_POA_horizonte(df.copy(), empl)
+    df[COLUMNA_POA_MEDIDA] = 555.0
+    df.loc[df.index[12], COLUMNA_POA_MEDIDA] = np.nan
+    poa = calcular_POA_horizonte(df, empl)
+    assert poa.iloc[12] == pytest.approx(poa_trans.iloc[12])
+    assert poa.iloc[13] == pytest.approx(555.0)
+
+
+def test_poa_medida_clip_negativos():
+    from core.clima import COLUMNA_POA_MEDIDA
+
+    df = _df_clima_dia_claro()
+    df[COLUMNA_POA_MEDIDA] = -4.0
+    poa = calcular_POA_horizonte(df, _empl_inclinado())
+    assert (poa.values == 0.0).all()
+
+
+def test_dia_tipo_mensual_preserva_poa_medida():
+    """El día típico mensual promedia también la columna de POA medida."""
+    from calculos.clima_calc import dia_tipo_mensual
+    from core.clima import COLUMNA_POA_MEDIDA
+
+    df = _df_multidia_dic(2022)
+    df[COLUMNA_POA_MEDIDA] = 321.0
+    dia = dia_tipo_mensual(df, 12, tz_local="America/Argentina/Salta")
+    assert COLUMNA_POA_MEDIDA in dia.columns
+    np.testing.assert_allclose(dia[COLUMNA_POA_MEDIDA].values, 321.0)
+
+
+# ---------------------------------------------------------------------------
+# resolver_datos_trabajo (mejora 38, fase 1b — paso de trabajo sub-horario)
+# ---------------------------------------------------------------------------
+
+from calculos.clima_calc import resolver_datos_trabajo  # noqa: E402
+
+
+def test_resolver_horario_devuelve_datos_intactos():
+    """paso 3600 → clima.datos tal cual, sin advertencias (camino histórico)."""
+    clima = Clima(datos=_df_multidia_dic(2022), anio=2022)
+    df, adv = resolver_datos_trabajo(clima, 3600.0)
+    assert df is clima.datos
+    assert adv == []
+
+
+def test_resolver_none_sin_datos():
+    df, adv = resolver_datos_trabajo(None, 900.0)
+    assert df is None
+    assert adv == []
+
+
+def test_resolver_subhorario_nasa_interpola_y_avisa():
+    """Clima solo horario (NASA) a 15 min → baseline sintético + ADV_PASO_SINTETICO."""
+    clima = Clima(datos=_df_multidia_dic(2022), anio=2022)
+    df, adv = resolver_datos_trabajo(clima, 900.0)
+    assert df is not None
+    # Grilla de 15 min: 4× más puntos que la horaria (aprox).
+    paso = df.index[1] - df.index[0]
+    assert paso == pd.Timedelta("15min")
+    assert any("ADV_PASO_SINTETICO" in a for a in adv)
+    # Interpolación lineal de T_amb entre dos horas consecutivas.
+    t0 = clima.datos["T_amb_K"].iloc[0]
+    t1 = clima.datos["T_amb_K"].iloc[1]
+    assert df["T_amb_K"].iloc[1] == pytest.approx(t0 + (t1 - t0) * 0.25, rel=1e-6)
+
+
+def test_resolver_subhorario_con_nativo_usa_real():
+    """Con datos_nativos a 5 min, el paso 15 min NO marca esa columna como sintética."""
+    idx_h = pd.date_range("2022-12-01", periods=6, freq="h", tz="UTC")
+    datos = pd.DataFrame(
+        {
+            "T_amb_K": 290.0 + np.arange(6) * 1.0,
+            "GHI_Wm2": np.zeros(6),
+            "DNI_Wm2": np.zeros(6),
+            "DHI_Wm2": np.zeros(6),
+            "WS_ms": np.full(6, 2.0),
+            "presion_Pa": np.full(6, 101325.0),
+            "HR": np.full(6, 0.5),
+        },
+        index=idx_h,
+    )
+    idx_n = pd.date_range("2022-12-01", "2022-12-01 05:00", freq="5min", tz="UTC")
+    nativos = pd.DataFrame({"T_amb_K": 300.0 + np.arange(len(idx_n)) * 0.1}, index=idx_n)
+    clima = Clima(datos=datos, anio=2022)
+    clima.datos_nativos = nativos
+    clima.frecuencia_nativa_s = 300.0
+
+    df, adv = resolver_datos_trabajo(clima, 900.0)
+    # T_amb viene del nativo real (~300 K), no del baseline horario (~290 K).
+    assert df["T_amb_K"].iloc[0] == pytest.approx(300.0, abs=0.5)
+    # La advertencia sintética menciona las columnas SIN nativo, no T_amb_K.
+    assert adv  # sigue habiendo columnas sintéticas (GHI, HR, etc.)
+    assert all("T_amb_K" not in a.split("(")[-1] for a in adv)

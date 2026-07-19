@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from calculos.clima_calc import calcular_POA_horizonte, dia_tipo_mensual
+from calculos.clima_medido import meses_cubiertos
 from calculos.eficiencias_camara import (
     eta_drying,
     eta_pickup,
@@ -130,6 +131,32 @@ def _T_salida_colector_lineal(
     return np.asarray(T_amb_K_serie, dtype=float) + dT
 
 
+def _omega_ambiente_dia(
+    HR_frac_serie: np.ndarray,
+    T_amb_K_serie: np.ndarray,
+    P_amb_Pa: float,
+) -> np.ndarray:
+    """Humedad absoluta ambiente ω(t) desde HR y T ambiente.
+
+    ``HR_frac_serie`` **debe** venir como fracción [0, 1] — es el contrato de
+    ``Clima.datos`` (``clima_calc.py`` convierte el % de NASA POWER y
+    ``clima_medido.py`` normaliza lo medido). NO se re-divide por 100 acá; hacerlo
+    fue el bug histórico del ANUAL (ω ~100× baja → aire irrealmente seco → secado
+    optimista). Consistente con el pipeline transitorio (``balance_global``).
+
+    Args:
+        HR_frac_serie: Humedad relativa por hora, fracción [0, 1].
+        T_amb_K_serie: T ambiente por hora [K].
+        P_amb_Pa: Presión representativa del emplazamiento [Pa].
+
+    Returns:
+        ω ambiente por hora [kg_agua/kg_aire_seco].
+    """
+    HR = np.asarray(HR_frac_serie, dtype=float)
+    T = np.asarray(T_amb_K_serie, dtype=float)
+    return np.array([humedad_absoluta(float(HR[h]), float(T[h]), P_amb_Pa) for h in range(len(HR))])
+
+
 def _area_colector_m2(proyecto: "Proyecto") -> float:
     """Área total del banco de colectores [m²]. 0 si no hay colector."""
     if proyecto.colector is None:
@@ -173,7 +200,7 @@ def _calcular_punto_mensual(
 
     T_amb_dia = df_dia["T_amb_K"].to_numpy()
     WS_dia = df_dia["WS_ms"].to_numpy()
-    HR_dia = df_dia["HR"].to_numpy() / 100.0  # NASA da en %
+    HR_dia = df_dia["HR"].to_numpy()  # fracción [0, 1] (ver _omega_ambiente_dia)
 
     # Irradiancia equivalente al producto sobre las caras translúcidas de la
     # cámara (fase 2: orientación propia, independiente del banco de
@@ -198,7 +225,7 @@ def _calcular_punto_mensual(
     # 4. ω ambiente desde HR y T_amb. La presión corregida por altitud se
     #    obtiene del helper híbrido (media NASA anual o ISA del emplazamiento).
     P_amb, _ = presion_representativa_proyecto(proyecto)
-    omega_amb_dia = np.array([humedad_absoluta(HR_dia[h], T_amb_dia[h], P_amb) for h in range(24)])
+    omega_amb_dia = _omega_ambiente_dia(HR_dia, T_amb_dia, P_amb)
 
     # 5. Replicar el día N veces para llenar el horizonte del batch
     n_dias = max(1, int(np.ceil(cfg.horizonte_horas_batch / 24)))
@@ -329,8 +356,23 @@ def calcular_operacion_anual_camara(
     """
     if proyecto.clima is None or proyecto.clima.datos is None:
         raise ValueError(
-            "ANUAL_SIN_CLIMA: la operación anual requiere clima NASA POWER "
-            "cargado en P2 (proyecto.clima.datos)."
+            "ANUAL_SIN_CLIMA: la operación anual requiere clima cargado en P2 "
+            "(proyecto.clima.datos)."
+        )
+    meses = meses_cubiertos(
+        proyecto.clima.datos,
+        (
+            getattr(proyecto.emplazamiento, "zona_horaria", "UTC")
+            if proyecto.emplazamiento is not None
+            else "UTC"
+        ),
+    )
+    if len(meses) < 12:
+        raise ValueError(
+            f"ANUAL_CLIMA_INCOMPLETO: la operación anual necesita los 12 meses "
+            f"con datos; el clima cargado cubre {len(meses)} "
+            f"({', '.join(str(m) for m in meses)}). Con clima medido de campaña "
+            "parcial usá los modos Diario / multidía / Ventana."
         )
     if proyecto.camara is None:
         raise ValueError("ANUAL_SIN_CAMARA: requiere proyecto.camara configurada.")

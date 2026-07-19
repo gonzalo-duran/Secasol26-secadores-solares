@@ -338,7 +338,11 @@ t_amb_origen:
   media_anual: "média anual NASA POWER = {t:.1f} °C"
   fallback: "fallback 25 °C (sem clima carregado)"
 anual:
-  sin_clima: ℹ️ **Operação anual** disponível apenas com clima NASA POWER carregado em P2.
+  sin_clima: ℹ️ **Operação anual** disponível apenas com clima carregado em P2.
+  clima_incompleto: >-
+    ⚠️ A operação anual precisa de clima dos 12 meses; o clima carregado
+    cobre {n_meses} mês(es). Com dados medidos de uma campanha parcial, use
+    os modos Diário, multidia ou Janela de produção.
   sin_colector: >-
     ⚠️ A operação anual da câmara requer um coletor configurado
     em P3 (modelo linear de pré-dimensionamento).

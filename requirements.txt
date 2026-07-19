@@ -29,6 +29,13 @@ pyarrow==24.0.0
 # === Catálogo de productos y materiales ===
 pyyaml==6.0.3
 
+# === Ingesta de datos climáticos medidos (mejora 38, F1a) ===
+# Lectores de Excel para archivos subidos por el usuario en P2: xlrd para .xls
+# legado (BIFF, dataloggers Campbell y planillas 97-2003) y openpyxl para .xlsx.
+# Pinneados como el resto del stack (deploy HF reconstruye con pip install).
+xlrd==2.0.2
+openpyxl==3.1.5
+
 # === Reporte PDF ===
 # kaleido pinned a la rama 0.2.x: la 1.x requiere Chrome instalado en el sistema,
 # que no está disponible en Streamlit Community Cloud por defecto. La 0.2.x trae

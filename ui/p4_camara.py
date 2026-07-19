@@ -24,6 +24,7 @@ from calculos.balance_global import (
 )
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from calculos.clima_medido import meses_cubiertos
 from calculos.conversiones_angulo import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
@@ -167,6 +168,33 @@ def _grafica_curva_secado(resultados, X_0: float, X_obj: float, prod_id: str) ->
 # ---------------------------------------------------------------------------
 # Helpers del motor termodinámico (forzantes + gráficas)
 # ---------------------------------------------------------------------------
+
+# Clave de session_state donde se depositan las advertencias del paso de trabajo
+# (ADV_PASO_SINTETICO) para que P4/P7 las muestren tras resolver el clima.
+_PASO_ADV_KEY = "p4_paso_trabajo_advertencias"
+
+
+def _datos_local_paso(proyecto):
+    """Devuelve el clima al **paso de trabajo** de P1, en hora local (fase 1b).
+
+    Resuelve ``clima.datos`` a la resolución ``configuracion.paso_trabajo_s``
+    (sub-horario real desde ``datos_nativos`` o interpolado del horario con
+    ``ADV_PASO_SINTETICO``), lo convierte a la zona local y lo filtra al año
+    climático. Las advertencias quedan en ``st.session_state[_PASO_ADV_KEY]``
+    para que la UI las muestre.
+
+    Returns:
+        DataFrame en hora local al paso de trabajo (o None si no hay clima).
+    """
+    from calculos.clima_calc import resolver_datos_trabajo
+
+    paso_s = getattr(proyecto.configuracion, "paso_trabajo_s", 3600.0)
+    df, adv = resolver_datos_trabajo(proyecto.clima, paso_s)
+    st.session_state[_PASO_ADV_KEY] = list(adv)
+    if df is None:
+        return None
+    df_local = df.tz_convert(proyecto.emplazamiento.zona_horaria)
+    return df_local[df_local.index.year == proyecto.clima.anio]
 
 
 def _construir_forzantes_termodinamico(
@@ -314,6 +342,13 @@ def _forzantes_desde_slice(
         dtype=float,
     )
 
+    # Paso temporal real del slice (fase 1b): sub-horario si el clima de trabajo
+    # se resolvió a 15/5 min; 3600 s con clima horario.
+    if len(datos_slice.index) > 1:
+        dt_s = float((datos_slice.index[1] - datos_slice.index[0]).total_seconds())
+    else:
+        dt_s = 3600.0
+
     return armar_forzantes_aire(
         modo="diario",  # n_reps=1 → serie completa de 24·N sin replicar
         n_dias=1,
@@ -325,7 +360,7 @@ def _forzantes_desde_slice(
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
-        dt_s=3600.0,
+        dt_s=dt_s,
     )
 
 
@@ -368,8 +403,7 @@ def _construir_forzantes_reales(
         empl = proyecto.emplazamiento
         cfg = proyecto.configuracion
         anio = proyecto.clima.anio
-        datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
-        datos_local = datos_local[datos_local.index.year == anio]
+        datos_local = _datos_local_paso(proyecto)
         fecha_dia = _resolver_fecha_dia(cfg, datos_local, anio)
         datos_slice, _, _ = slice_n_dias_consecutivos(datos_local, fecha_dia, n_dias)
         if len(datos_slice) == 0:
@@ -518,8 +552,7 @@ def _construir_forzantes_reales_caja(
     empl = proyecto.emplazamiento
     cfg = proyecto.configuracion
     anio = proyecto.clima.anio
-    datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
-    datos_local = datos_local[datos_local.index.year == anio]
+    datos_local = _datos_local_paso(proyecto)
 
     fecha_dia = _resolver_fecha_dia(cfg, datos_local, anio)
 
@@ -578,6 +611,10 @@ def _construir_forzantes_reales_caja(
         dtype=float,
     )
 
+    if len(datos_dia.index) > 1:
+        dt_s = float((datos_dia.index[1] - datos_dia.index[0]).total_seconds())
+    else:
+        dt_s = 3600.0
     modo = "multi_dia" if n_dias > 1 else "diario"
     return armar_forzantes_aire(
         modo=modo,
@@ -590,7 +627,7 @@ def _construir_forzantes_reales_caja(
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
-        dt_s=3600.0,
+        dt_s=dt_s,
     )
 
 
@@ -629,8 +666,7 @@ def _construir_forzantes_ventana(
 
     empl = proyecto.emplazamiento
     anio = proyecto.clima.anio
-    datos_local = proyecto.clima.datos.tz_convert(empl.zona_horaria)
-    datos_local = datos_local[datos_local.index.year == anio]
+    datos_local = _datos_local_paso(proyecto)
     n_dias = max(1, (fin - inicio).days)
     # La ventana se mapea al año climático descargado (mismo criterio que P7).
     inicio_anio = _date(anio, inicio.month, inicio.day)
@@ -1358,6 +1394,11 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
     """
     if proyecto.clima is None or proyecto.clima.datos is None:
         st.info(t("p4.anual.sin_clima"))
+        return
+    tz_local = proyecto.emplazamiento.zona_horaria if proyecto.emplazamiento is not None else "UTC"
+    meses = meses_cubiertos(proyecto.clima.datos, tz_local)
+    if len(meses) < 12:
+        st.warning(t("p4.anual.clima_incompleto", n_meses=len(meses)))
         return
     if proyecto.colector is None:
         st.warning(t("p4.anual.sin_colector"))
@@ -2665,14 +2706,22 @@ def render() -> None:
                         P_Pa=P_proyecto_Pa,
                         dias_consecutivos=dias_consecutivos,
                     )
+                # Advertencias del paso de trabajo (ADV_PASO_SINTETICO, fase 1b),
+                # depositadas por _datos_local_paso al resolver el clima real.
+                for _a in st.session_state.get(_PASO_ADV_KEY, []):
+                    st.warning(_a)
                 t_max_efectivo = (
                     float(fz_aire.t_s[-1]) if fz_aire is not None else float(n_dias) * 24.0 * 3600.0
                 )
                 # Días efectivamente simulados (en consecutivos puede truncarse en el
-                # borde del año). Se infiere de la longitud de la serie horaria.
-                n_dias_efectivo = (
-                    max(1, round(len(fz_aire.t_s) / 24)) if fz_aire is not None else int(n_dias)
-                )
+                # borde del año). Se infiere de la longitud de la serie: puntos por día
+                # = 86400/dt (fase 1b: el paso puede ser sub-horario).
+                if fz_aire is not None and len(fz_aire.t_s) > 1:
+                    _dt_fz = float(fz_aire.t_s[1] - fz_aire.t_s[0])
+                    _ppd = max(1, round(86400.0 / _dt_fz))
+                    n_dias_efectivo = max(1, round(len(fz_aire.t_s) / _ppd))
+                else:
+                    n_dias_efectivo = int(n_dias)
                 if dias_consecutivos and n_dias_efectivo < n_dias:
                     st.warning(
                         t(

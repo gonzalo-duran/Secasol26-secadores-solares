@@ -652,7 +652,13 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
     else:
         lines.append("  (sin configurar)")
 
-    lines += ["", "CLIMA (NASA POWER)"]
+    fuente_clima = getattr(clima, "fuente", "nasa_power") if clima is not None else "nasa_power"
+    _ETIQUETAS_FUENTE = {
+        "nasa_power": "NASA POWER",
+        "medido": "datos medidos del usuario",
+        "hibrido": "híbrido (medido + NASA POWER)",
+    }
+    lines += ["", f"CLIMA ({_ETIQUETAS_FUENTE.get(fuente_clima, fuente_clima)})"]
     json_clima: dict = {}
     if clima is not None and clima.datos is not None:
         n_total = len(clima.datos)
@@ -665,6 +671,7 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             float(clima.datos["GHI_Wm2"].mean()) if "GHI_Wm2" in clima.datos.columns else None
         )
         lines += [
+            f"  Fuente              : {fuente_clima}",
             f"  Año fuente          : {clima.anio}",
             "  Altitud NASA grid   : "
             + (f"{clima.altitud_nasa_m:.1f} m" if clima.altitud_nasa_m is not None else "—"),
@@ -677,8 +684,19 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             f"  Calidad — bloqueadas (h)   : {clima.calidad.n_horas_bloqueadas}",
             f"  Mayor hueco (h)            : {clima.calidad.mayor_hueco_h}",
         ]
+        procedencia = getattr(clima, "procedencia", None)
+        if procedencia:
+            lines.append(
+                "  Procedencia         : "
+                + ", ".join(f"{col}:{proc}" for col, proc in sorted(procedencia.items()))
+            )
+        if getattr(clima, "frecuencia_nativa_s", None):
+            lines.append(f"  Paso nativo medido  : {clima.frecuencia_nativa_s:.0f} s")
         json_clima = {
             "anio": clima.anio,
+            "fuente": fuente_clima,
+            "procedencia": procedencia,
+            "frecuencia_nativa_s": getattr(clima, "frecuencia_nativa_s", None),
             "altitud_nasa_m": clima.altitud_nasa_m,
             "n_horas": n_total,
             "T_amb_media_C": T_media_C,
@@ -1504,11 +1522,22 @@ def _render_resultados_barridos(barridos: list, modo: str, key_estado: str) -> N
 # ---------------------------------------------------------------------------
 
 
-def _slice_clima_ventana(clima, inicio, fin):
-    """Recorta el clima al lapso de la ventana (delegado a clima_calc, S41)."""
-    from calculos.clima_calc import slice_clima_ventana
+def _slice_clima_ventana(clima, inicio, fin, paso_s: float = 3600.0):
+    """Recorta el clima al lapso de la ventana, al **paso de trabajo** (fase 1b).
 
-    return slice_clima_ventana(clima, inicio, fin)
+    Resuelve ``clima.datos`` a la resolución ``paso_s`` (sub-horario real desde
+    ``datos_nativos`` o interpolado del horario con ``ADV_PASO_SINTETICO``) antes
+    de recortar. Devuelve ``(df, msg, advertencias)``.
+    """
+    import dataclasses
+
+    from calculos.clima_calc import resolver_datos_trabajo, slice_clima_ventana
+
+    df_trab, advertencias = resolver_datos_trabajo(clima, paso_s)
+    if df_trab is not None and df_trab is not getattr(clima, "datos", None):
+        clima = dataclasses.replace(clima, datos=df_trab)
+    df, msg = slice_clima_ventana(clima, inicio, fin)
+    return df, msg, advertencias
 
 
 def _fig_perfil_tunel(res) -> go.Figure:
@@ -1616,11 +1645,14 @@ def _render_ventana(proyecto) -> None:
     c3.metric(t("p7.ventana.subtipo"), subtipo.value.capitalize() if subtipo else "—")
 
     clima = getattr(proyecto, "clima", None)
-    df_ventana, msg = _slice_clima_ventana(clima, inicio, fin)
+    paso_s = getattr(cfg, "paso_trabajo_s", 3600.0)
+    df_ventana, msg, adv_paso = _slice_clima_ventana(clima, inicio, fin, paso_s)
     if df_ventana is None:
         st.info(t("p7.ventana.sin_clima", msg=msg))
         return
 
+    for a in adv_paso:
+        st.warning(a)
     st.caption(t("p7.ventana.clima_lapso", n=len(df_ventana), anio=clima.anio))
     if clima.anio is not None and inicio.year != clima.anio:
         st.warning(t("p7.ventana.anio_distinto", anio_ventana=inicio.year, anio_clima=clima.anio))

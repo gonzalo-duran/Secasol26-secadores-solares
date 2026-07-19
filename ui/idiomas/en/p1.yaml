@@ -84,6 +84,9 @@ subtipo:
     semicontinuo: Semi-continuous
 modo:
   titulo: Analysis mode
+  clima_parcial: >-
+    ℹ️ The climate loaded in P2 comes from measured data covering {n_meses}
+    month(s): the Annual mode will not be available (it requires 12 months).
   caja_sin_anual: ℹ️ The **Annual** analysis is not available for the Box typology in v0.
   label: Analysis type
   help: |
@@ -96,6 +99,26 @@ modo:
     diario: Daily — one representative day (hourly data)
     ventana: Production window — span [start, end] (real hourly climate)
     anual: Annual — full year (8,760 hours)
+paso:
+  label: Simulation time step
+  help: |
+    Time resolution of the transient calculation (Daily/Window modes).
+
+    **1 hour:** standard, matches the hourly climate (NASA POWER).
+
+    **15 min / 5 min:** fine step for sub-hourly measured data. With hourly climate the series are interpolated (synthetic resolution, no real transients).
+  opcion:
+    h: 1 hour (standard)
+    15min: 15 minutes
+    10min: 10 minutes
+    5min: 5 minutes
+  aviso_subhorario: >-
+    ℹ️ Sub-hourly step: if the climate is hourly (NASA), the series are interpolated
+    (synthetic resolution). With sub-hourly measured data the real resolution is used.
+  aviso_fino: >-
+    ⚠️ 5-min step: the collector (without thermal capacitance) over-reacts to cloud
+    transients and overestimates the outlet temperature peaks. The computation is also
+    noticeably slower.
 dia:
   label: Criterion to select the analysis day
   help: >-

@@ -49,6 +49,10 @@ portada:
   clima:
     titulo: Climate resource (NASA POWER)
     pendiente: Climate data not downloaded.
+    fuente: Data source
+    fuente_nasa_power: NASA POWER
+    fuente_medido: User-measured data
+    fuente_hibrido: Hybrid (measured + NASA POWER)
     anio: Source year
     altitud_nasa: NASA grid altitude
     horas: Available hours

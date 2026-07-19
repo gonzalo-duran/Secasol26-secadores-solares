@@ -199,7 +199,14 @@ def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
                 if P_arr.size > 0:
                     P = float(np.mean(P_arr))
                     if P > 0:
-                        return P, f"media anual NASA POWER = {P / 1000.0:.2f} kPa"
+                        etiquetas = {
+                            "nasa_power": "NASA POWER",
+                            "medido": "clima medido",
+                            "hibrido": "clima híbrido (medido + NASA)",
+                        }
+                        fuente = getattr(clima, "fuente", "nasa_power")
+                        etiqueta = etiquetas.get(fuente, fuente)
+                        return P, f"media anual {etiqueta} = {P / 1000.0:.2f} kPa"
             except Exception:
                 # Si por algún motivo la columna existe pero no es numérica,
                 # caemos al siguiente nivel sin abortar el cálculo.
@@ -1955,7 +1962,13 @@ def armar_forzantes_ventana(
         T_post_cano = T_sal_col
 
     omega_amb = np.array([humedad_absoluta(float(HR[i]), float(T_amb[i]), P_Pa) for i in range(n)])
-    t_s = np.arange(n, dtype=float) * 3600.0
+    # Paso temporal real del clima (fase 1b: puede ser sub-horario). Se deriva
+    # del índice en vez de asumir 3600 s; fallback a horario si n == 1.
+    if n > 1:
+        dt_s = float((df.index[1] - df.index[0]).total_seconds())
+    else:
+        dt_s = 3600.0
+    t_s = np.arange(n, dtype=float) * dt_s
 
     # Auxiliar en serie (con calendario de arranque) → ΔT y leña.
     T_ent = T_post_cano.copy()

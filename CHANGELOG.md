@@ -7,11 +7,64 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **Motor de simulación agnóstico al paso temporal (mejora 38, fase 1b)** — P1 gana un
+  selector de **paso de trabajo** (1 hora por defecto / 15 min / 10 min / 5 min) para los modos
+  Diario, multidía y Ventana (el modo Anual queda siempre horario). El paso sub-horario
+  re-remuestrea desde `Clima.datos_nativos` cuando hay resolución nativa fina (dato real) o
+  interpola el clima horario con aviso de **resolución sintética** (`ADV_PASO_SINTETICO`);
+  a 5 min se advierte además que el colector (sin capacitancia térmica) sobre-reacciona a
+  los transitorios de nube. Núcleo nuevo: `clima_medido.remuestrear_a_paso` y
+  `clima_calc.resolver_datos_trabajo` (baseline interpolado + sobrescritura con columnas
+  nativas reales, procedencia por columna). Las forzantes derivan el `dt` del índice del
+  clima (no lo asumen horario) y el paso máximo del integrador del motor termodinámico se
+  deriva del espaciado de las forzantes. `Configuracion.paso_trabajo_s` (default 3600,
+  back-compat total; se coacciona a horario en Anual).
+- **Ingesta de datos climáticos medidos (mejora 38, fase 1a)** — P2 gana un selector de
+  fuente de clima: NASA POWER (flujo histórico) o **datos medidos** (archivo propio CSV /
+  Excel .xls/.xlsx). Pipeline puro en `calculos/clima_medido.py`: mapeo declarativo de
+  columnas con auto-sugerencia (excluye canales de proceso del secador), timestamps como
+  serial Excel o texto (zona horaria y convención instantánea/promedio declarables),
+  marcadores `'NAN'`, conversión de unidades a SI, normalización del viento a 2 m (perfil
+  log), QC físico con reporte (rangos, irradiancia nocturna, cota extraterrestre, sensor
+  congelado), remuestreo a paso horario (media, etiqueta = inicio de hora, réplica NASA),
+  derivación DNI/DHI por Erbs, **completado por columna desde NASA POWER con procedencia
+  visible** (medida / derivada / completada), política de huecos existente y cache parquet
+  propia (`data/cache/clima_medido/`). La resolución nativa se conserva en
+  `Clima.datos_nativos` para la futura fase 1b (motor sub-horario).
+- **POA medida en plano de colector**: si el piranómetro está coplanar con el colector, la
+  columna `POA_med_Wm2` reemplaza a la transposición Liu-Jordan para el colector
+  (`calcular_POA_horizonte` la devuelve directo cuando se llama sin overrides); las caras
+  de la cámara radiativa siguen transponiendo desde GHI/DNI/DHI.
+- `Clima` gana `fuente` ("nasa_power"/"medido"/"hibrido"), `procedencia` por columna,
+  `frecuencia_nativa_s`, `datos_nativos`, `mapeo` y `qc` (back-compat total).
+- Snapshot JSON de sección "clima_medido" (mapeo + hashes) con restauración desde la cache
+  local sin re-subir el archivo.
+- Gating del modo ANUAL por cobertura: con clima de campaña parcial (< 12 meses) P4 lo
+  bloquea con aviso claro (`ANUAL_CLIMA_INCOMPLETO` defensivo en `operacion_anual_camara`).
+- Dependencias nuevas pinneadas: `xlrd==2.0.2` (.xls legado) y `openpyxl==3.1.5` (.xlsx).
+- Validado end-to-end contra el dataset real ADITAL 2010 (tesis cap. 3): los tres `.xls`
+  de la campaña se ingieren con sus trampas reales (test de integración `skipif` +
+  verificación AppTest con descarga NASA real).
+
 Mejoras post-1.0 (sin orden estricto):
 
+- Mejora 38 fases siguientes: 2 (validación medido vs simulado), 3 (calibración) — ver
+  `docs/notas/plan_datos_medidos.md`. (1b, motor agnóstico al paso, ya implementada.)
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+### Fixed
+
+- **Modo ANUAL: humedad relativa dividida dos veces por 100** — `operacion_anual_camara`
+  re-dividía la HR del día típico por 100, pero `clima_calc`/`clima_medido` ya la entregan
+  como fracción [0, 1]. La ω ambiente salía ~100× baja (aire irrealmente seco) → secado
+  anual optimista. Ahora la HR se trata como fracción, consistente con el pipeline
+  transitorio (`balance_global`); el cálculo se aisló en el helper puro `_omega_ambiente_dia`
+  con test de regresión. **Altera los resultados del modo ANUAL** respecto de versiones
+  previas (ahora físicamente correctos).
 
 ## [1.0.0] — 2026-07-09
 

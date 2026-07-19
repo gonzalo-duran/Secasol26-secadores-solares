@@ -168,3 +168,119 @@ csv:
   viento: Viento [m/s]
   hr: HR [%]
   presion: Presión [hPa]
+fuente:
+  titulo: Fuente de datos climáticos
+  nasa_power: NASA POWER (descarga satelital)
+  medido: Datos medidos (archivo propio)
+medido:
+  intro: >-
+    Subí un archivo CSV o Excel con mediciones propias (estación meteorológica,
+    datalogger de campaña). Las variables que falten se completan con NASA POWER
+    y cada columna queda etiquetada con su procedencia.
+  uploader:
+    label: Archivo de datos medidos
+    help: >-
+      CSV (separador coma o punto y coma, decimal punto o coma) o Excel
+      (.xls / .xlsx). Debe incluir una columna de fecha/hora.
+  archivo_cargado: "📄 **{nombre}** ({kb} kB)"
+  quitar: Quitar archivo
+  hoja:
+    label: Hoja del libro Excel
+  fila_enc:
+    label: Fila de encabezados
+    help: Índice (desde 0) de la fila que contiene los nombres de columna.
+  preview_titulo: 👀 Vista previa del archivo (primeras filas)
+  mapeo:
+    titulo: "#### Mapeo de columnas"
+    caption: >-
+      Indicá qué columna del archivo corresponde a cada variable y en qué
+      unidad está medida. Las no mapeadas se completan con NASA POWER.
+    timestamp: Columna de fecha/hora
+    no_mapear: (no mapear)
+    unidad: Unidad
+  variable:
+    T_amb_K: Temperatura ambiente
+    GHI_Wm2: Irradiancia global horizontal (GHI)
+    DNI_Wm2: Irradiancia directa normal (DNI)
+    DHI_Wm2: Irradiancia difusa horizontal (DHI)
+    WS_ms: Velocidad de viento
+    presion_Pa: Presión atmosférica
+    HR: Humedad relativa ambiente
+    POA_med_Wm2: Irradiancia global en plano de colector (POA medida)
+  unidad:
+    C: °C
+    K: K
+    F: °F
+    W_m2: W/m²
+    kW_m2: kW/m²
+    m_s: m/s
+    km_h: km/h
+    Pa: Pa
+    kPa: kPa
+    hPa: hPa
+    mbar: mbar
+    atm: atm
+    fraccion: fracción (0–1)
+    porcentaje: "%"
+  convencion:
+    label: Convención del timestamp
+    help: >-
+      ¿El valor registrado a las 10:00 es una lectura instantánea, o el promedio
+      del intervalo que termina (o empieza) a las 10:00? Los dataloggers Campbell
+      suelen registrar lecturas instantáneas o promedios del intervalo anterior.
+    instantanea: Lectura instantánea
+    promedio_fin: Promedio del intervalo anterior
+    promedio_inicio: Promedio del intervalo siguiente
+  tz:
+    label: Zona horaria de los timestamps del archivo
+  alt_viento:
+    label: Altura del anemómetro [m]
+    help: >-
+      El contrato interno usa viento a 2 m; la serie se normaliza con un perfil
+      logarítmico neutro (z₀ = 0.05 m).
+  plano:
+    label: Plano del piranómetro de irradiancia global
+    help: >-
+      Si el sensor está montado coplanar con el colector, la medición reemplaza
+      a la transposición Liu-Jordan para el colector (mayor precisión).
+    horizontal: Horizontal (GHI)
+    plano_colector: En el plano del colector (POA)
+  falta_variables: ⚠️ Mapeá al menos una variable climática para poder procesar.
+  procesar: Procesar archivo
+  spinner: Acondicionando datos medidos (QC + remuestreo + completado NASA)…
+  error: "❌ {err}"
+  procedencia:
+    titulo: "#### Procedencia de cada variable"
+    variable: Variable
+    origen: Procedencia
+    medida: Medida (archivo del usuario)
+    derivada: Derivada (Erbs desde GHI medida)
+    completada_nasa: Completada con NASA POWER
+    default: Valor por defecto
+  resumen:
+    previo: "Período {inicio} → {fin} · paso nativo {paso} s · horas al contrato horario: {n_horas}."
+    confirmado: >-
+      ✅ Clima {fuente} confirmado: {inicio} → {fin} · paso nativo {paso} s ·
+      {n_meses} mes(es) con datos.
+    hibrido: híbrido (medido + NASA POWER)
+  qc:
+    titulo: "🔬 Control de calidad físico — hallazgos: {n}"
+    sin_hallazgos: Sin hallazgos — todas las variables dentro de rangos físicos.
+    detalle: "{chequeo} — {variable} — valores afectados: {n}. Ejemplos: {ejemplos}"
+    chequeo:
+      rango_fisico: Fuera de rango físico (→ anulado)
+      ghi_nocturna: Irradiancia nocturna (→ 0)
+      ghi_extraterrestre: Supera la extraterrestre (→ anulado)
+      sensor_congelado: Sensor posiblemente congelado (aviso)
+  confirmar: Usar este clima en el proyecto
+  exito: ✅ Clima medido cargado en el proyecto.
+  opcion_descartar: Descartar este clima y corregir el mapeo
+  snapshot:
+    titulo: 💾 Guardar / cargar configuración de ingesta
+    guardar: ⬇️ Descargar configuración (.json)
+    cargar: Cargar configuración (.json)
+    restaurado: ✅ Clima medido restaurado desde la caché local.
+    falta_archivo: >-
+      ℹ️ La caché local no tiene esta ingesta: volvé a subir el archivo de
+      datos (el mapeo guardado se usará como sugerencia).
+    error: "❌ {err}"

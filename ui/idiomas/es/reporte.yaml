@@ -50,6 +50,10 @@ portada:
   clima:
     titulo: Recurso climático (NASA POWER)
     pendiente: Datos climáticos no descargados.
+    fuente: Fuente de datos
+    fuente_nasa_power: NASA POWER
+    fuente_medido: Datos medidos del usuario
+    fuente_hibrido: Híbrido (medido + NASA POWER)
     anio: Año fuente
     altitud_nasa: Altitud grilla NASA
     horas: Horas disponibles

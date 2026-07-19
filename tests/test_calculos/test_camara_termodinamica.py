@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from calculos.camara_termodinamica import (
     EstadoCamara,
+    _max_step_desde_forzantes,
     resolver_estado_camara,
 )
 from calculos.psicrometria import (
@@ -325,8 +327,6 @@ class TestValidacionEntradas:
 # Tests del motor termodinámico transitorio (S3) — simular_secado
 # ===========================================================================
 
-
-import numpy as np
 
 from calculos.camara_termodinamica import (
     ResultadoMotorTermodinamico,
@@ -840,3 +840,27 @@ class TestReconstruccionCompleta:
         # HR debe estar en [0, 1.1] (ligero overshoot numérico aceptable)
         assert np.all(res.HR_flujo >= 0.0)
         assert np.all(res.HR_flujo <= 1.1)
+
+
+class TestMaxStepDesdeForzantes:
+    """Paso máximo del integrador derivado del espaciado de forzantes (fase 1b)."""
+
+    def test_horario_devuelve_tope(self):
+        t = np.arange(24, dtype=float) * 3600.0
+        assert _max_step_desde_forzantes(t) == pytest.approx(3600.0)
+
+    def test_15min_devuelve_900(self):
+        t = np.arange(96, dtype=float) * 900.0
+        assert _max_step_desde_forzantes(t) == pytest.approx(900.0)
+
+    def test_5min_devuelve_300(self):
+        t = np.arange(288, dtype=float) * 300.0
+        assert _max_step_desde_forzantes(t) == pytest.approx(300.0)
+
+    def test_un_solo_nodo_fallback_tope(self):
+        assert _max_step_desde_forzantes(np.array([0.0])) == pytest.approx(3600.0)
+
+    def test_no_supera_el_tope_con_paso_grueso(self):
+        # Paso de 2 h se acota al tope de 1 h (no saltar más que histórico).
+        t = np.arange(12, dtype=float) * 7200.0
+        assert _max_step_desde_forzantes(t) == pytest.approx(3600.0)

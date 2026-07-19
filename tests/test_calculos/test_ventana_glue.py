@@ -13,6 +13,7 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from calculos.balance_global import armar_forzantes_ventana, calcular_todo_ventana
 from calculos.simulacion_ventana import ResultadoVentana
@@ -244,3 +245,44 @@ def test_ventana_con_hibrido_completo():
     res = calcular_todo_ventana(proy, df, P_Pa=88000.0)
     assert res.status != "error"
     assert res.lena_consumida_kg > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Paso de trabajo sub-horario (mejora 38, fase 1b)
+# ---------------------------------------------------------------------------
+
+
+def _clima_15min(dias: int = 2) -> pd.DataFrame:
+    """Clima sintético a 15 min: interpola linealmente el horario a la grilla fina."""
+    horario = _clima_sintetico(dias=dias)
+    idx = pd.date_range(horario.index[0], horario.index[-1], freq="15min")
+    return horario.reindex(horario.index.union(idx)).interpolate(method="time").reindex(idx)
+
+
+def test_forzantes_ventana_deriva_dt_del_indice():
+    """armar_forzantes_ventana deriva el paso del índice (15 min), no asume 3600 s."""
+    proy = _proyecto(SubtipoGranEscala.BATCH)
+    df = _clima_15min(dias=2)
+    fz, _lena, _adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    assert len(fz.t_s) == len(df)
+    # Paso de la serie de forzantes = 900 s (15 min).
+    assert fz.t_s[1] - fz.t_s[0] == pytest.approx(900.0)
+    assert fz.t_s[-1] == pytest.approx((len(df) - 1) * 900.0)
+
+
+def test_ventana_1h_vs_15min_converge():
+    """Sobre clima suave, la misma ventana a 1 h y a 15 min da masa evaporada
+    y sequedad coherentes (el motor interpola las forzantes → convergencia)."""
+    proy = _proyecto(SubtipoGranEscala.BATCH, masa_total_kg=60.0)
+    df_h = _clima_sintetico(dias=3)
+    df_q = _clima_15min(dias=3)
+
+    res_h = calcular_todo_ventana(proy, df_h, P_Pa=88000.0)
+    res_q = calcular_todo_ventana(proy, df_q, P_Pa=88000.0)
+
+    assert res_h.status != "error"
+    assert res_q.status != "error"
+    # La serie fina tiene ~4× nodos.
+    assert len(df_q) > 3 * len(df_h)
+    # Masa seca producida coherente entre pasos (tolerancia amplia: distinta grilla).
+    assert res_q.masa_seca_producida_kg == pytest.approx(res_h.masa_seca_producida_kg, rel=0.10)

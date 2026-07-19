@@ -93,3 +93,25 @@ class TestForzantesVentana:
         p.clima = None
         with pytest.raises(RuntimeError, match="clima real"):
             _construir_forzantes_ventana(proyecto=p, caudal_kg_s=0.02)
+
+    def test_paso_15min_da_forzantes_subhorarias(self):
+        """Con paso_trabajo_s=900 (fase 1b), las forzantes de ventana son a 15 min."""
+        p = _proyecto_ventana_caja()
+        p.configuracion.paso_trabajo_s = 900.0
+        fz = _construir_forzantes_ventana(proyecto=p, caudal_kg_s=0.02)
+        # dt de 900 s (15 min) derivado del clima resuelto al paso de trabajo.
+        assert fz.t_s[1] - fz.t_s[0] == pytest.approx(900.0)
+        # ~4× nodos que el horario (5 días × 96 puntos/día, con borde).
+        assert len(fz.t_s) > DIAS * 24 * 3
+
+    def test_paso_15min_stashea_advertencia_sintetica(self):
+        """Clima horario a 15 min → resolución sintética señalada en session_state."""
+        import streamlit as st
+
+        from ui.p4_camara import _PASO_ADV_KEY
+
+        p = _proyecto_ventana_caja()
+        p.configuracion.paso_trabajo_s = 900.0
+        _construir_forzantes_ventana(proyecto=p, caudal_kg_s=0.02)
+        advs = st.session_state.get(_PASO_ADV_KEY, [])
+        assert any("ADV_PASO_SINTETICO" in a for a in advs)

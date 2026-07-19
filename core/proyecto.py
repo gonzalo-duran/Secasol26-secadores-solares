@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import ClassVar, Optional
 
 VERSION_SOFTWARE = "1.0.0"
 
@@ -88,7 +88,16 @@ class Configuracion:
         ventana_fin: Fecha de fin del lapso de análisis (solo modo VENTANA).
             El lapso ``[ventana_inicio, ventana_fin]`` se simula con clima real
             horario; su largo máximo es 1 año (366 días).
+        paso_trabajo_s: Paso temporal de la simulación transitoria [s], para los
+            modos DIARIO/multidía/VENTANA (mejora 38 fase 1b). Valores admitidos:
+            3600 (horario, default), 900 (15 min), 600 (10 min) o 300 (5 min). El modo ANUAL
+            trabaja siempre a paso horario (día típico mensual) → se coacciona a
+            3600 si el modo es ANUAL. El paso sub-horario re-remuestrea desde
+            ``Clima.datos_nativos`` cuando hay resolución nativa fina; si la fuente
+            es horaria (NASA) se interpola con aviso de resolución sintética.
     """
+
+    PASOS_TRABAJO_S: ClassVar[tuple[float, ...]] = (3600.0, 900.0, 600.0, 300.0)
 
     tipologia: Tipologia = Tipologia.ARMARIO
     modo_analisis: ModoAnalisis = ModoAnalisis.DIARIO
@@ -97,8 +106,18 @@ class Configuracion:
     subtipo_gran_escala: SubtipoGranEscala = SubtipoGranEscala.BATCH
     ventana_inicio: Optional[date] = None
     ventana_fin: Optional[date] = None
+    paso_trabajo_s: float = 3600.0
 
     def __post_init__(self) -> None:
+        # Paso de trabajo (fase 1b): solo pasos discretos admitidos; ANUAL siempre
+        # horario (día típico mensual no admite sub-hora) → coacción defensiva.
+        if self.paso_trabajo_s not in Configuracion.PASOS_TRABAJO_S:
+            raise ValueError(
+                "CFG_PASO_TRABAJO_INVALIDO: paso_trabajo_s debe ser uno de "
+                f"{Configuracion.PASOS_TRABAJO_S} s (recibido: {self.paso_trabajo_s})."
+            )
+        if self.modo_analisis == ModoAnalisis.ANUAL:
+            self.paso_trabajo_s = 3600.0
         if self.modo_analisis == ModoAnalisis.ANUAL and self.tipologia == Tipologia.CAJA:
             raise ValueError(
                 "PROY_ANUAL_SIN_VECTORIZACION: el análisis anual no está implementado "

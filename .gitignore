@@ -43,3 +43,11 @@ Secasol26/
 
 # Papelera de Obsidian (vault local — no se versiona)
 .trash/
+
+# Datasets medidos crudos (mejora 38 — binarios pesados; se versionan solo las
+# descripciones .md, no los .xls/.xlsx de campo). Ver docs/notas/dataset/*/descripcion.md
+docs/notas/dataset/**/*.xls
+docs/notas/dataset/**/*.xlsx
+
+# Config local de Claude Code (por máquina — no se versiona)
+.claude/settings.local.json

@@ -84,6 +84,9 @@ subtipo:
     semicontinuo: Semicontínuo
 modo:
   titulo: Modo de análise
+  clima_parcial: >-
+    ℹ️ O clima carregado em P2 vem de dados medidos e cobre {n_meses}
+    mês(es): o modo Anual não estará disponível (requer 12 meses).
   caja_sin_anual: ℹ️ A análise **Anual** não está disponível para a tipologia Caixa na v0.
   label: Tipo de análise
   help: |
@@ -96,6 +99,26 @@ modo:
     diario: Diário — um dia representativo (dados horários)
     ventana: Janela de produção — período [início, fim] (clima real horário)
     anual: Anual — ano completo (8.760 horas)
+paso:
+  label: Passo temporal da simulação
+  help: |
+    Resolução temporal do cálculo transitório (modos Diário/Janela).
+
+    **1 hora:** padrão, coincide com o clima horário (NASA POWER).
+
+    **15 min / 5 min:** passo fino para dados medidos sub-horários. Com clima horário as séries são interpoladas (resolução sintética, sem transitórios reais).
+  opcion:
+    h: 1 hora (padrão)
+    15min: 15 minutos
+    10min: 10 minutos
+    5min: 5 minutos
+  aviso_subhorario: >-
+    ℹ️ Passo sub-horário: se o clima é horário (NASA), as séries são interpoladas
+    (resolução sintética). Com dados medidos sub-horários usa-se a resolução real.
+  aviso_fino: >-
+    ⚠️ Passo de 5 min: o coletor (sem capacitância térmica) reage em excesso aos
+    transitórios de nuvem e superestima os picos de temperatura de saída. Além disso,
+    o cálculo é bem mais lento.
 dia:
   label: Critério de seleção do dia de análise
   help: >-

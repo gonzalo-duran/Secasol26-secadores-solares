@@ -54,6 +54,30 @@ from core.camara import ForzantesAire
 # Constantes físicas
 _CP_AGUA_LIQ_J_KGK: float = 4186.0  # cp del agua líquida (para cp_prod variable)
 _HR_SAT_UMBRAL: float = 0.95  # umbral para advertencia HR_flujo alta
+_MAX_STEP_TOPE_S: float = 3600.0  # tope del paso del integrador (nodos horarios)
+
+
+def _max_step_desde_forzantes(t_fz: np.ndarray) -> float:
+    """Paso máximo del integrador desde el espaciado de las forzantes (fase 1b).
+
+    El RHS interpola las forzantes linealmente entre nodos; el integrador no debe
+    dar zancadas que salteen nodos (perdería la curvatura sub-horaria). Se usa la
+    mediana de los saltos positivos, acotada a ``_MAX_STEP_TOPE_S`` para preservar
+    el comportamiento histórico con forzantes horarias.
+
+    Args:
+        t_fz: Vector de tiempos de las forzantes [s].
+
+    Returns:
+        Paso máximo [s]: ``min(3600, mediana(diff(t_fz)))`` (o el tope si <2 nodos).
+    """
+    if t_fz.size < 2:
+        return _MAX_STEP_TOPE_S
+    diffs = np.diff(t_fz)
+    diffs = diffs[diffs > 0.0]
+    if diffs.size == 0:
+        return _MAX_STEP_TOPE_S
+    return float(min(_MAX_STEP_TOPE_S, np.median(diffs)))
 
 
 @dataclass(frozen=True)
@@ -675,7 +699,9 @@ def simular_secado(
         rtol=rtol,
         atol=atol,
         dense_output=False,
-        max_step=3600.0,  # evita saltar tramos enteros entre forzantes horarias
+        # Paso máximo derivado del espaciado de forzantes (fase 1b): evita saltar
+        # nodos con forzantes sub-horarias; == 3600 con forzantes horarias.
+        max_step=_max_step_desde_forzantes(t_fz),
     )
 
     if not sol.success:
@@ -1139,7 +1165,8 @@ def simular_cascada(
             method="LSODA",
             rtol=rtol,
             atol=atol,
-            max_step=3600.0,
+            # Paso máximo derivado del espaciado de forzantes (fase 1b).
+            max_step=_max_step_desde_forzantes(t_fz),
         )
         if not sol.success:
             advertencias.append(f"CASCADA_SOLVE_IVP_FALLO (avance {k}): {sol.message}")

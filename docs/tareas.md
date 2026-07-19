@@ -4,31 +4,41 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S49): **v0.17.0 en producción** · 7 pestañas funcionales +
-> manual de usuario · UI multiidioma ES/EN/PT · suite pytest 1262. Todos los
-> hitos DUROS de la hoja de ruta a 1.0 están cerrados (modo industrial, análisis
-> anual, manual, i18n infra F0–F8). **La 1.0.0 se libera con el manual 100%
-> traducido (F9)** — es lo único que falta; refinamiento anual y pérdidas IR
-> nocturnas quedan para 1.1+.
+> Estado general (S52): **v1.0.0 en producción** · suite pytest **1353 (+1 skip)**.
+> **Mejora 38 fase 1a implementada en working tree (sin commitear):** ingesta de
+> datos climáticos medidos (CSV/XLS) en P2 con completador NASA por procedencia,
+> POA medida y gating de ANUAL — validada end-to-end con el dataset real ADITAL
+> 2010. **S52:** resuelto el bug colateral HR/100 del modo ANUAL (ω ambiente ~100×
+> baja; altera resultados ANUAL). Pendientes de la mejora: 1b (paso sub-horario),
+> 2 (validación), 3 (calibración) — plan en `docs/notas/plan_datos_medidos.md`.
+> Sigue pendiente la verificación post-deploy de la 1.0.0 en el Space
+> ("arreglitos" del usuario) y la prueba manual del flujo de clima medido.
 
 ## En progreso
 
-- **Internacionalización ES/EN/PT (mejora 37) — F9, gate de la v1.0** — plan en
-  `docs/notas/plan_i18n.md`. **F0–F8 hechas y en producción (v0.17.0)**: infra +
-  selector 🌐, toda la UI de las 7 pestañas + componentes (F0–F4), advertencias
-  por código (F5), reporte PDF (F6), catálogos (F7) e infraestructura
-  multiidioma del manual (F8). `auditar_i18n.py` = 0. **Falta solo F9**:
-  traducir los 22 capítulos del manual a EN/PT en `manual/capitulos/{en,pt}/` +
-  agregar las claves `manual.toc.<slug>.titulo/.descripcion` y `manual.parte.<idx>`
-  a `en.yaml`/`pt.yaml` (el ES canónico vive en la tupla `CAPITULOS`). **Gotcha
-  F9**: sumar `manual.toc.*`/`manual.parte.*` al allowlist del test de paridad de
-  claves. La **próxima sesión arranca planificando F9** (orden de capítulos +
-  prioridad de idioma, decisión abierta).
+- **Mejora 38 — toma de datos externos medidos** — fase 1a COMPLETA en working
+  tree (S51): ingesta P2 + pipeline `calculos/clima_medido.py` + POA medida +
+  cache + i18n ×3. Falta: prueba manual del usuario + commit/push; fases 1b/2/3.
+  Hallazgos colaterales: bug HR/100 del modo ANUAL **resuelto (S52)**; queda la
+  inconsistencia viento 2 m vs 10 m en chimenea. Ver
+  `docs/bitacora/bitacora_sesion52.md` (y S51 para la fase 1a).
+
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).
 
 ## Completado (hitos recientes)
 
+- **🎉 Release 1.0.0 (S50)** — primera versión mayor. Cierra la hoja de ruta a
+  1.0. Ver `docs/bitacora/bitacora_sesion50.md`.
+- **Internacionalización ES/EN/PT completa (mejora 37, F0–F9)** — plan en
+  `docs/notas/plan_i18n.md`. **F0–F8** (v0.17.0): infra + selector 🌐, toda la UI
+  de las 7 pestañas + componentes, advertencias por código (F5), reporte PDF
+  (F6), catálogos (F7) e infra multiidioma del manual (F8). **F9** (v1.0.0):
+  los 22 capítulos del manual traducidos completos a EN y PT
+  (`manual/capitulos/{en,pt}/`) + índice/navegación (`manual.toc.*` +
+  `manual.parte.*` en `ui/idiomas/{en,pt}/manual.yaml`; el ES canónico vive en la
+  tupla `CAPITULOS`, exento del test de paridad con paridad EN↔PT). `auditar_i18n.py`
+  = 0. Ver `docs/bitacora/bitacora_sesion50.md`.
 - **Cámara radiativa orientada (S47, v0.15.0)** — la cámara gana orientación
   propia (acimut) y techo a un agua independientes del banco de colectores;
   hasta 5 caras translúcidas con transposición POA por cara y reparto de la

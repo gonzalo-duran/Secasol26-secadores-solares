@@ -21,6 +21,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 
+from calculos.clima_medido import meses_cubiertos
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN
 from core.proyecto import (
     Configuracion,
@@ -34,6 +35,24 @@ from ui.componentes.esquemas import mostrar_esquema
 from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
+
+# Paso de trabajo (mejora 38, fase 1b): valores estables [s] → clave i18n del
+# rótulo. Options = segundos (estables); format_func traduce por la clave.
+_PASOS_TRABAJO: tuple[tuple[float, str], ...] = (
+    (3600.0, "h"),
+    (900.0, "15min"),
+    (600.0, "10min"),
+    (300.0, "5min"),
+)
+
+
+def _clave_paso(paso_s: float) -> str:
+    """Devuelve la clave i18n del rótulo de un paso de trabajo [s]."""
+    for valor, clave in _PASOS_TRABAJO:
+        if valor == paso_s:
+            return clave
+    return "h"
+
 
 # ---------------------------------------------------------------------------
 # Render
@@ -171,6 +190,46 @@ def render() -> None:
             format_func=lambda m: t(f"p1.modo.opcion.{m.value.lower()}"),
             help=t("p1.modo.help"),
         )
+        clima_actual = proyecto.clima
+        if (
+            clima_actual is not None
+            and clima_actual.datos is not None
+            and getattr(clima_actual, "fuente", "nasa_power") != "nasa_power"
+        ):
+            meses = meses_cubiertos(
+                clima_actual.datos,
+                (
+                    proyecto.emplazamiento.zona_horaria
+                    if proyecto.emplazamiento is not None
+                    else "UTC"
+                ),
+            )
+            if len(meses) < 12:
+                st.caption(t("p1.modo.clima_parcial", n_meses=len(meses)))
+
+    # -----------------------------------------------------------------------
+    # Sección C-bis: Paso de trabajo (mejora 38, fase 1b)
+    # -----------------------------------------------------------------------
+    # El modo ANUAL trabaja siempre a paso horario (día típico mensual). Para
+    # DIARIO/VENTANA se ofrece paso sub-horario (15/5 min).
+    paso_sel = cfg.paso_trabajo_s if cfg.paso_trabajo_s in dict(_PASOS_TRABAJO) else 3600.0
+    if modo_sel != ModoAnalisis.ANUAL:
+        pasos_lista = [v for v, _ in _PASOS_TRABAJO]
+        idx_paso = pasos_lista.index(paso_sel) if paso_sel in pasos_lista else 0
+        paso_sel = st.radio(
+            t("p1.paso.label"),
+            options=pasos_lista,
+            index=idx_paso,
+            format_func=lambda p: t(f"p1.paso.opcion.{_clave_paso(p)}"),
+            help=t("p1.paso.help"),
+            horizontal=True,
+        )
+        if paso_sel <= 300.0:
+            st.warning(t("p1.paso.aviso_fino"))
+        elif paso_sel < 3600.0:
+            st.caption(t("p1.paso.aviso_subhorario"))
+    else:
+        paso_sel = 3600.0
 
     # -----------------------------------------------------------------------
     # Sección D: Criterio de día (DIARIO) / ventana de producción (VENTANA)
@@ -325,6 +384,7 @@ def render() -> None:
                 subtipo_gran_escala=subtipo_sel,
                 ventana_inicio=ventana_inicio_sel,
                 ventana_fin=ventana_fin_sel,
+                paso_trabajo_s=paso_sel,
             )
             proyecto.configuracion = nueva_cfg
         except (ValueError, NotImplementedError) as exc:

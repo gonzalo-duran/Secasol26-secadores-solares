@@ -251,6 +251,42 @@ class TestOperacionAnualConfig:
 # ---------------------------------------------------------------------------
 
 
+class TestOmegaAmbienteDia:
+    """ω ambiente desde HR: la HR ya es fracción [0, 1] (contrato Clima.datos).
+
+    Regresión del bug histórico del ANUAL: se dividía la HR por 100 una segunda
+    vez (clima_calc.py ya la convierte de %), dejando ω ~100× baja → aire
+    irrealmente seco → secado optimista.
+    """
+
+    def test_HR_se_trata_como_fraccion(self):
+        from calculos.operacion_anual_camara import _omega_ambiente_dia
+        from calculos.psicrometria import humedad_absoluta
+
+        HR = np.array([0.60, 0.60, 0.60])
+        T = np.array([293.15, 293.15, 293.15])
+        P = 90000.0
+        omega = _omega_ambiente_dia(HR, T, P)
+        esperado = humedad_absoluta(0.60, 293.15, P)
+        assert np.allclose(omega, esperado)
+
+    def test_no_redivide_por_100(self):
+        # Con HR=0.60 (fracción) ω debe ser ~100× el ω que daría el bug (HR/100).
+        from calculos.operacion_anual_camara import _omega_ambiente_dia
+
+        P = 90000.0
+        omega_ok = _omega_ambiente_dia(np.array([0.60]), np.array([293.15]), P)[0]
+        omega_bug = _omega_ambiente_dia(np.array([0.006]), np.array([293.15]), P)[0]
+        assert omega_ok > 50 * omega_bug
+
+    def test_valor_fisicamente_razonable(self):
+        # 20 °C, 60 % HR, ~90 kPa → ω del orden de 8-9 g/kg (no ~0.08 g/kg).
+        from calculos.operacion_anual_camara import _omega_ambiente_dia
+
+        omega = _omega_ambiente_dia(np.array([0.60]), np.array([293.15]), 90000.0)[0]
+        assert 0.006 < omega < 0.012
+
+
 class TestCalcularOperacionAnualCamara:
     """Tests del orquestador. Se mockea el proyecto con la mínima estructura."""
 
@@ -260,4 +296,19 @@ class TestCalcularOperacionAnualCamara:
 
         proy = Proyecto()  # sin clima ni cámara
         with pytest.raises(ValueError, match="ANUAL_SIN_CLIMA"):
+            calcular_operacion_anual_camara(proy)
+
+    def test_ANUAL_CLIMA_INCOMPLETO(self):
+        """Clima medido de campaña parcial (3 meses) → gating antes del bucle."""
+        import pandas as pd
+
+        from calculos.operacion_anual_camara import calcular_operacion_anual_camara
+        from core.clima import Clima
+        from core.proyecto import Proyecto
+
+        idx = pd.date_range("2010-04-14", "2010-06-18", freq="h", tz="UTC")
+        datos = pd.DataFrame({"T_amb_K": 290.0, "GHI_Wm2": 300.0}, index=idx)
+        proy = Proyecto()
+        proy.clima = Clima(datos=datos, anio=2010, fuente="hibrido")
+        with pytest.raises(ValueError, match="ANUAL_CLIMA_INCOMPLETO"):
             calcular_operacion_anual_camara(proy)

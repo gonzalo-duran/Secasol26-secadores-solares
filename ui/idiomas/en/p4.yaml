@@ -335,7 +335,11 @@ t_amb_origen:
   media_anual: "NASA POWER annual mean = {t:.1f} °C"
   fallback: "fallback 25 °C (no climate loaded)"
 anual:
-  sin_clima: ℹ️ **Annual operation** available only with NASA POWER climate loaded in P2.
+  sin_clima: ℹ️ **Annual operation** available only with climate loaded in P2.
+  clima_incompleto: >-
+    ⚠️ Annual operation needs climate data for all 12 months; the loaded
+    climate covers {n_meses} month(s). With measured data from a partial
+    campaign, use the Daily, multi-day or Production-window modes.
   sin_colector: >-
     ⚠️ The chamber's annual operation requires a collector configured
     in P3 (linear pre-design model).

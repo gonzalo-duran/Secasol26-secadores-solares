@@ -177,7 +177,7 @@ Desde **S40** la tipología `GRAN_ESCALA` es funcional (antes era cosmética, id
 ### Pestañas (`ui/`)
 
 - **P1** `p1_tipologia.py` — tipología (CAJA/ARMARIO/GRAN_ESCALA), modo de análisis (DIARIO/ANUAL/**VENTANA**), criterio de día. Cascada: cambiar a CAJA anula colector y motor con aviso. En `GRAN_ESCALA` (S40): selector de **subtipo** (Batch/Semicontinuo) y de **ventana de producción** (inicio/fin + presets 1 semana / 1 mes / campaña).
-- **P2** `p2_emplazamiento.py` — lat/lon/altitud/acimut/pendiente/tz. Descarga NASA POWER vía `calculos/clima_calc.py`. Gráficas POA vs GHI.
+- **P2** `p2_emplazamiento.py` — lat/lon/altitud/acimut/pendiente/tz. Fuente de clima seleccionable (S51, mejora 38 F1a): descarga NASA POWER vía `calculos/clima_calc.py`, o **datos medidos del usuario** (CSV/.xls/.xlsx) vía `calculos/clima_medido.py` — mapeo declarativo de columnas con auto-sugerencia, QC físico, remuestreo a horaria, completado por columna desde NASA con procedencia visible, POA medida en plano de colector (`POA_med_Wm2`, la usa `calcular_POA_horizonte` sin overrides), cache parquet en `data/cache/clima_medido/`. Con clima medido de campaña parcial (<12 meses) el modo ANUAL se bloquea (gating en P4 + `ANUAL_CLIMA_INCOMPLETO`). Gráficas POA vs GHI.
 - **P3** `p3_colector.py` — tipo (1–4), cubierta(s), placa, aislante, fondo, geometría, banco. En `GRAN_ESCALA` (S40): sección **caño maestro** (manifold) dentro del expander de banco, con preview de ΔP. Botón de evaluación gráfica diaria y anual con tránsito SPA y POA máx.
 - **P4** `p4_camara.py` — geometría, pared (compuesta con capas), techo translúcido opcional, bandejas, flujo, carga de producto, selector de modo de cálculo, horizonte (modo transitorio). En `modo_analisis == ANUAL` con motor termodinámico, aparece la sección "Operación anual" con slider de batches/mes y card resumen anual (4 métricas). En subtipo **SEMICONTINUO** (S40): sección **topología del túnel** (n_zonas + cadencia de avance) → `Camara.tunel`.
 - **P5** `p5_auxiliar.py` — auxiliar eléctrico o biomasa, modo de operación, setpoint, η, PCI. Expander opcional **calendario de arranque** (S40, híbrido mañana/tarde) → `Auxiliar.cargas_arranque`.
@@ -261,7 +261,7 @@ Namespaces: el archivo YAML es la raíz (`p1.yaml` → `p1.*`); `comun.*` (repet
 - Caudal másico en kg/s; volumétrico en m³/s
 - Ángulos en grados (°) pero con convención Duffie (ver abajo)
 
-**La única conversión de unidades físicas (°C↔K, kPa↔Pa, %↔fracción) ocurre en `ui/componentes/unidades.py`.** La conversión de ángulos entre convenciones es matemática pura y vive en `calculos/conversiones_angulo.py` (la consumen tanto la UI como `calculos/`); `unidades.py` la re-exporta por compatibilidad. Ver "Convención de ángulos".
+**La única conversión de unidades físicas (°C↔K, kPa↔Pa, %↔fracción) ocurre en `ui/componentes/unidades.py`** y en las dos fronteras de ingesta de datos climáticos: `calculos/clima_calc.py` (NASA POWER → SI) y `calculos/clima_medido.py` (archivos medidos del usuario → SI, mejora 38). La conversión de ángulos entre convenciones es matemática pura y vive en `calculos/conversiones_angulo.py` (la consumen tanto la UI como `calculos/`); `unidades.py` la re-exporta por compatibilidad. Ver "Convención de ángulos".
 
 ### Convención de ángulos (crítico)
 

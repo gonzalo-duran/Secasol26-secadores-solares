@@ -33,7 +33,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from calculos.conversiones_angulo import acimut_duffie_a_pvlib
-from core.clima import COLUMNAS_SI, CalidadClima, Clima
+from core.clima import COLUMNA_POA_MEDIDA, COLUMNAS_SI, CalidadClima, Clima
 from core.emplazamiento import Emplazamiento
 
 # Parámetros solicitados a NASA POWER (mezcla de nombres pvlib y nativos NASA).
@@ -115,6 +115,12 @@ def _ruta_cache(lat: float, lon: float, anio: int) -> pathlib.Path:
 # ---------------------------------------------------------------------------
 # Política de huecos
 # ---------------------------------------------------------------------------
+
+
+def aplicar_politica_huecos(df: pd.DataFrame) -> tuple[pd.DataFrame, CalidadClima]:
+    """Alias público de la política de huecos (la reusa la ingesta de datos
+    medidos, ``calculos/clima_medido.py``, sobre la serie ya horaria)."""
+    return _aplicar_politica_huecos(df)
 
 
 def _aplicar_politica_huecos(df: pd.DataFrame) -> tuple[pd.DataFrame, CalidadClima]:
@@ -318,6 +324,15 @@ def calcular_POA_horizonte(
         puede saber cuánto era directa vs difusa, así que se asume
         conservadoramente POA = GHI esa hora).
 
+    Nota (mejora 38, F1a — POA medida): si ``datos_clima`` trae la columna
+    ``POA_med_Wm2`` (irradiancia global medida con piranómetro EN el plano
+    del colector) y la función se llama SIN overrides de ``tilt_deg`` /
+    ``acimut_duffie_deg`` (= plano del colector), la medición manda: se
+    devuelve ``POA_med_Wm2`` (clip ≥ 0) y la transposición solo rellena las
+    horas donde la medida es NaN. Con overrides explícitos (p. ej. caras de
+    la cámara radiativa) SIEMPRE se transpone — la medida vale solo para el
+    plano en que se midió.
+
     Raises:
         ValueError: Si ``datos_clima`` no tiene las columnas esperadas o
             el índice no es DatetimeIndex tz-aware.
@@ -333,6 +348,10 @@ def calcular_POA_horizonte(
             "CLIMA_INDICE_NAIVE: datos_clima.index debe ser tz-aware "
             "(timestamps localizados). pvlib.solarposition lo requiere."
         )
+
+    usa_poa_medida = (
+        tilt_deg is None and acimut_duffie_deg is None and COLUMNA_POA_MEDIDA in datos_clima.columns
+    )
 
     sol_pos = pvlib.solarposition.get_solarposition(
         datos_clima.index,
@@ -366,6 +385,12 @@ def calcular_POA_horizonte(
     mask_nan = poa_global.isna() | datos_clima["DNI_Wm2"].isna() | datos_clima["DHI_Wm2"].isna()
     if mask_nan.any():
         poa_global = poa_global.where(~mask_nan, datos_clima["GHI_Wm2"].clip(lower=0.0))
+
+    if usa_poa_medida:
+        # La medición manda donde existe; la transposición rellena sus NaN.
+        poa_medida = datos_clima[COLUMNA_POA_MEDIDA].clip(lower=0.0)
+        poa_global = poa_medida.where(poa_medida.notna(), poa_global)
+
     return poa_global.fillna(0.0)
 
 
@@ -508,3 +533,77 @@ def slice_clima_ventana(
             f"(año {anio}). Descargá el año correspondiente en P2."
         )
     return df, ""
+
+
+def resolver_datos_trabajo(clima, paso_s: float) -> tuple[Optional[pd.DataFrame], list[str]]:
+    """Entrega el DataFrame de clima al **paso de trabajo** (mejora 38, fase 1b).
+
+    Único punto que traduce el contrato horario ``Clima.datos`` al paso temporal
+    de la simulación transitoria (``Configuracion.paso_trabajo_s``). Estrategia
+    por capas para preservar la procedencia:
+
+    - ``paso_s == 3600`` → ``clima.datos`` tal cual (camino histórico, sin aviso).
+    - ``paso_s < 3600`` → se interpola ``clima.datos`` horario al paso pedido como
+      **baseline sintético** (cubre todas las columnas) y, para las columnas que
+      existan en ``clima.datos_nativos`` a resolución suficiente
+      (``frecuencia_nativa_s <= paso_s``), se **sobrescribe** con el remuestreo
+      **real** de la serie nativa. Si alguna columna de trabajo quedó
+      interpolada del horario, se agrega ``ADV_PASO_SINTETICO`` nombrando esas
+      columnas (interpolar radiación horaria no repone los transitorios
+      sub-horarios; ver ``docs/notas/plan_datos_medidos_1b.md``).
+
+    Args:
+        clima: Objeto ``core.clima.Clima`` (o None).
+        paso_s: Paso de trabajo [s] (3600 / 900 / 300).
+
+    Returns:
+        ``(df, advertencias)``: ``df`` al paso de trabajo (o None si no hay
+        datos); ``advertencias`` es una lista (posiblemente vacía) de códigos.
+    """
+    if clima is None or getattr(clima, "datos", None) is None or len(clima.datos) == 0:
+        return None, []
+
+    datos = clima.datos
+    if paso_s >= 3600.0:
+        return datos, []
+
+    freq = f"{int(round(paso_s))}s"
+    grilla = pd.date_range(datos.index[0], datos.index[-1], freq=freq)
+
+    # Baseline sintético: interpolación temporal lineal de todas las columnas.
+    base = datos.reindex(datos.index.union(grilla)).interpolate(method="time").reindex(grilla)
+
+    columnas_reales: set[str] = set()
+    nativos = getattr(clima, "datos_nativos", None)
+    freq_nat = getattr(clima, "frecuencia_nativa_s", None)
+    if nativos is not None and freq_nat is not None and float(freq_nat) <= paso_s:
+        from calculos.clima_medido import remuestrear_a_paso
+
+        convencion = "instantanea"
+        mapeo = getattr(clima, "mapeo", None)
+        if mapeo is not None:
+            convencion = getattr(mapeo, "convencion_timestamp", "instantanea")
+        remuestreado = remuestrear_a_paso(
+            nativos,
+            paso_nativo_s=float(freq_nat),
+            paso_destino_s=paso_s,
+            convencion=convencion,
+        ).reindex(grilla)
+        for col in remuestreado.columns:
+            if col in base.columns:
+                # Solo sobrescribir donde el nativo aporta dato real (no NaN).
+                mask_real = remuestreado[col].notna()
+                base.loc[mask_real, col] = remuestreado.loc[mask_real, col]
+                if mask_real.any():
+                    columnas_reales.add(col)
+
+    advertencias: list[str] = []
+    sinteticas = [c for c in datos.columns if c not in columnas_reales]
+    if sinteticas:
+        advertencias.append(
+            "ADV_PASO_SINTETICO: paso de trabajo "
+            f"{int(round(paso_s / 60.0))} min con columnas interpoladas del horario "
+            f"({', '.join(sinteticas)}) — resolución sintética, sin transitorios "
+            "sub-horarios reales."
+        )
+    return base, advertencias

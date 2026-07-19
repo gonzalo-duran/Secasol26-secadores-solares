@@ -523,6 +523,10 @@ graph TD
 | P2 | acimut/pendiente | `emplazamiento.acimut/pendiente` | `solar_geometria` (vía emplazamiento) |
 | **P3** (cross-tab) | albedo del suelo (selectbox superficies + personalizado) | `emplazamiento.albedo_suelo` | `clima_calc.calcular_POA_horizonte` (componente reflejada `GHI·ρ·(1−cosβ)/2` → POA → solver colector y todos los consumidores de POA). **Widget en P3, campo en Emplazamiento.** Reemplaza el `0.25` hardcodeado de pvlib. Catálogo en `calculos/catalogo_albedos.py`. |
 | P2 | zona_horaria | `emplazamiento.zona_horaria` | `solar_geometria` |
+| P2 (S51) | radio fuente de clima (`p2_fuente_clima`, nasa_power/medido) | rama de `render()` | flujo NASA histórico o `_render_clima_medido` |
+| P2 (S51) | uploader + mapeo de columnas clima medido (`p2_med_*`) | `ConfigMapeoClima` → `clima_medido.ingerir_clima_medido` → `proyecto.clima` (fuente medido/hibrido, procedencia, datos_nativos) | todos los consumidores de `Clima.datos` (contrato intacto); `calcular_POA_horizonte` usa `POA_med_Wm2` si existe |
+| P2 (S51) | snapshot sección "clima_medido" (mapeo + hashes) | cache `data/cache/clima_medido/` | restauración sin re-subir archivo |
+| P4 (S51) | gating ANUAL por cobertura | `clima_medido.meses_cubiertos` < 12 → warning y sin botón | `operacion_anual_camara` (defensivo `ANUAL_CLIMA_INCOMPLETO`) |
 | P3 | N° cubiertas ⚑ | `colector.unidad.n_cubiertas` + `espaciado_entre_cubiertas_m` | `colector_calc`, `tipos234_calc` (vía `_U_cubierta_efectiva`) |
 | **P3** | **Espesor placa** ⚑ | `colector.unidad.espesor_placa_m` | **⚠️ ninguno** |
 | P3 | id_cubierta/espesor_cubierta | `colector.unidad.*` | `colector_calc`, `tipos234_calc` |
@@ -557,6 +561,7 @@ graph TD
 | (interno, S35) | base de tiempo de cálculo para estimar barrido | — (`session_state['p7_t_calc_base_s_{constantes,transitorio}']`) | `ui/p7_resultados` stash tras cada `calcular_todo(_transitorio)` normal |
 | **P1** (S40) | subtipo de gran escala (radio Batch/Semicontinuo, solo `GRAN_ESCALA`) | `configuracion.subtipo_gran_escala` (`SubtipoGranEscala`) | `simulacion_ventana.simular_ventana` (despacho batch↔cascada), `camara_calc.calcular_camara_cascada`, `ui/p4_camara` (gate de la sección túnel) |
 | **P1** (S40) | ventana de análisis (date_input inicio/fin + presets 1 sem/1 mes/campaña) | `configuracion.{ventana_inicio, ventana_fin}` + `ModoAnalisis.VENTANA` | `ui/p7_resultados._slice_clima_ventana` → `balance_global.calcular_todo_ventana` → `armar_forzantes_ventana` |
+| **P1** (S53) | paso de trabajo (radio 1 h / 15 min / 10 min / 5 min, solo si `modo ≠ ANUAL`; mejora 38 fase 1b) | `configuracion.paso_trabajo_s` (`{3600,900,600,300}`; coacción a 3600 en ANUAL) | `clima_calc.resolver_datos_trabajo` (→ `clima_medido.remuestrear_a_paso`) vía `ui/p4_camara._datos_local_paso` y `ui/p7_resultados._slice_clima_ventana`; el `dt` se propaga por `forzantes.t_s` y el `max_step` del motor (`camara_termodinamica._max_step_desde_forzantes`) |
 | **P3** (S40) | caño maestro (checkbox + largo/sección/aislado/aporte solar, solo `GRAN_ESCALA`) | `colector.banco.cano_maestro` (`CanoMaestro`) | `cano_maestro_calc.{estimar_delta_P_cano_maestro, delta_T_cano_maestro}` vía `balance_global.armar_forzantes_ventana` (ΔT al aire) y `ui/p6_motor` (ΔP a ductos) |
 | **P4** (S40) | topología del túnel (n_zonas + cadencia de avance, solo `SEMICONTINUO`) | `camara.tunel` (`ConfiguracionTunel`) | `camara_calc.calcular_camara_cascada` → `camara_termodinamica.simular_cascada` |
 | **P5** (S40) | calendario de arranque (checkbox + N cargas hora_inicio/duración) | `auxiliar.cargas_arranque` (`list[CargaArranque]`) | `auxiliar_calc.calcular_auxiliar_transitorio` (vía `_mascara_calendario`) → consumido por `balance_global` transitorio **y** ventana |

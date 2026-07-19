@@ -625,7 +625,9 @@ def _portada(
     if not snap_clima:
         elems += _seccion_pendiente(styles, tr("portada.clima.pendiente"))
     else:
+        fuente_clima = snap_clima.get("fuente") or "nasa_power"
         rows_clima = [
+            [tr("portada.clima.fuente"), tr(f"portada.clima.fuente_{fuente_clima}")],
             [tr("portada.clima.anio"), _fmt(snap_clima.get("anio"))],
             [tr("portada.clima.altitud_nasa"), f"{_fmt(snap_clima.get('altitud_nasa_m'))} m"],
             [tr("portada.clima.horas"), _fmt(snap_clima.get("n_horas"))],

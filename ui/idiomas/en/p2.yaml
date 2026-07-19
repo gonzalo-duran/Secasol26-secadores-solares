@@ -168,3 +168,119 @@ csv:
   viento: Wind [m/s]
   hr: RH [%]
   presion: Pressure [hPa]
+fuente:
+  titulo: Climate data source
+  nasa_power: NASA POWER (satellite download)
+  medido: Measured data (own file)
+medido:
+  intro: >-
+    Upload a CSV or Excel file with your own measurements (weather station,
+    campaign datalogger). Missing variables are completed with NASA POWER and
+    every column is labeled with its provenance.
+  uploader:
+    label: Measured data file
+    help: >-
+      CSV (comma or semicolon separator, point or comma decimal) or Excel
+      (.xls / .xlsx). It must include a date/time column.
+  archivo_cargado: "📄 **{nombre}** ({kb} kB)"
+  quitar: Remove file
+  hoja:
+    label: Excel worksheet
+  fila_enc:
+    label: Header row
+    help: Index (from 0) of the row containing the column names.
+  preview_titulo: 👀 File preview (first rows)
+  mapeo:
+    titulo: "#### Column mapping"
+    caption: >-
+      Select which file column corresponds to each variable and its measurement
+      unit. Unmapped variables are completed with NASA POWER.
+    timestamp: Date/time column
+    no_mapear: (do not map)
+    unidad: Unit
+  variable:
+    T_amb_K: Ambient temperature
+    GHI_Wm2: Global horizontal irradiance (GHI)
+    DNI_Wm2: Direct normal irradiance (DNI)
+    DHI_Wm2: Diffuse horizontal irradiance (DHI)
+    WS_ms: Wind speed
+    presion_Pa: Atmospheric pressure
+    HR: Ambient relative humidity
+    POA_med_Wm2: Global irradiance on collector plane (measured POA)
+  unidad:
+    C: °C
+    K: K
+    F: °F
+    W_m2: W/m²
+    kW_m2: kW/m²
+    m_s: m/s
+    km_h: km/h
+    Pa: Pa
+    kPa: kPa
+    hPa: hPa
+    mbar: mbar
+    atm: atm
+    fraccion: fraction (0–1)
+    porcentaje: "%"
+  convencion:
+    label: Timestamp convention
+    help: >-
+      Is the value recorded at 10:00 an instantaneous reading, or the average of
+      the interval ending (or starting) at 10:00? Campbell dataloggers usually
+      record instantaneous readings or previous-interval averages.
+    instantanea: Instantaneous reading
+    promedio_fin: Average of the previous interval
+    promedio_inicio: Average of the next interval
+  tz:
+    label: Time zone of the file timestamps
+  alt_viento:
+    label: Anemometer height [m]
+    help: >-
+      The internal contract uses wind at 2 m; the series is normalized with a
+      neutral logarithmic profile (z₀ = 0.05 m).
+  plano:
+    label: Plane of the global-irradiance pyranometer
+    help: >-
+      If the sensor is mounted coplanar with the collector, the measurement
+      replaces the Liu-Jordan transposition for the collector (higher accuracy).
+    horizontal: Horizontal (GHI)
+    plano_colector: On the collector plane (POA)
+  falta_variables: ⚠️ Map at least one climate variable before processing.
+  procesar: Process file
+  spinner: Conditioning measured data (QC + resampling + NASA completion)…
+  error: "❌ {err}"
+  procedencia:
+    titulo: "#### Provenance of each variable"
+    variable: Variable
+    origen: Provenance
+    medida: Measured (user file)
+    derivada: Derived (Erbs from measured GHI)
+    completada_nasa: Completed with NASA POWER
+    default: Default value
+  resumen:
+    previo: "Period {inicio} → {fin} · native step {paso} s · hours at the hourly contract: {n_horas}."
+    confirmado: >-
+      ✅ {fuente} climate confirmed: {inicio} → {fin} · native step {paso} s ·
+      {n_meses} month(s) with data.
+    hibrido: hybrid (measured + NASA POWER)
+  qc:
+    titulo: "🔬 Physical quality control — findings: {n}"
+    sin_hallazgos: No findings — all variables within physical ranges.
+    detalle: "{chequeo} — {variable} — affected values: {n}. Examples: {ejemplos}"
+    chequeo:
+      rango_fisico: Out of physical range (→ voided)
+      ghi_nocturna: Night-time irradiance (→ 0)
+      ghi_extraterrestre: Exceeds extraterrestrial (→ voided)
+      sensor_congelado: Possibly frozen sensor (warning)
+  confirmar: Use this climate in the project
+  exito: ✅ Measured climate loaded into the project.
+  opcion_descartar: Discard this climate and fix the mapping
+  snapshot:
+    titulo: 💾 Save / load ingestion configuration
+    guardar: ⬇️ Download configuration (.json)
+    cargar: Load configuration (.json)
+    restaurado: ✅ Measured climate restored from the local cache.
+    falta_archivo: >-
+      ℹ️ The local cache does not contain this ingestion: upload the data file
+      again (the saved mapping will be used as a suggestion).
+    error: "❌ {err}"

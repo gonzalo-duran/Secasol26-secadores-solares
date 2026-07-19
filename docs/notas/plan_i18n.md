@@ -4,6 +4,18 @@
 > integración S48 (cámara ampliada + manual → main; ver
 > `plan_integracion_S48.md`). No abrir la rama i18n antes de ese merge.
 >
+> **✅ ESTADO (S50, 2026-07-09): PLAN COMPLETO — F0–F9 EN PRODUCCIÓN (v1.0.0).**
+> F9 (traducción de los 22 capítulos del manual a EN y PT +
+> `manual.toc.*`/`manual.parte.*` en `ui/idiomas/{en,pt}/manual.yaml`) cerrada y
+> desplegada en el release **1.0.0** (`origin/main` = `5b045d6`). El manual queda
+> **100 % traducido a ES/EN/PT** (contenido + índice + navegación). El ES canónico
+> del TOC vive en la tupla `CAPITULOS`, así que esas familias existen solo en
+> EN/PT; el test de paridad de claves las exime contra ES pero exige paridad
+> EN↔PT (`_FAMILIAS_SOLO_EN_PT` en `tests/test_ui/test_idiomas.py`). Suite 1261
+> passed + 1 skip, `auditar_i18n.py` = 0. Detalle en
+> `docs/bitacora/bitacora_sesion50.md`. Lo que sigue debajo es el registro
+> histórico del plan (F0–F8, S49).
+>
 > **ESTADO (S49, 2026-07-09):** F0–F8 IMPLEMENTADAS en working tree (sin
 > commitear). **Toda la UI visible de las 7 pestañas + los componentes
 > compartidos** (carta psicrométrica, panel TD de cámara, selector de

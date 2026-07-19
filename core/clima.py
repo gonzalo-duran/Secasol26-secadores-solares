@@ -21,6 +21,18 @@ from typing import Optional
 
 import pandas as pd
 
+from core.clima_medido import COLUMNA_POA_MEDIDA, ConfigMapeoClima, ReporteQC
+
+__all__ = [
+    "COLUMNAS_SI",
+    "COLUMNA_POA_MEDIDA",
+    "ANIO_NASA_MIN",
+    "ANIO_NASA_MAX",
+    "FUENTES_CLIMA",
+    "CalidadClima",
+    "Clima",
+]
+
 # Nombre canónico de las columnas del DataFrame Clima.datos, en orden.
 COLUMNAS_SI: tuple[str, ...] = (
     "T_amb_K",
@@ -36,6 +48,9 @@ COLUMNAS_SI: tuple[str, ...] = (
 # NASA POWER suele extender el rango ~1 año tras finalizar el calendario).
 ANIO_NASA_MIN: int = 2001
 ANIO_NASA_MAX: int = 2023
+
+# Fuentes posibles de la serie climática del proyecto.
+FUENTES_CLIMA: tuple[str, ...] = ("nasa_power", "medido", "hibrido")
 
 
 @dataclass
@@ -65,17 +80,49 @@ class CalidadClima:
 class Clima:
     """Serie temporal horaria de recursos climáticos del emplazamiento.
 
-    Datos provistos por NASA POWER y convertidos a unidades SI.
+    Datos provistos por NASA POWER o ingeridos de mediciones del usuario
+    (mejora 38, F1a), siempre convertidos a unidades SI. El viento ``WS_ms``
+    está referido a 2 m sobre el suelo (convención NASA WS2M); las series
+    medidas a otra altura se normalizan a 2 m en la ingesta. ``datos`` puede
+    incluir además la columna opcional ``POA_med_Wm2`` (irradiancia global
+    medida en el plano del colector), que ``calcular_POA_horizonte`` usa para
+    saltear la transposición.
 
     Attributes:
         datos: DataFrame con columnas en COLUMNAS_SI e índice DatetimeIndex UTC
-            tz-aware. None si los datos aún no han sido descargados.
+            tz-aware, paso horario. None si aún no hay datos.
         anio: Año calendario de los datos (ej.: 2022).
         calidad: Resumen de la calidad y política de huecos aplicada.
-        altitud_nasa_m: Altitud del punto de grilla reportada por NASA POWER [m].
+        altitud_nasa_m: Altitud del punto de grilla reportada por NASA POWER [m]
+            (también cuando NASA solo se usó para completar columnas faltantes).
+        fuente: Origen de la serie: "nasa_power" (descarga completa),
+            "medido" (todas las columnas medidas/derivadas del archivo del
+            usuario) o "hibrido" (columnas medidas + completadas con NASA).
+        procedencia: Mapa columna canónica → constante PROCEDENCIA_* de
+            core.clima_medido. None equivale a "todo NASA POWER".
+        frecuencia_nativa_s: Paso temporal del archivo medido original [s]
+            (ej. 600 para 10-minutal). None para clima NASA.
+        datos_nativos: Serie medida en SI al paso nativo, post-QC y
+            pre-remuestreo (reservada para la fase 1b). None para clima NASA.
+        mapeo: Configuración de mapeo usada en la ingesta (para snapshot y
+            restauración). None para clima NASA.
+        qc: Reporte del control de calidad físico de la ingesta. None para
+            clima NASA.
     """
 
     datos: Optional[pd.DataFrame] = None
     anio: Optional[int] = None
     calidad: CalidadClima = field(default_factory=CalidadClima)
     altitud_nasa_m: Optional[float] = None
+    fuente: str = "nasa_power"
+    procedencia: Optional[dict[str, str]] = None
+    frecuencia_nativa_s: Optional[float] = None
+    datos_nativos: Optional[pd.DataFrame] = None
+    mapeo: Optional[ConfigMapeoClima] = None
+    qc: Optional[ReporteQC] = None
+
+    def __post_init__(self) -> None:
+        if self.fuente not in FUENTES_CLIMA:
+            raise ValueError(
+                f"CLIMA_FUENTE_INVALIDA: '{self.fuente}' " f"(válidas: {', '.join(FUENTES_CLIMA)})."
+            )

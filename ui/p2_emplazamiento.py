@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import io
+from typing import Callable
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -19,14 +20,29 @@ import pvlib
 import streamlit as st
 from plotly.subplots import make_subplots
 
+from calculos import clima_medido as cm
 from calculos.clima_calc import obtener_clima
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
+from core.clima_medido import (
+    CONVENCIONES_TIMESTAMP,
+    PLANOS_PIRANOMETRO,
+    UNIDADES_POR_VARIABLE,
+    VARIABLES_MAPEABLES,
+    ConfigMapeoClima,
+    MapeoColumna,
+)
 from core.emplazamiento import Emplazamiento
 from core.proyecto import DiaAnalisis, ModoAnalisis, Tipologia
 from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
+from ui.componentes.serializacion import (
+    dump_json,
+    limpiar_session_state_prefijo,
+    nombre_archivo_descarga,
+    parsear_json_seccion,
+)
 from ui.componentes.unidades import (
     acimut_duffie_a_pvlib,
     acimut_duffie_a_ui360,
@@ -586,6 +602,398 @@ def _generar_csv(datos: pd.DataFrame, zona_horaria: str) -> bytes:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Clima medido por el usuario (mejora 38, F1a)
+# ---------------------------------------------------------------------------
+
+
+def _construir_config_medido(
+    columna_timestamp: str,
+    seleccion: dict,
+    zona_horaria: str,
+    convencion: str,
+    altura_anemometro_m: float,
+    plano_piranometro: str,
+    hoja: str | None,
+    fila_encabezado: int,
+) -> ConfigMapeoClima:
+    """Arma la ConfigMapeoClima desde los valores de los widgets (pura, testeable).
+
+    Args:
+        seleccion: variable canónica → (columna_origen | None, unidad).
+    """
+    columnas = [
+        MapeoColumna(variable, col, unidad)
+        for variable, (col, unidad) in seleccion.items()
+        if col is not None
+    ]
+    return ConfigMapeoClima(
+        columna_timestamp=columna_timestamp,
+        zona_horaria=zona_horaria,
+        convencion_timestamp=convencion,
+        columnas=columnas,
+        hoja=hoja,
+        fila_encabezado=fila_encabezado,
+        altura_anemometro_m=altura_anemometro_m,
+        plano_piranometro=plano_piranometro,
+    )
+
+
+def _tabla_procedencia(clima: Clima, traducir_fn: Callable[..., str]) -> pd.DataFrame:
+    """Tabla variable → procedencia traducida, para mostrar antes de confirmar."""
+    filas = []
+    for col, proc in (clima.procedencia or {}).items():
+        filas.append(
+            {
+                traducir_fn("p2.medido.procedencia.variable"): traducir_fn(
+                    f"p2.medido.variable.{col}"
+                ),
+                traducir_fn("p2.medido.procedencia.origen"): traducir_fn(
+                    f"p2.medido.procedencia.{proc}"
+                ),
+            }
+        )
+    return pd.DataFrame(filas)
+
+
+def _resumen_medido_dict(clima: Clima) -> dict:
+    """Resumen compacto del clima medido confirmado (puro, testeable)."""
+    qc = clima.qc
+    return {
+        "fuente": clima.fuente,
+        "anio": clima.anio,
+        "paso_s": clima.frecuencia_nativa_s,
+        "periodo_inicio": qc.periodo_inicio if qc is not None else None,
+        "periodo_fin": qc.periodo_fin if qc is not None else None,
+        "meses": tuple(qc.meses_cubiertos) if qc is not None else (),
+    }
+
+
+def _limpiar_estado_medido() -> None:
+    limpiar_session_state_prefijo(st.session_state, "p2_med_")
+    limpiar_session_state_prefijo(st.session_state, "_p2_med_")
+
+
+def _render_snapshot_medido(proyecto) -> None:
+    """Expander guardar/cargar la configuración de ingesta (sección clima_medido)."""
+    clima = proyecto.clima
+    with st.expander(t("p2.medido.snapshot.titulo"), expanded=False):
+        snap = st.session_state.get("p2med_snapshot")
+        if snap is None and clima is not None and getattr(clima, "mapeo", None) is not None:
+            snap = {
+                "seccion": "clima_medido",
+                "nombre_archivo": None,
+                "hash_archivo": None,
+                "hash_ingesta": None,
+                "mapeo": cm.config_a_dict(clima.mapeo),
+            }
+        if snap is not None:
+            st.download_button(
+                t("p2.medido.snapshot.guardar"),
+                data=dump_json(snap),
+                file_name=nombre_archivo_descarga(proyecto, "clima_medido", "json"),
+                mime="application/json",
+                key="p2_med_snap_dl",
+            )
+        archivo = st.file_uploader(
+            t("p2.medido.snapshot.cargar"), type=["json"], key="p2_med_snap_uploader"
+        )
+        if archivo is not None:
+            data, err = parsear_json_seccion(archivo, "clima_medido")
+            if err:
+                st.error(t("p2.medido.snapshot.error", err=err))
+            else:
+                hash_ing = data.get("hash_ingesta")
+                rec = cm.cargar_cache_medido(hash_ing) if hash_ing else None
+                if rec is not None:
+                    proyecto.clima = rec
+                    _limpiar_estado_medido()
+                    st.session_state.pop("p2_med_snap_uploader", None)
+                    st.success(t("p2.medido.snapshot.restaurado"))
+                    st.rerun()
+                else:
+                    st.info(t("p2.medido.snapshot.falta_archivo"))
+
+
+def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
+    """Sección de carga de datos climáticos medidos (CSV/XLS) en P2."""
+    st.caption(t("p2.medido.intro"))
+
+    clima_conf = proyecto.clima
+    hay_confirmado = (
+        clima_conf is not None
+        and clima_conf.datos is not None
+        and getattr(clima_conf, "fuente", "nasa_power") != "nasa_power"
+    )
+    if hay_confirmado and st.session_state.get("p2_med_archivo") is None:
+        resumen = _resumen_medido_dict(clima_conf)
+        st.success(
+            t(
+                "p2.medido.resumen.confirmado",
+                fuente=(
+                    t(f"p2.fuente.{resumen['fuente']}")
+                    if resumen["fuente"] in ("medido",)
+                    else t("p2.medido.resumen.hibrido")
+                ),
+                inicio=str(resumen["periodo_inicio"] or "—")[:16],
+                fin=str(resumen["periodo_fin"] or "—")[:16],
+                paso=int(resumen["paso_s"] or 0),
+                n_meses=len(resumen["meses"]),
+            )
+        )
+        tabla_proc = _tabla_procedencia(clima_conf, t)
+        if len(tabla_proc) > 0:
+            st.dataframe(tabla_proc, hide_index=True)
+        _render_snapshot_medido(proyecto)
+
+    arch = st.session_state.get("p2_med_archivo")
+    if arch is None:
+        subido = st.file_uploader(
+            t("p2.medido.uploader.label"),
+            type=["csv", "txt", "xls", "xlsx"],
+            key="p2_med_uploader",
+            help=t("p2.medido.uploader.help"),
+        )
+        if subido is not None:
+            contenido = subido.read()
+            st.session_state["p2_med_archivo"] = {
+                "nombre": subido.name,
+                "bytes": contenido,
+                "hash": cm.hash_archivo(contenido),
+            }
+            st.session_state.pop("p2_med_uploader", None)
+            st.rerun()
+        if not hay_confirmado:
+            _render_snapshot_medido(proyecto)
+        return
+
+    c_a, c_b = st.columns([4, 1])
+    with c_a:
+        st.markdown(
+            t(
+                "p2.medido.archivo_cargado",
+                nombre=arch["nombre"],
+                kb=max(len(arch["bytes"]) // 1024, 1),
+            )
+        )
+    with c_b:
+        if st.button(t("p2.medido.quitar"), key="p2_med_quitar"):
+            _limpiar_estado_medido()
+            st.rerun()
+
+    # ---- hoja / fila de encabezado (solo Excel) ----
+    try:
+        hojas = cm.listar_hojas(arch["bytes"], arch["nombre"])
+    except (ValueError, RuntimeError) as exc:
+        st.error(t("p2.medido.error", err=exc))
+        return
+    hoja = None
+    c1, c2 = st.columns([3, 1])
+    if hojas:
+        with c1:
+            hoja = st.selectbox(t("p2.medido.hoja.label"), options=hojas, key="p2_med_hoja")
+    with c2:
+        fila_enc = int(
+            st.number_input(
+                t("p2.medido.fila_enc.label"),
+                min_value=0,
+                max_value=50,
+                value=0,
+                key="p2_med_fila_enc",
+                help=t("p2.medido.fila_enc.help"),
+            )
+        )
+
+    # ---- tabla cruda cacheada por (hash, hoja, fila) ----
+    clave_tabla = (arch["hash"], hoja, fila_enc)
+    cache = st.session_state.get("_p2_med_tabla_cache")
+    if cache is None or cache[0] != clave_tabla:
+        try:
+            tabla = cm.leer_tabla(
+                arch["bytes"], arch["nombre"], hoja=hoja, fila_encabezado=fila_enc
+            )
+        except (ValueError, RuntimeError) as exc:
+            st.error(t("p2.medido.error", err=exc))
+            return
+        st.session_state["_p2_med_tabla_cache"] = (clave_tabla, tabla)
+        st.session_state["_p2_med_sugerencia"] = cm.sugerir_mapeo(tabla.columns)
+        limpiar_session_state_prefijo(st.session_state, "p2_med_col_")
+        limpiar_session_state_prefijo(st.session_state, "p2_med_uni_")
+        st.session_state.pop("p2_med_resultado", None)
+    tabla = st.session_state["_p2_med_tabla_cache"][1]
+    sugerencia = st.session_state["_p2_med_sugerencia"]
+
+    with st.expander(t("p2.medido.preview_titulo"), expanded=False):
+        st.dataframe(tabla.head(12))
+
+    # ---- mapeo de columnas ----
+    st.markdown(t("p2.medido.mapeo.titulo"))
+    st.caption(t("p2.medido.mapeo.caption"))
+    columnas_archivo = [str(c) for c in tabla.columns]
+
+    idx_ts = (
+        columnas_archivo.index(sugerencia.columna_timestamp)
+        if sugerencia.columna_timestamp in columnas_archivo
+        else 0
+    )
+    col_ts = st.selectbox(
+        t("p2.medido.mapeo.timestamp"),
+        options=columnas_archivo,
+        index=idx_ts,
+        key="p2_med_col_timestamp",
+    )
+
+    sug_por_var = {m.variable: m for m in sugerencia.columnas}
+    opciones_col = [None] + columnas_archivo
+    seleccion: dict = {}
+    for variable in VARIABLES_MAPEABLES:
+        unidades = list(UNIDADES_POR_VARIABLE[variable])
+        sug = sug_por_var.get(variable)
+        c_col, c_uni = st.columns([3, 1])
+        with c_col:
+            col_sel = st.selectbox(
+                t(f"p2.medido.variable.{variable}"),
+                options=opciones_col,
+                index=(
+                    opciones_col.index(sug.columna_origen)
+                    if sug is not None and sug.columna_origen in columnas_archivo
+                    else 0
+                ),
+                format_func=lambda c: t("p2.medido.mapeo.no_mapear") if c is None else c,
+                key=f"p2_med_col_{variable}",
+            )
+        with c_uni:
+            uni_sel = st.selectbox(
+                t("p2.medido.mapeo.unidad"),
+                options=unidades,
+                index=(
+                    unidades.index(sug.unidad) if sug is not None and sug.unidad in unidades else 0
+                ),
+                format_func=lambda u: t(f"p2.medido.unidad.{u}"),
+                key=f"p2_med_uni_{variable}",
+            )
+        seleccion[variable] = (col_sel, uni_sel)
+
+    # ---- metadatos de adquisición ----
+    conv = st.radio(
+        t("p2.medido.convencion.label"),
+        options=list(CONVENCIONES_TIMESTAMP),
+        format_func=lambda k: t(f"p2.medido.convencion.{k}"),
+        key="p2_med_conv",
+        horizontal=True,
+        help=t("p2.medido.convencion.help"),
+    )
+    zona = st.selectbox(
+        t("p2.medido.tz.label"),
+        options=_ZONAS_HORARIAS,
+        index=(
+            _ZONAS_HORARIAS.index(empl.zona_horaria) if empl.zona_horaria in _ZONAS_HORARIAS else 0
+        ),
+        key="p2_med_tz",
+    )
+    altura = 2.0
+    if seleccion.get("WS_ms", (None, None))[0] is not None:
+        altura = float(
+            st.number_input(
+                t("p2.medido.alt_viento.label"),
+                min_value=0.5,
+                max_value=50.0,
+                value=2.0,
+                step=0.5,
+                key="p2_med_alt_viento",
+                help=t("p2.medido.alt_viento.help"),
+            )
+        )
+    plano = "horizontal"
+    if seleccion.get("GHI_Wm2", (None, None))[0] is not None:
+        plano = st.radio(
+            t("p2.medido.plano.label"),
+            options=list(PLANOS_PIRANOMETRO),
+            format_func=lambda k: t(f"p2.medido.plano.{k}"),
+            key="p2_med_plano",
+            horizontal=True,
+            help=t("p2.medido.plano.help"),
+        )
+
+    n_mapeadas = sum(1 for c, _ in seleccion.values() if c is not None)
+    if n_mapeadas == 0:
+        st.warning(t("p2.medido.falta_variables"))
+        st.session_state.pop("p2_med_resultado", None)
+        return
+
+    try:
+        cfg = _construir_config_medido(col_ts, seleccion, zona, conv, altura, plano, hoja, fila_enc)
+    except ValueError as exc:
+        st.error(t("p2.medido.error", err=exc))
+        return
+    hash_cfg = cm.hash_ingesta(arch["hash"], cfg)
+
+    # resultado previo invalidado si cambió el mapeo
+    if st.session_state.get("_p2_med_hash_res") not in (None, hash_cfg):
+        st.session_state.pop("p2_med_resultado", None)
+
+    if st.button(t("p2.medido.procesar"), type="primary", key="p2_med_procesar"):
+        with st.spinner(t("p2.medido.spinner")):
+            try:
+                resultado = cm.ingerir_clima_medido(tabla, cfg, empl)
+            except (ValueError, RuntimeError) as exc:
+                st.error(t("p2.medido.error", err=exc))
+            else:
+                st.session_state["p2_med_resultado"] = resultado
+                st.session_state["_p2_med_hash_res"] = hash_cfg
+
+    res = st.session_state.get("p2_med_resultado")
+    if res is None:
+        return
+
+    # ---- revisión: procedencia + QC + confirmación ----
+    st.markdown(t("p2.medido.procedencia.titulo"))
+    st.dataframe(_tabla_procedencia(res, t), hide_index=True)
+    resumen = _resumen_medido_dict(res)
+    st.caption(
+        t(
+            "p2.medido.resumen.previo",
+            inicio=str(resumen["periodo_inicio"] or "—")[:16],
+            fin=str(resumen["periodo_fin"] or "—")[:16],
+            paso=int(resumen["paso_s"] or 0),
+            n_horas=len(res.datos),
+        )
+    )
+    hallazgos = res.qc.con_hallazgos() if res.qc is not None else []
+    with st.expander(t("p2.medido.qc.titulo", n=len(hallazgos)), expanded=False):
+        if not hallazgos:
+            st.caption(t("p2.medido.qc.sin_hallazgos"))
+        for chq in hallazgos:
+            st.warning(
+                t(
+                    "p2.medido.qc.detalle",
+                    chequeo=t(f"p2.medido.qc.chequeo.{chq.codigo}"),
+                    variable=t(f"p2.medido.variable.{chq.variable}"),
+                    n=chq.n_marcados + chq.n_avisos,
+                    ejemplos=", ".join(chq.ejemplos[:3]),
+                )
+            )
+
+    if st.button(t("p2.medido.confirmar"), type="primary", key="p2_med_confirmar"):
+        proyecto.clima = res
+        try:
+            cm.guardar_cache_medido(res, hash_cfg)
+        except Exception:
+            pass  # la cache es una comodidad; no bloquea la confirmación
+        # Clave deliberadamente FUERA del prefijo "p2_med_": debe sobrevivir a
+        # _limpiar_estado_medido() para poder descargar el snapshot tras confirmar.
+        st.session_state["p2med_snapshot"] = {
+            "seccion": "clima_medido",
+            "nombre_archivo": arch["nombre"],
+            "hash_archivo": arch["hash"],
+            "hash_ingesta": hash_cfg,
+            "mapeo": cm.config_a_dict(cfg),
+        }
+        _limpiar_estado_medido()
+        st.success(t("p2.medido.exito"))
+        st.rerun()
+
+
 def render() -> None:
     """Renderiza la pestaña 2: Emplazamiento y Recursos Climáticos."""
 
@@ -785,57 +1193,78 @@ def render() -> None:
     else:
         anio_p1 = None
         fecha_sync_label = None
-    # Sincronización P1→P2 robusta a la purga de widget-keys al navegar (mejora
-    # 28). La lógica vive en _resolver_anio_descarga (pura, testeable).
-    anio_descarga, ultimo_visto = _resolver_anio_descarga(
-        anio_p1=anio_p1,
-        anio_descarga_actual=st.session_state.get("p2_anio_descarga"),
-        ultimo_anio_p1_visto=st.session_state.get("_p2_anio_p1_visto"),
+    fuente_sel = st.radio(
+        t("p2.fuente.titulo"),
+        options=["nasa_power", "medido"],
+        index=(
+            1
+            if (
+                "p2_fuente_clima" not in st.session_state
+                and proyecto.clima is not None
+                and getattr(proyecto.clima, "fuente", "nasa_power") != "nasa_power"
+            )
+            else 0
+        ),
+        format_func=lambda k: t(f"p2.fuente.{k}"),
+        key="p2_fuente_clima",
+        horizontal=True,
     )
-    st.session_state["p2_anio_descarga"] = anio_descarga
-    st.session_state["_p2_anio_p1_visto"] = ultimo_visto
-
-    c1, c2, c3 = st.columns([2, 1, 1])
-    with c1:
-        anio = st.number_input(
-            t("p2.clima.anio.label"),
-            min_value=_ANIO_MIN,
-            max_value=_ANIO_MAX,
-            step=1,
-            key="p2_anio_descarga",
-            help=(
-                t("p2.clima.anio.help_base", anio_min=_ANIO_MIN, anio_max=_ANIO_MAX)
-                + (
-                    t("p2.clima.anio.help_sync", sync=fecha_sync_label)
-                    if fecha_sync_label
-                    else t("p2.clima.anio.help_sin_sync")
-                )
-            ),
-        )
-    with c2:
-        forzar = st.checkbox(
-            t("p2.clima.forzar.label"),
-            value=False,
-            help=t("p2.clima.forzar.help"),
-        )
-    with c3:
-        st.write("")
-        st.write("")
-        boton_descarga = st.button(t("p2.clima.descargar"), type="primary", width="stretch")
-
     clima: Clima | None = proyecto.clima
+    boton_descarga = False
 
-    if boton_descarga:
-        with st.spinner(
-            t("p2.clima.spinner", lat=empl.latitud_deg, lon=empl.longitud_deg, anio=anio)
-        ):
-            try:
-                clima = obtener_clima(empl, int(anio), forzar_descarga=forzar)
-                proyecto.clima = clima
-                st.success(t("p2.clima.exito", n=len(clima.datos), alt=clima.altitud_nasa_m))
-            except RuntimeError as err:
-                st.error(t("p2.clima.error_descarga", err=err))
-                clima = None
+    if fuente_sel == "medido":
+        _render_clima_medido(proyecto, empl)
+        clima = proyecto.clima
+    else:
+        # Sincronización P1→P2 robusta a la purga de widget-keys al navegar (mejora
+        # 28). La lógica vive en _resolver_anio_descarga (pura, testeable).
+        anio_descarga, ultimo_visto = _resolver_anio_descarga(
+            anio_p1=anio_p1,
+            anio_descarga_actual=st.session_state.get("p2_anio_descarga"),
+            ultimo_anio_p1_visto=st.session_state.get("_p2_anio_p1_visto"),
+        )
+        st.session_state["p2_anio_descarga"] = anio_descarga
+        st.session_state["_p2_anio_p1_visto"] = ultimo_visto
+
+        c1, c2, c3 = st.columns([2, 1, 1])
+        with c1:
+            anio = st.number_input(
+                t("p2.clima.anio.label"),
+                min_value=_ANIO_MIN,
+                max_value=_ANIO_MAX,
+                step=1,
+                key="p2_anio_descarga",
+                help=(
+                    t("p2.clima.anio.help_base", anio_min=_ANIO_MIN, anio_max=_ANIO_MAX)
+                    + (
+                        t("p2.clima.anio.help_sync", sync=fecha_sync_label)
+                        if fecha_sync_label
+                        else t("p2.clima.anio.help_sin_sync")
+                    )
+                ),
+            )
+        with c2:
+            forzar = st.checkbox(
+                t("p2.clima.forzar.label"),
+                value=False,
+                help=t("p2.clima.forzar.help"),
+            )
+        with c3:
+            st.write("")
+            st.write("")
+            boton_descarga = st.button(t("p2.clima.descargar"), type="primary", width="stretch")
+
+        if boton_descarga:
+            with st.spinner(
+                t("p2.clima.spinner", lat=empl.latitud_deg, lon=empl.longitud_deg, anio=anio)
+            ):
+                try:
+                    clima = obtener_clima(empl, int(anio), forzar_descarga=forzar)
+                    proyecto.clima = clima
+                    st.success(t("p2.clima.exito", n=len(clima.datos), alt=clima.altitud_nasa_m))
+                except RuntimeError as err:
+                    st.error(t("p2.clima.error_descarga", err=err))
+                    clima = None
 
     # -----------------------------------------------------------------------
     # Mostrar estado de la descarga previa (si existe en session_state)
@@ -883,7 +1312,12 @@ def render() -> None:
             decision = st.radio(
                 t("p2.calidad.como_continuar"),
                 options=["aceptar_con_nulos", "descargar_nuevo_anio"],
-                format_func=lambda x: t(f"p2.calidad.opcion_{x}"),
+                format_func=lambda x: (
+                    t("p2.medido.opcion_descartar")
+                    if x == "descargar_nuevo_anio"
+                    and getattr(clima, "fuente", "nasa_power") != "nasa_power"
+                    else t(f"p2.calidad.opcion_{x}")
+                ),
                 key="p2_decision_huecos",
             )
             if st.button(t("p2.calidad.confirmar")):

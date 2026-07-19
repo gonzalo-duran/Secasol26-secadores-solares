@@ -15,13 +15,13 @@ from calculos.balance_global import (
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.psicrometria import humedad_absoluta
-from core.camara import ForzantesAire
 from core.auxiliar import Auxiliar, ModoOperacionAuxiliar, TipoAuxiliar
 from core.camara import (
     Camara,
     CargaProducto,
     ConfiguracionBandejas,
     ConfiguracionFlujo,
+    ForzantesAire,
     GeometriaCamara,
 )
 from core.chimenea import Chimenea
@@ -595,7 +595,7 @@ class TestChimeneaIntegrada:
     def test_picard_caja_converge_trivialmente(self):
         """CAJA sin colector: T_chim no depende del lazo (heurística estática
         T_amb + 25 K), Picard converge en 1 iter."""
-        from core.camara import GeometriaCamara, ConstruccionCamara
+        from core.camara import ConstruccionCamara, GeometriaCamara
 
         p = Proyecto(
             configuracion=Configuracion(
@@ -986,3 +986,38 @@ class TestIntegralEndToEnd:
         assert np.all(np.isfinite(res.X_prod_kg_kg))
         # T_cam_int siempre <= T_flujo (pared cede calor del aire)
         assert np.all(res.T_cam_int_K <= res.T_flujo_K + 1e-6)
+
+
+class TestPresionRepresentativaFuente:
+    """El string de origen de la presión refleja la fuente del clima (mejora 38)."""
+
+    def _proyecto_con_presion(self, fuente: str):
+        import pandas as pd
+
+        from core.clima import Clima
+        from core.proyecto import Proyecto
+
+        idx = pd.date_range("2010-05-01", periods=24, freq="h", tz="UTC")
+        datos = pd.DataFrame({"presion_Pa": 83_000.0}, index=idx)
+        proy = Proyecto()
+        proy.clima = Clima(datos=datos, anio=2010, fuente=fuente)
+        return proy
+
+    def test_origen_nasa(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P, origen = presion_representativa_proyecto(self._proyecto_con_presion("nasa_power"))
+        assert P == pytest.approx(83_000.0)
+        assert "NASA POWER" in origen
+
+    def test_origen_medido(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        _, origen = presion_representativa_proyecto(self._proyecto_con_presion("medido"))
+        assert "clima medido" in origen
+
+    def test_origen_hibrido(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        _, origen = presion_representativa_proyecto(self._proyecto_con_presion("hibrido"))
+        assert "híbrido" in origen
