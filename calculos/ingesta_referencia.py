@@ -29,6 +29,28 @@ _T_MIN_PLAUSIBLE_K: float = 253.15
 _T_MAX_PLAUSIBLE_K: float = 423.15
 
 
+def _parsear_timestamps_ref(serie: pd.Series, zona_horaria: str, fecha_fija) -> pd.DatetimeIndex:
+    """Parsea timestamps de la referencia, soportando **fecha fija** (fase 2b).
+
+    Con ``fecha_fija`` (para archivos cuya columna trae solo la hora, ej.
+    "09:00:00"): se toma la **hora del día** de cada registro y se combina con
+    ``fecha_fija``, luego se localiza en ``zona_horaria`` y se pasa a UTC. Sin
+    ``fecha_fija`` delega en el parser de clima_medido (serial Excel o texto).
+
+    Maneja tanto valores de texto ("09:00:00") como objetos ``datetime.time``
+    (cómo ``pd.read_excel`` suele leer una columna de solo-hora de un ``.xls``).
+
+    Args:
+        serie: Columna cruda de timestamps.
+        zona_horaria: Zona horaria del archivo.
+        fecha_fija: ``datetime.date`` o None.
+
+    Returns:
+        DatetimeIndex UTC (con NaT donde no se pudo parsear).
+    """
+    return _parsear_timestamps(serie, zona_horaria, fecha_fija)
+
+
 def _a_kelvin(valores: pd.Series, unidad: str) -> pd.Series:
     """Convierte una serie de temperatura a K según la unidad de origen.
 
@@ -79,7 +101,9 @@ def ingerir_referencia(df_crudo: pd.DataFrame, config: ConfigReferencia) -> Sena
             f"VREF_COLUMNA_VALOR_AUSENTE: '{config.columna_valor}' no está en el archivo."
         )
 
-    idx = _parsear_timestamps(df_crudo[config.columna_timestamp], config.zona_horaria)
+    idx = _parsear_timestamps_ref(
+        df_crudo[config.columna_timestamp], config.zona_horaria, config.fecha_fija
+    )
     valores = _a_numerico(df_crudo[config.columna_valor], config.marcadores_invalidos)
     valores.index = idx
 
@@ -124,6 +148,102 @@ def ingerir_referencia(df_crudo: pd.DataFrame, config: ConfigReferencia) -> Sena
         n_invalidos=n_invalidos,
         advertencias=advertencias,
     )
+
+
+def _a_poa_Wm2(valores: pd.Series, unidad: str) -> pd.Series:
+    """Convierte irradiancia a W/m² (``W_m2`` o ``kW_m2``)."""
+    if unidad == "W_m2":
+        return valores
+    if unidad == "kW_m2":
+        return valores * 1000.0
+    raise ValueError(f"VREF_UNIDAD_NO_SOPORTADA: unidad de irradiancia '{unidad}' desconocida.")
+
+
+def _a_viento_ms(valores: pd.Series, unidad: str) -> pd.Series:
+    """Convierte velocidad de viento a m/s (``m_s`` o ``km_h``)."""
+    if unidad == "m_s":
+        return valores
+    if unidad == "km_h":
+        return valores / 3.6
+    raise ValueError(f"VREF_UNIDAD_NO_SOPORTADA: unidad de viento '{unidad}' desconocida.")
+
+
+def ingerir_clima_forzante(
+    df_crudo: pd.DataFrame,
+    config: ConfigReferencia,
+    *,
+    columna_T_amb: str,
+    unidad_T_amb: str = "C",
+    columna_POA: str,
+    unidad_POA: str = "W_m2",
+    columna_viento: str | None = None,
+    unidad_viento: str = "m_s",
+) -> pd.DataFrame:
+    """Construye un df de **forzado del colector** desde el clima medido del archivo (fase 2b).
+
+    Permite validar el colector **aislado** forzándolo con la temperatura ambiente
+    y la irradiancia **del propio ensayo** (no con el clima horario de P2, que no
+    ve las nubes del día). Reusa el timestamp de ``config`` (incl. ``fecha_fija``).
+
+    Args:
+        df_crudo: Tabla cruda del archivo de referencia.
+        config: Config de la referencia (aporta timestamp, tz, convención, fecha_fija).
+        columna_T_amb / unidad_T_amb: Columna y unidad de temperatura ambiente (C/K/F).
+        columna_POA / unidad_POA: Columna y unidad de irradiancia en plano (W_m2/kW_m2).
+        columna_viento / unidad_viento: Columna y unidad de viento (opcional; None → 2 m/s).
+
+    Returns:
+        DataFrame UTC regular con columnas ``T_amb_K``, ``WS_ms``, ``POA_med_Wm2``,
+        ``GHI_Wm2``, ``DNI_Wm2``, ``DHI_Wm2`` (POA medida directa; ``calcular_POA_horizonte``
+        la usa sin transponer).
+
+    Raises:
+        ValueError: ``VREF_COLUMNA_*_AUSENTE`` si faltan columnas; ``VREF_CLIMA_VACIO``
+            si no queda ningún registro válido.
+    """
+    for col, code in ((columna_T_amb, "TAMB"), (columna_POA, "POA")):
+        if col not in df_crudo.columns:
+            raise ValueError(f"VREF_COLUMNA_{code}_AUSENTE: '{col}' no está en el archivo.")
+
+    idx = _parsear_timestamps_ref(
+        df_crudo[config.columna_timestamp], config.zona_horaria, config.fecha_fija
+    )
+    T_amb_K = _a_kelvin(
+        _a_numerico(df_crudo[columna_T_amb], config.marcadores_invalidos), unidad_T_amb
+    )
+    poa = _a_poa_Wm2(
+        _a_numerico(df_crudo[columna_POA], config.marcadores_invalidos), unidad_POA
+    ).clip(lower=0.0)
+
+    if columna_viento is not None and columna_viento in df_crudo.columns:
+        viento = _a_viento_ms(
+            _a_numerico(df_crudo[columna_viento], config.marcadores_invalidos), unidad_viento
+        ).clip(lower=0.0)
+    else:
+        viento = pd.Series(2.0, index=df_crudo.index)
+
+    df = pd.DataFrame(
+        {
+            "T_amb_K": T_amb_K.to_numpy(dtype=float),
+            "WS_ms": viento.to_numpy(dtype=float),
+            "POA_med_Wm2": poa.to_numpy(dtype=float),
+        },
+        index=idx,
+    )
+    df = df[~df.index.isna()]
+    df = df[~df.index.duplicated(keep="first")].sort_index()
+    if len(df) == 0:
+        raise ValueError("VREF_CLIMA_VACIO: no quedó ningún registro de clima válido.")
+
+    paso_s = inferir_frecuencia_s(df.index)
+    df = regularizar_grilla(df, paso_s)
+    # POA/T_amb completas (interpolación de huecos cortos de la grilla regular).
+    df = df.interpolate(method="time").ffill().bfill()
+    # calcular_POA_horizonte usa POA_med si está; GHI de respaldo, DNI/DHI ausentes.
+    df["GHI_Wm2"] = df["POA_med_Wm2"]
+    df["DNI_Wm2"] = np.nan
+    df["DHI_Wm2"] = np.nan
+    return df
 
 
 def alinear_con_simulada(

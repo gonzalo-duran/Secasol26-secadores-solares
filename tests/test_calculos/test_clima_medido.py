@@ -669,3 +669,62 @@ class TestErroresLectura:
         cfg = _config_adital(columnas=[MapeoColumna("T_amb_K", "Temperatura ambiente", "C")])
         with pytest.raises(ValueError, match="CLIMED_TIMESTAMP_INVALIDO"):
             aplicar_mapeo(tabla, cfg)
+
+
+# ---------------------------------------------------------------------------
+# Fase 1a + fecha fija / datetime.time (regresión: prototipo colector 10 m)
+# ---------------------------------------------------------------------------
+
+
+class TestFechaFijaClimaMedido:
+
+    def _df_hora_time(self, n=6):
+        from datetime import time
+
+        return pd.DataFrame(
+            {
+                "hora": [time(9, i * 5 // 1) if i * 5 < 60 else time(10, 0) for i in range(n)],
+                "Ta": [15.0 + i for i in range(n)],
+                "I": [700.0 + 10 * i for i in range(n)],
+            }
+        )
+
+    def test_aplicar_mapeo_con_fecha_fija_y_datetime_time(self):
+        from datetime import date
+
+        from calculos.clima_medido import aplicar_mapeo
+        from core.clima_medido import ConfigMapeoClima, MapeoColumna
+
+        df = self._df_hora_time()
+        cfg = ConfigMapeoClima(
+            columna_timestamp="hora",
+            zona_horaria="America/Argentina/Salta",
+            columnas=[MapeoColumna("T_amb_K", "Ta", "C"), MapeoColumna("POA_med_Wm2", "I", "W_m2")],
+            plano_piranometro="plano_colector",
+            fecha_fija=date(2007, 6, 9),
+        )
+        out = aplicar_mapeo(df, cfg)
+        assert len(out) == 6
+        # 09:00 Salta (UTC−3) → 12:00 UTC del 2007-06-09.
+        assert out.index[0] == pd.Timestamp("2007-06-09 12:00:00", tz="UTC")
+
+    def test_CLIMED_TIMESTAMP_SOLO_HORA_sin_fecha(self):
+        from calculos.clima_medido import _parsear_timestamps
+
+        df = self._df_hora_time()
+        with pytest.raises(ValueError, match="CLIMED_TIMESTAMP_SOLO_HORA"):
+            _parsear_timestamps(df["hora"], "America/Argentina/Salta")
+
+    def test_hash_y_roundtrip_config_con_fecha_fija(self):
+        from datetime import date
+
+        from calculos.clima_medido import config_a_dict, config_desde_dict, hash_ingesta
+        from core.clima_medido import ConfigMapeoClima
+
+        cfg = ConfigMapeoClima(columna_timestamp="hora", fecha_fija=date(2007, 6, 9))
+        # hash no debe romper por date no-serializable.
+        assert isinstance(hash_ingesta("abc", cfg), str)
+        d = config_a_dict(cfg)
+        assert d["fecha_fija"] == "2007-06-09"  # isoformat
+        cfg2 = config_desde_dict(d)
+        assert cfg2.fecha_fija == date(2007, 6, 9)

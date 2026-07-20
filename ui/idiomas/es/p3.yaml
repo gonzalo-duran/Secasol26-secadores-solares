@@ -370,3 +370,96 @@ figuras:
 guardar:
   txt: Guardar configuración del colector (.txt)
   json: Guardar configuración del colector (.json)
+validacion:
+  titulo: 🔬 Validación con datos medidos
+  intro: >-
+    Compará la temperatura de salida del colector simulada contra una serie medida
+    propia (ej. prototipo de colector). Cargá un archivo con la señal medida; se
+    corre el colector sobre ese período con el clima de P2 y se calculan las métricas
+    de ajuste.
+  sin_colector: Definí un colector (tipología Armario o Gran escala) para validar su salida.
+  sin_clima: Cargá el clima en P2 (NASA POWER o medido) que cubra el período de la señal medida.
+  uploader:
+    label: Archivo con la temperatura de salida medida (CSV / Excel)
+    help: Una columna de fecha/hora y una columna con la T de salida del colector.
+  archivo_cargado: "**{nombre}** ({kb} KB) cargado."
+  quitar: Quitar
+  error: "Error al procesar la referencia: {err}"
+  preview_titulo: Vista previa del archivo
+  mapeo:
+    titulo: "**Mapeo de columnas**"
+    timestamp: Columna de fecha/hora
+    valor: Columna de temperatura de salida del colector
+  salida:
+    label: Salida del colector a comparar
+    help: >-
+      En colector Tipo 2 (doble canal activo) podés comparar contra el canal superior,
+      el inferior, o la mezcla (media ponderada por caudal). Elegí el que corresponde a
+      la columna medida que mapeaste.
+    mezcla: Mezcla (media)
+    superior: Canal superior
+    inferior: Canal inferior
+  procesar: Procesar y comparar
+  spinner: Ingiriendo la señal y corriendo el colector…
+  senal_ok: "Señal medida: {n} muestras válidas, paso nativo ≈ {freq} min."
+  sin_cobertura: >-
+    El clima cargado en P2 no cubre el período de la señal medida. Cargá el clima
+    (medido o NASA) del mismo lapso del ensayo.
+  sin_solape: No hay instantes en común entre la señal medida y la simulación.
+  grafica:
+    titulo: Temperatura de salida del colector — medido vs simulado
+    y_label: Temperatura de salida [°C]
+    medido: Medido
+    simulado: Simulado
+  metricas_titulo: "**Métricas de ajuste**"
+  metrica:
+    rmse: RMSE
+    mbe: Sesgo (MBE)
+    mae: MAE
+    r2: R²
+    nse: NSE
+    d: Índice de Willmott
+  n_pares: "Calculado sobre {n} pares medido↔simulado alineados."
+  interpretacion: >-
+    RMSE = magnitud del error; MBE con signo (positivo = el modelo sobrestima) orienta
+    qué parámetro calibrar; R² captura la forma (ciego al sesgo).
+  fecha_fija:
+    check: El archivo trae solo la hora (sin fecha)
+    label: Fecha del ensayo
+    help: Se combina con la hora de cada registro (ej. prototipo 10 m INENCO, 9-jun).
+  forzar:
+    check: Forzar el colector con el clima medido del archivo
+    help: >-
+      Valida el colector AISLADO usando la temperatura ambiente y la irradiancia
+      del propio ensayo (no el clima de P2). Ideal cuando el archivo trae Ta e I.
+    col_ta: Columna de temperatura ambiente
+    col_poa: Columna de irradiancia en plano (POA)
+  forzado:
+    medido: ⚙️ Colector forzado con el clima MEDIDO del archivo (Ta + POA del ensayo).
+    p2: ⚙️ Colector forzado con el clima de P2 sobre el período de la referencia.
+calibracion:
+  titulo: "**🎯 Calibración del modelo**"
+  intro: >-
+    Barré un parámetro del colector y quedate con el valor que mejor ajusta la
+    simulación al medido (minimiza el RMSE / |MBE| / MAE). Automatiza el tanteo manual.
+  parametro: Parámetro a calibrar
+  param:
+    velocidad_diseno: Velocidad de diseño [m/s]
+    largo_colector: Largo del colector [m]
+  min: Mínimo
+  max: Máximo
+  n: N.º de puntos
+  objetivo: Función objetivo
+  obj:
+    rmse: RMSE
+    mbe_abs: "|MBE|"
+    mae: MAE
+  rango_invalido: El máximo debe ser mayor que el mínimo.
+  correr: Calibrar
+  spinner: Barriendo el parámetro y ajustando contra el medido…
+  sin_optimo: Ningún punto del barrido fue evaluable (revisá el rango o la cobertura del medido).
+  grafica_titulo: Función objetivo vs parámetro
+  optimo: Óptimo
+  resultado: "Óptimo: {valor} → RMSE {rmse} °C, MBE {mbe} °C, R² {r2}."
+  aplicar: Aplicar el valor óptimo al colector
+  aplicado: Valor óptimo aplicado al colector. Recalculá el desempeño arriba.

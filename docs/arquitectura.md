@@ -41,6 +41,14 @@ Agrupa las secciones del modelo: `meta`, `configuracion`, `emplazamiento`,
   incluido el lazo de convección natural por chimenea (Picard).
 - **Clima** (`calculos/clima_calc.py`): descarga NASA POWER, caché parquet,
   transposición POA con pvlib.
+- **Clima medido** (`core/clima_medido.py` + `calculos/clima_medido.py`, mejora 38
+  fase 1a): ingesta de archivos del usuario (CSV/XLS) → contrato `Clima.datos`; paso
+  de trabajo sub-horario en fase 1b (`clima_calc.resolver_datos_trabajo`).
+- **Validación y calibración** (`calculos/metricas_validacion.py`,
+  `core/validacion.py`, `calculos/ingesta_referencia.py`, `calculos/calibracion.py`,
+  mejora 38 fases 2/2b/3): contrasta el modelo contra datos de campo (métricas
+  RMSE/MBE/R², forzado con clima propio del ensayo) y calibra 1-D un parámetro
+  minimizando el ajuste. UI en P3 ("🔬 Validación con datos medidos").
 
 ## Convenciones críticas
 

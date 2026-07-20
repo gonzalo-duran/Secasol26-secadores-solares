@@ -81,6 +81,17 @@ ajuste (RMSE, MBE, MAE, R², NSE, índice de Willmott).
   `advertencias.VREF_*`/`MVAL_*` si se muestran — **en los TRES yaml** (paridad).
 - `requirements.txt`: sin dependencias nuevas (reusa xlrd/openpyxl de 1a).
 
+## Estado: E1–E5 + FASE 2b IMPLEMENTADAS (S54, working tree). Suite 1411+1.
+
+**Fase 2b (S54):** validación de colector aislado forzado con el clima del propio ensayo.
+`ConfigReferencia.fecha_fija` (timestamps de solo hora) + `ingesta_referencia.
+ingerir_clima_forzante` (Ta + POA medidas → df de forzado con `POA_med_Wm2`) +
+`_series_simuladas_colector(clima_forzante=…)`. UI en P3: checkboxes "fecha fija" y "forzar con
+clima medido" con mapeo de Ta/POA. **Fix colateral:** `AttributeError` de
+`CONVENCIONES_TIMESTAMP` (módulo equivocado) en el render de P3, blindado con smoke test
+AppTest. **Validación real (prototipo colector 10 m INENCO, cap. 2):** a v≈8 m/s (caudal alto
+0.8 kg/s) RMSE 0.91 °C, MBE +0.20 °C, R² 0.987.
+
 ## Etapas (cada una: suite verde + black/ruff + auditar_i18n.py)
 
 - **E1** `calculos/metricas_validacion.py` puro + `MetricasAjuste`. Tests: valores exactos

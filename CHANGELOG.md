@@ -9,6 +9,36 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **Calibración del modelo contra datos medidos (mejora 38, fase 3)** — la sección de
+  validación de P3 gana un bloque **"🎯 Calibración"**: barre un parámetro del colector
+  (velocidad de diseño, largo) sobre un rango y se queda con el valor que **minimiza el ajuste**
+  contra el medido (RMSE / |MBE| / MAE), con curva objetivo-vs-parámetro, métricas del óptimo y
+  botón para aplicarlo al proyecto. Motor puro nuevo `calculos/calibracion.py` (`calibrar_1d`
+  recibe un callback de evaluación → desacoplado de la simulación/UI, reusa
+  `metricas_validacion` como función objetivo y `barrido_parametrico.aplicar_parametro` para
+  setear el parámetro). Verificado end-to-end sobre el colector 10 m del INENCO: la calibración
+  encuentra automáticamente el óptimo (v ≈ 8 m/s → RMSE 0.91 °C, R² 0.987).
+- **Validación de colector aislado con clima propio del ensayo (mejora 38, fase 2b)** — la
+  sección de validación de P3 puede **forzar el colector con la temperatura ambiente y la
+  irradiancia (POA) medidas en el propio archivo** (no con el clima de P2), aislando el modelo
+  del colector de la representatividad del clima. Soporta además **timestamp de solo hora**
+  (fecha fija del ensayo). Nuevas `ConfigReferencia.fecha_fija` y
+  `ingesta_referencia.ingerir_clima_forzante`. Verificado end-to-end contra el prototipo de
+  colector de 10 m del INENCO (tesis cap. 2): a caudal alto (~0.8 kg/s) el modelo reproduce la
+  T de salida medida con **RMSE 0.91 °C, MBE +0.20 °C, R² 0.987**.
+- **Validación por canal de salida (Tipo 2)** — en colector de doble canal activo (Tipo 2), la
+  validación permite elegir la salida simulada a comparar: **mezcla (media), canal superior o
+  canal inferior**, para empalmar con la columna medida correspondiente. Tipos 1/3/4 usan la
+  única salida.
+- **Validación del colector con datos medidos (mejora 38, fase 2)** — P3 gana una sección
+  **"🔬 Validación con datos medidos"**: se carga (aparte del clima) una serie medida de
+  temperatura de salida del colector, se corre el colector sobre ese período con el clima de
+  P2 y se muestran el **overlay medido vs simulado** y las **métricas de ajuste**
+  (RMSE, MBE con signo, MAE, R², NSE, índice de Willmott). Módulo puro nuevo
+  `calculos/metricas_validacion.py` (reusable como función objetivo de la calibración,
+  fase 3), `core/validacion.py` + `calculos/ingesta_referencia.py` (ingesta de la señal de
+  referencia reusando la maquinaria de la fase 1a + alineación temporal medido↔simulado por
+  interpolación de la serie simulada a los timestamps medidos). Sin dependencias nuevas.
 - **Motor de simulación agnóstico al paso temporal (mejora 38, fase 1b)** — P1 gana un
   selector de **paso de trabajo** (1 hora por defecto / 15 min / 10 min / 5 min) para los modos
   Diario, multidía y Ventana (el modo Anual queda siempre horario). El paso sub-horario
@@ -50,14 +80,41 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 Mejoras post-1.0 (sin orden estricto):
 
-- Mejora 38 fases siguientes: 2 (validación medido vs simulado), 3 (calibración) — ver
-  `docs/notas/plan_datos_medidos.md`. (1b, motor agnóstico al paso, ya implementada.)
+- Mejora 38: extender validación/calibración a cámara y producto (hoy: colector aislado) —
+  ver `docs/notas/plan_datos_medidos.md`. (Fases 1a, 1b, 2, 2b y 3 ya implementadas.)
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
 ### Fixed
 
+- **P3: tope artificial de 10 m/s en la velocidad de diseño crasheaba con caudal alto** — el
+  `number_input` de velocidad tenía `max_value=10.0` hardcodeado (sin fundamento físico; el core
+  no impone tope duro, solo una advertencia > 3 m/s). Al aplicar una calibración con óptimo
+  > 10 m/s (gran escala / caudal alto, ej. 11.7 m/s) el widget lanzaba
+  `StreamlitValueAboveMaxError`. Ahora el máximo se adapta al valor actual
+  (`max(50.0, velocidad)`), sin tope artificial bajo; ídem el largo del colector
+  (`max(20.0, largo)`). Test de regresión con velocidad óptima de 15 m/s.
+- **Timestamp de solo-hora (`datetime.time`) daba error de parseo** — `pd.read_excel` devuelve
+  una columna de solo hora como objetos `datetime.time`, que el parser convertía a NaT (P2 daba
+  `CLIMED_TIMESTAMP_INVALIDO`, P3 `VREF_TODO_INVALIDO`). Se unificó el parser base
+  (`clima_medido._parsear_timestamps`, ahora con `fecha_fija`): maneja `datetime.time` y da un
+  error claro `CLIMED_TIMESTAMP_SOLO_HORA` si falta la fecha. **Se agregó la opción "el archivo
+  trae solo la hora" + fecha del ensayo también a la ingesta de clima medido de P2 (fase 1a)**,
+  además de P3. `ConfigMapeoClima.fecha_fija` (serializada a isoformat en el hash/snapshot).
+  Tests de regresión con objetos `datetime.time`. Afectaba al `.xls` real del colector 10 m.
+- **P3 calibración: "aplicar valor óptimo" no refrescaba el campo de geometría** — el
+  `number_input` de velocidad/largo conservaba el valor viejo (Streamlit prioriza el
+  session_state sobre `value=`). Ahora al aplicar el óptimo se **fija el valor del widget**
+  vía un pendiente que se escribe al session_state al tope del render (antes de instanciar el
+  widget) — patrón robusto que no depende de re-leer `value=` ni del orden de reconstrucción
+  del colector; los widgets omiten `value=` cuando su key ya está en session_state (sin
+  warning). Regresión con AppTest que hace clic en el botón real (velocidad 5 → 15 m/s).
+- **P3 validación: `AttributeError` al abrir la sección con datos medidos** —
+  `_render_validacion_colector` referenciaba `CONVENCIONES_TIMESTAMP` en el módulo equivocado
+  (`calculos.clima_medido` en vez de `core.validacion`), reventando el render de P3. Corregido
+  y **blindado con un smoke test de AppTest** que renderiza P3 completo (antes el render no
+  tenía cobertura y esta clase de bug se colaba).
 - **Modo ANUAL: humedad relativa dividida dos veces por 100** — `operacion_anual_camara`
   re-dividía la HR del día típico por 100, pero `clima_calc`/`clima_medido` ya la entregan
   como fracción [0, 1]. La ω ambiente salía ~100× baja (aire irrealmente seco) → secado

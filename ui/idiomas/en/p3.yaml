@@ -365,3 +365,96 @@ figuras:
 guardar:
   txt: Save collector configuration (.txt)
   json: Save collector configuration (.json)
+validacion:
+  titulo: 🔬 Validation with measured data
+  intro: >-
+    Compare the simulated collector outlet temperature against your own measured
+    series (e.g. a collector prototype). Upload a file with the measured signal; the
+    collector is run over that period with the P2 climate and the goodness-of-fit
+    metrics are computed.
+  sin_colector: Define a collector (Cabinet or Large-scale typology) to validate its output.
+  sin_clima: Load the climate in P2 (NASA POWER or measured) covering the measured signal period.
+  uploader:
+    label: File with the measured outlet temperature (CSV / Excel)
+    help: One date/time column and one column with the collector outlet T.
+  archivo_cargado: "**{nombre}** ({kb} KB) loaded."
+  quitar: Remove
+  error: "Error processing the reference: {err}"
+  preview_titulo: File preview
+  mapeo:
+    titulo: "**Column mapping**"
+    timestamp: Date/time column
+    valor: Collector outlet temperature column
+  salida:
+    label: Collector outlet to compare
+    help: >-
+      For a Type-2 collector (both channels active) you can compare against the upper
+      channel, the lower one, or the mix (flow-weighted mean). Pick the one matching the
+      measured column you mapped.
+    mezcla: Mix (mean)
+    superior: Upper channel
+    inferior: Lower channel
+  procesar: Process and compare
+  spinner: Ingesting the signal and running the collector…
+  senal_ok: "Measured signal: {n} valid samples, native step ≈ {freq} min."
+  sin_cobertura: >-
+    The climate loaded in P2 does not cover the measured signal period. Load the
+    climate (measured or NASA) for the same test window.
+  sin_solape: There are no common instants between the measured signal and the simulation.
+  grafica:
+    titulo: Collector outlet temperature — measured vs simulated
+    y_label: Outlet temperature [°C]
+    medido: Measured
+    simulado: Simulated
+  metricas_titulo: "**Goodness-of-fit metrics**"
+  metrica:
+    rmse: RMSE
+    mbe: Bias (MBE)
+    mae: MAE
+    r2: R²
+    nse: NSE
+    d: Willmott index
+  n_pares: "Computed over {n} aligned measured↔simulated pairs."
+  interpretacion: >-
+    RMSE = error magnitude; signed MBE (positive = the model overestimates) points to
+    which parameter to calibrate; R² captures the shape (blind to bias).
+  fecha_fija:
+    check: The file has time only (no date)
+    label: Test date
+    help: Combined with each record's time (e.g. INENCO 10 m prototype, Jun 9).
+  forzar:
+    check: Force the collector with the file's measured climate
+    help: >-
+      Validates the ISOLATED collector using the ambient temperature and irradiance
+      of the test itself (not the P2 climate). Ideal when the file carries Ta and I.
+    col_ta: Ambient temperature column
+    col_poa: In-plane irradiance column (POA)
+  forzado:
+    medido: ⚙️ Collector forced with the file's MEASURED climate (test Ta + POA).
+    p2: ⚙️ Collector forced with the P2 climate over the reference period.
+calibracion:
+  titulo: "**🎯 Model calibration**"
+  intro: >-
+    Sweep a collector parameter and keep the value that best fits the simulation to
+    the measured data (minimizes RMSE / |MBE| / MAE). Automates the manual tuning.
+  parametro: Parameter to calibrate
+  param:
+    velocidad_diseno: Design velocity [m/s]
+    largo_colector: Collector length [m]
+  min: Minimum
+  max: Maximum
+  n: Number of points
+  objetivo: Objective function
+  obj:
+    rmse: RMSE
+    mbe_abs: "|MBE|"
+    mae: MAE
+  rango_invalido: The maximum must be greater than the minimum.
+  correr: Calibrate
+  spinner: Sweeping the parameter and fitting against the measured data…
+  sin_optimo: No sweep point was evaluable (check the range or the measured coverage).
+  grafica_titulo: Objective function vs parameter
+  optimo: Optimum
+  resultado: "Optimum: {valor} → RMSE {rmse} °C, MBE {mbe} °C, R² {r2}."
+  aplicar: Apply the optimal value to the collector
+  aplicado: Optimal value applied to the collector. Recompute the performance above.

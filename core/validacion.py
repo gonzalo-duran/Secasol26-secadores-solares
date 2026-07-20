@@ -14,6 +14,7 @@ K↔°C, y la UI muestra °C.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date  # noqa: F401  (usado en anotación Optional[date] de fecha_fija)
 from typing import Optional
 
 import pandas as pd
@@ -48,6 +49,9 @@ class ConfigReferencia:
         hoja: Hoja del libro Excel (None para CSV o primera hoja).
         fila_encabezado: Fila (0-based) del encabezado.
         marcadores_invalidos: Cadenas a tratar como dato faltante.
+        fecha_fija: Fecha del ensayo, para archivos cuya columna de timestamp trae
+            **solo la hora** (sin fecha, ej. "09:00:00"). Si se define, se combina
+            con la hora de cada registro; None → se usa la fecha del propio dato.
     """
 
     columna_timestamp: str
@@ -59,6 +63,7 @@ class ConfigReferencia:
     hoja: Optional[str] = None
     fila_encabezado: int = 0
     marcadores_invalidos: tuple[str, ...] = MARCADORES_INVALIDOS_DEFAULT
+    fecha_fija: Optional[date] = None
 
     def __post_init__(self) -> None:
         if not str(self.columna_timestamp).strip():

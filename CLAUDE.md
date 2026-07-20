@@ -174,11 +174,43 @@ Desde **S40** la tipología `GRAN_ESCALA` es funcional (antes era cosmética, id
 - **Orquestación**: `simulacion_ventana.simular_ventana` despacha batch↔cascada según el subtipo y acumula producción (kg seco + tasa de régimen kg/día + leña). `balance_global.calcular_todo_ventana(proyecto, clima_datos_df)` es el punto de entrada de P7: `armar_forzantes_ventana` arma las forzantes horarias (colector forzado hora a hora + ΔT caño maestro + auxiliar con calendario) y delega en `simular_ventana`.
 - **Validación**: `validacion/validacion_adital.py` (standalone, fuera de pytest) contrasta la cadena térmica contra los datos de campo de ADITAL (4/4 checks: salida colector ~55/78 °C, caño maestro ΔT −2.8 °C, cámara 57 °C, campaña 5000 kg en ~5 días).
 
+### Validación y calibración contra datos medidos (mejora 38, fases 2/2b/3, S54)
+
+Lazo **ingesta → validación → calibración** para contrastar el modelo contra datos de campo
+del usuario (hoy: **colector aislado**; extensible a cámara/producto). Todo el núcleo es puro
+(sin streamlit); la UI vive en la sección "🔬 Validación con datos medidos" de P3.
+
+- **Métricas** `calculos/metricas_validacion.py` — puro: `rmse`, `mbe` (con signo, sim−med),
+  `mae`, `r2`, `nse`, `indice_willmott` + `MetricasAjuste` + `calcular_metricas`. Reusable como
+  **función objetivo** de la calibración. Las métricas de diferencia (RMSE/MBE/MAE) son
+  invariantes al offset K↔°C: se calculan en K y se muestran en °C.
+- **Señal de referencia** `core/validacion.py` (`ConfigReferencia`, `SenalReferencia`) +
+  `calculos/ingesta_referencia.py`: `ingerir_referencia` (carga SEPARADA de la T de salida
+  medida, reusa la maquinaria de 1a); **fase 2b** `ingerir_clima_forzante` (fuerza el colector
+  aislado con el Ta+POA del **propio archivo**, no con el clima de P2); `alinear_con_simulada`
+  (interpola la simulada a los timestamps medidos) + `evaluar_ajuste`. `ConfigReferencia.
+  fecha_fija` para archivos con timestamp de **solo hora**.
+- **Calibración** `calculos/calibracion.py::calibrar_1d(valores, evaluar_fn, *, parametro,
+  objetivo)` — puro, recibe un callback de evaluación → desacoplado de la simulación/UI. Barre
+  un parámetro (velocidad/largo, vía `barrido_parametrico.aplicar_parametro`) y devuelve el
+  argmin de `OBJETIVOS` (rmse/mbe_abs/mae). En P3: curva objetivo-vs-parámetro + botón "aplicar
+  óptimo".
+- **La orquestación que corre el colector** (`ui/p3_colector._series_simuladas_colector` →
+  `_evaluar_ventana`) vive en la UI porque `_evaluar_ventana` es de esa capa. Soporta
+  `salida ∈ {mezcla, superior, inferior}` (solo Tipo 2 distingue canales, vía `_T_salida_canal_K`).
+- **Parser de timestamps unificado (S54):** `clima_medido._parsear_timestamps(serie, tz,
+  fecha_fija=None)` es el único robusto — maneja serial Excel, texto y objetos `datetime.time`
+  (cómo lee `pd.read_excel` una columna de solo-hora); `CLIMED_TIMESTAMP_SOLO_HORA` si falta la
+  fecha. P2 (1a) y P3 (2/2b) lo usan.
+- **Dataset de referencia:** prototipo colector 10 m INENCO (tesis cap. 2) en
+  `docs/notas/dataset/medidas de prototipo de colector 10 metros/` — validado end-to-end
+  (RMSE 0.9 °C, R² 0.99 a la velocidad óptima; la calibración la encuentra sola).
+
 ### Pestañas (`ui/`)
 
 - **P1** `p1_tipologia.py` — tipología (CAJA/ARMARIO/GRAN_ESCALA), modo de análisis (DIARIO/ANUAL/**VENTANA**), criterio de día. Cascada: cambiar a CAJA anula colector y motor con aviso. En `GRAN_ESCALA` (S40): selector de **subtipo** (Batch/Semicontinuo) y de **ventana de producción** (inicio/fin + presets 1 semana / 1 mes / campaña).
-- **P2** `p2_emplazamiento.py` — lat/lon/altitud/acimut/pendiente/tz. Fuente de clima seleccionable (S51, mejora 38 F1a): descarga NASA POWER vía `calculos/clima_calc.py`, o **datos medidos del usuario** (CSV/.xls/.xlsx) vía `calculos/clima_medido.py` — mapeo declarativo de columnas con auto-sugerencia, QC físico, remuestreo a horaria, completado por columna desde NASA con procedencia visible, POA medida en plano de colector (`POA_med_Wm2`, la usa `calcular_POA_horizonte` sin overrides), cache parquet en `data/cache/clima_medido/`. Con clima medido de campaña parcial (<12 meses) el modo ANUAL se bloquea (gating en P4 + `ANUAL_CLIMA_INCOMPLETO`). Gráficas POA vs GHI.
-- **P3** `p3_colector.py` — tipo (1–4), cubierta(s), placa, aislante, fondo, geometría, banco. En `GRAN_ESCALA` (S40): sección **caño maestro** (manifold) dentro del expander de banco, con preview de ΔP. Botón de evaluación gráfica diaria y anual con tránsito SPA y POA máx.
+- **P2** `p2_emplazamiento.py` — lat/lon/altitud/acimut/pendiente/tz. Fuente de clima seleccionable (S51, mejora 38 F1a): descarga NASA POWER vía `calculos/clima_calc.py`, o **datos medidos del usuario** (CSV/.xls/.xlsx) vía `calculos/clima_medido.py` — mapeo declarativo de columnas con auto-sugerencia, QC físico, remuestreo a horaria, completado por columna desde NASA con procedencia visible, POA medida en plano de colector (`POA_med_Wm2`, la usa `calcular_POA_horizonte` sin overrides), cache parquet en `data/cache/clima_medido/`. Con clima medido de campaña parcial (<12 meses) el modo ANUAL se bloquea (gating en P4 + `ANUAL_CLIMA_INCOMPLETO`). Gráficas POA vs GHI. Opción **fecha fija** (S54) para archivos con timestamp de solo hora.
+- **P3** `p3_colector.py` — tipo (1–4), cubierta(s), placa, aislante, fondo, geometría, banco. En `GRAN_ESCALA` (S40): sección **caño maestro** (manifold) dentro del expander de banco, con preview de ΔP. Botón de evaluación gráfica diaria y anual con tránsito SPA y POA máx. **Sección "🔬 Validación con datos medidos" (S54, mejora 38 fase 2/2b/3):** carga la T de salida medida, la contrasta contra la simulada (overlay + RMSE/MBE/R²), permite forzar con el clima del propio archivo y **calibrar** un parámetro. Los `number_input` de velocidad/largo no tienen tope artificial (`max_value` adaptado al valor; sin cap de 10 m/s) y se refrescan al aplicar el óptimo (patrón pendiente en session_state).
 - **P4** `p4_camara.py` — geometría, pared (compuesta con capas), techo translúcido opcional, bandejas, flujo, carga de producto, selector de modo de cálculo, horizonte (modo transitorio). En `modo_analisis == ANUAL` con motor termodinámico, aparece la sección "Operación anual" con slider de batches/mes y card resumen anual (4 métricas). En subtipo **SEMICONTINUO** (S40): sección **topología del túnel** (n_zonas + cadencia de avance) → `Camara.tunel`.
 - **P5** `p5_auxiliar.py` — auxiliar eléctrico o biomasa, modo de operación, setpoint, η, PCI. Expander opcional **calendario de arranque** (S40, híbrido mañana/tarde) → `Auxiliar.cargas_arranque`.
 - **P6** `p6_motor.py` — motor eléctrico (axial/centrífugo) o chimenea solar (cuando motor OFF). La chimenea puede equiparse opcionalmente con un **extractor eólico** (turbina sombrero chino) en el tope, que agrega al balance del lazo natural un término motriz `Cp·ρ·v_viento²/2` (con corrección logarítmica del viento NASA POWER de 10 m a la altura del tope) y un término resistivo `Kt·ρ·v_flujo²/2`. Estima ΔP del sistema; en `GRAN_ESCALA` (S40) el ΔP del **caño maestro** se suma a ductos.

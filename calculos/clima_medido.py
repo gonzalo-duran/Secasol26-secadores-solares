@@ -317,17 +317,48 @@ def sugerir_mapeo(columnas: Sequence[str]) -> ConfigMapeoClima:
 # ---------------------------------------------------------------------------
 
 
-def _parsear_timestamps(serie: pd.Series, zona_horaria: str) -> pd.DatetimeIndex:
-    numerica = pd.to_numeric(serie, errors="coerce")
-    frac_num = float(numerica.notna().mean()) if len(numerica) else 0.0
-    if frac_num > 0.9 and numerica.dropna().between(_SERIAL_EXCEL_MIN, _SERIAL_EXCEL_MAX).all():
-        tiempos = pd.to_datetime(
-            numerica, unit="D", origin=_ORIGEN_SERIAL_EXCEL, errors="coerce"
-        ).dt.round("s")
-    else:
-        tiempos = pd.to_datetime(serie, dayfirst=True, errors="coerce", format="mixed")
+def _parsear_timestamps(serie: pd.Series, zona_horaria: str, fecha_fija=None) -> pd.DatetimeIndex:
+    """Parsea una columna de timestamps a un DatetimeIndex UTC.
 
-    if tiempos.isna().all():
+    Soporta serial de Excel, texto ("2010-05-01 09:00"), objetos ``datetime.time``
+    y objetos datetime. Con ``fecha_fija`` (archivos que traen **solo la hora**,
+    ej. "09:00:00" o ``datetime.time(9, 0)``) se toma la hora del día de cada
+    registro y se combina con esa fecha.
+
+    Raises:
+        ValueError: ``CLIMED_TIMESTAMP_SOLO_HORA`` si la columna trae solo la hora y
+            no se dio ``fecha_fija``; ``CLIMED_TIMESTAMP_INVALIDO`` si no se pudo
+            interpretar ninguna fecha/hora; ``CLIMED_TZ_INVALIDA`` si la zona falla.
+    """
+    from datetime import datetime, time
+
+    es_solo_hora = bool(serie.map(lambda v: isinstance(v, time)).any())
+
+    if fecha_fija is not None:
+        # Combinar la hora del día de cada registro con la fecha del ensayo.
+        def _combinar(v):
+            if isinstance(v, time):
+                return datetime.combine(fecha_fija, v)
+            ts = pd.to_datetime(v, dayfirst=True, errors="coerce")
+            return pd.NaT if pd.isna(ts) else datetime.combine(fecha_fija, ts.time())
+
+        tiempos = pd.to_datetime([_combinar(v) for v in serie], errors="coerce")
+    elif es_solo_hora:
+        raise ValueError(
+            "CLIMED_TIMESTAMP_SOLO_HORA: la columna de timestamp trae solo la hora (sin "
+            "fecha). Activá 'el archivo trae solo la hora' e indicá la fecha del ensayo."
+        )
+    else:
+        numerica = pd.to_numeric(serie, errors="coerce")
+        frac_num = float(numerica.notna().mean()) if len(numerica) else 0.0
+        if frac_num > 0.9 and numerica.dropna().between(_SERIAL_EXCEL_MIN, _SERIAL_EXCEL_MAX).all():
+            tiempos = pd.to_datetime(
+                numerica, unit="D", origin=_ORIGEN_SERIAL_EXCEL, errors="coerce"
+            ).dt.round("s")
+        else:
+            tiempos = pd.to_datetime(serie, dayfirst=True, errors="coerce", format="mixed")
+
+    if pd.Series(tiempos).isna().all():
         raise ValueError(
             "CLIMED_TIMESTAMP_INVALIDO: no se pudo interpretar ninguna fecha/hora "
             "de la columna de timestamp."
@@ -396,7 +427,7 @@ def aplicar_mapeo(df_crudo: pd.DataFrame, config: ConfigMapeoClima) -> pd.DataFr
 
     df = df_crudo.copy()
     df.columns = columnas_archivo
-    idx = _parsear_timestamps(df[config.columna_timestamp], config.zona_horaria)
+    idx = _parsear_timestamps(df[config.columna_timestamp], config.zona_horaria, config.fecha_fija)
 
     datos: dict[str, pd.Series] = {}
     for m in config.columnas:
@@ -922,7 +953,11 @@ def hash_archivo(contenido: bytes) -> str:
 
 def config_a_dict(config: ConfigMapeoClima) -> dict:
     """Serializa la configuración de mapeo a un dict JSON-compatible."""
-    return asdict(config)
+    d = asdict(config)
+    # fecha_fija (date) → isoformat para que sea JSON-serializable (hash/snapshot).
+    if d.get("fecha_fija") is not None and not isinstance(d["fecha_fija"], str):
+        d["fecha_fija"] = d["fecha_fija"].isoformat()
+    return d
 
 
 def config_desde_dict(d: dict) -> ConfigMapeoClima:
@@ -934,6 +969,8 @@ def config_desde_dict(d: dict) -> ConfigMapeoClima:
         ValueError: códigos ``CLIMED_CONFIG_*`` si el dict trae valores
             inválidos (mismas validaciones que el constructor).
     """
+    from datetime import date as _date
+
     datos = dict(d)
     columnas = [
         m if isinstance(m, MapeoColumna) else MapeoColumna(**m) for m in datos.get("columnas", [])
@@ -941,6 +978,8 @@ def config_desde_dict(d: dict) -> ConfigMapeoClima:
     datos["columnas"] = columnas
     if "marcadores_invalidos" in datos and datos["marcadores_invalidos"] is not None:
         datos["marcadores_invalidos"] = tuple(datos["marcadores_invalidos"])
+    if isinstance(datos.get("fecha_fija"), str):
+        datos["fecha_fija"] = _date.fromisoformat(datos["fecha_fija"])
     return ConfigMapeoClima(**datos)
 
 

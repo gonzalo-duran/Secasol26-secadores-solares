@@ -616,11 +616,13 @@ def _construir_config_medido(
     plano_piranometro: str,
     hoja: str | None,
     fila_encabezado: int,
+    fecha_fija=None,
 ) -> ConfigMapeoClima:
     """Arma la ConfigMapeoClima desde los valores de los widgets (pura, testeable).
 
     Args:
         seleccion: variable canónica → (columna_origen | None, unidad).
+        fecha_fija: fecha del ensayo si la columna de timestamp trae solo la hora.
     """
     columnas = [
         MapeoColumna(variable, col, unidad)
@@ -636,6 +638,7 @@ def _construir_config_medido(
         fila_encabezado=fila_encabezado,
         altura_anemometro_m=altura_anemometro_m,
         plano_piranometro=plano_piranometro,
+        fecha_fija=fecha_fija,
     )
 
 
@@ -891,6 +894,18 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
         ),
         key="p2_med_tz",
     )
+    # Fecha fija: archivos cuya columna de timestamp trae solo la hora (sin fecha).
+    fecha_fija = None
+    if st.checkbox(t("p2.medido.fecha_fija.check"), key="p2_med_usar_fecha"):
+        from datetime import date as _date
+
+        fecha_fija = st.date_input(
+            t("p2.medido.fecha_fija.label"),
+            min_value=_date(1990, 1, 1),
+            max_value=_date.today(),
+            key="p2_med_fecha",
+            help=t("p2.medido.fecha_fija.help"),
+        )
     altura = 2.0
     if seleccion.get("WS_ms", (None, None))[0] is not None:
         altura = float(
@@ -922,7 +937,9 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
         return
 
     try:
-        cfg = _construir_config_medido(col_ts, seleccion, zona, conv, altura, plano, hoja, fila_enc)
+        cfg = _construir_config_medido(
+            col_ts, seleccion, zona, conv, altura, plano, hoja, fila_enc, fecha_fija
+        )
     except ValueError as exc:
         st.error(t("p2.medido.error", err=exc))
         return

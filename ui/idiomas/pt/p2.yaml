@@ -231,6 +231,10 @@ medido:
     instantanea: Leitura instantânea
     promedio_fin: Média do intervalo anterior
     promedio_inicio: Média do intervalo seguinte
+  fecha_fija:
+    check: O arquivo traz apenas a hora (sem data)
+    label: Data do ensaio
+    help: Combina-se com a hora de cada registro (ex. dados de só-hora de um datalogger).
   tz:
     label: Fuso horário dos timestamps do arquivo
   alt_viento:

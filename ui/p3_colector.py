@@ -13,6 +13,8 @@ from __future__ import annotations
 import dataclasses
 from datetime import date as _date_type
 
+import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
@@ -863,6 +865,30 @@ def _T_salida_res(res, tipo):
     return res.T_salida_mezcla_K if tipo == 2 else res.T_salida_K
 
 
+# Canales de salida ofrecidos para validar contra el medido. Solo el Tipo 2
+# (doble canal activo) distingue superior/inferior; en el resto los tres colapsan
+# a la única salida.
+CANALES_SALIDA: tuple[str, ...] = ("mezcla", "superior", "inferior")
+
+
+def _T_salida_canal_K(res, tipo, canal: str) -> float:
+    """T de salida del colector para el canal pedido [K].
+
+    Args:
+        res: Resultado del solver del colector.
+        tipo: Tipo de colector (1–4).
+        canal: "mezcla" | "superior" | "inferior". Para Tipos 1/3/4 los tres
+            devuelven la única salida disponible.
+    """
+    if tipo == 2:
+        if canal == "superior":
+            return res.T_salida_cs_K
+        if canal == "inferior":
+            return res.T_salida_ci_K
+        return res.T_salida_mezcla_K
+    return _T_salida_res(res, tipo)
+
+
 def _perfil_fluido(res, tipo):
     x = res.x_m
     if tipo == 1:
@@ -978,6 +1004,8 @@ def _evaluar_ventana(colector, datos_vent, empl):
     tipo = colector.unidad.tipo_colector
 
     horas, T_sal_C, T_amb_C, T_abs_C, poa_list = [], [], [], [], []
+    # Salidas por canal (solo difieren de la mezcla en Tipo 2, doble canal activo).
+    T_sal_cs_C, T_sal_ci_C = [], []
     for ts, row in datos_vent.iterrows():
         I_g = float(poa.get(ts, 0.0))
         T_amb = float(row["T_amb_K"])
@@ -989,10 +1017,14 @@ def _evaluar_ventana(colector, datos_vent, empl):
         poa_list.append(I_g)
         if res is not None:
             T_sal_C.append(_T_salida_res(res, tipo) - 273.15)
+            T_sal_cs_C.append(_T_salida_canal_K(res, tipo, "superior") - 273.15)
+            T_sal_ci_C.append(_T_salida_canal_K(res, tipo, "inferior") - 273.15)
             T_abs_C.append(float(res.T_abs_K.mean()) - 273.15)
         else:
             # Noche / sin sol: el aire pasa sin calentarse (T → T_amb).
             T_sal_C.append(T_amb - 273.15)
+            T_sal_cs_C.append(T_amb - 273.15)
+            T_sal_ci_C.append(T_amb - 273.15)
             T_abs_C.append(T_amb - 273.15)
 
     # --- Marcas por día (POA máx en bin + mediodía solar SPA) y perfil T(x) ---
@@ -1028,6 +1060,8 @@ def _evaluar_ventana(colector, datos_vent, empl):
     return {
         "horas": horas,
         "T_salida_C": T_sal_C,
+        "T_salida_cs_C": T_sal_cs_C,
+        "T_salida_ci_C": T_sal_ci_C,
         "T_amb_C": T_amb_C,
         "T_abs_C": T_abs_C,
         "poa": poa_list,
@@ -1551,6 +1585,561 @@ def _fig_T_fluido_anual(r):
 
 
 # ---------------------------------------------------------------------------
+# Validación con datos medidos (mejora 38, fase 2)
+# ---------------------------------------------------------------------------
+
+
+def _config_referencia_desde_widgets(
+    *, col_ts, col_val, unidad, zona, conv, hoja, fila_enc, fecha_fija=None
+):
+    """Arma la ConfigReferencia desde las selecciones de los widgets (puro).
+
+    Returns:
+        ``core.validacion.ConfigReferencia`` (valida en __post_init__).
+    """
+    from core.validacion import ConfigReferencia
+
+    return ConfigReferencia(
+        columna_timestamp=col_ts,
+        columna_valor=col_val,
+        variable="T_salida_colector",
+        unidad=unidad,
+        zona_horaria=zona,
+        convencion_timestamp=conv,
+        hoja=hoja,
+        fila_encabezado=fila_enc,
+        fecha_fija=fecha_fija,
+    )
+
+
+def _filas_metricas(metricas) -> list[tuple[str, float, str]]:
+    """Convierte MetricasAjuste en filas ``(id, valor, unidad)`` para la tabla (puro).
+
+    La unidad ``"C"`` marca métricas en grados (RMSE/MBE/MAE — invariantes al
+    offset K↔°C); ``""`` marca adimensionales (R²/NSE/d).
+    """
+    return [
+        ("rmse", metricas.rmse, "C"),
+        ("mbe", metricas.mbe, "C"),
+        ("mae", metricas.mae, "C"),
+        ("r2", metricas.r2, ""),
+        ("nse", metricas.nse, ""),
+        ("d", metricas.d_willmott, ""),
+    ]
+
+
+def _series_simuladas_colector(proyecto, senal, clima_forzante=None, salida="mezcla"):
+    """Corre el colector sobre el período de la señal medida (fase 2 / 2b).
+
+    Fuente del clima de forzado:
+    - ``clima_forzante`` provisto (fase 2b): se usa **ese** df (clima medido del
+      propio ensayo — Ta + POA a paso fino) → validación de colector aislado.
+    - None: se recorta el clima de P2 al rango de la referencia (fase 2).
+
+    En ambos casos evalúa el colector paso a paso (``_evaluar_ventana``).
+
+    Args:
+        proyecto: Proyecto con colector, clima y emplazamiento.
+        senal: ``core.validacion.SenalReferencia`` (índice UTC).
+        clima_forzante: DataFrame de forzado (COLUMNAS del colector + ``POA_med_Wm2``)
+            o None para usar el clima de P2.
+        salida: Canal de salida a comparar — "mezcla" | "superior" | "inferior"
+            (solo distingue en Tipo 2; en el resto colapsan a la única salida).
+
+    Returns:
+        ``(t_sim, y_sim_K)`` — DatetimeIndex UTC y array de T de salida [K]; o
+        ``(None, None)`` si no hay clima que cubra el período.
+    """
+    empl = proyecto.emplazamiento
+    if proyecto.colector is None:
+        return None, None
+
+    idx_ref = senal.serie.dropna().index
+    if len(idx_ref) == 0:
+        return None, None
+    t0, t1 = idx_ref[0], idx_ref[-1]
+
+    if clima_forzante is not None:
+        idx = clima_forzante.index
+        slice_ref = clima_forzante.loc[(idx >= t0) & (idx <= t1)]
+    else:
+        clima = getattr(proyecto, "clima", None)
+        if clima is None or getattr(clima, "datos", None) is None:
+            return None, None
+        datos = clima.datos
+        idx = datos.index
+        if idx.tz is None:
+            datos = datos.tz_localize("UTC")
+            idx = datos.index
+        slice_ref = datos.loc[(idx >= t0) & (idx <= t1)]
+    if len(slice_ref) < 2:
+        return None, None
+
+    ev = _evaluar_ventana(proyecto.colector, slice_ref, empl)
+    clave = {"superior": "T_salida_cs_C", "inferior": "T_salida_ci_C"}.get(salida, "T_salida_C")
+    t_sim = pd.DatetimeIndex(ev["horas"])
+    y_sim_K = np.asarray(ev[clave], dtype=float) + 273.15
+    return t_sim, y_sim_K
+
+
+def _fig_overlay_validacion(ts, y_med_C, y_sim_C, *, medido_lbl, simulado_lbl, titulo, y_lbl):
+    """Overlay medido vs simulado de la T de salida del colector."""
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=ts,
+            y=y_med_C,
+            mode="markers",
+            name=medido_lbl,
+            marker=dict(size=5, color="#d62728"),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=ts,
+            y=y_sim_C,
+            mode="lines",
+            name=simulado_lbl,
+            line=dict(color="#1f77b4", width=2),
+        )
+    )
+    fig.update_layout(
+        title=titulo,
+        xaxis_title="",
+        yaxis_title=y_lbl,
+        height=420,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+    )
+    return fig
+
+
+def _render_validacion_colector(proyecto) -> None:
+    """Sección de P3: valida la T de salida del colector contra datos medidos."""
+    from calculos import clima_medido as cm
+    from calculos.ingesta_referencia import evaluar_ajuste, ingerir_referencia
+    from core.proyecto import Tipologia
+    from core.validacion import CONVENCIONES_TIMESTAMP
+    from ui.componentes.serializacion import limpiar_session_state_prefijo
+
+    empl = proyecto.emplazamiento
+
+    with st.expander(t("p3.validacion.titulo"), expanded=False):
+        st.caption(t("p3.validacion.intro"))
+
+        if proyecto.colector is None or getattr(proyecto.configuracion, "tipologia", None) == (
+            Tipologia.CAJA
+        ):
+            st.info(t("p3.validacion.sin_colector"))
+            return
+        # Sin clima en P2 no se bloquea: se puede forzar con el clima del propio
+        # archivo (fase 2b). Solo se avisa que hará falta una de las dos fuentes.
+        if getattr(proyecto, "clima", None) is None or proyecto.clima.datos is None:
+            st.caption(t("p3.validacion.sin_clima"))
+
+        arch = st.session_state.get("p3_val_archivo")
+        if arch is None:
+            subido = st.file_uploader(
+                t("p3.validacion.uploader.label"),
+                type=["csv", "txt", "xls", "xlsx"],
+                key="p3_val_uploader",
+                help=t("p3.validacion.uploader.help"),
+            )
+            if subido is not None:
+                contenido = subido.read()
+                st.session_state["p3_val_archivo"] = {
+                    "nombre": subido.name,
+                    "bytes": contenido,
+                    "hash": cm.hash_archivo(contenido),
+                }
+                st.session_state.pop("p3_val_uploader", None)
+                st.rerun()
+            return
+
+        c_a, c_b = st.columns([4, 1])
+        with c_a:
+            st.markdown(
+                t(
+                    "p3.validacion.archivo_cargado",
+                    nombre=arch["nombre"],
+                    kb=max(len(arch["bytes"]) // 1024, 1),
+                )
+            )
+        with c_b:
+            if st.button(t("p3.validacion.quitar"), key="p3_val_quitar"):
+                limpiar_session_state_prefijo(st.session_state, "p3_val_")
+                limpiar_session_state_prefijo(st.session_state, "_p3_val_")
+                st.rerun()
+
+        try:
+            hojas = cm.listar_hojas(arch["bytes"], arch["nombre"])
+        except (ValueError, RuntimeError) as exc:
+            st.error(t("p3.validacion.error", err=exc))
+            return
+        hoja = None
+        c1, c2 = st.columns([3, 1])
+        if hojas:
+            with c1:
+                hoja = st.selectbox(t("p2.medido.hoja.label"), options=hojas, key="p3_val_hoja")
+        with c2:
+            fila_enc = int(
+                st.number_input(
+                    t("p2.medido.fila_enc.label"),
+                    min_value=0,
+                    max_value=50,
+                    value=0,
+                    key="p3_val_fila_enc",
+                    help=t("p2.medido.fila_enc.help"),
+                )
+            )
+
+        clave_tabla = (arch["hash"], hoja, fila_enc)
+        cache = st.session_state.get("_p3_val_tabla_cache")
+        if cache is None or cache[0] != clave_tabla:
+            try:
+                tabla = cm.leer_tabla(
+                    arch["bytes"], arch["nombre"], hoja=hoja, fila_encabezado=fila_enc
+                )
+            except (ValueError, RuntimeError) as exc:
+                st.error(t("p3.validacion.error", err=exc))
+                return
+            st.session_state["_p3_val_tabla_cache"] = (clave_tabla, tabla)
+            st.session_state.pop("p3_val_resultado", None)
+        tabla = st.session_state["_p3_val_tabla_cache"][1]
+
+        with st.expander(t("p3.validacion.preview_titulo"), expanded=False):
+            st.dataframe(tabla.head(12))
+
+        columnas = [str(c) for c in tabla.columns]
+        st.markdown(t("p3.validacion.mapeo.titulo"))
+        col_ts = st.selectbox(
+            t("p3.validacion.mapeo.timestamp"), options=columnas, key="p3_val_col_ts"
+        )
+        col_val = st.selectbox(
+            t("p3.validacion.mapeo.valor"), options=columnas, key="p3_val_col_val"
+        )
+        # Canal de salida simulado a comparar (solo Tipo 2 distingue superior/inferior).
+        salida = "mezcla"
+        if getattr(proyecto.colector.unidad, "tipo_colector", 1) == 2:
+            salida = st.selectbox(
+                t("p3.validacion.salida.label"),
+                options=list(CANALES_SALIDA),
+                format_func=lambda s: t(f"p3.validacion.salida.{s}"),
+                key="p3_val_salida",
+                help=t("p3.validacion.salida.help"),
+            )
+        c_u, c_c = st.columns(2)
+        with c_u:
+            unidad = st.selectbox(
+                t("p2.medido.mapeo.unidad"),
+                options=["C", "K", "F"],
+                format_func=lambda u: t(f"p2.medido.unidad.{u}"),
+                key="p3_val_unidad",
+            )
+        with c_c:
+            conv = st.radio(
+                t("p2.medido.convencion.label"),
+                options=list(CONVENCIONES_TIMESTAMP),
+                format_func=lambda k: t(f"p2.medido.convencion.{k}"),
+                key="p3_val_conv",
+                horizontal=True,
+            )
+        from ui.p2_emplazamiento import _ZONAS_HORARIAS
+
+        zona = st.selectbox(
+            t("p2.medido.tz.label"),
+            options=_ZONAS_HORARIAS,
+            index=(
+                _ZONAS_HORARIAS.index(empl.zona_horaria)
+                if empl.zona_horaria in _ZONAS_HORARIAS
+                else 0
+            ),
+            key="p3_val_tz",
+        )
+
+        # --- Fecha fija (archivos con timestamp de solo hora, fase 2b) ---
+        fecha_fija = None
+        if st.checkbox(t("p3.validacion.fecha_fija.check"), key="p3_val_usar_fecha"):
+            from datetime import date as _d
+
+            fecha_fija = st.date_input(
+                t("p3.validacion.fecha_fija.label"),
+                value=_d(2007, 6, 9),
+                min_value=_d(1990, 1, 1),
+                max_value=_d.today(),
+                key="p3_val_fecha",
+                help=t("p3.validacion.fecha_fija.help"),
+            )
+
+        # --- Forzar con el clima medido del propio archivo (fase 2b) ---
+        forzar_medido = st.checkbox(
+            t("p3.validacion.forzar.check"),
+            key="p3_val_forzar",
+            help=t("p3.validacion.forzar.help"),
+        )
+        col_ta = col_poa = None
+        uni_ta, uni_poa = "C", "W_m2"
+        if forzar_medido:
+            f_ta, f_poa = st.columns(2)
+            with f_ta:
+                col_ta = st.selectbox(
+                    t("p3.validacion.forzar.col_ta"), options=columnas, key="p3_val_col_ta"
+                )
+                uni_ta = st.selectbox(
+                    t("p2.medido.mapeo.unidad"),
+                    options=["C", "K", "F"],
+                    format_func=lambda u: t(f"p2.medido.unidad.{u}"),
+                    key="p3_val_uni_ta",
+                )
+            with f_poa:
+                col_poa = st.selectbox(
+                    t("p3.validacion.forzar.col_poa"), options=columnas, key="p3_val_col_poa"
+                )
+                uni_poa = st.selectbox(
+                    t("p2.medido.mapeo.unidad"),
+                    options=["W_m2", "kW_m2"],
+                    format_func=lambda u: t(f"p2.medido.unidad.{u}"),
+                    key="p3_val_uni_poa",
+                )
+
+        if st.button(t("p3.validacion.procesar"), type="primary", key="p3_val_procesar"):
+            try:
+                cfg = _config_referencia_desde_widgets(
+                    col_ts=col_ts,
+                    col_val=col_val,
+                    unidad=unidad,
+                    zona=zona,
+                    conv=conv,
+                    hoja=hoja,
+                    fila_enc=fila_enc,
+                    fecha_fija=fecha_fija,
+                )
+                with st.spinner(t("p3.validacion.spinner")):
+                    senal = ingerir_referencia(tabla, cfg)
+                    clima_forz = None
+                    if forzar_medido:
+                        from calculos.ingesta_referencia import ingerir_clima_forzante
+
+                        clima_forz = ingerir_clima_forzante(
+                            tabla,
+                            cfg,
+                            columna_T_amb=col_ta,
+                            unidad_T_amb=uni_ta,
+                            columna_POA=col_poa,
+                            unidad_POA=uni_poa,
+                        )
+                    t_sim, y_sim_K = _series_simuladas_colector(
+                        proyecto, senal, clima_forzante=clima_forz, salida=salida
+                    )
+                st.session_state["p3_val_resultado"] = {
+                    "senal": senal,
+                    "t_sim": t_sim,
+                    "y_sim_K": y_sim_K,
+                    "forzado_medido": forzar_medido,
+                    "clima_forzante": clima_forz,
+                    "salida": salida,
+                }
+            except (ValueError, RuntimeError) as exc:
+                st.error(t("p3.validacion.error", err=exc))
+                st.session_state.pop("p3_val_resultado", None)
+                return
+
+        res = st.session_state.get("p3_val_resultado")
+        if res is None:
+            return
+
+        senal = res["senal"]
+        for adv in senal.advertencias:
+            st.warning(adv)
+        st.caption(
+            t(
+                "p3.validacion.senal_ok",
+                n=int(senal.serie.notna().sum()),
+                freq=int(round(senal.frecuencia_nativa_s / 60.0)),
+            )
+        )
+        st.caption(
+            t("p3.validacion.forzado.medido")
+            if res.get("forzado_medido")
+            else t("p3.validacion.forzado.p2")
+        )
+
+        if res["t_sim"] is None:
+            st.warning(t("p3.validacion.sin_cobertura"))
+            return
+
+        metricas, y_med_K, y_sim_al_K, ts = evaluar_ajuste(senal, res["t_sim"], res["y_sim_K"])
+        if metricas is None:
+            st.warning(t("p3.validacion.sin_solape"))
+            return
+
+        st.plotly_chart(
+            _fig_overlay_validacion(
+                ts,
+                y_med_K - 273.15,
+                y_sim_al_K - 273.15,
+                medido_lbl=t("p3.validacion.grafica.medido"),
+                simulado_lbl=t("p3.validacion.grafica.simulado"),
+                titulo=t("p3.validacion.grafica.titulo"),
+                y_lbl=t("p3.validacion.grafica.y_label"),
+            ),
+            width="stretch",
+        )
+
+        st.markdown(t("p3.validacion.metricas_titulo"))
+        cols = st.columns(3)
+        for i, (mid, val, uni) in enumerate(_filas_metricas(metricas)):
+            valor_fmt = f"{val:+.2f} °C" if uni == "C" else f"{val:.3f}"
+            cols[i % 3].metric(t(f"p3.validacion.metrica.{mid}"), valor_fmt)
+        st.caption(t("p3.validacion.n_pares", n=metricas.n_pares))
+        st.caption(t("p3.validacion.interpretacion"))
+
+        # --- Calibración (fase 3) ---
+        _render_calibracion_colector(
+            proyecto, senal, res.get("clima_forzante"), res.get("salida", "mezcla")
+        )
+
+
+# Parámetros del colector ofrecidos para calibración (id del catálogo de barridos
+# → clave i18n del rótulo). Se calibra un escalar 1-D contra el medido.
+_PARAMS_CALIBRABLES: tuple[tuple[str, str], ...] = (
+    ("velocidad_diseno", "velocidad_diseno"),
+    ("largo_colector", "largo_colector"),
+)
+
+# Id del parámetro calibrado → key del number_input de geometría en P3, para
+# refrescar el campo tras "aplicar óptimo" (Streamlit prioriza el session_state
+# sobre ``value=``, así que se borra la key para que re-lea del proyecto).
+_WIDGET_KEY_POR_PARAM: dict[str, str] = {
+    "velocidad_diseno": "p3_velocidad",
+    "largo_colector": "p3_largo",
+}
+
+
+def _fig_curva_calibracion(res_cal, *, x_lbl, y_lbl, titulo, optimo_lbl):
+    """Curva de la función objetivo vs el parámetro, con marca en el óptimo."""
+    xs = [p.valor for p in res_cal.puntos if p.objetivo is not None]
+    ys = [p.objetivo for p in res_cal.puntos if p.objetivo is not None]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines+markers", line=dict(color="#1f77b4")))
+    if res_cal.valor_optimo is not None:
+        y_opt = min(ys)
+        fig.add_trace(
+            go.Scatter(
+                x=[res_cal.valor_optimo],
+                y=[y_opt],
+                mode="markers",
+                name=optimo_lbl,
+                marker=dict(size=13, color="#2ca02c", symbol="star"),
+            )
+        )
+    fig.update_layout(title=titulo, xaxis_title=x_lbl, yaxis_title=y_lbl, height=360)
+    return fig
+
+
+def _render_calibracion_colector(proyecto, senal, clima_forz, salida="mezcla") -> None:
+    """Calibra un parámetro del colector minimizando el ajuste contra el medido."""
+    import copy
+
+    from calculos.barrido_parametrico import aplicar_parametro
+    from calculos.calibracion import calibrar_1d
+    from calculos.ingesta_referencia import evaluar_ajuste
+
+    st.divider()
+    st.markdown(t("p3.calibracion.titulo"))
+    st.caption(t("p3.calibracion.intro"))
+
+    param_ids = [pid for pid, _ in _PARAMS_CALIBRABLES]
+    parametro_id = st.selectbox(
+        t("p3.calibracion.parametro"),
+        options=param_ids,
+        format_func=lambda pid: t(f"p3.calibracion.param.{dict(_PARAMS_CALIBRABLES)[pid]}"),
+        key="p3_cal_param",
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    vmin = float(c1.number_input(t("p3.calibracion.min"), value=1.0, key="p3_cal_min"))
+    vmax = float(c2.number_input(t("p3.calibracion.max"), value=10.0, key="p3_cal_max"))
+    n_pts = int(
+        c3.number_input(t("p3.calibracion.n"), min_value=3, max_value=40, value=10, key="p3_cal_n")
+    )
+    objetivo = c4.selectbox(
+        t("p3.calibracion.objetivo"),
+        options=["rmse", "mbe_abs", "mae"],
+        format_func=lambda o: t(f"p3.calibracion.obj.{o}"),
+        key="p3_cal_obj",
+    )
+
+    if vmax <= vmin:
+        st.warning(t("p3.calibracion.rango_invalido"))
+        return
+
+    if st.button(t("p3.calibracion.correr"), key="p3_cal_correr"):
+        valores = np.linspace(vmin, vmax, n_pts)
+
+        def _evaluar(valor):
+            proy2 = copy.copy(proyecto)
+            proy2.colector = copy.deepcopy(proyecto.colector)
+            try:
+                aplicar_parametro(proy2, parametro_id, float(valor))
+            except (ValueError, KeyError):
+                return None
+            t_sim, y_sim_K = _series_simuladas_colector(
+                proy2, senal, clima_forzante=clima_forz, salida=salida
+            )
+            if t_sim is None:
+                return None
+            met, *_ = evaluar_ajuste(senal, t_sim, y_sim_K)
+            return met
+
+        with st.spinner(t("p3.calibracion.spinner")):
+            res_cal = calibrar_1d(valores, _evaluar, parametro=parametro_id, objetivo=objetivo)
+        st.session_state["p3_cal_resultado"] = res_cal
+
+    res_cal = st.session_state.get("p3_cal_resultado")
+    if res_cal is None:
+        return
+    if res_cal.valor_optimo is None:
+        st.warning(t("p3.calibracion.sin_optimo"))
+        return
+
+    st.plotly_chart(
+        _fig_curva_calibracion(
+            res_cal,
+            x_lbl=t(f"p3.calibracion.param.{dict(_PARAMS_CALIBRABLES)[res_cal.parametro]}"),
+            y_lbl=t(f"p3.calibracion.obj.{res_cal.objetivo_nombre}"),
+            titulo=t("p3.calibracion.grafica_titulo"),
+            optimo_lbl=t("p3.calibracion.optimo"),
+        ),
+        width="stretch",
+    )
+    mo = res_cal.metricas_optimo
+    st.success(
+        t(
+            "p3.calibracion.resultado",
+            valor=f"{res_cal.valor_optimo:.3g}",
+            rmse=f"{mo.rmse:.2f}",
+            mbe=f"{mo.mbe:+.2f}",
+            r2=f"{mo.r2:.3f}",
+        )
+    )
+    if st.button(t("p3.calibracion.aplicar"), key="p3_cal_aplicar"):
+        try:
+            aplicar_parametro(proyecto, res_cal.parametro, float(res_cal.valor_optimo))
+            # Refrescar el number_input de geometría correspondiente: se deja el
+            # valor pendiente para fijarlo al TOPE del próximo render (antes de que
+            # el widget se instancie). Es robusto: no depende de re-leer ``value=``
+            # ni del orden en que se reconstruye el colector desde los widgets.
+            _wkey = _WIDGET_KEY_POR_PARAM.get(res_cal.parametro)
+            if _wkey is not None:
+                st.session_state["_p3_pending_widget"] = {_wkey: float(res_cal.valor_optimo)}
+            st.session_state.pop("p3_val_resultado", None)
+            st.session_state.pop("p3_cal_resultado", None)
+            st.success(t("p3.calibracion.aplicado"))
+            st.rerun()
+        except (ValueError, KeyError) as exc:
+            st.error(t("p3.validacion.error", err=exc))
+
+
+# ---------------------------------------------------------------------------
 # Render principal
 # ---------------------------------------------------------------------------
 
@@ -1563,6 +2152,15 @@ def render() -> None:
 
     proyecto = st.session_state.proyecto
     tipologia = proyecto.configuracion.tipologia
+
+    # Aplicar cambios pendientes a widgets de geometría (calibración → "aplicar
+    # óptimo"). Se fija el session_state ANTES de instanciar los number_input, que
+    # es la forma robusta de actualizar un widget desde un botón de otra sección
+    # (no depende de re-leer ``value=`` ni del orden de reconstrucción del colector).
+    _pend = st.session_state.pop("_p3_pending_widget", None)
+    if _pend:
+        for _k, _v in _pend.items():
+            st.session_state[_k] = _v
 
     # La tipología CAJA no tiene colector externo
     if tipologia == Tipologia.CAJA:
@@ -1853,12 +2451,17 @@ def render() -> None:
             largo_m = st.number_input(
                 t("p3.geometria.largo.label"),
                 min_value=0.1,
-                max_value=20.0,
-                value=float(colector.unidad.largo_m),
+                # Máximo adaptado al valor actual (calibración/snapshot) para no crashear.
+                max_value=max(20.0, float(colector.unidad.largo_m)),
                 step=0.1,
                 format="%.2f",
                 key="p3_largo",
                 help=t("p3.geometria.largo.help"),
+                **(
+                    {}
+                    if "p3_largo" in st.session_state
+                    else {"value": float(colector.unidad.largo_m)}
+                ),
             )
         with c2:
             _clave_esp = (
@@ -1893,12 +2496,21 @@ def render() -> None:
             velocidad_ms = st.number_input(
                 t("p3.geometria.velocidad.label"),
                 min_value=0.01,
-                max_value=10.0,
-                value=float(colector.unidad.velocidad_diseno_ms),
+                # Sin tope artificial bajo: en gran escala/alto caudal la velocidad de
+                # canal puede ser alta. El máximo se adapta al valor actual (calibración,
+                # snapshot) para no crashear nunca (StreamlitValueAboveMaxError).
+                max_value=max(50.0, float(colector.unidad.velocidad_diseno_ms)),
+                # value= solo para inicializar; si la key ya está en session_state
+                # (incl. "aplicar óptimo" que la fija), el widget la respeta sin warning.
                 step=0.05,
                 format="%.2f",
                 key="p3_velocidad",
                 help=t("p3.geometria.velocidad.help"),
+                **(
+                    {}
+                    if "p3_velocidad" in st.session_state
+                    else {"value": float(colector.unidad.velocidad_diseno_ms)}
+                ),
             )
 
         # Preview rápido
@@ -2537,6 +3149,10 @@ def render() -> None:
                     qmax=_rc.uniformidad["q_max_m3_s"] * 1000,
                 )
             )
+
+    # --- Validación con datos medidos (mejora 38, fase 2) ---
+    st.divider()
+    _render_validacion_colector(proyecto)
 
     # --- Guardar configuración (mejora 4) ---
     st.divider()

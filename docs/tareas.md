@@ -4,24 +4,25 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S52): **v1.0.0 en producción** · suite pytest **1353 (+1 skip)**.
-> **Mejora 38 fase 1a implementada en working tree (sin commitear):** ingesta de
-> datos climáticos medidos (CSV/XLS) en P2 con completador NASA por procedencia,
-> POA medida y gating de ANUAL — validada end-to-end con el dataset real ADITAL
-> 2010. **S52:** resuelto el bug colateral HR/100 del modo ANUAL (ω ambiente ~100×
-> baja; altera resultados ANUAL). Pendientes de la mejora: 1b (paso sub-horario),
-> 2 (validación), 3 (calibración) — plan en `docs/notas/plan_datos_medidos.md`.
-> Sigue pendiente la verificación post-deploy de la 1.0.0 en el Space
-> ("arreglitos" del usuario) y la prueba manual del flujo de clima medido.
+> Estado general (S54): **v1.0.0 en producción** · suite pytest **1426 (+1 skip)**.
+> **Mejora 38: fases 1a, 1b, 2, 2b y 3 IMPLEMENTADAS.** Fases 1a+1b+fix HR/100
+> **commiteadas** (`origin/main`=`61f1826`, deploy HF disparado). Fases 2/2b/3
+> (validación → forzado con clima propio → calibración del colector contra datos
+> medidos) en **working tree sin commitear** — validadas end-to-end con el
+> prototipo colector 10 m del INENCO y **probadas OK en Streamlit por el usuario**.
+> Pendiente: commit de 2/2b/3; extender validación/calibración a cámara y producto.
 
 ## En progreso
 
-- **Mejora 38 — toma de datos externos medidos** — fase 1a COMPLETA en working
-  tree (S51): ingesta P2 + pipeline `calculos/clima_medido.py` + POA medida +
-  cache + i18n ×3. Falta: prueba manual del usuario + commit/push; fases 1b/2/3.
-  Hallazgos colaterales: bug HR/100 del modo ANUAL **resuelto (S52)**; queda la
-  inconsistencia viento 2 m vs 10 m en chimenea. Ver
-  `docs/bitacora/bitacora_sesion52.md` (y S51 para la fase 1a).
+- **Mejora 38 — toma de datos externos medidos** — fases 1a/1b **commiteadas**
+  (`61f1826`); fases **2/2b/3 completas en working tree** (S54): sección "🔬
+  Validación con datos medidos" en P3 — carga la T de salida medida, la contrasta
+  con la simulada (overlay + RMSE/MBE/R²), puede forzar con el clima del propio
+  ensayo (Ta+POA + fecha fija) y **calibrar** un parámetro (velocidad/largo)
+  minimizando el ajuste. Módulos nuevos: `calculos/{metricas_validacion,
+  ingesta_referencia,calibracion}.py` + `core/validacion.py`. Falta: commit;
+  extender a cámara/producto. Ver `docs/bitacora/bitacora_sesion54.md` y
+  `docs/notas/plan_datos_medidos_2.md`. Sigue la inconsistencia viento 2 m vs 10 m.
 
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).

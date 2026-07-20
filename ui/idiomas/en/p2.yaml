@@ -231,6 +231,10 @@ medido:
     instantanea: Instantaneous reading
     promedio_fin: Average of the previous interval
     promedio_inicio: Average of the next interval
+  fecha_fija:
+    check: The file has time only (no date)
+    label: Test date
+    help: Combined with each record's time (e.g. time-only datalogger data).
   tz:
     label: Time zone of the file timestamps
   alt_viento:

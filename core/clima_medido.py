@@ -22,6 +22,7 @@ Contiene:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date  # noqa: F401  (usado en anotación Optional[date] de fecha_fija)
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -154,6 +155,7 @@ class ConfigMapeoClima:
     altura_anemometro_m: float = 2.0
     plano_piranometro: str = "horizontal"
     marcadores_invalidos: tuple[str, ...] = MARCADORES_INVALIDOS_DEFAULT
+    fecha_fija: Optional[date] = None
 
     def __post_init__(self) -> None:
         if not str(self.columna_timestamp).strip():

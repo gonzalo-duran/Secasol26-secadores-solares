@@ -367,3 +367,96 @@ figuras:
 guardar:
   txt: Salvar configuração do coletor (.txt)
   json: Salvar configuração do coletor (.json)
+validacion:
+  titulo: 🔬 Validação com dados medidos
+  intro: >-
+    Compare a temperatura de saída do coletor simulada com uma série medida própria
+    (ex. protótipo de coletor). Carregue um arquivo com o sinal medido; o coletor é
+    executado sobre esse período com o clima da P2 e as métricas de ajuste são
+    calculadas.
+  sin_colector: Defina um coletor (tipologia Armário ou Grande escala) para validar sua saída.
+  sin_clima: Carregue o clima na P2 (NASA POWER ou medido) que cubra o período do sinal medido.
+  uploader:
+    label: Arquivo com a temperatura de saída medida (CSV / Excel)
+    help: Uma coluna de data/hora e uma coluna com a T de saída do coletor.
+  archivo_cargado: "**{nombre}** ({kb} KB) carregado."
+  quitar: Remover
+  error: "Erro ao processar a referência: {err}"
+  preview_titulo: Prévia do arquivo
+  mapeo:
+    titulo: "**Mapeamento de colunas**"
+    timestamp: Coluna de data/hora
+    valor: Coluna de temperatura de saída do coletor
+  salida:
+    label: Saída do coletor a comparar
+    help: >-
+      No coletor Tipo 2 (dois canais ativos) você pode comparar com o canal superior,
+      o inferior, ou a mistura (média ponderada pela vazão). Escolha o que corresponde à
+      coluna medida que você mapeou.
+    mezcla: Mistura (média)
+    superior: Canal superior
+    inferior: Canal inferior
+  procesar: Processar e comparar
+  spinner: Ingerindo o sinal e executando o coletor…
+  senal_ok: "Sinal medido: {n} amostras válidas, passo nativo ≈ {freq} min."
+  sin_cobertura: >-
+    O clima carregado na P2 não cobre o período do sinal medido. Carregue o clima
+    (medido ou NASA) do mesmo intervalo do ensaio.
+  sin_solape: Não há instantes em comum entre o sinal medido e a simulação.
+  grafica:
+    titulo: Temperatura de saída do coletor — medido vs simulado
+    y_label: Temperatura de saída [°C]
+    medido: Medido
+    simulado: Simulado
+  metricas_titulo: "**Métricas de ajuste**"
+  metrica:
+    rmse: RMSE
+    mbe: Viés (MBE)
+    mae: MAE
+    r2: R²
+    nse: NSE
+    d: Índice de Willmott
+  n_pares: "Calculado sobre {n} pares medido↔simulado alinhados."
+  interpretacion: >-
+    RMSE = magnitude do erro; MBE com sinal (positivo = o modelo superestima) orienta
+    qual parâmetro calibrar; R² capta a forma (cego ao viés).
+  fecha_fija:
+    check: O arquivo traz apenas a hora (sem data)
+    label: Data do ensaio
+    help: Combina-se com a hora de cada registro (ex. protótipo 10 m INENCO, 9-jun).
+  forzar:
+    check: Forçar o coletor com o clima medido do arquivo
+    help: >-
+      Valida o coletor ISOLADO usando a temperatura ambiente e a irradiância do
+      próprio ensaio (não o clima da P2). Ideal quando o arquivo traz Ta e I.
+    col_ta: Coluna de temperatura ambiente
+    col_poa: Coluna de irradiância no plano (POA)
+  forzado:
+    medido: ⚙️ Coletor forçado com o clima MEDIDO do arquivo (Ta + POA do ensaio).
+    p2: ⚙️ Coletor forçado com o clima da P2 sobre o período da referência.
+calibracion:
+  titulo: "**🎯 Calibração do modelo**"
+  intro: >-
+    Varra um parâmetro do coletor e fique com o valor que melhor ajusta a simulação
+    ao medido (minimiza o RMSE / |MBE| / MAE). Automatiza o tateio manual.
+  parametro: Parâmetro a calibrar
+  param:
+    velocidad_diseno: Velocidade de projeto [m/s]
+    largo_colector: Comprimento do coletor [m]
+  min: Mínimo
+  max: Máximo
+  n: Nº de pontos
+  objetivo: Função objetivo
+  obj:
+    rmse: RMSE
+    mbe_abs: "|MBE|"
+    mae: MAE
+  rango_invalido: O máximo deve ser maior que o mínimo.
+  correr: Calibrar
+  spinner: Varrendo o parâmetro e ajustando contra o medido…
+  sin_optimo: Nenhum ponto da varredura foi avaliável (verifique o intervalo ou a cobertura do medido).
+  grafica_titulo: Função objetivo vs parâmetro
+  optimo: Ótimo
+  resultado: "Ótimo: {valor} → RMSE {rmse} °C, MBE {mbe} °C, R² {r2}."
+  aplicar: Aplicar o valor ótimo ao coletor
+  aplicado: Valor ótimo aplicado ao coletor. Recalcule o desempenho acima.
