@@ -2,3 +2,4 @@ espesor:
   otro: Other (custom)…
   personalizado: Custom thickness [mm]
 esquema_no_encontrado: "[diagram '{nombre}' not found]"
+error_inesperado: "Unexpected error while processing the file ({tipo}): {err}. Check the column mapping; if the problem persists, report it along with the sample file."

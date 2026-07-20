@@ -2,3 +2,4 @@ espesor:
   otro: Otro (personalizado)…
   personalizado: Espesor personalizado [mm]
 esquema_no_encontrado: "[esquema '{nombre}' no encontrado]"
+error_inesperado: "Error inesperado al procesar el archivo ({tipo}): {err}. Revisá el mapeo de columnas; si el problema persiste, reportalo con el archivo de ejemplo."

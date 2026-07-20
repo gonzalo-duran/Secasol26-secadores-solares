@@ -728,3 +728,91 @@ class TestFechaFijaClimaMedido:
         assert d["fecha_fija"] == "2007-06-09"  # isoformat
         cfg2 = config_desde_dict(d)
         assert cfg2.fecha_fija == date(2007, 6, 9)
+
+
+# ---------------------------------------------------------------------------
+# Columna de timestamp mal mapeada (bug del Space, S55)
+# ---------------------------------------------------------------------------
+
+
+class TestTimestampNumericoNoSerial:
+    """Regresión: una columna de *tiempo transcurrido* como timestamp.
+
+    En el Space, mapear la columna ``tiempo`` (segundos desde el inicio del
+    ensayo: 0, 300, 600…) como timestamp hacía que ``pd.to_datetime`` la leyera
+    como **nanosegundos desde 1970** → paso inferido 3e-07 s → ``freq="0s"`` →
+    ``ZeroDivisionError`` en las tripas de pandas. Ahora corta en el parser, con
+    dos guardas más aguas abajo.
+    """
+
+    def _serie_transcurrido(self, n=12):
+        return pd.Series([i * 300 for i in range(n)], name="tiempo")
+
+    def test_CLIMED_TIMESTAMP_NUMERICO_AMBIGUO(self):
+        from calculos.clima_medido import _parsear_timestamps
+
+        with pytest.raises(ValueError, match="CLIMED_TIMESTAMP_NUMERICO_AMBIGUO"):
+            _parsear_timestamps(self._serie_transcurrido(), "America/Argentina/Salta")
+
+    def test_CLIMED_TIMESTAMP_NUMERICO_AMBIGUO_con_fecha_fija(self):
+        from datetime import date
+
+        from calculos.clima_medido import _parsear_timestamps
+
+        with pytest.raises(ValueError, match="CLIMED_TIMESTAMP_NUMERICO_AMBIGUO"):
+            _parsear_timestamps(
+                self._serie_transcurrido(), "America/Argentina/Salta", date(2007, 6, 9)
+            )
+
+    def test_serial_excel_sigue_funcionando(self):
+        """El corte no debe romper el camino legítimo (serial de Excel)."""
+        from calculos.clima_medido import _parsear_timestamps
+
+        # 40299.375 = 2010-05-01 09:00 (serial Excel, origen 1899-12-30).
+        serie = pd.Series([40299.375 + i / 144.0 for i in range(6)])
+        idx = _parsear_timestamps(serie, "UTC")
+        assert idx[0] == pd.Timestamp("2010-05-01 09:00:00", tz="UTC")
+        assert (idx[1] - idx[0]).total_seconds() == pytest.approx(600.0)
+
+    def test_fraccion_de_dia_con_fecha_fija_es_hora_del_dia(self):
+        """Con fecha fija, un numérico en [0,1) es hora de Excel (0.375 = 09:00)."""
+        from datetime import date
+
+        from calculos.clima_medido import _parsear_timestamps
+
+        serie = pd.Series([0.375 + i / 288.0 for i in range(6)])  # 09:00, cada 5 min
+        idx = _parsear_timestamps(serie, "UTC", date(2007, 6, 9))
+        assert idx[0] == pd.Timestamp("2007-06-09 09:00:00", tz="UTC")
+        assert (idx[1] - idx[0]).total_seconds() == pytest.approx(300.0)
+
+    def test_CLIMED_PASO_SUBSEGUNDO(self):
+        """Segunda guarda: un paso inferido < 1 s es siempre un mapeo equivocado."""
+        base = pd.Timestamp("1970-01-01", tz="UTC")
+        idx = pd.DatetimeIndex([base + pd.Timedelta(nanoseconds=300 * i) for i in range(20)])
+        with pytest.raises(ValueError, match="CLIMED_PASO_SUBSEGUNDO"):
+            inferir_frecuencia_s(idx)
+
+    def test_CLIMED_PASO_INVALIDO(self):
+        """Tercera guarda: paso que redondea a 0 s no llega a pandas."""
+        idx = pd.date_range("2010-05-01", periods=5, freq="600s", tz="UTC")
+        df = pd.DataFrame({"T_amb_K": 300.0}, index=idx)
+        with pytest.raises(ValueError, match="CLIMED_PASO_INVALIDO"):
+            regularizar_grilla(df, 3e-07)
+
+    def test_CLIMED_GRILLA_EXCESIVA(self):
+        """Un paso de 1 s sobre un año no debe intentar materializarse."""
+        idx = pd.DatetimeIndex(
+            [pd.Timestamp("2010-01-01", tz="UTC"), pd.Timestamp("2010-12-31", tz="UTC")]
+        )
+        df = pd.DataFrame({"T_amb_K": [300.0, 300.0]}, index=idx)
+        with pytest.raises(ValueError, match="CLIMED_GRILLA_EXCESIVA"):
+            regularizar_grilla(df, 1.0)
+
+    def test_columna_de_datetimes_no_se_confunde_con_numerica(self):
+        """pd.to_numeric sobre datetimes da epoch en ns: no debe caer en el corte."""
+        from calculos.clima_medido import _parsear_timestamps
+
+        serie = pd.Series(pd.date_range("2010-05-01 09:00", periods=6, freq="10min"))
+        idx = _parsear_timestamps(serie, "UTC")
+        assert idx[0] == pd.Timestamp("2010-05-01 09:00:00", tz="UTC")
+        assert len(idx) == 6

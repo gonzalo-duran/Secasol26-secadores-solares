@@ -790,6 +790,9 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
     except (ValueError, RuntimeError) as exc:
         st.error(t("p2.medido.error", err=exc))
         return
+    except Exception as exc:  # archivo arbitrario del usuario: nunca traceback crudo
+        st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+        return
     hoja = None
     c1, c2 = st.columns([3, 1])
     if hojas:
@@ -817,6 +820,9 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
             )
         except (ValueError, RuntimeError) as exc:
             st.error(t("p2.medido.error", err=exc))
+            return
+        except Exception as exc:  # archivo arbitrario del usuario
+            st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
             return
         st.session_state["_p2_med_tabla_cache"] = (clave_tabla, tabla)
         st.session_state["_p2_med_sugerencia"] = cm.sugerir_mapeo(tabla.columns)
@@ -955,6 +961,8 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
                 resultado = cm.ingerir_clima_medido(tabla, cfg, empl)
             except (ValueError, RuntimeError) as exc:
                 st.error(t("p2.medido.error", err=exc))
+            except Exception as exc:  # mapeo arbitrario sobre archivo arbitrario
+                st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
             else:
                 st.session_state["p2_med_resultado"] = resultado
                 st.session_state["_p2_med_hash_res"] = hash_cfg

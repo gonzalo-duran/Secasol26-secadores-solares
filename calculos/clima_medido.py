@@ -70,6 +70,15 @@ _SERIAL_EXCEL_MIN = 20_000.0
 _SERIAL_EXCEL_MAX = 80_000.0
 _ORIGEN_SERIAL_EXCEL = "1899-12-30"
 
+# Paso temporal mínimo aceptable [s]. Por debajo de 1 s no hay adquisición de
+# clima real: un paso sub-segundo delata una columna de timestamp mal mapeada
+# (típicamente tiempo transcurrido leído como nanosegundos desde 1970).
+_PASO_MINIMO_S = 1.0
+# Cota de tamaño de la grilla regular: evita que un paso absurdamente fino sobre
+# un período largo intente materializar cientos de millones de filas.
+_MAX_PUNTOS_GRILLA = 2_000_000
+_SEGUNDOS_POR_DIA = 86_400.0
+
 # Conversión de unidades de origen → SI (clave = unidad de core.clima_medido).
 _A_SI: dict[str, Callable[[pd.Series], pd.Series]] = {
     "K": lambda s: s,
@@ -317,6 +326,32 @@ def sugerir_mapeo(columnas: Sequence[str]) -> ConfigMapeoClima:
 # ---------------------------------------------------------------------------
 
 
+def _error_timestamp_numerico(numerica: pd.Series) -> ValueError:
+    """Arma el error de columna de timestamp numérica no interpretable.
+
+    Se dispara cuando la columna es mayoritariamente numérica pero los valores no
+    son seriales de Excel: el caso típico es una columna de **tiempo transcurrido**
+    (0, 300, 600… segundos desde el inicio del ensayo), que no identifica un
+    instante. Sin este chequeo, ``pd.to_datetime`` interpretaría los números como
+    nanosegundos desde 1970 y produciría una serie con paso sub-segundo.
+
+    Args:
+        numerica: Columna ya coaccionada a numérico.
+
+    Returns:
+        ``ValueError`` con código ``CLIMED_TIMESTAMP_NUMERICO_AMBIGUO``.
+    """
+    muestras = numerica.dropna().unique()[:3]
+    ejemplos = ", ".join(f"{float(v):g}" for v in muestras)
+    return ValueError(
+        "CLIMED_TIMESTAMP_NUMERICO_AMBIGUO: la columna de timestamp es numérica pero "
+        f"sus valores no son fechas de Excel (ej.: {ejemplos}). Parece tiempo "
+        "transcurrido (segundos/minutos desde el inicio del ensayo), que no identifica "
+        "un instante. Elegí la columna de fecha/hora del archivo; si solo trae la hora, "
+        "activá 'el archivo trae solo la hora' e indicá la fecha del ensayo."
+    )
+
+
 def _parsear_timestamps(serie: pd.Series, zona_horaria: str, fecha_fija=None) -> pd.DatetimeIndex:
     """Parsea una columna de timestamps a un DatetimeIndex UTC.
 
@@ -327,36 +362,57 @@ def _parsear_timestamps(serie: pd.Series, zona_horaria: str, fecha_fija=None) ->
 
     Raises:
         ValueError: ``CLIMED_TIMESTAMP_SOLO_HORA`` si la columna trae solo la hora y
-            no se dio ``fecha_fija``; ``CLIMED_TIMESTAMP_INVALIDO`` si no se pudo
-            interpretar ninguna fecha/hora; ``CLIMED_TZ_INVALIDA`` si la zona falla.
+            no se dio ``fecha_fija``; ``CLIMED_TIMESTAMP_NUMERICO_AMBIGUO`` si la
+            columna es numérica pero no son seriales de Excel (típicamente tiempo
+            transcurrido); ``CLIMED_TIMESTAMP_INVALIDO`` si no se pudo interpretar
+            ninguna fecha/hora; ``CLIMED_TZ_INVALIDA`` si la zona falla.
     """
     from datetime import datetime, time
 
     es_solo_hora = bool(serie.map(lambda v: isinstance(v, time)).any())
+    # Ojo: pd.to_numeric sobre una columna de datetimes devuelve epoch en ns
+    # (~1.3e18), que pasaría por "numérica no serial" — hay que excluirla antes.
+    es_fecha = pd.api.types.is_datetime64_any_dtype(serie) or bool(
+        serie.map(lambda v: isinstance(v, datetime)).any()
+    )
+    numerica = pd.to_numeric(serie, errors="coerce")
+    frac_num = float(numerica.notna().mean()) if len(numerica) else 0.0
+    es_numerica = frac_num > 0.9 and not es_solo_hora and not es_fecha
+    validos = numerica.dropna()
+    es_serial = es_numerica and bool(validos.between(_SERIAL_EXCEL_MIN, _SERIAL_EXCEL_MAX).all())
 
     if fecha_fija is not None:
-        # Combinar la hora del día de cada registro con la fecha del ensayo.
-        def _combinar(v):
-            if isinstance(v, time):
-                return datetime.combine(fecha_fija, v)
-            ts = pd.to_datetime(v, dayfirst=True, errors="coerce")
-            return pd.NaT if pd.isna(ts) else datetime.combine(fecha_fija, ts.time())
+        if es_numerica and not es_serial:
+            # Con fecha fija, una columna numérica solo puede ser hora del día
+            # expresada como fracción de día (formato de hora de Excel: 0.375 = 09:00).
+            if not bool(validos.between(0.0, 1.0).all()):
+                raise _error_timestamp_numerico(numerica)
+            base = pd.to_datetime(fecha_fija)
+            tiempos = base + pd.to_timedelta((numerica * _SEGUNDOS_POR_DIA).round(), unit="s")
+        else:
+            # Combinar la hora del día de cada registro con la fecha del ensayo.
+            def _combinar(v):
+                if isinstance(v, time):
+                    return datetime.combine(fecha_fija, v)
+                ts = pd.to_datetime(v, dayfirst=True, errors="coerce")
+                return pd.NaT if pd.isna(ts) else datetime.combine(fecha_fija, ts.time())
 
-        tiempos = pd.to_datetime([_combinar(v) for v in serie], errors="coerce")
+            tiempos = pd.to_datetime([_combinar(v) for v in serie], errors="coerce")
     elif es_solo_hora:
         raise ValueError(
             "CLIMED_TIMESTAMP_SOLO_HORA: la columna de timestamp trae solo la hora (sin "
             "fecha). Activá 'el archivo trae solo la hora' e indicá la fecha del ensayo."
         )
+    elif es_serial:
+        tiempos = pd.to_datetime(
+            numerica, unit="D", origin=_ORIGEN_SERIAL_EXCEL, errors="coerce"
+        ).dt.round("s")
+    elif es_numerica:
+        # Números que no son seriales de Excel: sin este corte, pd.to_datetime los
+        # leería como nanosegundos desde 1970 (paso sub-segundo, fecha 1/1/1970).
+        raise _error_timestamp_numerico(numerica)
     else:
-        numerica = pd.to_numeric(serie, errors="coerce")
-        frac_num = float(numerica.notna().mean()) if len(numerica) else 0.0
-        if frac_num > 0.9 and numerica.dropna().between(_SERIAL_EXCEL_MIN, _SERIAL_EXCEL_MAX).all():
-            tiempos = pd.to_datetime(
-                numerica, unit="D", origin=_ORIGEN_SERIAL_EXCEL, errors="coerce"
-            ).dt.round("s")
-        else:
-            tiempos = pd.to_datetime(serie, dayfirst=True, errors="coerce", format="mixed")
+        tiempos = pd.to_datetime(serie, dayfirst=True, errors="coerce", format="mixed")
 
     if pd.Series(tiempos).isna().all():
         raise ValueError(
@@ -491,8 +547,13 @@ def inferir_frecuencia_s(idx: pd.DatetimeIndex) -> float:
             f"CLIMED_FRECUENCIA_IRREGULAR: el paso más común ({moda:.0f} s) solo "
             f"explica el {fraccion:.0%} de los saltos; el archivo mezcla cadencias."
         )
-    if moda <= 0:
-        raise ValueError("CLIMED_FRECUENCIA_IRREGULAR: paso temporal no positivo.")
+    if moda < _PASO_MINIMO_S:
+        raise ValueError(
+            f"CLIMED_PASO_SUBSEGUNDO: el paso temporal inferido ({moda:g} s) es menor "
+            f"que {_PASO_MINIMO_S:.0f} s. Ninguna campaña de clima se adquiere a esa "
+            "cadencia: revisá que la columna de timestamp sea la de fecha/hora y no una "
+            "de tiempo transcurrido o de otra magnitud."
+        )
     return moda
 
 
@@ -505,8 +566,27 @@ def regularizar_grilla(df: pd.DataFrame, paso_s: float) -> pd.DataFrame:
 
     Returns:
         DataFrame reindexado sobre la grilla completa [primer, último] timestamp.
+
+    Raises:
+        ValueError: ``CLIMED_PASO_INVALIDO`` si el paso redondeado a segundos es < 1 s
+            (``freq="0s"`` haría que pandas divida por cero); ``CLIMED_GRILLA_EXCESIVA``
+            si la grilla resultante superaría :data:`_MAX_PUNTOS_GRILLA` puntos.
     """
-    grilla = pd.date_range(df.index[0], df.index[-1], freq=f"{int(round(paso_s))}s")
+    paso_entero_s = int(round(paso_s))
+    if paso_entero_s < 1:
+        raise ValueError(
+            f"CLIMED_PASO_INVALIDO: el paso temporal ({paso_s:g} s) redondea a 0 s, "
+            "no se puede construir una grilla regular. Revisá la columna de timestamp."
+        )
+    span_s = (df.index[-1] - df.index[0]).total_seconds()
+    n_puntos = int(span_s // paso_entero_s) + 1
+    if n_puntos > _MAX_PUNTOS_GRILLA:
+        raise ValueError(
+            f"CLIMED_GRILLA_EXCESIVA: una grilla de {paso_entero_s} s sobre el período "
+            f"del archivo daría {n_puntos:,} filas (máximo {_MAX_PUNTOS_GRILLA:,}). "
+            "Revisá la columna de timestamp y el período cubierto."
+        )
+    grilla = pd.date_range(df.index[0], df.index[-1], freq=f"{paso_entero_s}s")
     return df.reindex(grilla)
 
 

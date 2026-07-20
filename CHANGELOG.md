@@ -88,6 +88,24 @@ Mejoras post-1.0 (sin orden estricto):
 
 ### Fixed
 
+- **Columna de timestamp mal mapeada crasheaba con `ZeroDivisionError` (detectado en el Space)**
+  — mapear como timestamp una columna de **tiempo transcurrido** (0, 300, 600… segundos desde el
+  inicio del ensayo) hacía que `pd.to_datetime` la leyera como **nanosegundos desde 1970**: la
+  serie quedaba con paso 3e-07 s, pasaba los guardas de `inferir_frecuencia_s` (positivo y
+  regular) y llegaba a `regularizar_grilla`, donde `int(round(3e-07)) == 0` producía `freq="0s"`
+  → división por cero en las tripas de pandas, con traceback crudo en pantalla. Corregido en tres
+  capas: (1) el parser corta con `CLIMED_TIMESTAMP_NUMERICO_AMBIGUO` cuando la columna es numérica
+  pero no son seriales de Excel, y con fecha fija interpreta bien un numérico en [0,1) como **hora
+  de Excel** (0.375 = 09:00); (2) `inferir_frecuencia_s` rechaza pasos < 1 s
+  (`CLIMED_PASO_SUBSEGUNDO`); (3) `regularizar_grilla` rechaza un paso que redondea a 0 s
+  (`CLIMED_PASO_INVALIDO`) y acota el tamaño de la grilla (`CLIMED_GRILLA_EXCESIVA`, bomba latente:
+  1 s sobre un año son 31 M de filas). Las capas 2 y 3 protegen también la validación de P3, que
+  reusa las mismas funciones.
+- **Carga de archivos: nunca más un traceback crudo en producción** — los seis puntos de ingesta
+  de archivos del usuario en P2 y P3 (listar hojas, leer tabla, procesar) atrapaban solo
+  `ValueError`/`RuntimeError`; cualquier otra excepción de parseo llegaba a la pantalla como
+  traceback. Ahora caen en un `except Exception` con el mensaje traducido `comun.error_inesperado`
+  (tipo de excepción + detalle + qué revisar), en ES/EN/PT.
 - **P3: tope artificial de 10 m/s en la velocidad de diseño crasheaba con caudal alto** — el
   `number_input` de velocidad tenía `max_value=10.0` hardcodeado (sin fundamento físico; el core
   no impone tope duro, solo una advertencia > 3 m/s). Al aplicar una calibración con óptimo

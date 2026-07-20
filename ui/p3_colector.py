@@ -1775,6 +1775,9 @@ def _render_validacion_colector(proyecto) -> None:
         except (ValueError, RuntimeError) as exc:
             st.error(t("p3.validacion.error", err=exc))
             return
+        except Exception as exc:  # archivo arbitrario del usuario
+            st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+            return
         hoja = None
         c1, c2 = st.columns([3, 1])
         if hojas:
@@ -1801,6 +1804,9 @@ def _render_validacion_colector(proyecto) -> None:
                 )
             except (ValueError, RuntimeError) as exc:
                 st.error(t("p3.validacion.error", err=exc))
+                return
+            except Exception as exc:  # archivo arbitrario del usuario
+                st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
                 return
             st.session_state["_p3_val_tabla_cache"] = (clave_tabla, tabla)
             st.session_state.pop("p3_val_resultado", None)
@@ -1940,6 +1946,10 @@ def _render_validacion_colector(proyecto) -> None:
                 }
             except (ValueError, RuntimeError) as exc:
                 st.error(t("p3.validacion.error", err=exc))
+                st.session_state.pop("p3_val_resultado", None)
+                return
+            except Exception as exc:  # ingesta + simulación sobre datos arbitrarios
+                st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
                 st.session_state.pop("p3_val_resultado", None)
                 return
 
