@@ -773,6 +773,7 @@ def armar_forzantes_aire(
     I_g_POA_W_m2: Optional[np.ndarray] = None,
     Q_rad_aire_W: Optional[np.ndarray] = None,
     dt_s: float = 3600.0,
+    t0_utc=None,
 ) -> ForzantesAire:
     """Construye la serie de forzantes de entrada a la cámara para el motor dinámico.
 
@@ -951,6 +952,7 @@ def armar_forzantes_aire(
         I_g_W_m2=I_g_arr,
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
+        t0_utc=t0_utc,
     )
 
 
@@ -1352,6 +1354,10 @@ class ResultadosCompletosTransitorio:
     Attributes:
         forzantes_base: ForzantesAire del horizonte tal como salieron de P4
             (T_ent_K = T_salida del colector, sin auxiliar).
+        t0_utc: Instante absoluto (UTC) de ``t_s[0]``, heredado de las forzantes.
+            Permite reanclar las trayectorias del motor a timestamps reales para
+            contrastarlas contra datos medidos (mejora 38, fase 4). ``None`` con
+            forzantes sintéticas.
         forzantes_aplicadas: ForzantesAire que efectivamente vio la cámara
             (T_ent_K = T_sal_col + ΔT_aux si hay auxiliar; igual a base si no).
         camara: ResultadoMotorTermodinamico re-corrido con forzantes_aplicadas.
@@ -1384,6 +1390,7 @@ class ResultadosCompletosTransitorio:
 
     forzantes_base: Optional[ForzantesAire] = None
     forzantes_aplicadas: Optional[ForzantesAire] = None
+    t0_utc: Optional[object] = None
     camara: Optional[ResultadoMotorTermodinamico] = None
     auxiliar: Optional[ResultadosAuxiliarTransitorio] = None
     chimenea: Optional[dict] = None  # series horarias del lazo natural si aplica
@@ -1435,6 +1442,7 @@ def calcular_todo_transitorio(
         forzantes_base=forzantes_base,
         n_dias=n_dias,
         horizonte_s=float(forzantes_base.t_s[-1] - forzantes_base.t_s[0]),
+        t0_utc=getattr(forzantes_base, "t0_utc", None),
     )
 
     # --- Verificaciones cruzadas ---
@@ -2000,6 +2008,9 @@ def armar_forzantes_ventana(
         v_viento_ms=v_viento,
         I_g_W_m2=I_eq_prod,
         I_g_POA_W_m2=POA,
+        # Ancla absoluta del lapso: sin ella las descargas del túnel no se pueden
+        # fechar para contrastarlas contra muestreos de campo (mejora 38, fase 4).
+        t0_utc=df.index[0] if len(df.index) else None,
         Q_rad_aire_W=Q_rad_aire,
     )
     return forzantes, lena_kg, advertencias

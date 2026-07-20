@@ -361,6 +361,7 @@ def _forzantes_desde_slice(
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=dt_s,
+        t0_utc=datos_slice.index[0] if len(datos_slice.index) else None,
     )
 
 
@@ -521,6 +522,7 @@ def _construir_forzantes_reales(
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=3600.0,
+        t0_utc=datos_dia.index[0] if len(datos_dia.index) else None,
     )
 
 
@@ -628,6 +630,7 @@ def _construir_forzantes_reales_caja(
         I_g_POA_W_m2=I_g_POA_arr,
         Q_rad_aire_W=Q_rad_aire_arr,
         dt_s=dt_s,
+        t0_utc=datos_dia.index[0] if len(datos_dia.index) else None,
     )
 
 
@@ -1511,6 +1514,14 @@ def render() -> None:
 
     proyecto = st.session_state.proyecto
 
+    # Aplicar cambios pendientes a widgets (calibración → "aplicar óptimo"). Se fija
+    # el session_state ANTES de instanciar los number_input, que es la forma robusta
+    # de actualizar un widget desde un botón de otra sección.
+    _pend = st.session_state.pop("_p4_pending_widget", None)
+    if _pend:
+        for _k, _v in _pend.items():
+            st.session_state[_k] = _v
+
     # Detectar tipología temprano: condiciona defaults de cubierta y T_op.
     from core.proyecto import SubtipoGranEscala, Tipologia
 
@@ -1525,6 +1536,12 @@ def render() -> None:
     # tipologías) usan la topología de bandejas clásica.
     _subtipo_actual = getattr(_cfg_actual, "subtipo_gran_escala", SubtipoGranEscala.BATCH)
     es_gran_escala = _tipologia_actual == Tipologia.GRAN_ESCALA
+    # Modo Ventana de producción: el horizonte de la vista previa de cámara es el
+    # lapso [inicio, fin] de P1 con clima real horario. Vale para TODAS las
+    # tipologías (incl. gran escala): P7 sigue siendo la fuente de verdad —con su
+    # pipeline de cascada para el túnel—, pero la previa de P4 no tiene por qué
+    # degradarse a un día sintético cuando hay clima real de la ventana.
+    usar_ventana = getattr(_cfg_actual, "modo_analisis", None) == ModoAnalisis.VENTANA
     es_semicontinuo = (
         _tipologia_actual == Tipologia.GRAN_ESCALA
         and _subtipo_actual == SubtipoGranEscala.SEMICONTINUO
@@ -2128,10 +2145,19 @@ def render() -> None:
         area_bandeja = c2.number_input(
             t("p4.bandejas.area_bandeja"),
             min_value=0.01,
-            max_value=10.0,
-            value=band_prev.area_bandeja_m2,
+            # El máximo se adapta al valor actual (calibración del área efectiva,
+            # snapshot) para no crashear nunca con StreamlitValueAboveMaxError.
+            max_value=max(10.0, float(band_prev.area_bandeja_m2)),
             step=0.05,
             format="%.3f",
+            key="p4_area_bandeja",
+            # value= solo inicializa; si la key ya está en session_state (incl.
+            # "aplicar óptimo" de la calibración), el widget la respeta sin warning.
+            **(
+                {}
+                if "p4_area_bandeja" in st.session_state
+                else {"value": float(band_prev.area_bandeja_m2)}
+            ),
         )
         c3, c4 = st.columns(2)
         espesor_capa = c3.number_input(
@@ -2321,7 +2347,7 @@ def render() -> None:
         # además del label; el modo "Día real" es el índice 2 del radio.
         _forz_idx_sel = int(st.session_state.get("cam_forz_idx", 0))
         _real_disp, _ = _disponibilidad_forzantes_reales(st.session_state.get("p3_eval"), proyecto)
-        _borde_no_aplica = _forz_idx_sel == 2 and _real_disp
+        _borde_no_aplica = usar_ventana or (_forz_idx_sel == 2 and _real_disp)
 
         if _borde_no_aplica:
             st.info(t("p4.borde.no_aplica"))
@@ -2365,11 +2391,6 @@ def render() -> None:
     tipologia = getattr(getattr(proyecto, "configuracion", None), "tipologia", None)
     es_caja = tipologia == Tipologia.CAJA
     es_gran_escala = tipologia == Tipologia.GRAN_ESCALA
-    # Modo Ventana de producción para CAJA/ARMARIO (mejora 35): el horizonte es
-    # el lapso [inicio, fin] de P1 con clima real horario (multidía real). El
-    # túnel de gran escala tiene su propio pipeline (P7 _render_ventana).
-    _modo_analisis_p4 = getattr(getattr(proyecto, "configuracion", None), "modo_analisis", None)
-    usar_ventana = _modo_analisis_p4 == ModoAnalisis.VENTANA and not es_gran_escala
 
     with st.expander(t("p4.forzantes.titulo"), expanded=False):
 
@@ -2602,6 +2623,12 @@ def render() -> None:
     _bloqueo_caja_opaca = es_caja_pre and (
         cubierta_id_sel is None or not caras_translucidas_sel.activas()
     )
+    # En túnel semicontinuo la previa NO es el modelo real: P4 resuelve siempre con
+    # `calcular_camara` (un nodo), mientras que el túnel de N zonas a contracorriente
+    # vive en `calcular_camara_cascada` y se corre en P7. Hay que decirlo, porque los
+    # números de acá no son los de producción.
+    if es_semicontinuo:
+        st.warning(t("p4.calcular.aviso_previa_nodo_unico"))
     calcular = st.button(
         t("p4.calcular.label"),
         type="primary" if modo_analisis != ModoAnalisis.ANUAL else "secondary",
@@ -2797,6 +2824,10 @@ def render() -> None:
         if isinstance(res, ResultadoMotorTermodinamico):
             # ---- Display motor termodinámico ----
             st.subheader(t("p4.resultados_td.titulo"))
+            # Repetido sobre los resultados: es donde el usuario lee los números y
+            # donde más fácil sería tomarlos por los del túnel.
+            if es_semicontinuo:
+                st.warning(t("p4.calcular.aviso_previa_nodo_unico"))
             col_r1, col_r2, col_r3, col_r4 = st.columns(4)
             if res.t_secado_s is not None:
                 col_r1.metric(
@@ -2936,3 +2967,653 @@ def render() -> None:
                 mime="application/json",
                 width="stretch",
             )
+
+    # --- Validación con datos medidos (mejora 38, fase 4) ---
+    st.divider()
+    _render_validacion_camara(proyecto)
+
+
+# ---------------------------------------------------------------------------
+# Validación con datos medidos (mejora 38, fase 4)
+# ---------------------------------------------------------------------------
+
+
+def _config_referencia_camara(
+    *, col_ts, col_val, variable, unidad, zona, conv, hoja, fila_enc, fecha_fija, masa_seca
+):
+    """Arma la ``ConfigReferencia`` de cámara desde los widgets (puro, testeable)."""
+    from core.validacion import ConfigReferencia
+
+    return ConfigReferencia(
+        columna_timestamp=col_ts,
+        columna_valor=col_val,
+        variable=variable,
+        unidad=unidad,
+        zona_horaria=zona,
+        convencion_timestamp=conv,
+        hoja=hoja,
+        fila_encabezado=int(fila_enc),
+        fecha_fija=fecha_fija,
+        masa_seca_kg=masa_seca,
+    )
+
+
+def _opciones_columna(columnas, etiqueta_vacia):
+    """Lista de columnas con una opción 'no mapeada' al frente."""
+    return [etiqueta_vacia] + [str(c) for c in columnas]
+
+
+# Parámetros calibrables de la cámara. Los dos primeros grupos son distintos:
+#   - ``area_bandeja`` es un CAMPO REAL del proyecto (área efectiva de intercambio).
+#     Multiplica tanto h·A como K_m·A, así que es el knob físicamente interpretable
+#     — y por eso se puede APLICAR al proyecto, como en P3.
+#   - ``factor_K_m``/``factor_h_conv`` son correcciones al CIERRE del modelo (analogía
+#     de Chilton-Colburn, isoterma GAB del cultivar, ω de entrada supuesta). No son
+#     propiedades de la cámara ni transfieren a otro producto/caudal, así que quedan
+#     como DIAGNÓSTICO: se informan, no se guardan.
+_PARAMS_CALIBRABLES_CAMARA: tuple[str, ...] = ("area_bandeja", "factor_K_m", "factor_h_conv")
+_PARAMS_APLICABLES_CAMARA: tuple[str, ...] = ("area_bandeja",)
+
+# Id del parámetro calibrado → key del widget de P4, para refrescar el campo tras
+# "aplicar óptimo" (mismo patrón pendiente que P3).
+_WIDGET_KEY_POR_PARAM_P4: dict[str, str] = {"area_bandeja": "p4_area_bandeja"}
+
+
+def _rango_sugerido_calibracion(param: str, proyecto) -> tuple[float, float, float]:
+    """Rango por defecto del barrido: ``(min, max, paso)`` según el parámetro.
+
+    Para el área efectiva se centra en el valor actual del proyecto (0.5×–3×,
+    porque una capa de rodajas apiladas puede tener varias veces el área de la
+    bandeja); para los factores de cierre, un rango neutro alrededor de 1.
+    """
+    if param == "area_bandeja" and proyecto.camara is not None:
+        actual = float(proyecto.camara.bandejas.area_bandeja_m2)
+        return max(0.01, 0.5 * actual), 3.0 * actual, max(0.01, actual / 20.0)
+    return 0.5, 2.5, 0.1
+
+
+def _evaluador_calibracion_camara(proyecto, senal, forzantes, t0_utc, param):
+    """Closure ``valor -> MetricasAjuste|None`` para :func:`calibrar_1d`.
+
+    Los factores de cierre se pasan como kwargs al motor; el área efectiva se
+    aplica sobre un **clon** de la cámara (nunca sobre el proyecto del usuario)
+    vía ``barrido_parametrico.aplicar_parametro``.
+    """
+    import copy
+    from types import SimpleNamespace
+
+    from calculos.barrido_parametrico import aplicar_parametro
+    from calculos.validacion_camara import evaluar_camara
+
+    def _evaluar(valor):
+        if param in ("factor_K_m", "factor_h_conv"):
+            metricas, _ = evaluar_camara(
+                proyecto.camara, senal, forzantes, t0_utc, **{param: float(valor)}
+            )
+            return metricas
+        shim = SimpleNamespace(camara=copy.deepcopy(proyecto.camara))
+        aplicar_parametro(shim, param, float(valor))
+        metricas, _ = evaluar_camara(shim.camara, senal, forzantes, t0_utc)
+        return metricas
+
+    return _evaluar
+
+
+def _render_calibracion_camara(proyecto, senal, forzantes, t0_utc) -> None:
+    """Calibra un parámetro de la cámara contra el medido.
+
+    El área efectiva se puede aplicar al proyecto (es un campo real); los factores
+    de cierre solo se informan (ver :data:`_PARAMS_CALIBRABLES_CAMARA`).
+    """
+    import numpy as _np
+
+    from calculos.barrido_parametrico import aplicar_parametro
+    from calculos.calibracion import calibrar_1d
+    from calculos.validacion_camara import unidad_display
+    from ui.componentes.validacion_widget import fig_curva_calibracion
+
+    st.divider()
+    st.markdown(t("p4.calibracion.titulo"))
+    st.caption(t("p4.calibracion.intro"))
+
+    param = st.selectbox(
+        t("p4.calibracion.parametro"),
+        options=list(_PARAMS_CALIBRABLES_CAMARA),
+        format_func=lambda k: t(f"p4.calibracion.param.{k}"),
+        key="p4_cal_param",
+        help=t("p4.calibracion.ayuda_param"),
+    )
+    st.caption(
+        t("p4.calibracion.es_aplicable")
+        if param in _PARAMS_APLICABLES_CAMARA
+        else t("p4.calibracion.es_diagnostico")
+    )
+
+    v_min_def, v_max_def, paso_def = _rango_sugerido_calibracion(param, proyecto)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        v_min = st.number_input(
+            t("p4.calibracion.min"),
+            value=float(v_min_def),
+            min_value=0.001,
+            step=float(paso_def),
+            format="%.3f",
+            key=f"p4_cal_min_{param}",
+        )
+    with c2:
+        v_max = st.number_input(
+            t("p4.calibracion.max"),
+            value=float(v_max_def),
+            min_value=0.002,
+            step=float(paso_def),
+            format="%.3f",
+            key=f"p4_cal_max_{param}",
+        )
+    with c3:
+        n_pts = st.number_input(
+            t("p4.calibracion.n"), value=9, min_value=3, max_value=41, step=1, key="p4_cal_n"
+        )
+    with c4:
+        objetivo = st.selectbox(
+            t("p4.calibracion.objetivo"),
+            options=["rmse", "mbe_abs", "mae"],
+            format_func=lambda k: t(f"p4.calibracion.obj.{k}"),
+            key="p4_cal_obj",
+        )
+
+    if v_max <= v_min:
+        st.warning(t("p4.calibracion.rango_invalido"))
+        return
+
+    if st.button(t("p4.calibracion.correr"), key="p4_cal_correr"):
+        with st.spinner(t("p4.calibracion.spinner")):
+            st.session_state["p4_cal_resultado"] = calibrar_1d(
+                _np.linspace(float(v_min), float(v_max), int(n_pts)),
+                _evaluador_calibracion_camara(proyecto, senal, forzantes, t0_utc, param),
+                parametro=param,
+                objetivo=objetivo,
+            )
+
+    res_cal = st.session_state.get("p4_cal_resultado")
+    if res_cal is None:
+        return
+    if res_cal.valor_optimo is None:
+        st.warning(t("p4.calibracion.sin_optimo"))
+        return
+
+    es_factor = res_cal.parametro in ("factor_K_m", "factor_h_conv")
+    st.plotly_chart(
+        fig_curva_calibracion(
+            res_cal,
+            x_lbl=(
+                t("p4.calibracion.eje_x")
+                if es_factor
+                else t(f"p4.calibracion.param.{res_cal.parametro}")
+            ),
+            y_lbl=t(f"p4.calibracion.obj.{res_cal.objetivo_nombre}"),
+            titulo=t("p4.calibracion.grafica_titulo"),
+            optimo_lbl=t("p4.calibracion.optimo"),
+        ),
+        width="stretch",
+    )
+    m = res_cal.metricas_optimo
+    unidad = unidad_display(senal.variable)
+    st.success(
+        t(
+            "p4.calibracion.resultado",
+            valor=f"{res_cal.valor_optimo:.4g}",
+            rmse=f"{m.rmse:.3g} {unidad}",
+            mbe=f"{m.mbe:+.3g} {unidad}",
+            r2=f"{m.r2:.3f}",
+        )
+    )
+
+    if es_factor:
+        # Lectura física del factor: qué dice sobre el modelo.
+        if res_cal.valor_optimo > 1.05:
+            st.caption(t("p4.calibracion.lectura_alto"))
+        elif res_cal.valor_optimo < 0.95:
+            st.caption(t("p4.calibracion.lectura_bajo"))
+        else:
+            st.caption(t("p4.calibracion.lectura_neutro"))
+    elif res_cal.parametro == "area_bandeja" and proyecto.camara is not None:
+        # El área efectiva es interpretable: cuántas veces la de bandeja declarada.
+        actual = float(proyecto.camara.bandejas.area_bandeja_m2)
+        if actual > 0:
+            st.caption(
+                t("p4.calibracion.lectura_area", veces=f"{res_cal.valor_optimo / actual:.2f}")
+            )
+
+    if st.session_state.get("_p4_val_hr_asumida"):
+        st.warning(t("p4.calibracion.aviso_hr"))
+
+    if res_cal.parametro in _PARAMS_APLICABLES_CAMARA:
+        if st.button(t("p4.calibracion.aplicar"), key="p4_cal_aplicar"):
+            try:
+                aplicar_parametro(proyecto, res_cal.parametro, float(res_cal.valor_optimo))
+                # Igual que en P3: se deja el valor pendiente para fijarlo al TOPE del
+                # próximo render, antes de que el widget se instancie.
+                _wkey = _WIDGET_KEY_POR_PARAM_P4.get(res_cal.parametro)
+                if _wkey is not None:
+                    st.session_state["_p4_pending_widget"] = {_wkey: float(res_cal.valor_optimo)}
+                st.session_state.pop("p4_val_resultado", None)
+                st.session_state.pop("p4_cal_resultado", None)
+                st.success(t("p4.calibracion.aplicado"))
+                st.rerun()
+            except (ValueError, KeyError) as exc:
+                st.error(t("p4.validacion.error", err=exc))
+
+
+def _render_cadena_completa(senal, variable) -> None:
+    """Overlay medido vs **cadena completa** de P7 (diagnóstico, sin calibrar).
+
+    Reusa el resultado transitorio que P7 dejó en sesión. Solo es posible si ese
+    resultado trae ``t0_utc`` (forzantes con clima real): el motor integra en
+    tiempo relativo, así que sin ancla absoluta no hay forma de alinearlo contra
+    una señal medida — y un overlay corrido sería peor que no tenerlo.
+    """
+    from calculos.ingesta_referencia import evaluar_ajuste
+    from calculos.validacion_camara import a_display, serie_simulada, unidad_display
+    from ui.componentes.validacion_widget import fig_overlay
+
+    st.divider()
+    st.markdown(t("p4.cadena.titulo"))
+    st.caption(t("p4.cadena.intro"))
+
+    res_tr = st.session_state.get("p7_resultados_tr")
+    if res_tr is None or getattr(res_tr, "camara", None) is None:
+        st.info(t("p4.cadena.sin_resultado"))
+        return
+    t0 = getattr(res_tr, "t0_utc", None)
+    if t0 is None:
+        st.info(t("p4.cadena.sin_ancla"))
+        return
+
+    try:
+        t_sim, y_sim = serie_simulada(res_tr.camara, variable, t0)
+        metricas, y_med, y_sim_al, ts = evaluar_ajuste(senal, t_sim, y_sim)
+    except (ValueError, RuntimeError) as exc:
+        st.error(t("p4.validacion.error", err=exc))
+        return
+    if metricas is None:
+        st.info(t("p4.cadena.sin_solape"))
+        return
+
+    unidad_disp = unidad_display(variable)
+    st.plotly_chart(
+        fig_overlay(
+            ts,
+            a_display(y_med, variable),
+            a_display(y_sim_al, variable),
+            medido_lbl=t("p4.validacion.grafica.medido"),
+            simulado_lbl=t("p4.cadena.simulado"),
+            titulo=t("p4.cadena.grafica_titulo", magnitud=t(f"p4.validacion.variable.{variable}")),
+            y_lbl=f"{t(f'p4.validacion.variable.{variable}')} [{unidad_disp}]",
+        ),
+        width="stretch",
+    )
+    st.caption(
+        t(
+            "p4.cadena.metricas",
+            rmse=f"{metricas.rmse:.3g} {unidad_disp}",
+            mbe=f"{metricas.mbe:+.3g} {unidad_disp}",
+            r2=f"{metricas.r2:.3f}",
+            n=int(metricas.n_pares),
+        )
+    )
+    st.caption(t("p4.cadena.comparacion"))
+
+
+def _render_validacion_camara(proyecto) -> None:
+    """Sección de P4: valida la cámara AISLADA contra un ensayo medido."""
+    from calculos import clima_medido as cm
+    from calculos.ingesta_referencia import (
+        evaluar_ajuste,
+        ingerir_forzantes_camara,
+        ingerir_referencia,
+    )
+    from calculos.validacion_camara import (
+        VARIABLES_CAMARA,
+        a_display,
+        serie_simulada,
+        simular_camara_aislada,
+        unidad_display,
+    )
+    from core.validacion import CONVENCIONES_TIMESTAMP, UNIDADES_REFERENCIA
+    from ui.componentes.serializacion import limpiar_session_state_prefijo
+    from ui.componentes.validacion_widget import fig_overlay, filas_metricas
+
+    with st.expander(t("p4.validacion.titulo"), expanded=False):
+        st.caption(t("p4.validacion.intro"))
+
+        if proyecto.camara is None:
+            st.info(t("p4.validacion.sin_camara"))
+            return
+
+        arch = st.session_state.get("p4_val_archivo")
+        if arch is None:
+            subido = st.file_uploader(
+                t("p4.validacion.uploader.label"),
+                type=["csv", "txt", "xls", "xlsx"],
+                key="p4_val_uploader",
+                help=t("p4.validacion.uploader.help"),
+            )
+            if subido is not None:
+                contenido = subido.read()
+                st.session_state["p4_val_archivo"] = {
+                    "nombre": subido.name,
+                    "bytes": contenido,
+                    "hash": cm.hash_archivo(contenido),
+                }
+                st.session_state.pop("p4_val_uploader", None)
+                st.rerun()
+            return
+
+        c_a, c_b = st.columns([4, 1])
+        with c_a:
+            st.markdown(
+                t(
+                    "p4.validacion.archivo_cargado",
+                    nombre=arch["nombre"],
+                    kb=f"{len(arch['bytes']) / 1024:.0f}",
+                )
+            )
+        with c_b:
+            if st.button(t("p4.validacion.quitar"), key="p4_val_quitar"):
+                limpiar_session_state_prefijo(st.session_state, "p4_val_")
+                limpiar_session_state_prefijo(st.session_state, "_p4_val_")
+                limpiar_session_state_prefijo(st.session_state, "p4_cal_")
+                st.rerun()
+
+        try:
+            hojas = cm.listar_hojas(arch["bytes"], arch["nombre"])
+        except (ValueError, RuntimeError) as exc:
+            st.error(t("p4.validacion.error", err=exc))
+            return
+        except Exception as exc:  # archivo arbitrario del usuario
+            st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+            return
+
+        hoja = None
+        c1, c2 = st.columns([3, 1])
+        if hojas:
+            with c1:
+                hoja = st.selectbox(t("p2.medido.hoja.label"), options=hojas, key="p4_val_hoja")
+        with c2:
+            fila_enc = st.number_input(
+                t("p2.medido.fila_enc.label"),
+                min_value=0,
+                value=0,
+                step=1,
+                key="p4_val_fila",
+            )
+
+        clave_tabla = (arch["hash"], hoja, int(fila_enc))
+        cache = st.session_state.get("_p4_val_tabla_cache")
+        if cache is None or cache[0] != clave_tabla:
+            try:
+                tabla = cm.leer_tabla(
+                    arch["bytes"], arch["nombre"], hoja=hoja, fila_encabezado=fila_enc
+                )
+            except (ValueError, RuntimeError) as exc:
+                st.error(t("p4.validacion.error", err=exc))
+                return
+            except Exception as exc:  # archivo arbitrario del usuario
+                st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+                return
+            st.session_state["_p4_val_tabla_cache"] = (clave_tabla, tabla)
+            st.session_state.pop("p4_val_resultado", None)
+        tabla = st.session_state["_p4_val_tabla_cache"][1]
+        columnas = [str(c) for c in tabla.columns]
+
+        with st.expander(t("p4.validacion.preview_titulo"), expanded=False):
+            st.dataframe(tabla.head(12))
+
+        # ---- señal a validar ----
+        st.markdown(t("p4.validacion.mapeo.titulo"))
+        col_ts = st.selectbox(
+            t("p4.validacion.mapeo.timestamp"), options=columnas, key="p4_val_col_ts"
+        )
+        variable = st.selectbox(
+            t("p4.validacion.mapeo.variable"),
+            options=list(VARIABLES_CAMARA),
+            format_func=lambda k: t(f"p4.validacion.variable.{k}"),
+            key="p4_val_variable",
+        )
+        c_v, c_u = st.columns(2)
+        with c_v:
+            col_val = st.selectbox(
+                t("p4.validacion.mapeo.valor"), options=columnas, key="p4_val_col_val"
+            )
+        with c_u:
+            unidad = st.selectbox(
+                t("p4.validacion.mapeo.unidad"),
+                options=list(UNIDADES_REFERENCIA[variable]),
+                format_func=lambda k: t(f"p4.validacion.unidad.{k}"),
+                key=f"p4_val_unidad_{variable}",
+            )
+        masa_seca = None
+        if variable == "masa_producto":
+            masa_seca = st.number_input(
+                t("p4.validacion.masa_seca.label"),
+                min_value=0.001,
+                value=1.0,
+                step=0.1,
+                format="%.3f",
+                key="p4_val_masa_seca",
+                help=t("p4.validacion.masa_seca.help"),
+            )
+
+        from ui.p2_emplazamiento import _ZONAS_HORARIAS
+
+        empl_tz = getattr(proyecto.emplazamiento, "zona_horaria", None)
+        c_z, c_c = st.columns(2)
+        with c_z:
+            zona = st.selectbox(
+                t("p2.medido.tz.label"),
+                options=_ZONAS_HORARIAS,
+                index=(_ZONAS_HORARIAS.index(empl_tz) if empl_tz in _ZONAS_HORARIAS else 0),
+                key="p4_val_zona",
+            )
+        with c_c:
+            conv = st.radio(
+                t("p2.medido.convencion.label"),
+                options=list(CONVENCIONES_TIMESTAMP),
+                format_func=lambda k: t(f"p2.medido.convencion.{k}"),
+                horizontal=True,
+                key="p4_val_conv",
+            )
+
+        fecha_fija = None
+        if st.checkbox(t("p4.validacion.fecha_fija.check"), key="p4_val_usar_fecha"):
+            from datetime import date as _date
+
+            fecha_fija = st.date_input(
+                t("p4.validacion.fecha_fija.label"),
+                value=_date(2010, 5, 1),
+                min_value=_date(1990, 1, 1),
+                key="p4_val_fecha",
+                help=t("p4.validacion.fecha_fija.help"),
+            )
+
+        # ---- aire de entrada (forzado de la cámara aislada) ----
+        st.markdown(t("p4.validacion.aire.titulo"))
+        c_t, c_h = st.columns(2)
+        with c_t:
+            col_t_ent = st.selectbox(
+                t("p4.validacion.aire.t_ent"), options=columnas, key="p4_val_t_ent"
+            )
+        with c_h:
+            col_hr_ent = st.selectbox(
+                t("p4.validacion.aire.hr_ent"),
+                options=_opciones_columna(columnas, t("p4.validacion.aire.hr_ent_sin")),
+                key="p4_val_hr_ent",
+            )
+        hr_fija = None
+        if col_hr_ent == t("p4.validacion.aire.hr_ent_sin"):
+            hr_fija = (
+                st.slider(
+                    t("p4.validacion.aire.hr_fija"),
+                    min_value=5,
+                    max_value=95,
+                    value=30,
+                    key="p4_val_hr_fija",
+                )
+                / 100.0
+            )
+
+        c_q, c_qu = st.columns(2)
+        with c_q:
+            col_caudal = st.selectbox(
+                t("p4.validacion.aire.caudal"),
+                options=_opciones_columna(columnas, t("p4.validacion.aire.caudal_sin")),
+                key="p4_val_caudal",
+            )
+        m_dot_fijo = None
+        if col_caudal == t("p4.validacion.aire.caudal_sin"):
+            with c_qu:
+                m_dot_fijo = st.number_input(
+                    t("p4.validacion.aire.caudal_fijo"),
+                    min_value=0.001,
+                    value=float(proyecto.camara.flujo.caudal_masico_kg_s),
+                    step=0.01,
+                    format="%.4f",
+                    key="p4_val_mdot",
+                )
+            unidad_caudal = "kg_s"
+        else:
+            with c_qu:
+                unidad_caudal = st.selectbox(
+                    t("p4.validacion.aire.caudal_unidad"),
+                    options=["kg_s", "m3_s", "m3_h"],
+                    key="p4_val_uni_caudal",
+                )
+
+        c_ta, c_vv = st.columns(2)
+        with c_ta:
+            col_t_amb = st.selectbox(
+                t("p4.validacion.aire.t_amb"),
+                options=_opciones_columna(columnas, t("p4.validacion.aire.t_amb_sin")),
+                key="p4_val_t_amb",
+            )
+        with c_vv:
+            col_viento = st.selectbox(
+                t("p4.validacion.aire.viento"),
+                options=_opciones_columna(columnas, t("p4.validacion.aire.viento_sin")),
+                key="p4_val_viento",
+            )
+
+        def _col_o_none(valor, etiqueta_vacia):
+            return None if valor == etiqueta_vacia else valor
+
+        if st.button(t("p4.validacion.procesar"), type="primary", key="p4_val_procesar"):
+            try:
+                with st.spinner(t("p4.validacion.spinner")):
+                    cfg = _config_referencia_camara(
+                        col_ts=col_ts,
+                        col_val=col_val,
+                        variable=variable,
+                        unidad=unidad,
+                        zona=zona,
+                        conv=conv,
+                        hoja=hoja,
+                        fila_enc=fila_enc,
+                        fecha_fija=fecha_fija,
+                        masa_seca=masa_seca,
+                    )
+                    senal = ingerir_referencia(tabla, cfg)
+                    fm = ingerir_forzantes_camara(
+                        tabla,
+                        cfg,
+                        columna_T_ent=col_t_ent,
+                        columna_HR_ent=_col_o_none(col_hr_ent, t("p4.validacion.aire.hr_ent_sin")),
+                        HR_ent_fija=hr_fija,
+                        columna_caudal=_col_o_none(col_caudal, t("p4.validacion.aire.caudal_sin")),
+                        unidad_caudal=unidad_caudal,
+                        m_dot_fijo_kg_s=m_dot_fijo,
+                        columna_T_amb=_col_o_none(col_t_amb, t("p4.validacion.aire.t_amb_sin")),
+                        columna_viento=_col_o_none(col_viento, t("p4.validacion.aire.viento_sin")),
+                    )
+                    resultado = simular_camara_aislada(proyecto.camara, fm.forzantes)
+                    t_sim, y_sim = serie_simulada(resultado, variable, fm.t0_utc)
+                    metricas, y_med, y_sim_al, ts = evaluar_ajuste(senal, t_sim, y_sim)
+                st.session_state["p4_val_resultado"] = {
+                    "senal": senal,
+                    "forzantes": fm.forzantes,
+                    "t0_utc": fm.t0_utc,
+                    "advertencias": fm.advertencias,
+                    "metricas": metricas,
+                    "y_med": y_med,
+                    "y_sim": y_sim_al,
+                    "ts": ts,
+                    "variable": variable,
+                }
+                st.session_state["_p4_val_hr_asumida"] = any(
+                    "VREF_HR_ENT_ASUMIDA" in a for a in fm.advertencias
+                )
+                st.session_state.pop("p4_cal_resultado", None)
+            except (ValueError, RuntimeError) as exc:
+                st.error(t("p4.validacion.error", err=exc))
+                st.session_state.pop("p4_val_resultado", None)
+                return
+            except Exception as exc:  # ingesta + simulación sobre datos arbitrarios
+                st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+                st.session_state.pop("p4_val_resultado", None)
+                return
+
+        res = st.session_state.get("p4_val_resultado")
+        if res is None:
+            return
+
+        senal = res["senal"]
+        st.caption(
+            t(
+                "p4.validacion.senal_ok",
+                n=int(senal.serie.notna().sum()),
+                freq=f"{senal.frecuencia_nativa_s / 60:.0f}",
+            )
+        )
+        for adv in senal.advertencias:
+            st.warning(adv)
+        if res["advertencias"]:
+            st.markdown(t("p4.validacion.supuestos_titulo"))
+            for adv in res["advertencias"]:
+                st.caption(f"⚙️ {adv}")  # i18n: exento (código VREF_* de calculos/)
+
+        if res["metricas"] is None:
+            st.warning(t("p4.validacion.sin_solape"))
+            return
+
+        var = res["variable"]
+        unidad_disp = unidad_display(var)
+        st.plotly_chart(
+            fig_overlay(
+                res["ts"],
+                a_display(res["y_med"], var),
+                a_display(res["y_sim"], var),
+                medido_lbl=t("p4.validacion.grafica.medido"),
+                simulado_lbl=t("p4.validacion.grafica.simulado"),
+                titulo=t(
+                    "p4.validacion.grafica.titulo",
+                    magnitud=t(f"p4.validacion.variable.{var}"),
+                ),
+                y_lbl=f"{t(f'p4.validacion.variable.{var}')} [{unidad_disp}]",
+            ),
+            width="stretch",
+        )
+
+        st.markdown(t("p4.validacion.metricas_titulo"))
+        filas = filas_metricas(res["metricas"], unidad=unidad_disp)
+        cols = st.columns(3)
+        for i, (clave, valor, uni) in enumerate(filas):
+            with cols[i % 3]:
+                st.metric(
+                    t(f"p4.validacion.metrica.{clave}"),
+                    f"{valor:.3g}" + (f" {uni}" if uni else ""),
+                )
+        st.caption(t("p4.validacion.n_pares", n=int(res["metricas"].n_pares)))
+        st.caption(t("p4.validacion.interpretacion"))
+        st.caption(t("p4.validacion.aviso_cstr"))
+
+        _render_calibracion_camara(proyecto, senal, res["forzantes"], res["t0_utc"])
+        _render_cadena_completa(senal, var)

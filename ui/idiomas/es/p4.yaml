@@ -403,6 +403,14 @@ test_puntual:
     alimenta los resultados anuales — esos salen del botón
     'Calcular operación anual' de arriba.
 calcular:
+  aviso_previa_nodo_unico: >-
+    ⚠️ **Esta previa resuelve la cámara como un solo nodo** (aire bien mezclado),
+    no como el túnel de N zonas a contracorriente. Sirve para ver el orden de
+    magnitud de temperaturas y de la curva de secado con el clima real de la
+    ventana, pero **no** reproduce la variación longitudinal ni la sequedad
+    emergente del producto descargado. El comportamiento completo del túnel
+    (perfil por zonas, descargas por avance, producción) se evalúa en **P7 ·
+    Resultados**, que es la fuente de verdad.
   label: ⚙️ Calcular cámara
   help_bloqueo: Tipología CAJA requiere al menos una cara translúcida para poder calcular.
 resultados_td:
@@ -506,3 +514,157 @@ graficas:
   eje_hr: HR [%]
   eje_m_dot: ṁ_w [g/h]
   titulo_td: "Motor termodinámico — {prod}"
+validacion:
+  titulo: 🔬 Validación con datos medidos
+  intro: >-
+    Contrastá la cámara simulada contra un ensayo propio. La cámara se corre
+    AISLADA, forzada con el aire de entrada medido en el mismo archivo, para que
+    el error del colector no se mezcle con el de la cámara.
+  sin_camara: Configurá la cámara para habilitar la validación.
+  uploader:
+    label: Archivo del ensayo de cámara (CSV / Excel)
+    help: >-
+      Una columna de fecha/hora, la señal a validar (T de cámara, HR, T o humedad
+      del producto) y el aire de entrada (T y HR a la entrada de la cámara).
+  archivo_cargado: "**{nombre}** ({kb} KB) cargado."
+  quitar: Quitar
+  error: "Error al procesar el ensayo: {err}"
+  preview_titulo: Vista previa del archivo
+  mapeo:
+    titulo: "**Señal a validar**"
+    timestamp: Columna de fecha/hora
+    variable: Magnitud medida
+    valor: Columna con la señal
+    unidad: Unidad de origen
+  variable:
+    T_camara: Temperatura del aire en cámara
+    HR_camara: Humedad relativa del aire en cámara
+    T_producto: Temperatura del producto
+    X_producto: Humedad del producto
+    masa_producto: Masa de la muestra (pesadas)
+  unidad:
+    C: °C
+    K: K
+    F: °F
+    pct: "%"
+    frac: fracción 0–1
+    kg_kg: kg agua/kg seco (base seca)
+    pct_bs: "% base seca"
+    kg_kg_bh: kg agua/kg total (base húmeda)
+    pct_bh: "% base húmeda"
+    kg: kg
+    g: g
+  masa_seca:
+    label: Masa seca de la muestra [kg]
+    help: >-
+      La pesada se convierte a humedad base seca con X = m/m_seco − 1. Si la
+      declarás mal, toda la curva queda desplazada (MBE grande con R² alto).
+  aire:
+    titulo: "**Aire de entrada a la cámara**"
+    t_ent: Columna de T del aire de entrada
+    hr_ent: Columna de HR del aire de entrada
+    hr_ent_sin: (no medida — asumir constante)
+    hr_fija: HR de entrada asumida [%]
+    caudal: Columna de caudal de aire
+    caudal_sin: (no medido — usar valor fijo)
+    caudal_unidad: Unidad de caudal
+    caudal_fijo: Caudal másico de aire seco [kg/s]
+    t_amb: Columna de T ambiente
+    t_amb_sin: (no medida)
+    viento: Columna de viento
+    viento_sin: (no medido)
+    sin_columna: "—"
+  fecha_fija:
+    check: El archivo trae solo la hora (sin fecha)
+    label: Fecha del ensayo
+    help: Se combina con la hora de cada registro.
+  procesar: Procesar y comparar
+  spinner: Ingiriendo el ensayo y corriendo la cámara aislada…
+  senal_ok: "Señal medida: {n} muestras válidas, paso nativo ≈ {freq} min."
+  sin_solape: No hay instantes en común entre la señal medida y la simulación.
+  supuestos_titulo: "**Supuestos de forzado** (lo que no se midió)"
+  grafica:
+    titulo: "{magnitud} — medido vs simulado"
+    medido: Medido
+    simulado: Simulado
+  metricas_titulo: "**Métricas de ajuste**"
+  metrica:
+    rmse: RMSE
+    mbe: Sesgo (MBE)
+    mae: MAE
+    r2: R²
+    nse: NSE
+    d: Índice de Willmott
+  n_pares: "Calculado sobre {n} pares medido↔simulado alineados."
+  interpretacion: >-
+    RMSE = magnitud del error; MBE con signo (positivo = el modelo sobrestima)
+    orienta qué calibrar; R² captura la forma (ciego al sesgo).
+  aviso_cstr: >-
+    El modelo supone aire bien mezclado (un nodo): un sensor cerca de la entrada
+    lee más caliente que el promedio y uno cerca de la salida, más frío. Parte del
+    residuo puede ser posición del sensor, no error del modelo.
+calibracion:
+  titulo: "**🎯 Calibración del modelo de cámara**"
+  intro: >-
+    Barré un coeficiente de transporte y quedate con el valor que mejor ajusta la
+    simulación al medido. El resultado es un diagnóstico: cuánto se aparta el
+    modelo de lo medido y en qué dirección.
+  parametro: Coeficiente a calibrar
+  param:
+    area_bandeja: Área efectiva de intercambio [m²]
+    factor_K_m: Factor sobre K_m (transferencia de masa)
+    factor_h_conv: Factor sobre h_conv (convección interior)
+  ayuda_param: >-
+    K_m gobierna la velocidad de evaporación; h_conv arrastra a K_m por
+    Chilton-Colburn, así que además cambia el calor sensible.
+  min: Mínimo
+  max: Máximo
+  n: N.º de puntos
+  objetivo: Función objetivo
+  obj:
+    rmse: RMSE
+    mbe_abs: "|MBE|"
+    mae: MAE
+  rango_invalido: El máximo debe ser mayor que el mínimo.
+  correr: Calibrar
+  spinner: Barriendo el coeficiente y ajustando contra el medido…
+  sin_optimo: Ningún punto del barrido fue evaluable (revisá el rango o el solape temporal).
+  grafica_titulo: Función objetivo vs coeficiente
+  eje_x: Factor multiplicativo
+  optimo: Óptimo
+  resultado: "Óptimo: factor {valor} → RMSE {rmse}, MBE {mbe}, R² {r2}."
+  lectura_alto: >-
+    Un factor mayor que 1 significa que el modelo **subestima** el transporte:
+    la cámara real seca más rápido de lo que predice.
+  lectura_bajo: >-
+    Un factor menor que 1 significa que el modelo **sobrestima** el transporte:
+    la cámara real seca más lento de lo que predice.
+  lectura_neutro: El modelo reproduce el ensayo sin corrección apreciable.
+  aviso_hr: >-
+    Ojo: la HR de entrada no se midió. Un error en la humedad de entrada se
+    absorbe dentro de este factor, así que el valor calibrado puede estar
+    compensando el supuesto y no un defecto del modelo.
+  es_aplicable: "Este parámetro **es un campo del proyecto**: el valor óptimo se puede aplicar a la cámara."
+  es_diagnostico: >-
+    Este coeficiente es un **diagnóstico del modelo**, no una propiedad de la cámara: no se guarda en el proyecto, porque lo que absorbe (analogía de Chilton-Colburn, isoterma del cultivar, humedad de entrada supuesta) no transfiere a otro producto ni a otro caudal.
+  lectura_area: >-
+    El área efectiva de intercambio ajustada es **{veces}×** la de bandeja declarada. Para una capa de rodajas apiladas, un valor mayor que 1 es esperable.
+  aplicar: "Aplicar el valor óptimo a la cámara"
+  aplicado: "Valor óptimo aplicado a la cámara. Recalculá el secado arriba."
+cadena:
+  titulo: "**🔗 Diagnóstico de la cadena completa**"
+  intro: >-
+    Además de la cámara aislada, compará lo medido contra el resultado del sistema
+    completo (colector → auxiliar → cámara) calculado en P7. No se puede calibrar
+    sobre él: el residuo mezcla el error de todos los eslabones.
+  sin_resultado: Calculá el transitorio en P7 para habilitar esta comparación.
+  sin_ancla: >-
+    El resultado de P7 no tiene fecha asociada (forzantes sintéticas). Corré el
+    transitorio con clima real para poder alinearlo con lo medido.
+  sin_solape: El período de lo medido no se solapa con el horizonte calculado en P7.
+  grafica_titulo: "{magnitud} — medido vs cadena completa (P7)"
+  simulado: Simulado (cadena P7)
+  metricas: "Cadena completa: RMSE {rmse}, MBE {mbe}, R² {r2} sobre {n} pares."
+  comparacion: >-
+    Si la cadena ajusta peor que la cámara aislada, el exceso de error viene de los
+    eslabones de aguas arriba (colector, caño, auxiliar) o del clima, no de la cámara.

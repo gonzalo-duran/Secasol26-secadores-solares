@@ -65,6 +65,10 @@ class ResultadoVentana:
         perfil_X_zonas: Perfil espacial de X por zona (solo SEMICONTINUO).
         perfil_T_aire_zonas_K: Perfil de T del aire por zona (solo SEMICONTINUO).
         perfil_omega_aire_zonas: Perfil de ω del aire por zona (solo SEMICONTINUO).
+        X_salida_por_avance: X del producto descargado en cada avance [kg/kg seco].
+        T_prod_salida_por_avance_K: T del producto descargado en cada avance [K].
+        intervalo_avance_s: Cadencia de avance [s] (para fechar cada descarga).
+        t0_utc: Instante absoluto del inicio del lapso (ancla de las descargas).
         lena_consumida_kg: Leña consumida por el híbrido [kg] (Fase 4; hoy 0).
         status: Estado global.
         advertencias: Mensajes integrados.
@@ -92,6 +96,13 @@ class ResultadoVentana:
     perfil_X_zonas: Optional[np.ndarray] = None
     perfil_T_aire_zonas_K: Optional[np.ndarray] = None
     perfil_omega_aire_zonas: Optional[np.ndarray] = None
+    # Descargas del túnel: una columna por avance. Es la comparación lagrangiana
+    # natural contra un muestreo de campo (lo que sale del túnel), y lo único
+    # fechable sin historia por zona (mejora 38, fase 4).
+    X_salida_por_avance: Optional[np.ndarray] = None
+    T_prod_salida_por_avance_K: Optional[np.ndarray] = None
+    intervalo_avance_s: Optional[float] = None
+    t0_utc: Optional[object] = None
     # Común
     lena_consumida_kg: float = 0.0
     status: str = ""
@@ -322,6 +333,10 @@ def _simular_ventana_semicontinuo(
     res.perfil_X_zonas = cas.X_perfil_zonas
     res.perfil_T_aire_zonas_K = cas.T_aire_perfil_zonas_K
     res.perfil_omega_aire_zonas = cas.omega_aire_perfil_zonas
+    res.X_salida_por_avance = cas.X_salida_por_avance
+    res.T_prod_salida_por_avance_K = cas.T_prod_salida_por_avance_K
+    res.intervalo_avance_s = float(cas.intervalo_avance_s)
+    res.t0_utc = getattr(forzantes_base, "t0_utc", None)
     res.throughput_fresco_kg_dia = cas.throughput_fresco_kg_s * _SEGUNDOS_POR_DIA
 
     if cas.X_salida_regimen is not None:

@@ -125,6 +125,8 @@ def _construir_params_termodinamico(
     HR_operacion: float,
     T_amb_K: float,
     P_Pa: float,
+    factor_h_conv: float = 1.0,
+    factor_K_m: float = 1.0,
 ) -> _ParamsCamaraTD:
     """Arma los parámetros del motor termodinámico desde la ``Camara``.
 
@@ -132,6 +134,19 @@ def _construir_params_termodinamico(
     semicontinuo (``calcular_camara_cascada``). Lee el catálogo del producto
     (cp seco, GAB), calcula h_conv (placa plana) y K_m (Chilton-Colburn),
     el closure de coeficientes variables en t, y la decomposición de pared.
+
+    Args:
+        camara: Cámara configurada.
+        T_operacion_K, HR_operacion, T_amb_K, P_Pa: Condiciones de referencia.
+        factor_h_conv: Multiplicador del coeficiente convectivo interior. Como K_m
+            se deriva de h_conv por Chilton-Colburn, escalar h **también** escala la
+            transferencia de masa (es el efecto físico de cambiar la convección).
+        factor_K_m: Multiplicador **adicional** solo sobre el coeficiente de
+            transferencia de masa, para calibrar la evaporación sin tocar el calor
+            sensible (absorbe la incertidumbre de área efectiva de producto y de la
+            correlación de Chilton-Colburn).
+
+    Con ambos factores en 1.0 (default) el resultado es idéntico al histórico.
     """
     p = camara.carga_producto
     g = camara.geometria
@@ -243,9 +258,11 @@ def _construir_params_termodinamico(
     rho_pelicula = densidad_aire_humedo(T_pelicula, omega_ent, P_Pa)
     area_transversal_m2 = g.ancho_m * g.alto_m
     v_aire = f.caudal_masico_kg_s / (rho_pelicula * area_transversal_m2)
-    h_conv = _h_conv_camara_placa_plana(v_aire, g.largo_m, T_pelicula, omega_ent, P_Pa)
+    h_conv = _h_conv_camara_placa_plana(v_aire, g.largo_m, T_pelicula, omega_ent, P_Pa) * (
+        factor_h_conv
+    )
     cp_hum = 1006.0 + omega_ent * 1805.0
-    K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0))
+    K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
     # --- Coeficientes interiores variables en t (closure) ---
     def _coef_transporte(
@@ -254,9 +271,12 @@ def _construir_params_termodinamico(
         T_pel = 0.5 * (T_ent_local + T_prod_local)
         rho = densidad_aire_humedo(T_pel, omega_ent_local, P_Pa)
         v_aire_t = m_dot_local / (rho * area_transversal_m2)
-        h = _h_conv_camara_placa_plana(v_aire_t, g.largo_m, T_pel, omega_ent_local, P_Pa)
+        h = (
+            _h_conv_camara_placa_plana(v_aire_t, g.largo_m, T_pel, omega_ent_local, P_Pa)
+            * factor_h_conv
+        )
         cp_hum_t = 1006.0 + omega_ent_local * 1805.0
-        return h, h / (cp_hum_t * _LE_AGUA_AIRE ** (2.0 / 3.0))
+        return h, h / (cp_hum_t * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
     # --- Decomposición de la pared en cascada 3-nodos ---
     R_cond_pared = cons.pared.R_conduccion_m2K_W
@@ -294,6 +314,8 @@ def _calcular_termodinamico(
     P_Pa: float,
     t_max_s: float = 24.0 * 3600.0,
     forzantes_aire: Optional["ForzantesAire"] = None,
+    factor_h_conv: float = 1.0,
+    factor_K_m: float = 1.0,
 ) -> ResultadoMotorTermodinamico:
     """Wire-up de Camara → motor termodinámico transitorio.
 
@@ -318,7 +340,15 @@ def _calcular_termodinamico(
 
     Si T_prod_inicial_K es None en CargaProducto, usa T_amb_K como fallback.
     """
-    pr = _construir_params_termodinamico(camara, T_operacion_K, HR_operacion, T_amb_K, P_Pa)
+    pr = _construir_params_termodinamico(
+        camara,
+        T_operacion_K,
+        HR_operacion,
+        T_amb_K,
+        P_Pa,
+        factor_h_conv=factor_h_conv,
+        factor_K_m=factor_K_m,
+    )
     advertencias = pr.advertencias
 
     # --- Forzantes: usar las del llamador o construir degeneradas ---
@@ -396,6 +426,8 @@ def calcular_camara(
     P_Pa: float = 101325.0,
     t_max_s: float = 72.0 * 3600.0,
     forzantes_aire: Optional["ForzantesAire"] = None,
+    factor_h_conv: float = 1.0,
+    factor_K_m: float = 1.0,
 ) -> ResultadoMotorTermodinamico:
     """Punto de entrada único de la cámara — motor termodinámico.
 
@@ -418,6 +450,11 @@ def calcular_camara(
             (comportamiento histórico). Use
             `calculos.balance_global.construir_serie_sintetica_dia_tipo` o
             `armar_forzantes_aire` para construirlas.
+        factor_h_conv: Multiplicador del coeficiente convectivo interior (1.0 =
+            sin cambios). Perilla de **calibración** contra datos medidos.
+        factor_K_m: Multiplicador adicional del coeficiente de transferencia de
+            masa (1.0 = sin cambios). Es la perilla principal para calibrar la
+            velocidad de secado; ver `calculos/validacion_camara.py`.
 
     Returns:
         ResultadoMotorTermodinamico con curvas dinámicas.
@@ -430,6 +467,8 @@ def calcular_camara(
         P_Pa,
         t_max_s=t_max_s,
         forzantes_aire=forzantes_aire,
+        factor_h_conv=factor_h_conv,
+        factor_K_m=factor_K_m,
     )
 
 
@@ -442,6 +481,8 @@ def calcular_camara_cascada(
     T_amb_K: float = 298.15,
     P_Pa: float = 101325.0,
     n_avances: Optional[int] = None,
+    factor_h_conv: float = 1.0,
+    factor_K_m: float = 1.0,
 ) -> ResultadoCascada:
     """Punto de entrada de la cámara semicontinua (túnel a contracorriente).
 
@@ -461,6 +502,8 @@ def calcular_camara_cascada(
         T_amb_K, P_Pa: Ambiente y presión.
         n_avances: Avances a simular. None → se derivan del horizonte de las
             forzantes (floor(t_max / intervalo_avance)).
+        factor_h_conv, factor_K_m: Perillas de calibración de los coeficientes de
+            transporte interiores (1.0 = sin cambios). Ver ``calcular_camara``.
 
     Returns:
         ResultadoCascada (sequedad emergente, throughput, perfil espacial...).
@@ -474,7 +517,15 @@ def calcular_camara_cascada(
             "camara.tunel (ConfiguracionTunel) configurado."
         )
     tun = camara.tunel
-    pr = _construir_params_termodinamico(camara, T_operacion_K, HR_operacion, T_amb_K, P_Pa)
+    pr = _construir_params_termodinamico(
+        camara,
+        T_operacion_K,
+        HR_operacion,
+        T_amb_K,
+        P_Pa,
+        factor_h_conv=factor_h_conv,
+        factor_K_m=factor_K_m,
+    )
     N = tun.n_zonas
 
     res = simular_cascada(

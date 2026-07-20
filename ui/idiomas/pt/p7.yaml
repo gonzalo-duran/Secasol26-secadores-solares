@@ -398,3 +398,37 @@ guardar:
   pdf_exito: "✅ Relatório gerado ({kb:.0f} KB). Baixe com o botão abaixo."
   pdf_error: "❌ Erro gerando o relatório: {exc}"
   pdf_descargar: Baixar relatório PDF
+validacion_tunel:
+  titulo: 🔬 Validação do túnel com dados medidos
+  intro: >-
+    Compare o túnel simulado com uma amostragem de campo. O modelo integra cada coluna
+    ao longo de seu percurso (lagrangiano) e não guarda histórico por zona, portanto a
+    comparação usa os dois objetos diretos: as **descargas** (o que sai do túnel em cada
+    avanço) e o **perfil espacial** no fechamento.
+  sin_resultado: Calcule a janela de produção para habilitar a validação.
+  solo_semicontinuo: A validação por descargas e perfil aplica-se ao subtipo semicontínuo.
+  descargas:
+    titulo: "**Descargas do túnel**"
+    ayuda: >-
+      Arquivo com a umidade (ou a massa) das colunas descarregadas e sua data/hora.
+      É comparado com a secura emergente de cada avanço.
+    sin_datos: O resultado não traz descargas por avanço (o túnel completou algum avanço?).
+    sin_ancla: >-
+      O resultado não tem data associada; não é possível datar as descargas para
+      alinhá-las com o medido.
+    grafica_titulo: Umidade do produto descarregado — medido vs simulado
+    y_label: Umidade do produto [kg/kg base seca]
+  perfil:
+    titulo: "**Perfil espacial por zona**"
+    ayuda: >-
+      Informe os valores medidos em cada zona no fechamento do ensaio (deixe vazio onde
+      não houver sensor). Zona 1 = produto fresco; zona N = produto seco.
+    magnitud: Grandeza do perfil
+    columna_zona: Zona
+    columna_medido: Medido
+    grafica_titulo: Perfil por zona — medido vs simulado
+    eje_x: Zona (1 = fresco → N = seco)
+    sin_medidos: Informe ao menos duas zonas medidas para calcular as métricas.
+  metricas: "RMSE {rmse}, MBE {mbe}, R² {r2} sobre {n} pares."
+  medido: Medido
+  simulado: Simulado

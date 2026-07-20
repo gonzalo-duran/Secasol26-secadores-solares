@@ -1618,14 +1618,9 @@ def _filas_metricas(metricas) -> list[tuple[str, float, str]]:
     La unidad ``"C"`` marca métricas en grados (RMSE/MBE/MAE — invariantes al
     offset K↔°C); ``""`` marca adimensionales (R²/NSE/d).
     """
-    return [
-        ("rmse", metricas.rmse, "C"),
-        ("mbe", metricas.mbe, "C"),
-        ("mae", metricas.mae, "C"),
-        ("r2", metricas.r2, ""),
-        ("nse", metricas.nse, ""),
-        ("d", metricas.d_willmott, ""),
-    ]
+    from ui.componentes.validacion_widget import filas_metricas
+
+    return filas_metricas(metricas, unidad="C")
 
 
 def _series_simuladas_colector(proyecto, senal, clima_forzante=None, salida="mezcla"):
@@ -1684,33 +1679,17 @@ def _series_simuladas_colector(proyecto, senal, clima_forzante=None, salida="mez
 
 def _fig_overlay_validacion(ts, y_med_C, y_sim_C, *, medido_lbl, simulado_lbl, titulo, y_lbl):
     """Overlay medido vs simulado de la T de salida del colector."""
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter(
-            x=ts,
-            y=y_med_C,
-            mode="markers",
-            name=medido_lbl,
-            marker=dict(size=5, color="#d62728"),
-        )
+    from ui.componentes.validacion_widget import fig_overlay
+
+    return fig_overlay(
+        ts,
+        y_med_C,
+        y_sim_C,
+        medido_lbl=medido_lbl,
+        simulado_lbl=simulado_lbl,
+        titulo=titulo,
+        y_lbl=y_lbl,
     )
-    fig.add_trace(
-        go.Scatter(
-            x=ts,
-            y=y_sim_C,
-            mode="lines",
-            name=simulado_lbl,
-            line=dict(color="#1f77b4", width=2),
-        )
-    )
-    fig.update_layout(
-        title=titulo,
-        xaxis_title="",
-        yaxis_title=y_lbl,
-        height=420,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    )
-    return fig
 
 
 def _render_validacion_colector(proyecto) -> None:
@@ -2027,23 +2006,11 @@ _WIDGET_KEY_POR_PARAM: dict[str, str] = {
 
 def _fig_curva_calibracion(res_cal, *, x_lbl, y_lbl, titulo, optimo_lbl):
     """Curva de la función objetivo vs el parámetro, con marca en el óptimo."""
-    xs = [p.valor for p in res_cal.puntos if p.objetivo is not None]
-    ys = [p.objetivo for p in res_cal.puntos if p.objetivo is not None]
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines+markers", line=dict(color="#1f77b4")))
-    if res_cal.valor_optimo is not None:
-        y_opt = min(ys)
-        fig.add_trace(
-            go.Scatter(
-                x=[res_cal.valor_optimo],
-                y=[y_opt],
-                mode="markers",
-                name=optimo_lbl,
-                marker=dict(size=13, color="#2ca02c", symbol="star"),
-            )
-        )
-    fig.update_layout(title=titulo, xaxis_title=x_lbl, yaxis_title=y_lbl, height=360)
-    return fig
+    from ui.componentes.validacion_widget import fig_curva_calibracion
+
+    return fig_curva_calibracion(
+        res_cal, x_lbl=x_lbl, y_lbl=y_lbl, titulo=titulo, optimo_lbl=optimo_lbl
+    )
 
 
 def _render_calibracion_colector(proyecto, senal, clima_forz, salida="mezcla") -> None:

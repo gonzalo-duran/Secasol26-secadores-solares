@@ -399,6 +399,14 @@ test_puntual:
     feed the annual results — those come from the 'Compute annual
     operation' button above.
 calcular:
+  aviso_previa_nodo_unico: >-
+    ⚠️ **This preview solves the chamber as a single node** (well-mixed air), not
+    as the N-zone counter-current tunnel. It is useful to see the order of
+    magnitude of temperatures and of the drying curve with the real weather of
+    the window, but it does **not** reproduce the longitudinal variation nor the
+    emergent dryness of the discharged product. The full tunnel behaviour (zone
+    profile, discharges per advance, production) is evaluated in **P7 · Results**,
+    which is the source of truth.
   label: ⚙️ Compute chamber
   help_bloqueo: BOX typology requires at least one translucent face to be able to compute.
 resultados_td:
@@ -502,3 +510,157 @@ graficas:
   eje_hr: RH [%]
   eje_m_dot: ṁ_w [g/h]
   titulo_td: "Thermodynamic engine — {prod}"
+validacion:
+  titulo: 🔬 Validation against measured data
+  intro: >-
+    Compare the simulated chamber against your own test. The chamber runs
+    ISOLATED, driven by the inlet air measured in the same file, so that the
+    collector's error does not mix with the chamber's.
+  sin_camara: Configure the chamber to enable validation.
+  uploader:
+    label: Chamber test file (CSV / Excel)
+    help: >-
+      A date/time column, the signal to validate (chamber T, RH, product T or
+      moisture) and the inlet air (T and RH at the chamber inlet).
+  archivo_cargado: "**{nombre}** ({kb} KB) loaded."
+  quitar: Remove
+  error: "Error processing the test: {err}"
+  preview_titulo: File preview
+  mapeo:
+    titulo: "**Signal to validate**"
+    timestamp: Date/time column
+    variable: Measured quantity
+    valor: Signal column
+    unidad: Source unit
+  variable:
+    T_camara: Chamber air temperature
+    HR_camara: Chamber air relative humidity
+    T_producto: Product temperature
+    X_producto: Product moisture
+    masa_producto: Sample mass (weighings)
+  unidad:
+    C: °C
+    K: K
+    F: °F
+    pct: "%"
+    frac: fraction 0–1
+    kg_kg: kg water/kg dry (dry basis)
+    pct_bs: "% dry basis"
+    kg_kg_bh: kg water/kg total (wet basis)
+    pct_bh: "% wet basis"
+    kg: kg
+    g: g
+  masa_seca:
+    label: Dry mass of the sample [kg]
+    help: >-
+      The weighing is converted to dry-basis moisture with X = m/m_dry − 1. If
+      you declare it wrong, the whole curve shifts (large MBE with high R²).
+  aire:
+    titulo: "**Air entering the chamber**"
+    t_ent: Inlet air T column
+    hr_ent: Inlet air RH column
+    hr_ent_sin: (not measured — assume constant)
+    hr_fija: Assumed inlet RH [%]
+    caudal: Air flow rate column
+    caudal_sin: (not measured — use fixed value)
+    caudal_unidad: Flow rate unit
+    caudal_fijo: Dry air mass flow rate [kg/s]
+    t_amb: Ambient T column
+    t_amb_sin: (not measured)
+    viento: Wind column
+    viento_sin: (not measured)
+    sin_columna: "—"
+  fecha_fija:
+    check: The file only has the time (no date)
+    label: Test date
+    help: It is combined with the time of each record.
+  procesar: Process and compare
+  spinner: Ingesting the test and running the isolated chamber…
+  senal_ok: "Measured signal: {n} valid samples, native step ≈ {freq} min."
+  sin_solape: There are no instants shared by the measured signal and the simulation.
+  supuestos_titulo: "**Forcing assumptions** (what was not measured)"
+  grafica:
+    titulo: "{magnitud} — measured vs simulated"
+    medido: Measured
+    simulado: Simulated
+  metricas_titulo: "**Goodness-of-fit metrics**"
+  metrica:
+    rmse: RMSE
+    mbe: Bias (MBE)
+    mae: MAE
+    r2: R²
+    nse: NSE
+    d: Willmott index
+  n_pares: "Computed over {n} aligned measured↔simulated pairs."
+  interpretacion: >-
+    RMSE = error magnitude; signed MBE (positive = the model overestimates) tells
+    you what to calibrate; R² captures the shape (blind to bias).
+  aviso_cstr: >-
+    The model assumes well-mixed air (a single node): a sensor near the inlet
+    reads hotter than the average and one near the outlet, colder. Part of the
+    residual may be sensor position, not model error.
+calibracion:
+  titulo: "**🎯 Chamber model calibration**"
+  intro: >-
+    Sweep a transport coefficient and keep the value that best fits the
+    simulation to the measurement. The result is a diagnostic: how far the model
+    departs from the measurement, and in which direction.
+  parametro: Coefficient to calibrate
+  param:
+    area_bandeja: Effective exchange area [m²]
+    factor_K_m: Factor on K_m (mass transfer)
+    factor_h_conv: Factor on h_conv (internal convection)
+  ayuda_param: >-
+    K_m governs the evaporation rate; h_conv drags K_m along through
+    Chilton-Colburn, so it also changes the sensible heat.
+  min: Minimum
+  max: Maximum
+  n: Number of points
+  objetivo: Objective function
+  obj:
+    rmse: RMSE
+    mbe_abs: "|MBE|"
+    mae: MAE
+  rango_invalido: The maximum must be greater than the minimum.
+  correr: Calibrate
+  spinner: Sweeping the coefficient and fitting against the measurement…
+  sin_optimo: No point of the sweep could be evaluated (check the range or the time overlap).
+  grafica_titulo: Objective function vs coefficient
+  eje_x: Multiplicative factor
+  optimo: Optimum
+  resultado: "Optimum: factor {valor} → RMSE {rmse}, MBE {mbe}, R² {r2}."
+  lectura_alto: >-
+    A factor greater than 1 means the model **underestimates** transport: the
+    real chamber dries faster than predicted.
+  lectura_bajo: >-
+    A factor smaller than 1 means the model **overestimates** transport: the real
+    chamber dries slower than predicted.
+  lectura_neutro: The model reproduces the test with no appreciable correction.
+  aviso_hr: >-
+    Careful: the inlet RH was not measured. An error in the inlet humidity is
+    absorbed into this factor, so the calibrated value may be compensating the
+    assumption rather than a model defect.
+  es_aplicable: "This parameter **is a project field**: the optimum can be applied to the chamber."
+  es_diagnostico: >-
+    This coefficient is a **model diagnostic**, not a property of the chamber: it is not stored in the project, because what it absorbs (Chilton-Colburn analogy, cultivar isotherm, assumed inlet humidity) does not transfer to another product or flow rate.
+  lectura_area: >-
+    The fitted effective exchange area is **{veces}×** the declared tray area. For a layer of stacked slices, a value above 1 is expected.
+  aplicar: "Apply the optimum to the chamber"
+  aplicado: "Optimum applied to the chamber. Recompute the drying above."
+cadena:
+  titulo: "**🔗 Full-chain diagnosis**"
+  intro: >-
+    Besides the isolated chamber, compare the measurement against the whole-system
+    result (collector → backup → chamber) computed in P7. You cannot calibrate on
+    it: the residual mixes the error of every link.
+  sin_resultado: Run the transient in P7 to enable this comparison.
+  sin_ancla: >-
+    The P7 result has no date attached (synthetic forcing). Run the transient with
+    real weather so it can be aligned with the measurement.
+  sin_solape: The measured period does not overlap the horizon computed in P7.
+  grafica_titulo: "{magnitud} — measured vs full chain (P7)"
+  simulado: Simulated (P7 chain)
+  metricas: "Full chain: RMSE {rmse}, MBE {mbe}, R² {r2} over {n} pairs."
+  comparacion: >-
+    If the chain fits worse than the isolated chamber, the extra error comes from the
+    upstream links (collector, duct, backup) or from the weather, not from the chamber.

@@ -280,6 +280,27 @@ CATALOGO_PARAMETROS: tuple[ParametroBarrido, ...] = (
         descripcion_corta="Masa total de producto fresco a secar en la tanda.",
     ),
     ParametroBarrido(
+        id="area_bandeja",
+        label="Área de bandeja (área efectiva de intercambio)",
+        path="camara.bandejas.area_bandeja_m2",
+        unidad_ui="m²",
+        unidad_si="m²",
+        si_a_ui=_identidad,
+        ui_a_si=_identidad,
+        valor_min_si=0.05,
+        valor_max_si=50.0,
+        paso_sugerido_si=0.1,
+        transform_pre_set=None,
+        tipologias=_TODAS_TIPOLOGIAS,
+        modos_soportados=_TODOS_MODOS,
+        descripcion_corta=(
+            "Área de intercambio aire↔producto por bandeja. Multiplica tanto el calor "
+            "sensible (h·A) como la evaporación (K_m·A), así que es el parámetro "
+            "físicamente interpretable para calibrar contra un ensayo: el área efectiva "
+            "de una capa de rodajas apiladas puede ser varias veces la de la bandeja."
+        ),
+    ),
+    ParametroBarrido(
         id="humedad_inicial",
         label="Humedad inicial del producto",
         path="camara.carga_producto.humedad_inicial_X",

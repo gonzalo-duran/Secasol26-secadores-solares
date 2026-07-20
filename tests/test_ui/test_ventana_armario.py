@@ -115,3 +115,56 @@ class TestForzantesVentana:
         _construir_forzantes_ventana(proyecto=p, caudal_kg_s=0.02)
         advs = st.session_state.get(_PASO_ADV_KEY, [])
         assert any("ADV_PASO_SINTETICO" in a for a in advs)
+
+
+class TestVentanaEnGranEscala:
+    """Regresión (S55): en GRAN_ESCALA + VENTANA la previa de P4 perdía la ventana.
+
+    ``usar_ventana`` excluía explícitamente gran escala, así que P4 caía a la rama
+    de "día real / sintético", exigía P3 *en modo diario* (que en VENTANA nunca se
+    cumple) y terminaba simulando un **día sintético** — perdiendo el lapso y el
+    clima real que P2 y P3 sí habían usado. Reportado por el usuario con el preset
+    ADITAL semicontinuo emplazado en Salta.
+    """
+
+    def _proyecto_gran_escala(self, subtipo, anio: int = 2023):
+        from core.camara import Camara, CargaProducto
+        from core.colector import Colector, ColectorUnidad
+
+        p = _proyecto_ventana_caja(anio)
+        # Con colector, la POA necesita las componentes directa/difusa.
+        p.clima.datos["DNI_Wm2"] = np.nan
+        p.clima.datos["DHI_Wm2"] = np.nan
+        p.clima.datos["presion_Pa"] = 90000.0
+        p.configuracion = Configuracion(
+            tipologia=Tipologia.GRAN_ESCALA,
+            subtipo_gran_escala=subtipo,
+            modo_analisis=ModoAnalisis.VENTANA,
+            ventana_inicio=date(anio, 6, 15),
+            ventana_fin=date(anio, 6, 20),
+        )
+        p.colector = Colector(unidad=ColectorUnidad())
+        p.camara = Camara(carga_producto=CargaProducto(producto_id="manzana"))
+        return p
+
+    @pytest.mark.parametrize("subtipo_nombre", ["BATCH", "SEMICONTINUO"])
+    def test_forzantes_de_ventana_disponibles_en_gran_escala(self, subtipo_nombre):
+        """El constructor de forzantes de ventana es agnóstico a la tipología."""
+        from core.proyecto import SubtipoGranEscala
+
+        proyecto = self._proyecto_gran_escala(getattr(SubtipoGranEscala, subtipo_nombre))
+        fz = _construir_forzantes_ventana(proyecto=proyecto, caudal_kg_s=0.5)
+        # Cubre el lapso completo con clima real horario (no un día sintético).
+        assert fz.t_s[-1] == pytest.approx(DIAS * 24 * 3600.0, rel=0.05)
+        assert len(fz.T_ent_K) >= DIAS * 24
+        # Y trae el ancla temporal para poder reanclar resultados (fase 4).
+        assert fz.t0_utc is not None
+
+    def test_usar_ventana_no_excluye_gran_escala(self):
+        """El flag de la UI debe ser verdadero también en gran escala."""
+        from core.proyecto import SubtipoGranEscala
+
+        for subtipo in (SubtipoGranEscala.BATCH, SubtipoGranEscala.SEMICONTINUO):
+            cfg = self._proyecto_gran_escala(subtipo).configuracion
+            usar_ventana = getattr(cfg, "modo_analisis", None) == ModoAnalisis.VENTANA
+            assert usar_ventana, f"{subtipo} en VENTANA debería usar la ventana en P4"

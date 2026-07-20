@@ -400,3 +400,37 @@ guardar:
   pdf_exito: "✅ Report generated ({kb:.0f} KB). Download with the button below."
   pdf_error: "❌ Error generating the report: {exc}"
   pdf_descargar: Download PDF report
+validacion_tunel:
+  titulo: 🔬 Tunnel validation against measured data
+  intro: >-
+    Compare the simulated tunnel against a field sampling. The model integrates each
+    column along its journey (Lagrangian) and keeps no per-zone history, so the
+    comparison uses the two direct objects: the **discharges** (what leaves the tunnel
+    at each advance) and the **spatial profile** at the end.
+  sin_resultado: Compute the production window to enable validation.
+  solo_semicontinuo: Discharge and profile validation applies to the semi-continuous subtype.
+  descargas:
+    titulo: "**Tunnel discharges**"
+    ayuda: >-
+      File with the moisture (or mass) of the discharged columns and their date/time.
+      It is compared against the emergent dryness of each advance.
+    sin_datos: The result carries no per-advance discharges (did the tunnel complete any advance?).
+    sin_ancla: >-
+      The result has no date attached; discharges cannot be time-stamped to align them
+      with the measurement.
+    grafica_titulo: Discharged product moisture — measured vs simulated
+    y_label: Product moisture [kg/kg dry basis]
+  perfil:
+    titulo: "**Spatial profile per zone**"
+    ayuda: >-
+      Enter the values measured in each zone at the end of the test (leave blank where
+      there is no sensor). Zone 1 = fresh product; zone N = dry product.
+    magnitud: Profile quantity
+    columna_zona: Zone
+    columna_medido: Measured
+    grafica_titulo: Per-zone profile — measured vs simulated
+    eje_x: Zone (1 = fresh → N = dry)
+    sin_medidos: Enter at least two measured zones to compute the metrics.
+  metricas: "RMSE {rmse}, MBE {mbe}, R² {r2} over {n} pairs."
+  medido: Measured
+  simulado: Simulated

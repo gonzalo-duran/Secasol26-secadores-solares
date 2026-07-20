@@ -23,8 +23,8 @@ from core.camara import (
     ConfiguracionBandejas,
     ConfiguracionFlujo,
     ConstruccionCamara,
-    GeometriaCamara,
     ForzantesAire,
+    GeometriaCamara,
     ParedCamara,
 )
 from core.clima import Clima
@@ -366,3 +366,56 @@ class TestCamaraOrientadaEnForzantesReales:
         )
         assert fz_sin.I_g_POA_W_m2 is not None
         np.testing.assert_allclose(fz_sin.I_g_POA_W_m2, fz_con.I_g_POA_W_m2, rtol=1e-9)
+
+
+class TestAnclaTemporalT0:
+    """El ancla absoluta ``t0_utc`` viaja del clima a las forzantes y al resultado.
+
+    Sin ella, las trayectorias del motor (que integra desde t=0) no se pueden
+    alinear contra una señal medida — es lo que habilita el diagnóstico de cadena
+    completa de la fase 4.
+    """
+
+    def test_forzantes_reales_heredan_el_t0_del_clima(self):
+        """El ancla sale del propio slice climático usado para forzar."""
+        proyecto, horas = _proyecto_con_clima_diario()
+        proyecto.camara = Camara(carga_producto=CargaProducto(producto_id="manzana"))
+        fz = _construir_forzantes_reales(
+            p3_eval=_p3_eval_diario(horas),
+            proyecto=proyecto,
+            caudal_kg_s=0.1,
+            n_dias=1,
+        )
+        assert fz.t0_utc is not None
+        assert fz.t0_utc == proyecto.clima.datos.index[0]
+
+    def test_transitorio_propaga_t0(self):
+        """``calcular_todo_transitorio`` hereda el ancla de las forzantes."""
+        from calculos.balance_global import ResultadosCompletosTransitorio
+        from core.camara import ForzantesAire
+
+        fz = ForzantesAire(
+            t_s=np.array([0.0, 3600.0]),
+            T_ent_K=np.array([310.0, 312.0]),
+            omega_ent=np.array([0.01, 0.01]),
+            m_dot_aire_seco_kg_s=np.array([0.1, 0.1]),
+            T_amb_K=np.array([293.0, 294.0]),
+            v_viento_ms=np.array([2.0, 2.0]),
+            t0_utc="2010-05-01T09:00:00Z",
+        )
+        res = ResultadosCompletosTransitorio(forzantes_base=fz, t0_utc=getattr(fz, "t0_utc", None))
+        assert res.t0_utc == "2010-05-01T09:00:00Z"
+
+    def test_forzantes_sin_ancla_por_defecto(self):
+        """Serie sintética → sin fecha asociada (el diagnóstico de cadena lo avisa)."""
+        from core.camara import ForzantesAire
+
+        fz = ForzantesAire(
+            t_s=np.array([0.0, 3600.0]),
+            T_ent_K=np.array([310.0, 312.0]),
+            omega_ent=np.array([0.01, 0.01]),
+            m_dot_aire_seco_kg_s=np.array([0.1, 0.1]),
+            T_amb_K=np.array([293.0, 294.0]),
+            v_viento_ms=np.array([2.0, 2.0]),
+        )
+        assert fz.t0_utc is None

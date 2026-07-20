@@ -1620,6 +1620,8 @@ def _render_resultados_ventana(res, proyecto) -> None:
         )
         if res.perfil_X_zonas is not None and len(res.perfil_X_zonas) > 0:
             mostrar_plotly(_fig_perfil_tunel(res), nombre="perfil_tunel")
+        # Validación del túnel contra muestreo de campo (mejora 38, fase 4).
+        _render_validacion_tunel(proyecto, res)
 
     _render_carta_psicrometrica(res, proyecto)
 
@@ -2372,3 +2374,273 @@ def _render_botones_guardado(
             mime="application/pdf",
             width="stretch",
         )
+
+
+# ---------------------------------------------------------------------------
+# Validación del túnel con datos medidos (mejora 38, fase 4, E5)
+# ---------------------------------------------------------------------------
+
+
+def _perfil_medido_desde_editor(filas, n_zonas: int):
+    """Extrae ``(indices_zona, valores)`` de la tabla editable del perfil (puro).
+
+    Se descartan las filas sin valor (zonas sin sensor) y las fuera de rango.
+
+    Args:
+        filas: Iterable de dicts con claves de zona (1-based) y valor medido.
+        n_zonas: Cantidad de zonas del túnel.
+
+    Returns:
+        ``(zonas_0based, valores)`` como listas paralelas, ya ordenadas por zona.
+    """
+    import math
+
+    pares = []
+    for i, fila in enumerate(filas):
+        valor = fila.get("medido") if isinstance(fila, dict) else None
+        if valor is None:
+            continue
+        try:
+            v = float(valor)
+        except (TypeError, ValueError):
+            continue
+        if math.isnan(v) or not (0 <= i < n_zonas):
+            continue
+        pares.append((i, v))
+    pares.sort()
+    return [z for z, _ in pares], [v for _, v in pares]
+
+
+def _render_validacion_tunel(proyecto, res) -> None:
+    """Valida el túnel semicontinuo contra descargas y perfil medidos.
+
+    No hay overlay temporal por zona: ``simular_cascada`` no guarda historia
+    ``(n_zonas, n_pasos)`` (deuda registrada en ``docs/notas/plan_datos_medidos_4.md``).
+    Se comparan los dos objetos que sí son directos y libres del artefacto
+    euleriano↔lagrangiano: las **descargas** (columna que sale, comparación
+    lagrangiana) y el **perfil espacial** al cierre (foto instantánea, euleriana).
+    """
+    import numpy as np
+    import pandas as pd
+
+    from calculos import clima_medido as cm
+    from calculos.ingesta_referencia import evaluar_ajuste, ingerir_referencia
+    from calculos.metricas_validacion import calcular_metricas
+    from calculos.validacion_camara import a_display, unidad_display
+    from core.proyecto import SubtipoGranEscala
+    from ui.componentes.validacion_widget import fig_overlay, fig_perfil_zonas
+
+    subtipo = getattr(proyecto.configuracion, "subtipo_gran_escala", None)
+    if subtipo != SubtipoGranEscala.SEMICONTINUO:
+        return
+
+    with st.expander(t("p7.validacion_tunel.titulo"), expanded=False):
+        st.caption(t("p7.validacion_tunel.intro"))
+        if res is None:
+            st.info(t("p7.validacion_tunel.sin_resultado"))
+            return
+
+        # ---- 1) Descargas del túnel (comparación lagrangiana) ----
+        st.markdown(t("p7.validacion_tunel.descargas.titulo"))
+        st.caption(t("p7.validacion_tunel.descargas.ayuda"))
+
+        descargas = getattr(res, "X_salida_por_avance", None)
+        if descargas is None or len(descargas) == 0:
+            st.info(t("p7.validacion_tunel.descargas.sin_datos"))
+        elif getattr(res, "t0_utc", None) is None:
+            st.info(t("p7.validacion_tunel.descargas.sin_ancla"))
+        else:
+            _render_descargas_tunel(res, cm, ingerir_referencia, evaluar_ajuste, fig_overlay)
+
+        # ---- 2) Perfil espacial por zona (comparación euleriana) ----
+        st.divider()
+        st.markdown(t("p7.validacion_tunel.perfil.titulo"))
+        st.caption(t("p7.validacion_tunel.perfil.ayuda"))
+
+        magnitudes = {
+            "X_producto": res.perfil_X_zonas,
+            "T_camara": res.perfil_T_aire_zonas_K,
+        }
+        magnitud = st.selectbox(
+            t("p7.validacion_tunel.perfil.magnitud"),
+            options=list(magnitudes),
+            format_func=lambda k: t(f"p4.validacion.variable.{k}"),
+            key="p7_valtun_magnitud",
+        )
+        perfil_sim = magnitudes.get(magnitud)
+        if perfil_sim is None or len(perfil_sim) == 0:
+            st.info(t("p7.validacion_tunel.descargas.sin_datos"))
+            return
+
+        perfil_sim = np.asarray(perfil_sim, dtype=float)
+        n_zonas = len(perfil_sim)
+        unidad_disp = unidad_display(magnitud)
+        tabla = pd.DataFrame(
+            {
+                t("p7.validacion_tunel.perfil.columna_zona"): list(range(1, n_zonas + 1)),
+                "medido": [None] * n_zonas,
+            }
+        )
+        editada = st.data_editor(
+            tabla,
+            key="p7_valtun_perfil",
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "medido": st.column_config.NumberColumn(
+                    t("p7.validacion_tunel.perfil.columna_medido") + f" [{unidad_disp}]"
+                )
+            },
+            disabled=[t("p7.validacion_tunel.perfil.columna_zona")],
+        )
+        zonas_med, valores_med = _perfil_medido_desde_editor(editada.to_dict("records"), n_zonas)
+        # Lo cargado está en unidad de display; el perfil simulado, en SI.
+        perfil_sim_disp = a_display(perfil_sim, magnitud)
+        y_med_alineado = [None] * n_zonas
+        for z, v in zip(zonas_med, valores_med):
+            y_med_alineado[z] = v
+
+        st.plotly_chart(
+            fig_perfil_zonas(
+                list(range(1, n_zonas + 1)),
+                y_med_alineado if zonas_med else None,
+                perfil_sim_disp,
+                medido_lbl=t("p7.validacion_tunel.medido"),
+                simulado_lbl=t("p7.validacion_tunel.simulado"),
+                titulo=t("p7.validacion_tunel.perfil.grafica_titulo"),
+                x_lbl=t("p7.validacion_tunel.perfil.eje_x"),
+                y_lbl=f"{t(f'p4.validacion.variable.{magnitud}')} [{unidad_disp}]",
+            ),
+            width="stretch",
+        )
+        if len(zonas_med) < 2:
+            st.caption(t("p7.validacion_tunel.perfil.sin_medidos"))
+            return
+        metricas = calcular_metricas(
+            np.array(valores_med, dtype=float),
+            np.array([perfil_sim_disp[z] for z in zonas_med], dtype=float),
+        )
+        st.caption(
+            t(
+                "p7.validacion_tunel.metricas",
+                rmse=f"{metricas.rmse:.3g} {unidad_disp}",
+                mbe=f"{metricas.mbe:+.3g} {unidad_disp}",
+                r2=f"{metricas.r2:.3f}",
+                n=int(metricas.n_pares),
+            )
+        )
+
+
+def _render_descargas_tunel(res, cm, ingerir_referencia, evaluar_ajuste, fig_overlay) -> None:
+    """Sub-bloque de descargas: carga el muestreo de campo y lo contrasta."""
+    import numpy as np
+
+    from calculos.validacion_camara import a_display, pares_descarga_tunel, unidad_display
+    from core.validacion import UNIDADES_REFERENCIA, ConfigReferencia, SenalReferencia
+
+    arch = st.session_state.get("p7_valtun_archivo")
+    if arch is None:
+        subido = st.file_uploader(
+            t("p4.validacion.uploader.label"),
+            type=["csv", "txt", "xls", "xlsx"],
+            key="p7_valtun_uploader",
+        )
+        if subido is not None:
+            contenido = subido.read()
+            st.session_state["p7_valtun_archivo"] = {
+                "nombre": subido.name,
+                "bytes": contenido,
+                "hash": cm.hash_archivo(contenido),
+            }
+            st.session_state.pop("p7_valtun_uploader", None)
+            st.rerun()
+        return
+
+    c_a, c_b = st.columns([4, 1])
+    with c_a:
+        st.markdown(
+            t(
+                "p4.validacion.archivo_cargado",
+                nombre=arch["nombre"],
+                kb=f"{len(arch['bytes']) / 1024:.0f}",
+            )
+        )
+    with c_b:
+        if st.button(t("p4.validacion.quitar"), key="p7_valtun_quitar"):
+            st.session_state.pop("p7_valtun_archivo", None)
+            st.session_state.pop("p7_valtun_resultado", None)
+            st.rerun()
+
+    try:
+        tabla = cm.leer_tabla(arch["bytes"], arch["nombre"])
+    except (ValueError, RuntimeError) as exc:
+        st.error(t("p4.validacion.error", err=exc))
+        return
+    except Exception as exc:  # archivo arbitrario del usuario
+        st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+        return
+
+    columnas = [str(c) for c in tabla.columns]
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        col_ts = st.selectbox(
+            t("p4.validacion.mapeo.timestamp"), options=columnas, key="p7_valtun_ts"
+        )
+    with c2:
+        col_val = st.selectbox(
+            t("p4.validacion.mapeo.valor"), options=columnas, key="p7_valtun_val"
+        )
+    with c3:
+        unidad = st.selectbox(
+            t("p4.validacion.mapeo.unidad"),
+            options=list(UNIDADES_REFERENCIA["X_producto"]),
+            format_func=lambda k: t(f"p4.validacion.unidad.{k}"),
+            key="p7_valtun_unidad",
+        )
+
+    if not st.button(t("p4.validacion.procesar"), key="p7_valtun_procesar"):
+        return
+    try:
+        cfg = ConfigReferencia(
+            columna_timestamp=col_ts,
+            columna_valor=col_val,
+            variable="X_producto",
+            unidad=unidad,
+            zona_horaria="UTC",
+        )
+        senal: SenalReferencia = ingerir_referencia(tabla, cfg)
+        ts_sim, y_sim = pares_descarga_tunel(res, res.t0_utc, "X_producto")
+        metricas, y_med, y_sim_al, ts = evaluar_ajuste(senal, ts_sim, y_sim)
+    except (ValueError, RuntimeError) as exc:
+        st.error(t("p4.validacion.error", err=exc))
+        return
+    except Exception as exc:  # ingesta sobre datos arbitrarios
+        st.error(t("comun.error_inesperado", tipo=type(exc).__name__, err=exc))
+        return
+
+    if metricas is None:
+        st.warning(t("p4.validacion.sin_solape"))
+        return
+
+    unidad_disp = unidad_display("X_producto")
+    st.plotly_chart(
+        fig_overlay(
+            ts,
+            a_display(np.asarray(y_med), "X_producto"),
+            a_display(np.asarray(y_sim_al), "X_producto"),
+            medido_lbl=t("p7.validacion_tunel.medido"),
+            simulado_lbl=t("p7.validacion_tunel.simulado"),
+            titulo=t("p7.validacion_tunel.descargas.grafica_titulo"),
+            y_lbl=t("p7.validacion_tunel.descargas.y_label"),
+        ),
+        width="stretch",
+    )
+    st.caption(
+        t(
+            "p7.validacion_tunel.metricas",
+            rmse=f"{metricas.rmse:.3g} {unidad_disp}",
+            mbe=f"{metricas.mbe:+.3g} {unidad_disp}",
+            r2=f"{metricas.r2:.3f}",
+            n=int(metricas.n_pares),
+        )
+    )

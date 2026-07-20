@@ -9,6 +9,39 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **Validación y calibración de cámara y producto (mejora 38, fase 4)** — P4 gana la
+  sección **"🔬 Validación con datos medidos"**: se carga el archivo de un ensayo de cámara, se
+  elige qué señal validar (**T del aire en cámara, HR del aire, T del producto, humedad del
+  producto o pesadas de la muestra**) y la cámara se corre **aislada**, forzada con el aire de
+  entrada medido en el mismo archivo, de modo que el error del colector no se mezcle con el de
+  la cámara. Overlay medido-vs-simulado + métricas (RMSE/MBE/MAE/R²/NSE/Willmott) + bloque
+  **"🎯 Calibración"** que barre un coeficiente de transporte y devuelve el factor que mejor
+  ajusta. Módulos nuevos: `calculos/validacion_camara.py` (orquestación **pura**: corre la
+  cámara aislada, extrae la serie de cada variable con timestamps absolutos y expone los dos
+  objetos de comparación del túnel) y `ui/componentes/validacion_widget.py` (tabla de métricas,
+  overlay, curva de calibración y perfil de zonas, compartidos con P3). `core/validacion.py` y
+  `calculos/ingesta_referencia.py` se generalizaron a las seis variables de referencia con
+  conversión y QC por magnitud (incluida la conversión de pesadas y de base húmeda a base
+  seca), y `ingerir_forzantes_camara` construye el `ForzantesAire` desde el propio ensayo,
+  dejando una advertencia por cada supuesto (HR de entrada, caudal, T ambiente, viento).
+  La calibración distingue **qué se puede aplicar y qué no**: el **área efectiva de
+  intercambio** (`area_bandeja`, parámetro nuevo del catálogo de barridos) es un campo real
+  del proyecto —multiplica tanto `h·A` como `K_m·A`, y su valor ajustado es interpretable
+  ("el área efectiva es 1.8× la de bandeja, coherente con rodajas apiladas")— así que tiene
+  botón "aplicar" como en P3; `factor_K_m`/`factor_h_conv` quedan como **diagnóstico** y no
+  se guardan, porque lo que absorben (analogía de Chilton-Colburn, isoterma del cultivar,
+  ω de entrada supuesta) no transfiere a otro producto ni caudal. P4 suma además el bloque
+  **"🔗 Diagnóstico de la cadena completa"**, que contrasta lo medido contra el resultado
+  transitorio de P7 (sin calibrar sobre él: el residuo mezcla todos los eslabones).
+  En **P7**, para el túnel semicontinuo, se suma **"🔬 Validación del túnel con datos
+  medidos"**: como `simular_cascada` no guarda historia por zona, la comparación usa los dos
+  objetos que sí son directos y libres del artefacto euleriano↔lagrangiano — las **descargas**
+  por avance (la columna que sale, contra un muestreo de campo fechado) y el **perfil espacial**
+  al cierre (tabla editable de valores medidos por zona, contra la foto instantánea del túnel),
+  cada uno con sus métricas. `ResultadoVentana` pasa a exponer `X_salida_por_avance`,
+  `T_prod_salida_por_avance_K`, `intervalo_avance_s` y `t0_utc` para hacerlo posible.
+  Plan en `docs/notas/plan_datos_medidos_4.md`.
+
 - **Calibración del modelo contra datos medidos (mejora 38, fase 3)** — la sección de
   validación de P3 gana un bloque **"🎯 Calibración"**: barre un parámetro del colector
   (velocidad de diseño, largo) sobre un rango y se queda con el valor que **minimiza el ajuste**
@@ -80,14 +113,50 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 Mejoras post-1.0 (sin orden estricto):
 
-- Mejora 38: extender validación/calibración a cámara y producto (hoy: colector aislado) —
-  ver `docs/notas/plan_datos_medidos.md`. (Fases 1a, 1b, 2, 2b y 3 ya implementadas.)
+- Mejora 38: **cerrada** — fases 1a, 1b, 2, 2b, 3 (colector) y 4 (cámara y producto)
+  implementadas; ver `docs/notas/plan_datos_medidos.md` y `plan_datos_medidos_4.md`. Queda como
+  deuda técnica la **historia temporal por zona en `simular_cascada`**, que habilitaría el
+  overlay contra termopares fijos del túnel y una vista previa de N zonas en P4.
 - Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
+### Changed
+
+- **`camara_calc.calcular_camara` / `calcular_camara_cascada` aceptan `factor_h_conv` y
+  `factor_K_m`** (default **1.0**, resultado idéntico al anterior): son las perillas físicamente
+  calibrables de la cámara, que el catálogo de barridos no cubría — ninguno de sus parámetros
+  ataca la transferencia de masa. `factor_K_m` escala solo la evaporación; `factor_h_conv`
+  arrastra a K_m por Chilton-Colburn y además cambia el calor sensible.
+- **`ForzantesAire` gana `t0_utc`**: el instante absoluto que corresponde a `t_s[0] == 0`. El
+  motor integra en tiempo relativo, así que sin ese ancla sus trayectorias no se pueden alinear
+  contra una serie medida. Lo llenan los tres constructores de forzantes de P4 desde el índice
+  del clima real y `armar_forzantes_ventana` desde el lapso; lo propagan
+  `ResultadosCompletosTransitorio.t0_utc` y `ResultadoVentana.t0_utc`. Queda en `None` con
+  forzantes sintéticas (la UI lo avisa en vez de dibujar un overlay corrido).
+
 ### Fixed
 
+- **Gran escala + Ventana: P4 perdía la ventana y caía a un día sintético** — en tipología
+  `GRAN_ESCALA` con modo VENTANA, el flag `usar_ventana` de P4 excluía explícitamente la gran
+  escala (`and not es_gran_escala`), con el argumento de que el túnel tiene su pipeline propio
+  en P7. Consecuencia: la vista previa de cámara caía a la rama "día real / sintético", que
+  exige P3 evaluado **en modo diario** — condición que en VENTANA nunca se cumple, porque P3
+  evalúa sobre la ventana. El usuario veía el aviso "P3 sin calcular (ejecutá 'Calcular
+  desempeño del colector' en modo diario)" y la previa se calculaba con un **día sintético**,
+  perdiendo el lapso y el clima real que P2 y P3 sí habían usado. Ahora el modo VENTANA vale
+  para todas las tipologías en la previa de P4 (el constructor `_construir_forzantes_ventana`
+  ya era agnóstico a la tipología); P7 sigue siendo la fuente de verdad, con su pipeline de
+  cascada para el túnel. Además, en modo ventana los sliders de borde T_op/HR_op se ocultan,
+  porque el aire de entrada sale del clima y del colector.
+- **La previa de P4 en túnel semicontinuo no avisaba que resuelve un solo nodo** — P4 llama
+  siempre a `calcular_camara` (CSTR monozona), nunca a `calcular_camara_cascada`: el gráfico de
+  trayectorias necesita series temporales que `ResultadoCascada` no expone (solo perfiles
+  finales y descargas por avance). El mensaje informativo del subtipo describía la topología
+  del túnel pero no decía que los números de la previa **no** son los del túnel. Ahora, en
+  subtipo SEMICONTINUO, un aviso explícito antes del botón de cálculo y sobre los resultados
+  aclara que la previa es de un nodo (orden de magnitud), que no reproduce la variación
+  longitudinal ni la sequedad emergente, y que el comportamiento completo se evalúa en P7.
 - **Columna de timestamp mal mapeada crasheaba con `ZeroDivisionError` (detectado en el Space)**
   — mapear como timestamp una columna de **tiempo transcurrido** (0, 300, 600… segundos desde el
   inicio del ensayo) hacía que `pd.to_datetime` la leyera como **nanosegundos desde 1970**: la

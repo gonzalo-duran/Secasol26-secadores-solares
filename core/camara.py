@@ -1389,6 +1389,12 @@ class ForzantesAire:
             paredes/piso internos — efecto invernadero de la caja). ``None``
             → rellena con ceros (comportamiento histórico: sin este término).
             Calcúlese con ``calculos/radiacion_camara.py::series_radiacion_camara``.
+        t0_utc: Instante absoluto (UTC) que corresponde a ``t_s[0] == 0``. El
+            motor integra en tiempo relativo; este campo es el **ancla** que
+            permite reanclar sus salidas a timestamps reales — necesario para
+            contrastarlas contra datos medidos (mejora 38, fase 4). ``None``
+            cuando la serie es sintética o no tiene fecha asociada. Se tipa
+            laxo (``pd.Timestamp``) para no meter pandas en ``core/camara``.
     """
 
     t_s: np.ndarray
@@ -1400,6 +1406,7 @@ class ForzantesAire:
     I_g_W_m2: Optional[np.ndarray] = None
     I_g_POA_W_m2: Optional[np.ndarray] = None
     Q_rad_aire_W: Optional[np.ndarray] = None
+    t0_utc: Optional[object] = None
 
     def __post_init__(self):
         n = len(self.t_s)
