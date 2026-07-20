@@ -4,30 +4,42 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S54): **v1.0.0 en producción** · suite pytest **1426 (+1 skip)**.
-> **Mejora 38: fases 1a, 1b, 2, 2b y 3 IMPLEMENTADAS.** Fases 1a+1b+fix HR/100
-> **commiteadas** (`origin/main`=`61f1826`, deploy HF disparado). Fases 2/2b/3
-> (validación → forzado con clima propio → calibración del colector contra datos
-> medidos) en **working tree sin commitear** — validadas end-to-end con el
-> prototipo colector 10 m del INENCO y **probadas OK en Streamlit por el usuario**.
-> Pendiente: commit de 2/2b/3; extender validación/calibración a cámara y producto.
+> Estado general (S55): **v1.0.0 en producción** · suite pytest **1497 (+1 skip)** ·
+> `origin/main`=`3f2f668`. **Mejora 38 CERRADA: fases 1a, 1b, 2, 2b, 3 (colector) y
+> 4 (cámara y producto) implementadas.** Hasta la fase 3 está **commiteado y pusheado**
+> (`628e451`), más el fix del `ZeroDivisionError` del Space (`e8eec34`). La **fase 4
+> completa** queda en **working tree sin commitear**, junto con dos fixes de bugs
+> reportados por el usuario (gran escala + ventana en P4; aviso de nodo único en
+> semicontinuo). Pendiente: probarla en Streamlit con un ensayo real de cámara y
+> decidir el commit.
 
 ## En progreso
 
-- **Mejora 38 — toma de datos externos medidos** — fases 1a/1b **commiteadas**
-  (`61f1826`); fases **2/2b/3 completas en working tree** (S54): sección "🔬
-  Validación con datos medidos" en P3 — carga la T de salida medida, la contrasta
-  con la simulada (overlay + RMSE/MBE/R²), puede forzar con el clima del propio
-  ensayo (Ta+POA + fecha fija) y **calibrar** un parámetro (velocidad/largo)
-  minimizando el ajuste. Módulos nuevos: `calculos/{metricas_validacion,
-  ingesta_referencia,calibracion}.py` + `core/validacion.py`. Falta: commit;
-  extender a cámara/producto. Ver `docs/bitacora/bitacora_sesion54.md` y
-  `docs/notas/plan_datos_medidos_2.md`. Sigue la inconsistencia viento 2 m vs 10 m.
+- **Mejora 38 fase 4 — validación/calibración de cámara y producto (S55)** —
+  implementada completa (E1–E6) en **working tree sin commitear**. Falta: **probarla
+  en Streamlit con un ensayo real de cámara** (lo único que ningún test cubre; en la
+  fase 2 fue probándolo que salieron los bugs importantes) y decidir el commit —
+  conviene separarlo en fase 4 / fixes de bugs / `t0_utc`. Ver
+  `docs/bitacora/bitacora_sesion55.md` y `docs/notas/plan_datos_medidos_4.md`.
+  Sigue la inconsistencia viento 2 m vs 10 m.
 
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).
 
 ## Completado (hitos recientes)
+
+- **Mejora 38 — toma de datos externos medidos (S51–S55)** — lazo completo
+  **ingesta → validación → calibración**. Fases 1a (clima medido en P2), 1b (motor
+  agnóstico al paso), 2/2b/3 (colector: validación, forzado con el clima del propio
+  ensayo y calibración 1-D; validado con el prototipo 10 m del INENCO, RMSE 0.91 °C,
+  R² 0.987) y **4** (cámara y producto: cuatro señales medibles, cámara aislada
+  forzada con el aire de entrada del ensayo, calibración del área efectiva —aplicable—
+  y de los factores de transporte —diagnóstico—, diagnóstico de cadena completa en P4
+  y validación del túnel por descargas y perfil en P7). Módulos nuevos:
+  `calculos/{metricas_validacion,ingesta_referencia,calibracion,validacion_camara}.py`,
+  `core/validacion.py`, `ui/componentes/validacion_widget.py`. **Deuda registrada:**
+  historia temporal por zona en `simular_cascada` (habilitaría el overlay contra
+  termopares fijos del túnel y una previa de N zonas en P4).
 
 - **🎉 Release 1.0.0 (S50)** — primera versión mayor. Cierra la hoja de ruta a
   1.0. Ver `docs/bitacora/bitacora_sesion50.md`.

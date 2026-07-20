@@ -147,6 +147,43 @@ apliquen (`masa_producto`, `humedad_inicial`, geometría de cámara) vía
 - i18n: `p4.validacion.*`, `p7.validacion_tunel.*`, `graficas.validacion.*` y
   `advertencias.VREF_*` nuevos — **en los TRES yaml** (paridad de claves y placeholders).
 
+## Estado: E1–E5 COMPLETAS (S55, working tree). Suite 1497 + 1 skip.
+
+**Ancla temporal (decisión del usuario, 2026-07-20):** se agregó ``t0_utc`` a
+``ForzantesAire`` —su lugar natural, así lo heredan todos los pipelines y no solo el
+transitorio— más ``ResultadosCompletosTransitorio.t0_utc``. Sin ese ancla las trayectorias
+del motor (que integra desde t=0) no se pueden alinear contra una serie medida. Con eso quedó
+implementado el **overlay de la cadena completa** en P4 (diagnóstico, sin calibrar); si las
+forzantes fueron sintéticas, ``t0_utc is None`` y la UI lo avisa en vez de dibujar un overlay
+corrido.
+
+**E5 — validación del túnel (implementada).** Bloque "🔬 Validación del túnel con datos
+medidos" en el dashboard de ventana de P7, solo en subtipo SEMICONTINUO. Dos comparaciones,
+las únicas libres del artefacto euleriano↔lagrangiano: (a) **descargas** por avance —se carga
+un muestreo de campo fechado y se contrasta contra `X_salida_por_avance`, con las descargas
+fechadas al fin de su intervalo de avance desde `t0_utc`—; (b) **perfil espacial** al cierre
+—tabla editable con el valor medido por zona (vacío donde no hay sensor) contra el perfil
+final de X o de T del aire—. Para habilitarlo, `ResultadoVentana` expone ahora
+`X_salida_por_avance`, `T_prod_salida_por_avance_K`, `intervalo_avance_s` y `t0_utc`
+(`armar_forzantes_ventana` lo toma del índice del clima); `pares_descarga_tunel` funciona
+sobre ambos resultados por duck-typing.
+
+**Qué se puede aplicar y qué no (decisión del usuario, 2026-07-20).** La calibración de
+cámara distingue dos clases de parámetro, y la distinción es física, no de implementación:
+
+- **``area_bandeja`` — área efectiva de intercambio: APLICABLE.** Es un campo real del
+  proyecto y multiplica *tanto* ``h·A`` (sensible) como ``K_m·A`` (evaporación), o sea que es
+  matemáticamente el mismo knob que ``factor_h_conv`` pero **interpretable y falsable**: "el
+  área efectiva ajustada es 1.8× la de bandeja declarada" es una afirmación verificable para
+  una capa de rodajas apiladas. Por eso tiene botón "aplicar" como en P3 (parámetro nuevo del
+  catálogo de barridos + patrón pendiente de session_state para refrescar el widget).
+- **``factor_K_m`` / ``factor_h_conv`` — correcciones al cierre: DIAGNÓSTICO.** No son
+  propiedades de la cámara: agrupan el error de la analogía de Chilton-Colburn, los parámetros
+  GAB del cultivar y —si no se midió HR de entrada— el sesgo de ``ω_ent``. Nada de eso
+  transfiere a otro producto ni a otro caudal, así que persistirlos en el proyecto promovería
+  un factor de corrección al estatus de parámetro de diseño. Se informan y se interpretan
+  ("un factor > 1 significa que el modelo subestima el transporte"), no se guardan.
+
 ## Etapas (cada una: suite verde + black/ruff + `auditar_i18n.py`)
 
 - **E1** — `core/validacion.py` generalizado + tablas de conversión/QC por variable en
