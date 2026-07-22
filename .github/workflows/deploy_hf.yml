@@ -21,8 +21,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # Clonar el Space actual
-          git clone https://gonzalojduran:$HF_TOKEN@huggingface.co/spaces/gonzalojduran/Secasol26 hf_space
+          # Clonar el Space actual (shallow + sin blobs LFS: el workflow pisa src/
+          # entero, no necesita historial ni objetos LFS, y así el clone no se
+          # cuelga aunque el historial del Space haya crecido con los auto-deploys)
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://gonzalojduran:$HF_TOKEN@huggingface.co/spaces/gonzalojduran/Secasol26 hf_space
           cd hf_space
 
           # Preservar archivos propios del Space
