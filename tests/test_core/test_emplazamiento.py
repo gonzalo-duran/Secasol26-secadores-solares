@@ -113,3 +113,19 @@ def test_empl_albedo_invalido_excede_1():
     """Albedo > 1 debe lanzar EMPL_ALBEDO_INVALIDO."""
     with pytest.raises(ValueError, match="EMPL_ALBEDO_INVALIDO"):
         Emplazamiento(albedo_suelo=1.01)
+
+
+def test_empl_z0_terreno_default():
+    """La rugosidad del terreno por defecto es 0.05 m (rural medio)."""
+    assert Emplazamiento().z0_terreno_m == 0.05
+
+
+def test_EMPL_Z0_TERRENO_INVALIDO():
+    """z₀ debe estar en (0, 2) m: aparece en ln(z/z₀) y debe quedar por debajo
+    de los 2 m de referencia del contrato de Clima."""
+    with pytest.raises(ValueError, match="EMPL_Z0_TERRENO_INVALIDO"):
+        Emplazamiento(z0_terreno_m=0.0)
+    with pytest.raises(ValueError, match="EMPL_Z0_TERRENO_INVALIDO"):
+        Emplazamiento(z0_terreno_m=-0.1)
+    with pytest.raises(ValueError, match="EMPL_Z0_TERRENO_INVALIDO"):
+        Emplazamiento(z0_terreno_m=2.0)

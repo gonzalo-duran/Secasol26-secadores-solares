@@ -14,6 +14,7 @@ import pytest
 
 from calculos.chimenea_calc import (
     _G_MS2,
+    _Z_REF_VIENTO_M,
     _v_viento_a_altura,
     caudal_natural_kgs,
     delta_P_chimenea_Pa,
@@ -21,6 +22,7 @@ from calculos.chimenea_calc import (
     delta_P_turbina_motriz_Pa,
 )
 from calculos.motor_calc import densidad_aire
+from calculos.perfil_viento import Z_CONTRATO_M
 from core.chimenea import Chimenea
 
 # ---------------------------------------------------------------------------
@@ -327,16 +329,26 @@ class TestCaudalNatural:
 
 
 class TestPerfilVientoLog:
-    """v(z) = v(10) · ln(z/z0) / ln(10/z0)."""
+    """v(z) = v(2) · ln(z/z0) / ln(2/z0).
 
-    def test_a_10m_devuelve_v_referencia(self):
-        # v(10 m) debe coincidir con la velocidad de referencia.
-        assert _v_viento_a_altura(5.0, z_m=10.0, z0_m=0.05) == pytest.approx(5.0, rel=1e-9)
+    La referencia es la del contrato de ``Clima`` (``WS_ms`` a 2 m, nativo de NASA
+    POWER WS2M). Hasta S57 este módulo asumía 10 m y recibía el viento de 2 m sin
+    convertir, subestimando el término motriz del extractor a la mitad.
+    """
+
+    def test_a_2m_devuelve_v_referencia(self):
+        # v(2 m) debe coincidir con la velocidad de referencia (altura del contrato).
+        assert _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.05) == pytest.approx(5.0, rel=1e-9)
+
+    def test_altura_mayor_da_mas_viento(self):
+        # Para z > 2 m, v(z) > v(2): el perfil crece con la altura.
+        v_6m = _v_viento_a_altura(5.0, z_m=6.0, z0_m=0.05)
+        assert v_6m > 5.0
 
     def test_altura_menor_da_menos_viento(self):
-        # Para z < 10 m con terreno rugoso, v(z) < v(10).
-        v_2m = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.05)
-        assert 0.0 < v_2m < 5.0
+        # Para z entre z0 y 2 m, v(z) < v(2).
+        v_1m = _v_viento_a_altura(5.0, z_m=1.0, z0_m=0.05)
+        assert 0.0 < v_1m < 5.0
 
     def test_z_menor_a_z0_devuelve_cero(self):
         # Dentro de la capa de rugosidad no hay viento útil.
@@ -347,16 +359,21 @@ class TestPerfilVientoLog:
         assert _v_viento_a_altura(-1.0, z_m=2.0, z0_m=0.05) == 0.0
 
     def test_terreno_liso_da_mas_viento_a_altura_baja(self):
-        # Terreno liso (z0 chico) → la capa límite es más fina → más viento a baja altura.
-        v_rural = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.05)
-        v_mar = _v_viento_a_altura(5.0, z_m=2.0, z0_m=0.001)
+        # Por debajo de la altura de referencia, el terreno liso (z0 chico) retiene
+        # menos el perfil → menos caída respecto de v(2) → más viento.
+        v_rural = _v_viento_a_altura(5.0, z_m=1.0, z0_m=0.05)
+        v_mar = _v_viento_a_altura(5.0, z_m=1.0, z0_m=0.001)
         assert v_mar > v_rural
 
     def test_formula_analitica(self):
-        # Para z=2, z0=0.05: factor esperado = ln(40)/ln(200) ≈ 0.6961
-        v_calc = _v_viento_a_altura(10.0, z_m=2.0, z0_m=0.05)
-        factor_esperado = math.log(2.0 / 0.05) / math.log(10.0 / 0.05)
+        # Para z=6, z0=0.05: factor esperado = ln(120)/ln(40) ≈ 1.2977
+        v_calc = _v_viento_a_altura(10.0, z_m=6.0, z0_m=0.05)
+        factor_esperado = math.log(6.0 / 0.05) / math.log(2.0 / 0.05)
         assert v_calc == pytest.approx(10.0 * factor_esperado, rel=1e-9)
+
+    def test_referencia_es_la_del_contrato_de_clima(self):
+        """Regresión S57: la altura de referencia debe ser la de `Clima.WS_ms`."""
+        assert _Z_REF_VIENTO_M == Z_CONTRATO_M == 2.0
 
 
 # ---------------------------------------------------------------------------
@@ -420,7 +437,7 @@ class TestCaudalNaturalConExtractor:
             Cp_turbina=0.5,
             Kt_turbina=1.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=8.0,
+            v_viento_ref_ms=8.0,
         )
         assert res["m_punto_kgs"] > 0.0
         assert res["delta_P_turbina_motriz_Pa"] > 0.0
@@ -433,14 +450,14 @@ class TestCaudalNaturalConExtractor:
             Cp_turbina=0.5,
             Kt_turbina=1.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=0.0,
+            v_viento_ref_ms=0.0,
         )
         con_viento = self._llamar(
             extractor_activo=True,
             Cp_turbina=0.5,
             Kt_turbina=1.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=6.0,
+            v_viento_ref_ms=6.0,
         )
         assert con_viento["m_punto_kgs"] > sin_viento["m_punto_kgs"]
 
@@ -453,7 +470,7 @@ class TestCaudalNaturalConExtractor:
             Cp_turbina=0.5,
             Kt_turbina=2.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=0.0,
+            v_viento_ref_ms=0.0,
         )
         assert con_turbina_parada["m_punto_kgs"] < chim_sola["m_punto_kgs"]
 
@@ -464,7 +481,7 @@ class TestCaudalNaturalConExtractor:
             Cp_turbina=0.5,
             Kt_turbina=1.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=0.0,
+            v_viento_ref_ms=0.0,
         )
         assert res["m_punto_kgs"] == 0.0
 
@@ -475,7 +492,7 @@ class TestCaudalNaturalConExtractor:
             Cp_turbina=0.5,
             Kt_turbina=1.0,
             diametro_extractor_m=0.30,
-            v_viento_10m_ms=0.0,
+            v_viento_ref_ms=0.0,
         )
         assert any("CHIM_SIN_TIRO" in a for a in res["advertencias"])
 

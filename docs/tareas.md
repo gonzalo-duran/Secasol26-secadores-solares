@@ -25,10 +25,27 @@ decisiones de diseño en [[docs/decisiones]].
   **Ojo:** todos necesitan `PYTHONPATH=.` (`PYTHONPATH=. .venv/bin/python
   validacion/<script>.py`), lo que el docstring de varios no dice.
 
-- **Inconsistencia viento 2 m vs 10 m** — arrastrada desde la mejora 38; el clima
-  medido y NASA POWER no coinciden en la altura de referencia del viento.
+- **`h_w` de McAdams usa el viento a 2 m sin corregir a la altura del equipo** —
+  decisión de modelo pendiente, deliberadamente fuera del fix de S57. McAdams viene
+  de datos de placa plana con velocidad de corriente libre y la literatura solar la
+  aplica con soltura; corregir a la altura real del colector/cámara movería *todos*
+  los resultados, no solo el lazo natural.
 
 ## Completado (hitos recientes)
+
+- **Altura de referencia del viento y rugosidad del terreno (S57)** — dos arreglos
+  encadenados. (1) **Fix**: `chimenea_calc` asumía viento a 10 m pero recibía el de
+  2 m del contrato `Clima.WS_ms`, subestimando la velocidad en el tope por
+  `ln(2/z₀)/ln(10/z₀) ≈ 0.70` y el término motriz del extractor —que va con v²— a la
+  mitad; el caudal natural con extractor sube +14 a +35 % según viento y T_chim.
+  (2) **Fuente única**: la fórmula del perfil logarítmico estaba duplicada en
+  `clima_medido` y `chimenea_calc` con z₀ propio cada una → extraída a
+  `calculos/perfil_viento.py`, y z₀ pasó a ser propiedad del sitio en
+  `Emplazamiento.z0_terreno_m` (catálogo Davenport-Wieringa, widget en P2 →
+  Ubicación, igual que el albedo). Antes el mismo terreno físico podía entrar al
+  modelo con dos valores distintos: la ingesta lo hardcodeaba en 0.05 mientras P6
+  ofrecía un selector — hasta 23 % de error en `v` con anemómetro a 10 m sobre
+  terreno rugoso.
 
 - **Corridas paramétricas (barridos) en P7 — cerradas (S57)** — la etapa 12
   (verificación manual e2e, no auto-testeable) quedó confirmada por el usuario: los

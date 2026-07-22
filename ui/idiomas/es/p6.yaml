@@ -178,19 +178,17 @@ chimenea:
         sobre la velocidad del aire en el extractor.
         1.0 (default) cubre expansión + obstrucción de álabes.
     z0:
-      label: Tipo de terreno (z₀)
+      label: Terreno (z₀)
       help: >-
-        Longitud de rugosidad aerodinámica del terreno. Se
-        usa para corregir el viento de NASA POWER (a 10 m)
-        a la altura del tope de chimenea via perfil
-        logarítmico v(z) = v(10)·ln(z/z₀)/ln(10/z₀).
-      mar: Mar/lago (0.001 m)
-      campo: Campo abierto (0.03 m)
-      rural: Rural medio (0.05 m)
-      suburbano: Suburbano (0.20 m)
-      urbano: Urbano denso (0.50 m)
+        Longitud de rugosidad aerodinámica del terreno. Se usa
+        para corregir el viento del sitio (a 2 m) a la altura del
+        tope de chimenea via perfil logarítmico
+        v(z) = v(2)·ln(z/z₀)/ln(2/z₀). Es una propiedad del sitio:
+        se define una sola vez en P2 → Ubicación y la comparten la
+        chimenea y la ingesta de clima medido.
+      origen: 📍 {terreno} — definido en P2 → Ubicación.
     preview_viento: >-
-      Viento medio del sitio (P2, a 10 m): **{v10:.1f} m/s** → corregido
+      Viento medio del sitio (P2, a 2 m): **{vref:.1f} m/s** → corregido
       a {z:.1f} m del tope: **{vloc:.2f} m/s** → ΔP motriz turbina
       (a T_amb 20 °C): **{dp:.2f} Pa**.
     preview_sin_clima: >-

@@ -44,6 +44,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from calculos.clima_calc import aplicar_politica_huecos, obtener_clima
+from calculos.perfil_viento import Z0_DEFAULT_M, Z_CONTRATO_M, factor_altura
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, COLUMNAS_SI, CalidadClima, Clima
 from core.clima_medido import (
     COLUMNA_POA_MEDIDA,
@@ -97,9 +98,11 @@ _A_SI: dict[str, Callable[[pd.Series], pd.Series]] = {
     "porcentaje": lambda s: s / 100.0,
 }
 
-# Perfil logarítmico neutro para normalizar el viento a 2 m (contrato Clima).
-_Z_VIENTO_CONTRATO_M = 2.0
-_Z0_RUGOSIDAD_M = 0.05
+# Perfil logarítmico neutro para normalizar el viento al contrato de Clima (2 m).
+# La fórmula vive en `calculos/perfil_viento.py` (fuente única, compartida con el
+# extractor eólico de la chimenea).
+_Z_VIENTO_CONTRATO_M = Z_CONTRATO_M
+_Z0_RUGOSIDAD_M = Z0_DEFAULT_M
 
 # Rangos físicos del QC: variable → (min, max). Fuera de rango → NaN.
 _RANGOS_QC: dict[str, tuple[float, float]] = {
@@ -443,10 +446,18 @@ def _a_numerico(serie: pd.Series, marcadores: tuple[str, ...]) -> pd.Series:
     return pd.to_numeric(serie.map(_limpiar), errors="coerce")
 
 
-def _viento_a_2m(v: pd.Series, altura_m: float) -> pd.Series:
+def _viento_a_2m(v: pd.Series, altura_m: float, z0_m: float = _Z0_RUGOSIDAD_M) -> pd.Series:
+    """Normaliza una serie de viento a los 2 m del contrato de ``Clima``.
+
+    Args:
+        v: Serie de velocidad de viento [m/s] a ``altura_m``.
+        altura_m: Altura del anemómetro [m].
+        z0_m: Rugosidad del terreno [m]. Viene de ``Emplazamiento.z0_terreno_m``
+            vía ``ConfigMapeoClima``; solo influye si ``altura_m != 2``.
+    """
     if abs(altura_m - _Z_VIENTO_CONTRATO_M) < 1e-9:
         return v
-    factor = np.log(_Z_VIENTO_CONTRATO_M / _Z0_RUGOSIDAD_M) / np.log(altura_m / _Z0_RUGOSIDAD_M)
+    factor = factor_altura(_Z_VIENTO_CONTRATO_M, z_origen_m=altura_m, z0_m=z0_m)
     return v * factor
 
 
@@ -490,7 +501,7 @@ def aplicar_mapeo(df_crudo: pd.DataFrame, config: ConfigMapeoClima) -> pd.DataFr
         serie = _a_numerico(df[m.columna_origen], config.marcadores_invalidos)
         serie = _A_SI[m.unidad](serie)
         if m.variable == "WS_ms":
-            serie = _viento_a_2m(serie, config.altura_anemometro_m)
+            serie = _viento_a_2m(serie, config.altura_anemometro_m, config.z0_terreno_m)
         datos[m.variable] = serie
 
     resultado = pd.DataFrame(datos)

@@ -36,6 +36,15 @@ class Emplazamiento:
             para colectores inclinados/verticales. Default 0.25 (valor histórico
             de pvlib). Ver ``calculos/catalogo_albedos.py`` para superficies
             usuales.
+        z0_terreno_m: Longitud de rugosidad aerodinámica del terreno [m]. Fija
+            la forma del perfil logarítmico de viento
+            (``calculos/perfil_viento.py``) y por lo tanto la conversión de la
+            velocidad entre alturas. La consumen la ingesta de clima medido
+            (normaliza el anemómetro a los 2 m del contrato de ``Clima``) y el
+            extractor eólico de la chimenea (lleva el viento al tope). Es una
+            propiedad **del sitio**, como el albedo: vive acá y no en la
+            chimenea (S57). Default 0.05 (rural medio). Ver
+            ``calculos/catalogo_rugosidades.py``.
     """
 
     latitud_deg: float = -24.72
@@ -45,6 +54,7 @@ class Emplazamiento:
     pendiente_colector_deg: float = 25.0
     zona_horaria: str = "America/Argentina/Salta"
     albedo_suelo: float = 0.25
+    z0_terreno_m: float = 0.05
 
     def __post_init__(self) -> None:
         if not (-90.0 <= self.latitud_deg <= 90.0):
@@ -76,6 +86,15 @@ class Emplazamiento:
             raise ValueError(
                 f"EMPL_ALBEDO_INVALIDO: albedo_suelo {self.albedo_suelo:.3f} "
                 "fuera del rango válido [0, 1] (reflectancia solar adimensional)."
+            )
+        # El perfil logarítmico exige z0 > 0 (aparece en ln(z/z0)) y z0 < 2 m para
+        # que la altura de referencia del contrato de Clima quede por encima de la
+        # capa de rugosidad. El máximo tabulado (urbano denso/bosque) es 0.5 m.
+        if not (0.0 < self.z0_terreno_m < 2.0):
+            raise ValueError(
+                f"EMPL_Z0_TERRENO_INVALIDO: z0_terreno_m {self.z0_terreno_m:.4f} m "
+                "fuera del rango válido (0, 2) m. Valores usuales: 0.001 (mar) a "
+                "0.5 (urbano denso)."
             )
         try:
             zoneinfo.ZoneInfo(self.zona_horaria)

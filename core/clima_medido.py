@@ -142,6 +142,11 @@ class ConfigMapeoClima:
         fila_encabezado: Índice 0-based de la fila de encabezados.
         altura_anemometro_m: Altura del sensor de viento [m]; la serie se
             normaliza a 2 m (convención del contrato Clima) con perfil log.
+        z0_terreno_m: Rugosidad aerodinámica del terreno [m] usada en esa
+            normalización. Se copia de ``Emplazamiento.z0_terreno_m`` (fuente
+            única del sitio) al construir la config; vive también acá para que
+            entre en ``hash_ingesta`` y la caché parquet se invalide al cambiar
+            el terreno. Solo tiene efecto si ``altura_anemometro_m != 2``.
         plano_piranometro: "horizontal" (GHI) o "plano_colector" (POA medida).
         marcadores_invalidos: Strings que representan dato inválido.
     """
@@ -153,6 +158,7 @@ class ConfigMapeoClima:
     hoja: Optional[str] = None
     fila_encabezado: int = 0
     altura_anemometro_m: float = 2.0
+    z0_terreno_m: float = 0.05
     plano_piranometro: str = "horizontal"
     marcadores_invalidos: tuple[str, ...] = MARCADORES_INVALIDOS_DEFAULT
     fecha_fija: Optional[date] = None
@@ -176,6 +182,13 @@ class ConfigMapeoClima:
             raise ValueError(
                 "CLIMED_CONFIG_ALTURA_NO_POSITIVA: la altura del anemómetro debe "
                 f"ser > 0 m (recibido: {self.altura_anemometro_m})."
+            )
+        if not (0.0 < self.z0_terreno_m < self.altura_anemometro_m):
+            raise ValueError(
+                f"CLIMED_CONFIG_Z0_INVALIDO: z0_terreno_m {self.z0_terreno_m:.4f} m "
+                "debe ser > 0 y menor que la altura del anemómetro "
+                f"({self.altura_anemometro_m} m) para que el perfil logarítmico "
+                "esté definido."
             )
         if self.fila_encabezado < 0:
             raise ValueError(

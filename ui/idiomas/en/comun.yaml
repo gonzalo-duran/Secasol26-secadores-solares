@@ -1,5 +1,12 @@
 espesor:
   otro: Other (custom)…
   personalizado: Custom thickness [mm]
+rugosidad:
+  mar: Sea / lake (0.001 m)
+  campo: Open country (0.03 m)
+  rural: Average rural (0.05 m)
+  suburbano: Suburban / shrubs (0.20 m)
+  urbano: Dense urban / forest (0.50 m)
+  personalizado: Custom…
 esquema_no_encontrado: "[diagram '{nombre}' not found]"
 error_inesperado: "Unexpected error while processing the file ({tipo}): {err}. Check the column mapping; if the problem persists, report it along with the sample file."

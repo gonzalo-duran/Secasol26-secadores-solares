@@ -1,5 +1,14 @@
 header: Site and Climate Resources
 error_validacion: "Validation error ({codigo}): {err}"
+terreno:
+  label: Terrain type (z₀)
+  personalizado: Custom z₀ [m]
+  help: >-
+    Aerodynamic roughness length of the dryer surroundings. It sets the logarithmic
+    wind profile v(z) = v(2)·ln(z/z₀)/ln(2/z₀), used in two places: to normalize to
+    2 m an anemometer mounted at a different height (measured climate) and to carry
+    the wind up to the chimney top (wind extractor in P6). Davenport-Wieringa
+    classification.
 ubicacion:
   titulo: Geographic location
   lat:
@@ -241,7 +250,11 @@ medido:
     label: Anemometer height [m]
     help: >-
       The internal contract uses wind at 2 m; the series is normalized with a
-      neutral logarithmic profile (z₀ = 0.05 m).
+      neutral logarithmic profile that uses the terrain roughness set above, in
+      Location. If the anemometer is already at 2 m, no correction is applied.
+    z0_aviso: >-
+      Will be normalized to 2 m using the site terrain (z₀ = {z0:.3f} m):
+      factor **{factor:.3f}**. To change it, edit "Terrain type" in Location.
   plano:
     label: Plane of the global-irradiance pyranometer
     help: >-

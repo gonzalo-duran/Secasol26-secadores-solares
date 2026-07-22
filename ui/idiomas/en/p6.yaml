@@ -176,19 +176,16 @@ chimenea:
         on the air velocity in the extractor.
         1.0 (default) covers expansion + blade obstruction.
     z0:
-      label: Terrain type (z₀)
+      label: Terrain (z₀)
       help: >-
-        Aerodynamic roughness length of the terrain. Used to
-        correct the NASA POWER wind (at 10 m) to the chimney-top
-        height via the logarithmic profile
-        v(z) = v(10)·ln(z/z₀)/ln(10/z₀).
-      mar: Sea/lake (0.001 m)
-      campo: Open field (0.03 m)
-      rural: Medium rural (0.05 m)
-      suburbano: Suburban (0.20 m)
-      urbano: Dense urban (0.50 m)
+        Aerodynamic roughness length of the terrain. Used to correct
+        the site wind (at 2 m) to the chimney-top height via the
+        logarithmic profile v(z) = v(2)·ln(z/z₀)/ln(2/z₀). It is a
+        site property: set once in P2 → Location and shared by the
+        chimney and the measured-climate ingestion.
+      origen: 📍 {terreno} — set in P2 → Location.
     preview_viento: >-
-      Site mean wind (P2, at 10 m): **{v10:.1f} m/s** → corrected
+      Site mean wind (P2, at 2 m): **{vref:.1f} m/s** → corrected
       to {z:.1f} m at the top: **{vloc:.2f} m/s** → turbine driving ΔP
       (at T_amb 20 °C): **{dp:.2f} Pa**.
     preview_sin_clima: >-

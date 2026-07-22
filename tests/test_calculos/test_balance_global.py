@@ -1021,3 +1021,41 @@ class TestPresionRepresentativaFuente:
 
         _, origen = presion_representativa_proyecto(self._proyecto_con_presion("hibrido"))
         assert "híbrido" in origen
+
+
+class TestZ0Terreno:
+    """La rugosidad del terreno se lee del sitio, no de la copia en Chimenea (S57).
+
+    Antes cada consumidor tenía la suya: la chimenea con un selector propio en P6 y
+    la ingesta de clima medido con un 0.05 hardcodeado, así que el mismo terreno
+    físico podía entrar al modelo con dos valores distintos.
+    """
+
+    def test_lee_del_emplazamiento(self):
+        from calculos.balance_global import _z0_terreno
+        from core.emplazamiento import Emplazamiento
+        from core.proyecto import Proyecto
+
+        proy = Proyecto()
+        proy.emplazamiento = Emplazamiento(z0_terreno_m=0.25)
+        assert _z0_terreno(proy) == pytest.approx(0.25)
+
+    def test_ignora_el_valor_vestigial_de_la_chimenea(self):
+        from calculos.balance_global import _z0_terreno
+        from core.chimenea import Chimenea
+        from core.emplazamiento import Emplazamiento
+        from core.proyecto import Proyecto
+
+        proy = Proyecto()
+        proy.emplazamiento = Emplazamiento(z0_terreno_m=0.03)
+        proy.chimenea = Chimenea(z0_terreno_m=0.50)  # back-compat de snapshots
+        assert _z0_terreno(proy) == pytest.approx(0.03)
+
+    def test_sin_emplazamiento_cae_al_default(self):
+        from calculos.balance_global import _z0_terreno
+        from calculos.catalogo_rugosidades import Z0_DEFAULT_M
+
+        class _Pelado:
+            pass
+
+        assert _z0_terreno(_Pelado()) == Z0_DEFAULT_M

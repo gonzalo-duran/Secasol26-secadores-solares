@@ -36,6 +36,7 @@ from calculos.auxiliar_calc import (
 )
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from calculos.catalogo_rugosidades import Z0_DEFAULT_M
 from calculos.colector_calc import calcular_colector_tipo1
 from calculos.colector_tipos234_calc import (
     calcular_colector_tipo2,
@@ -451,6 +452,24 @@ def _velocidad_modulo_desde_caudal(
     return float(m_punto_kgs) / (rho * A_canal * n_par)
 
 
+def _z0_terreno(proyecto) -> float:
+    """Rugosidad aerodinámica del terreno del sitio [m].
+
+    Fuente única: ``Emplazamiento.z0_terreno_m`` (S57). Antes cada consumidor
+    tenía la suya —la chimenea con un selector propio en P6, la ingesta de clima
+    medido con un 0.05 hardcodeado—, así que el mismo terreno físico podía entrar
+    al modelo con dos valores distintos. ``Chimenea.z0_terreno_m`` sobrevive como
+    back-compat de snapshots pero ya no se lee para calcular.
+
+    Cae al default del catálogo si el proyecto no tiene emplazamiento (defensivo:
+    los tests arman proyectos parciales).
+    """
+    empl = getattr(proyecto, "emplazamiento", None)
+    if empl is None:
+        return Z0_DEFAULT_M
+    return float(getattr(empl, "z0_terreno_m", Z0_DEFAULT_M))
+
+
 def _caudal_natural_loop(
     proyecto,
     T_amb_K: float,
@@ -528,8 +547,8 @@ def _caudal_natural_loop(
         Cp_turbina=chim.Cp_turbina,
         Kt_turbina=chim.Kt_turbina,
         diametro_extractor_m=chim.diametro_extractor_m,
-        z0_terreno_m=chim.z0_terreno_m,
-        v_viento_10m_ms=v_viento_ms,
+        z0_terreno_m=_z0_terreno(proyecto),
+        v_viento_ref_ms=v_viento_ms,
     )
 
 
@@ -706,8 +725,8 @@ def _caudal_natural_horizonte(
                 Cp_turbina=chim.Cp_turbina,
                 Kt_turbina=chim.Kt_turbina,
                 diametro_extractor_m=chim.diametro_extractor_m,
-                z0_terreno_m=chim.z0_terreno_m,
-                v_viento_10m_ms=float(v_viento_arr[i]),
+                z0_terreno_m=_z0_terreno(proyecto),
+                v_viento_ref_ms=float(v_viento_arr[i]),
             )
         except Exception:
             # Brentq fuera del bracket: marcamos hora como sin tiro.

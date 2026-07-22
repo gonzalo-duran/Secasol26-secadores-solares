@@ -1,5 +1,12 @@
 espesor:
   otro: Outro (personalizado)…
   personalizado: Espessura personalizada [mm]
+rugosidad:
+  mar: Mar / lago (0.001 m)
+  campo: Campo aberto (0.03 m)
+  rural: Rural médio (0.05 m)
+  suburbano: Suburbano / arbustos (0.20 m)
+  urbano: Urbano denso / floresta (0.50 m)
+  personalizado: Personalizado…
 esquema_no_encontrado: "[esquema '{nombre}' não encontrado]"
 error_inesperado: "Erro inesperado ao processar o arquivo ({tipo}): {err}. Verifique o mapeamento de colunas; se o problema persistir, reporte-o com o arquivo de exemplo."

@@ -213,7 +213,7 @@ del usuario (hoy: **colector aislado**; extensible a cámara/producto). Todo el 
 - **P3** `p3_colector.py` — tipo (1–4), cubierta(s), placa, aislante, fondo, geometría, banco. En `GRAN_ESCALA` (S40): sección **caño maestro** (manifold) dentro del expander de banco, con preview de ΔP. Botón de evaluación gráfica diaria y anual con tránsito SPA y POA máx. **Sección "🔬 Validación con datos medidos" (S54, mejora 38 fase 2/2b/3):** carga la T de salida medida, la contrasta contra la simulada (overlay + RMSE/MBE/R²), permite forzar con el clima del propio archivo y **calibrar** un parámetro. Los `number_input` de velocidad/largo no tienen tope artificial (`max_value` adaptado al valor; sin cap de 10 m/s) y se refrescan al aplicar el óptimo (patrón pendiente en session_state).
 - **P4** `p4_camara.py` — geometría, pared (compuesta con capas), techo translúcido opcional, bandejas, flujo, carga de producto, selector de modo de cálculo, horizonte (modo transitorio). En `modo_analisis == ANUAL` con motor termodinámico, aparece la sección "Operación anual" con slider de batches/mes y card resumen anual (4 métricas). En subtipo **SEMICONTINUO** (S40): sección **topología del túnel** (n_zonas + cadencia de avance) → `Camara.tunel`.
 - **P5** `p5_auxiliar.py` — auxiliar eléctrico o biomasa, modo de operación, setpoint, η, PCI. Expander opcional **calendario de arranque** (S40, híbrido mañana/tarde) → `Auxiliar.cargas_arranque`.
-- **P6** `p6_motor.py` — motor eléctrico (axial/centrífugo) o chimenea solar (cuando motor OFF). La chimenea puede equiparse opcionalmente con un **extractor eólico** (turbina sombrero chino) en el tope, que agrega al balance del lazo natural un término motriz `Cp·ρ·v_viento²/2` (con corrección logarítmica del viento NASA POWER de 10 m a la altura del tope) y un término resistivo `Kt·ρ·v_flujo²/2`. Estima ΔP del sistema; en `GRAN_ESCALA` (S40) el ΔP del **caño maestro** se suma a ductos.
+- **P6** `p6_motor.py` — motor eléctrico (axial/centrífugo) o chimenea solar (cuando motor OFF). La chimenea puede equiparse opcionalmente con un **extractor eólico** (turbina sombrero chino) en el tope, que agrega al balance del lazo natural un término motriz `Cp·ρ·v_viento²/2` (con corrección logarítmica del viento desde los **2 m** del contrato de `Clima` hasta la altura del tope, vía `calculos/perfil_viento.py`) y un término resistivo `Kt·ρ·v_flujo²/2`. Estima ΔP del sistema; en `GRAN_ESCALA` (S40) el ΔP del **caño maestro** se suma a ductos.
 - **P7** `p7_resultados.py` — orquesta `calcular_todo`, `calcular_todo_transitorio` o **`calcular_todo_ventana`** (modo VENTANA, S40), muestra dashboard integrado, exporta JSON/TXT/PDF del proyecto. Sugerencia automática de irradiancia: quantile 90 de POA representativa. Si P4 calculó operación anual, agrega panel detalle mensual. En modo VENTANA (gran escala): **dashboard de producción** (producto seco, tasa de régimen, leña + perfil espacial del túnel en semicontinuo).
 
 `Secasol.py` es el entry point que monta `st.set_page_config`, llama a `ui.componentes.header.render_header()`, inicializa `st.session_state.proyecto`, y construye las 7 pestañas con `st.tabs([...])`.
@@ -280,6 +280,14 @@ Namespaces: el archivo YAML es la raíz (`p1.yaml` → `p1.*`); `comun.*` (repet
 - Literales legítimamente no traducibles (marca, mails): comentario `# i18n: exento` en la
   línea (el test heurístico de `tests/test_ui/test_idiomas.py` lo respeta). Auditoría del
   residuo por archivo: `.venv/bin/python scripts/auditar_i18n.py`.
+- **Marca `i18n_paridad` (S57):** los tests de `tests/test_ui/test_idiomas.py` que comparan
+  los TRES idiomas entre sí (paridad de claves, paridad de placeholders, plantillas de
+  advertencia, descripciones de catálogo) llevan `@pytest.mark.i18n_paridad`. No son
+  evaluables tras editar un solo YAML —mientras la clave está en `es/` y todavía no en
+  `en/pt` fallan por construcción—, así que el hook de `PostToolUse` los excluye
+  (`-m "not i18n_paridad"`) y un hook de `Stop` los corre al final del turno, con los tres
+  idiomas ya escritos. `pytest` a secas corre todo, como siempre. **Al agregar un test
+  cross-idioma nuevo, ponerle la marca** — si no, vuelve el ruido de fallas transitorias.
 
 ### Convención de unidades (crítico)
 
@@ -291,6 +299,8 @@ Namespaces: el archivo YAML es la raíz (`p1.yaml` → `p1.*`); `comun.*` (repet
 - Humedad del producto X en kg_agua/kg_seco (base seca)
 - Tiempo en s (los parámetros cinéticos del catálogo vienen en min⁻¹ y se convierten en el motor: `k_SI = k_cat / 60.0`)
 - Caudal másico en kg/s; volumétrico en m³/s
+- **Viento `WS_ms` referido a 2 m sobre el suelo** (nativo de NASA POWER WS2M; la ingesta de clima medido normaliza a esa altura desde `altura_anemometro_m`). Quien necesite el viento a otra altura debe pasar por `calculos/perfil_viento.py` declarando `z_origen_m=Z_CONTRATO_M` — **nunca asumir 10 m** (ese error subestimaba el extractor eólico a la mitad hasta S57).
+- **Rugosidad del terreno `z0` = propiedad del sitio**, en `Emplazamiento.z0_terreno_m` (catálogo Davenport-Wieringa en `calculos/catalogo_rugosidades.py`, widget en P2 → Ubicación). La comparten la ingesta de clima medido y el extractor de la chimenea; el balance la lee vía `balance_global._z0_terreno(proyecto)`. `Chimenea.z0_terreno_m` es **vestigial** (back-compat de snapshots, no se lee para calcular). Entra en `ConfigMapeoClima` solo para que el hash de ingesta invalide la caché al cambiarla.
 - Ángulos en grados (°) pero con convención Duffie (ver abajo)
 
 **La única conversión de unidades físicas (°C↔K, kPa↔Pa, %↔fracción) ocurre en `ui/componentes/unidades.py`** y en las dos fronteras de ingesta de datos climáticos: `calculos/clima_calc.py` (NASA POWER → SI) y `calculos/clima_medido.py` (archivos medidos del usuario → SI, mejora 38). La conversión de ángulos entre convenciones es matemática pura y vive en `calculos/conversiones_angulo.py` (la consumen tanto la UI como `calculos/`); `unidades.py` la re-exporta por compatibilidad. Ver "Convención de ángulos".

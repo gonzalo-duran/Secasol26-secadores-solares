@@ -21,7 +21,13 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from calculos import clima_medido as cm
+from calculos.catalogo_rugosidades import (
+    ID_PERSONALIZADO,
+    RUGOSIDADES_TERRENO,
+    id_desde_z0,
+)
 from calculos.clima_calc import obtener_clima
+from calculos.perfil_viento import factor_altura
 from core.clima import ANIO_NASA_MAX, ANIO_NASA_MIN, Clima
 from core.clima_medido import (
     CONVENCIONES_TIMESTAMP,
@@ -617,12 +623,16 @@ def _construir_config_medido(
     hoja: str | None,
     fila_encabezado: int,
     fecha_fija=None,
+    z0_terreno_m: float = 0.05,
 ) -> ConfigMapeoClima:
     """Arma la ConfigMapeoClima desde los valores de los widgets (pura, testeable).
 
     Args:
         seleccion: variable canónica → (columna_origen | None, unidad).
         fecha_fija: fecha del ensayo si la columna de timestamp trae solo la hora.
+        z0_terreno_m: Rugosidad del terreno del sitio [m], de
+            ``Emplazamiento.z0_terreno_m``. Entra en la config para que el hash
+            de ingesta (y por lo tanto la caché) dependa de él.
     """
     columnas = [
         MapeoColumna(variable, col, unidad)
@@ -637,9 +647,59 @@ def _construir_config_medido(
         hoja=hoja,
         fila_encabezado=fila_encabezado,
         altura_anemometro_m=altura_anemometro_m,
+        z0_terreno_m=z0_terreno_m,
         plano_piranometro=plano_piranometro,
         fecha_fija=fecha_fija,
     )
+
+
+def _render_rugosidad_terreno(proyecto, empl) -> None:
+    """Desplegable de rugosidad aerodinámica del terreno (z₀) en P2.
+
+    z₀ es una propiedad del sitio —como el albedo— y desde S57 vive en
+    ``Emplazamiento``. La consumen dos lugares que antes tenían su propio valor:
+    la normalización del anemómetro en la ingesta de clima medido (acá, en P2) y
+    el extractor eólico de la chimenea (P6). El widget vive en P2 porque es donde
+    se define el sitio y porque la ingesta lo necesita en el mismo paso.
+
+    Escribe ``proyecto.emplazamiento`` con ``dataclasses.replace`` para re-disparar
+    la validación y preservar los campos no mencionados.
+    """
+    opciones = list(RUGOSIDADES_TERRENO.keys()) + [ID_PERSONALIZADO]
+    id_actual = id_desde_z0(empl.z0_terreno_m)
+
+    col_sel, col_val = st.columns([2, 1])
+    with col_sel:
+        seleccion = st.selectbox(
+            t("p2.terreno.label"),
+            options=opciones,
+            index=opciones.index(id_actual),
+            format_func=lambda cid: t(f"comun.rugosidad.{cid}"),
+            key="p2_rugosidad_terreno",
+            help=t("p2.terreno.help"),
+        )
+
+    if seleccion == ID_PERSONALIZADO:
+        with col_val:
+            nuevo_z0 = st.number_input(
+                t("p2.terreno.personalizado"),
+                min_value=0.001,
+                max_value=1.999,
+                value=float(empl.z0_terreno_m),
+                step=0.01,
+                format="%.3f",
+                key="p2_rugosidad_personalizada",
+            )
+    else:
+        nuevo_z0 = RUGOSIDADES_TERRENO[seleccion]
+        with col_val:
+            st.metric("z₀", f"{nuevo_z0:.3f} m")  # i18n: exento (símbolo)
+
+    if abs(nuevo_z0 - empl.z0_terreno_m) > 1e-9:
+        try:
+            proyecto.emplazamiento = dataclasses.replace(empl, z0_terreno_m=nuevo_z0)
+        except ValueError as err:
+            st.error(t("p2.error_validacion", codigo=str(err).split(":")[0], err=err))
 
 
 def _tabla_procedencia(clima: Clima, traducir_fn: Callable[..., str]) -> pd.DataFrame:
@@ -925,6 +985,16 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
                 help=t("p2.medido.alt_viento.help"),
             )
         )
+        # El z0 solo interviene si hay que corregir de altura. Se muestra de dónde
+        # sale para que el usuario sepa que la perilla está en "Terreno del sitio".
+        if abs(altura - 2.0) > 1e-9:
+            st.caption(
+                t(
+                    "p2.medido.alt_viento.z0_aviso",
+                    z0=empl.z0_terreno_m,
+                    factor=factor_altura(2.0, z_origen_m=altura, z0_m=empl.z0_terreno_m),
+                )
+            )
     plano = "horizontal"
     if seleccion.get("GHI_Wm2", (None, None))[0] is not None:
         plano = st.radio(
@@ -944,7 +1014,16 @@ def _render_clima_medido(proyecto, empl: Emplazamiento) -> None:
 
     try:
         cfg = _construir_config_medido(
-            col_ts, seleccion, zona, conv, altura, plano, hoja, fila_enc, fecha_fija
+            col_ts,
+            seleccion,
+            zona,
+            conv,
+            altura,
+            plano,
+            hoja,
+            fila_enc,
+            fecha_fija,
+            z0_terreno_m=empl.z0_terreno_m,
         )
     except ValueError as exc:
         st.error(t("p2.medido.error", err=exc))
@@ -1121,6 +1200,10 @@ def render() -> None:
         except ValueError as err:
             codigo = str(err).split(":")[0]
             st.error(t("p2.error_validacion", codigo=codigo, err=err))
+
+        st.divider()
+        _render_rugosidad_terreno(proyecto, empl)
+        empl = proyecto.emplazamiento
 
     # -----------------------------------------------------------------------
     # Sección 2: Orientación del colector

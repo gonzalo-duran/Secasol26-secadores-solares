@@ -145,6 +145,21 @@ class TestConfigMapeoClima:
         with pytest.raises(ValueError, match="CLIMED_CONFIG_ALTURA_NO_POSITIVA"):
             _config_minima(altura_anemometro_m=0.0)
 
+    def test_CLIMED_CONFIG_Z0_INVALIDO(self):
+        # z0 debe ser > 0 y menor que la altura del anemómetro (perfil log).
+        with pytest.raises(ValueError, match="CLIMED_CONFIG_Z0_INVALIDO"):
+            _config_minima(z0_terreno_m=0.0)
+        with pytest.raises(ValueError, match="CLIMED_CONFIG_Z0_INVALIDO"):
+            _config_minima(altura_anemometro_m=2.0, z0_terreno_m=2.5)
+
+    def test_z0_entra_en_el_hash_de_ingesta(self):
+        """Cambiar el terreno debe invalidar la caché parquet del clima medido."""
+        from calculos.clima_medido import hash_ingesta
+
+        cfg_a = _config_minima(altura_anemometro_m=10.0, z0_terreno_m=0.05)
+        cfg_b = _config_minima(altura_anemometro_m=10.0, z0_terreno_m=0.25)
+        assert hash_ingesta("abc", cfg_a) != hash_ingesta("abc", cfg_b)
+
     def test_CLIMED_CONFIG_FILA_ENCABEZADO_NEGATIVA(self):
         with pytest.raises(ValueError, match="CLIMED_CONFIG_FILA_ENCABEZADO_NEGATIVA"):
             _config_minima(fila_encabezado=-1)

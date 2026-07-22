@@ -59,9 +59,13 @@ class Chimenea:
         Kt_turbina: Coeficiente resistivo de la turbina [adim], aplicado como
             Kt·ρ·v_flujo²/2 sobre la velocidad del flujo en la chimenea.
             Default: 1.0 (expansión + obstrucción de álabes).
-        z0_terreno_m: Rugosidad aerodinámica del terreno [m] para corregir el
-            viento NASA POWER (medido a 10 m) a la altura del tope de la
-            chimenea via perfil logarítmico. Default: 0.05 (terreno rural medio).
+        z0_terreno_m: **Vestigial desde S57 — no se lee para calcular.** La
+            rugosidad del terreno es una propiedad del sitio y vive en
+            ``Emplazamiento.z0_terreno_m`` (fuente única, compartida con la
+            ingesta de clima medido); el balance la lee de ahí vía
+            ``balance_global._z0_terreno``. El campo se conserva para que los
+            snapshots ``.json`` antiguos sigan cargando y la UI de P6 lo espeja
+            del sitio. Default: 0.05 (terreno rural medio).
     """
 
     diametro_m: float = 0.20

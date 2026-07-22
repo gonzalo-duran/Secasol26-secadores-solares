@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from calculos.catalogo_rugosidades import id_desde_z0
 from calculos.chimenea_calc import (
     _v_viento_a_altura,
     delta_P_tiro_Pa,
@@ -695,40 +696,35 @@ def _render_chimenea_section(proyecto) -> None:
                     help=t("p6.chimenea.extractor.kt.help"),
                 )
             with ec4:
-                # (id_estable, z0 [m]) — el label sale de t().
-                _z0_items = [
-                    ("mar", 0.001),
-                    ("campo", 0.03),
-                    ("rural", 0.05),
-                    ("suburbano", 0.20),
-                    ("urbano", 0.50),
-                ]
-                z0_prev_val = float(ch_ref_ext.z0_terreno_m) if ch_ref_ext else 0.05
-                _z0_idx = next(
-                    (i for i, (_, v) in enumerate(_z0_items) if abs(v - z0_prev_val) < 1e-6),
-                    2,
-                )
-                z0_id = st.selectbox(
+                # z0 es propiedad del sitio y vive en `Emplazamiento` desde S57
+                # (antes había acá un selector propio, desacoplado del que usaba
+                # la ingesta de clima medido). Acá solo se muestra, en solo
+                # lectura: se edita en P2 → Ubicación.
+                z0_val = float(proyecto.emplazamiento.z0_terreno_m)
+                st.metric(
                     t("p6.chimenea.extractor.z0.label"),
-                    options=[cid for cid, _ in _z0_items],
-                    index=_z0_idx,
-                    format_func=lambda cid: t(f"p6.chimenea.extractor.z0.{cid}"),
-                    key="p6_chim_ext_z0",
+                    f"{z0_val:.3f} m",
                     help=t("p6.chimenea.extractor.z0.help"),
                 )
-                z0_val = dict(_z0_items)[z0_id]
+                st.caption(
+                    t(
+                        "p6.chimenea.extractor.z0.origen",
+                        terreno=t(f"comun.rugosidad.{id_desde_z0(z0_val)}"),
+                    )
+                )
 
-            # Preview: viento corregido a la altura del tope.
-            v_viento_10m: float | None = None
+            # Preview: viento corregido a la altura del tope. `WS_ms` está a la
+            # altura del contrato de Clima (2 m), no a los 10 m meteorológicos.
+            v_viento_ref: float | None = None
             try:
                 if (
                     proyecto.clima is not None
                     and proyecto.clima.datos is not None
                     and "WS_ms" in proyecto.clima.datos.columns
                 ):
-                    v_viento_10m = float(proyecto.clima.datos["WS_ms"].mean())
+                    v_viento_ref = float(proyecto.clima.datos["WS_ms"].mean())
             except (AttributeError, KeyError):
-                v_viento_10m = None
+                v_viento_ref = None
 
             H_cam_default = 1.5
             if proyecto.camara is not None:
@@ -737,15 +733,15 @@ def _render_chimenea_section(proyecto) -> None:
                 except (AttributeError, TypeError):
                     pass
             z_tope = H_cam_default + alt
-            if v_viento_10m is not None:
-                v_loc = _v_viento_a_altura(v_viento_10m, z_tope, z0_val)
+            if v_viento_ref is not None:
+                v_loc = _v_viento_a_altura(v_viento_ref, z_tope, z0_val)
                 dP_turb = delta_P_turbina_motriz_Pa(
                     v_loc, Cp_val, T_amb_K=293.15, P_amb_Pa=P_proyecto_Pa
                 )
                 st.caption(
                     t(
                         "p6.chimenea.extractor.preview_viento",
-                        v10=v_viento_10m,
+                        vref=v_viento_ref,
                         z=z_tope,
                         vloc=v_loc,
                         dp=dP_turb,

@@ -1,5 +1,14 @@
 header: Local e Recursos Climáticos
 error_validacion: "Erro de validação ({codigo}): {err}"
+terreno:
+  label: Tipo de terreno (z₀)
+  personalizado: z₀ personalizado [m]
+  help: >-
+    Comprimento de rugosidade aerodinâmica do entorno do secador. Define o perfil
+    logarítmico de vento v(z) = v(2)·ln(z/z₀)/ln(2/z₀), usado em dois lugares: para
+    normalizar a 2 m um anemômetro montado em outra altura (clima medido) e para
+    levar o vento ao topo da chaminé (extrator eólico de P6). Classificação de
+    Davenport-Wieringa.
 ubicacion:
   titulo: Localização geográfica
   lat:
@@ -241,7 +250,11 @@ medido:
     label: Altura do anemômetro [m]
     help: >-
       O contrato interno usa vento a 2 m; a série é normalizada com perfil
-      logarítmico neutro (z₀ = 0.05 m).
+      logarítmico neutro que usa a rugosidade do terreno definida acima, em
+      Localização. Se o anemômetro já está a 2 m, não se aplica correção.
+    z0_aviso: >-
+      Será normalizado a 2 m com o terreno do sítio (z₀ = {z0:.3f} m):
+      fator **{factor:.3f}**. Para alterá-lo, edite "Tipo de terreno" em Localização.
   plano:
     label: Plano do piranômetro de irradiância global
     help: >-

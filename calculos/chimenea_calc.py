@@ -11,9 +11,9 @@ Fenómenos modelados:
 - Pérdidas singulares de entrada y salida (K bundleado por defecto = 1.5).
 - Extractor eólico opcional en el tope (turbina sombrero chino): agrega un
   término motriz ΔP = Cp·ρ_amb·v_viento²/2 al balance, donde v_viento se
-  corrige del valor NASA POWER (10 m) a la altura del tope via perfil
-  logarítmico. La turbina también introduce una resistencia adicional al
-  flujo Kt·ρ_chim·v_extractor²/2.
+  corrige de la altura del contrato de `Clima` (2 m, ver `perfil_viento`) a la
+  altura del tope via perfil logarítmico. La turbina también introduce una
+  resistencia adicional al flujo Kt·ρ_chim·v_extractor²/2.
 
 Convención termodinámica:
 - T_chim es la temperatura promedio de la columna ascendente (cámara + chimenea).
@@ -34,7 +34,6 @@ para mantenerse testeable y reusable desde cualquier capa.
 
 from __future__ import annotations
 
-import math
 from math import pi
 from typing import Optional
 
@@ -50,6 +49,7 @@ from calculos.motor_calc import (
     densidad_aire,
     viscosidad_aire,
 )
+from calculos.perfil_viento import Z0_DEFAULT_M, Z_CONTRATO_M, velocidad_a_altura
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -72,8 +72,13 @@ _K_SINGULAR_DEFAULT: float = 1.5
 _M_MIN_KGS: float = 1.0e-8
 _M_MAX_KGS: float = 10.0
 
-# Altura de referencia del viento NASA POWER (estándar meteorológico) [m].
-_Z_REF_VIENTO_M: float = 10.0
+# Altura de referencia del viento de entrada [m]. Es la del contrato de `Clima`
+# (`WS_ms` a 2 m, nativo de NASA POWER WS2M y altura a la que la ingesta normaliza
+# las series medidas), NO el estándar meteorológico de 10 m. Hasta S57 este módulo
+# asumía 10 m y recibía el viento de 2 m sin convertir, lo que subestimaba la
+# velocidad en el tope por el factor ln(2/z₀)/ln(10/z₀) ≈ 0.70 y el término motriz
+# del extractor —que va con v²— a la mitad.
+_Z_REF_VIENTO_M: float = Z_CONTRATO_M
 
 
 # ---------------------------------------------------------------------------
@@ -81,16 +86,16 @@ _Z_REF_VIENTO_M: float = 10.0
 # ---------------------------------------------------------------------------
 
 
-def _v_viento_a_altura(v_10m_ms: float, z_m: float, z0_m: float = 0.05) -> float:
-    """Corrige el viento medido a 10 m a una altura ``z`` via perfil logarítmico.
+def _v_viento_a_altura(v_ref_ms: float, z_m: float, z0_m: float = Z0_DEFAULT_M) -> float:
+    """Corrige el viento del contrato (2 m) a una altura ``z``.
 
-    Perfil de capa límite neutra (Monin-Obukhov simplificado):
-
-        v(z) = v(10) · ln(z/z₀) / ln(10/z₀)
+    Envoltorio delgado sobre :func:`calculos.perfil_viento.velocidad_a_altura` que
+    fija la altura de origen en la del contrato de ``Clima``. Se conserva como
+    función propia porque la UI de P6 la importa para el preview del extractor.
 
     Args:
-        v_10m_ms: Velocidad del viento a 10 m sobre el suelo [m/s] (estándar
-            NASA POWER y la mayoría de las estaciones meteorológicas).
+        v_ref_ms: Velocidad del viento a :data:`_Z_REF_VIENTO_M` sobre el suelo
+            [m/s] — el campo ``Clima.WS_ms``.
         z_m: Altura de interés [m] (tope de la chimenea).
         z0_m: Longitud de rugosidad aerodinámica del terreno [m]. Valores
             típicos: 0.001 (mar/lago), 0.03 (campo abierto/cultivo bajo),
@@ -98,12 +103,12 @@ def _v_viento_a_altura(v_10m_ms: float, z_m: float, z0_m: float = 0.05) -> float
             (urbano denso, árboles altos).
 
     Returns:
-        v(z) [m/s]. Devuelve 0 si v_10m_ms ≤ 0 o z ≤ z0 (dentro de la capa
+        v(z) [m/s]. Devuelve 0 si v_ref_ms ≤ 0 o z ≤ z0 (dentro de la capa
         de rugosidad, sin viento útil).
     """
-    if v_10m_ms <= 0 or z_m <= z0_m or z0_m <= 0:
+    if z0_m <= 0 or _Z_REF_VIENTO_M <= z0_m:
         return 0.0
-    return v_10m_ms * math.log(z_m / z0_m) / math.log(_Z_REF_VIENTO_M / z0_m)
+    return velocidad_a_altura(v_ref_ms, z_m, z_origen_m=_Z_REF_VIENTO_M, z0_m=z0_m)
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +175,8 @@ def delta_P_turbina_motriz_Pa(
     turbina (no la columna ascendente caliente).
 
     Args:
-        v_viento_local_ms: Velocidad del viento a la altura del extractor
-            (corregida por perfil log si v_NASA es a 10 m) [m/s].
+        v_viento_local_ms: Velocidad del viento a la altura del extractor,
+            ya corregida por perfil logarítmico desde los 2 m del contrato [m/s].
         Cp_turbina: Coeficiente de presión motriz [adim]. Típico 0.3-0.6
             para turbinas comerciales tipo sombrero chino.
         T_amb_K: Temperatura ambiente [K].
@@ -278,7 +283,7 @@ def caudal_natural_kgs(
     Kt_turbina: float = 0.0,
     diametro_extractor_m: Optional[float] = None,
     z0_terreno_m: float = 0.05,
-    v_viento_10m_ms: float = 0.0,
+    v_viento_ref_ms: float = 0.0,
 ) -> dict:
     """Caudal másico de equilibrio del lazo con chimenea solar [kg/s].
 
@@ -316,7 +321,8 @@ def caudal_natural_kgs(
             ``extractor_activo``.
         z0_terreno_m: Rugosidad aerodinámica del terreno [m] para corregir
             v_viento por perfil logarítmico.
-        v_viento_10m_ms: Velocidad del viento a 10 m (NASA POWER) [m/s].
+        v_viento_ref_ms: Velocidad del viento a la altura del contrato de
+            ``Clima`` (2 m, ``WS_ms``) [m/s]. Se corrige internamente al tope.
 
     Returns:
         Dict con:
@@ -346,7 +352,7 @@ def caudal_natural_kgs(
     # altura del tope de la chimenea = H_camara + altura_chim.
     if extractor_activo:
         z_top = H_camara_m + altura_chim_m
-        v_loc = _v_viento_a_altura(v_viento_10m_ms, z_top, z0_terreno_m)
+        v_loc = _v_viento_a_altura(v_viento_ref_ms, z_top, z0_terreno_m)
         dPT_turbina = delta_P_turbina_motriz_Pa(v_loc, Cp_turbina, T_amb_K, P_amb_Pa)
         Kt_eff = Kt_turbina
         d_ext_eff = diametro_extractor_m
