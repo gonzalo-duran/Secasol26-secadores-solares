@@ -7,6 +7,17 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+Mejoras post-1.1 (sin orden estricto):
+
+- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
+  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
+  en P4.
+- Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
+- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
+  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [1.1.0] — 2026-07-21
+
 ### Added
 
 - **Exports completos por modo de análisis** — el reporte de prediseño (PDF) y los
@@ -138,15 +149,8 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   de la campaña se ingieren con sus trampas reales (test de integración `skipif` +
   verificación AppTest con descarga NASA real).
 
-Mejoras post-1.0 (sin orden estricto):
-
-- Mejora 38: **cerrada** — fases 1a, 1b, 2, 2b, 3 (colector) y 4 (cámara y producto)
-  implementadas; ver `docs/notas/plan_datos_medidos.md` y `plan_datos_medidos_4.md`. Queda como
-  deuda técnica la **historia temporal por zona en `simular_cascada`**, que habilitaría el
-  overlay contra termopares fijos del túnel y una vista previa de N zonas en P4.
-- Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
-- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
-  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+Nota: la mejora 38 queda **cerrada** en esta versión — fases 1a, 1b, 2, 2b, 3 (colector) y 4
+(cámara y producto); ver `docs/notas/plan_datos_medidos.md` y `plan_datos_medidos_4.md`.
 
 ### Changed
 
