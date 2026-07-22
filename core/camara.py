@@ -32,14 +32,14 @@ from typing import Literal, Optional
 
 import numpy as np
 
+from core import catalogo
+from core.advertencias import Advertencia, Severidad
+
 # Modos válidos de cálculo de cámara
 _MODOS_CALCULO_VALIDOS: tuple[str, ...] = ("capa_fina", "termodinamico")
 # Rango razonable para T inicial del producto (caso refrigerado a precalentado)
 _T_PROD_INICIAL_MIN_K: float = 263.15  # −10 °C
 _T_PROD_INICIAL_MAX_K: float = 343.15  # +70 °C
-
-from core import catalogo
-from core.advertencias import Advertencia, Severidad
 
 # ---------------------------------------------------------------------------
 # Umbrales de diseño

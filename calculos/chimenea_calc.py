@@ -38,7 +38,6 @@ import math
 from math import pi
 from typing import Optional
 
-import numpy as np
 from scipy.optimize import brentq
 
 # _factor_friccion_haaland es interno a motor_calc pero esta es la misma
@@ -46,6 +45,8 @@ from scipy.optimize import brentq
 # coherencia con las pérdidas del colector y de la cámara.
 from calculos.motor_calc import (
     _factor_friccion_haaland as _haaland,
+)
+from calculos.motor_calc import (
     densidad_aire,
     viscosidad_aire,
 )

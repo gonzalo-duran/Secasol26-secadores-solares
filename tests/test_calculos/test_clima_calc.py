@@ -13,7 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from calculos.clima_calc import _aplicar_politica_huecos, _hash_cache
+from calculos.clima_calc import _aplicar_politica_huecos, _hash_cache, calcular_POA_horizonte
+from core.emplazamiento import Emplazamiento
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -135,10 +136,6 @@ def test_politica_columnas_preservadas():
 # ---------------------------------------------------------------------------
 # POA (Plane of Array) — transposición GHI/DNI/DHI → plano inclinado
 # ---------------------------------------------------------------------------
-
-
-from calculos.clima_calc import calcular_POA_horizonte
-from core.emplazamiento import Emplazamiento
 
 
 def _df_clima_dia_claro(

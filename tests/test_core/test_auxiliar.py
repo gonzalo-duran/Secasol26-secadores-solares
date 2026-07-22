@@ -322,7 +322,6 @@ class TestCalcularAuxiliar:
 
     def test_T_salida_no_excede_T_max_genera_advertencia(self):
         """T_salida > T_max debe generar advertencia, no error."""
-        from calculos.auxiliar_calc import CP_AIRE
 
         m_dot = 0.005  # caudal muy bajo → ΔT muy grande
         aux = Auxiliar(

@@ -19,27 +19,28 @@ El objetivo es detectar regresiones en la implementación.
 from __future__ import annotations
 
 import math
+
 import pytest
 
 from calculos.correlaciones_nusselt import (
-    nusselt_shah_london,
-    nusselt_shah_london_simetrico,
-    nusselt_heaton,
-    nusselt_gnielinski,
-    nusselt_dittus_boelter,
-    nusselt_sparrow_liu,
-    nusselt_cengel,
-    nusselt_hollands_inclinada,
-    calcular_h_int,
-    nusselt_forzado_local,
-    nusselt_natural_canal,
-    nusselt_mixto_local,
     CORRELACIONES_FORZADO,
     CORRELACIONES_NATURAL,
-    RE_LAMINAR_MAX,
-    RE_TURBULENTO_MIN,
     K_AIRE,
     PR_AIRE,
+    RE_LAMINAR_MAX,
+    RE_TURBULENTO_MIN,
+    calcular_h_int,
+    nusselt_cengel,
+    nusselt_dittus_boelter,
+    nusselt_forzado_local,
+    nusselt_gnielinski,
+    nusselt_heaton,
+    nusselt_hollands_inclinada,
+    nusselt_mixto_local,
+    nusselt_natural_canal,
+    nusselt_shah_london,
+    nusselt_shah_london_simetrico,
+    nusselt_sparrow_liu,
 )
 
 # Tolerancia relativa para comparaciones numéricas

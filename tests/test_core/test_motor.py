@@ -258,7 +258,7 @@ class TestEstimarDeltaPColector:
         assert dP > 0
 
     def test_dP_crece_con_velocidad(self):
-        from core.colector import ColectorUnidad, BancoColectores
+        from core.colector import ColectorUnidad
 
         col_lento = Colector(
             unidad=ColectorUnidad(velocidad_diseno_ms=0.3),
@@ -529,7 +529,6 @@ class TestDeltaPCamaraVerticalErgun:
     def test_vertical_sin_d_p_usa_default_ergun(self, camara_vertical_sin_d_p_explicito):
         """Sin d_p explícito ni producto, motor_calc usa defaults (d_p=8 mm,
         ε=0.45, Φ=0.6) → Ergun activo, ΔP > solo malla."""
-        from core.camara import DireccionFlujo
 
         cam = camara_vertical_sin_d_p_explicito
         f = cam.flujo

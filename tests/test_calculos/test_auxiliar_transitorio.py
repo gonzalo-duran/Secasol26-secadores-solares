@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 from calculos.auxiliar_calc import (
-    CP_AIRE,
     calcular_auxiliar,
     calcular_auxiliar_transitorio,
 )

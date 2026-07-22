@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.proyecto import Configuracion, Meta, Proyecto, Tipologia, ModoAnalisis
+from core.proyecto import Configuracion, Meta, ModoAnalisis, Proyecto, Tipologia
 
 
 @pytest.fixture

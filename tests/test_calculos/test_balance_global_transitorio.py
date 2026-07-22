@@ -221,7 +221,6 @@ class TestEnergiaSolar:
         proy = _proyecto_armario(con_auxiliar=False)
         # Forzantes "todo noche": T_sal_col = T_amb, I_g = 0
         n = 13
-        t = np.linspace(0.0, 12 * 3600.0, n)
         T_amb = np.full(n, 290.0)
         T_sal_col = T_amb.copy()
         omega = np.full(n, humedad_absoluta(0.4, 290.0))

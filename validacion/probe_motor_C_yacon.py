@@ -17,8 +17,6 @@ significativamente respecto al reporte histórico de S26.
 
 from __future__ import annotations
 
-import numpy as np
-
 from calculos.balance_global import construir_serie_sintetica_dia_tipo
 from calculos.camara_calc import calcular_camara
 from calculos.psicrometria import humedad_absoluta

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.proyecto import Configuracion, ModoAnalisis, Proyecto, Tipologia
+from core.proyecto import Configuracion, ModoAnalisis, Tipologia
 
 
 def test_proy_anual_sin_vectorizacion():

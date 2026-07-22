@@ -8,10 +8,8 @@ termodinámico con T_ent = T_amb y aporte Q_rad a través de la cubierta.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from calculos.balance_global import (
-    armar_forzantes_aire,
     construir_serie_sintetica_dia_tipo,
     verificar_coherencia_proyecto,
 )

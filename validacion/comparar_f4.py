@@ -12,8 +12,6 @@ Uso:
 
 from __future__ import annotations
 
-import numpy as np
-
 from calculos import colector_tipos234_calc as mod
 from calculos.colector_tipos234_calc import (
     calcular_colector_tipo2,

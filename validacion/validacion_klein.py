@@ -22,17 +22,16 @@ Duffie, J.A. & Beckman, W.A. (2013). Solar Engineering of Thermal Processes,
 
 from __future__ import annotations
 
-import math
 import numpy as np
 
-from core.colector import Colector, ColectorUnidad, BancoColectores
 from calculos.colector_calc import (
-    calcular_colector_tipo1,
+    SIGMA_SB,
     _h_viento_W_m2K,
     _T_cielo_K,
-    SIGMA_SB,
+    calcular_colector_tipo1,
 )
 from core.catalogo import CUBIERTAS, PLACAS
+from core.colector import BancoColectores, Colector, ColectorUnidad
 
 
 def u_top_klein(

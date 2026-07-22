@@ -30,7 +30,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
+from calculos.balance_global import construir_serie_sintetica_dia_tipo
+from calculos.camara_calc import calcular_camara, calcular_tiempo_secado_estatico
+from calculos.psicrometria import humedad_absoluta
+from core.camara import (
+    Camara,
+    CapaPared,
+    CargaProducto,
+    ConfiguracionBandejas,
+    ConfiguracionFlujo,
+    ConstruccionCamara,
+    GeometriaCamara,
+    ParedCamara,
+)
 
 # ---------------------------------------------------------------------------
 # Condiciones de contorno — mismas para los tres motores
@@ -68,23 +80,6 @@ N_DIAS_C = 4  # Motor C: cuántos días replicar el sintético
 T_SAL_COL_AMP_K = 15.0  # ±15 K en T_sal_col (pico al mediodía)
 T_AMB_AMP_K = 5.0  # ±5 K en T_amb
 V_VIENTO_MS = 2.0  # constante en el sintético
-
-# ---------------------------------------------------------------------------
-# Imports del proyecto
-# ---------------------------------------------------------------------------
-from calculos.balance_global import construir_serie_sintetica_dia_tipo
-from calculos.camara_calc import calcular_camara, calcular_tiempo_secado_estatico
-from calculos.psicrometria import humedad_absoluta
-from core.camara import (
-    Camara,
-    CapaPared,
-    CargaProducto,
-    ConfiguracionBandejas,
-    ConfiguracionFlujo,
-    ConstruccionCamara,
-    GeometriaCamara,
-    ParedCamara,
-)
 
 PARED_AISLADA = ParedCamara(
     capas=[

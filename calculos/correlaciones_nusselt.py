@@ -60,7 +60,7 @@ Referencias
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 # ---------------------------------------------------------------------------
@@ -675,7 +675,6 @@ def _seleccion_automatica(
             else:
                 nombre = "shah_london"
                 Nu = nusselt_shah_london(Re, Pr)
-        regimen_str = "laminar"
         advertencias.append(
             f"COL_FLUJO_LAMINAR: Re={Re:.0f} < {RE_LAMINAR_MAX:.0f}. "
             "Flujo laminar — eficiencia de transferencia de calor reducida. "

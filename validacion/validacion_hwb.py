@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.colector import Colector, ColectorUnidad, BancoColectores
 from calculos.colector_calc import calcular_colector_tipo1
+from core.colector import BancoColectores, Colector, ColectorUnidad
 
 
 def construir_curva_hwb(

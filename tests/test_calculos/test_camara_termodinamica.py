@@ -9,8 +9,10 @@ import pytest
 
 from calculos.camara_termodinamica import (
     EstadoCamara,
+    ResultadoMotorTermodinamico,
     _max_step_desde_forzantes,
     resolver_estado_camara,
+    simular_secado,
 )
 from calculos.psicrometria import (
     _CP_VAPOR,
@@ -19,7 +21,9 @@ from calculos.psicrometria import (
     entalpia_aire_humedo,
     humedad_absoluta,
     omega_saturacion,
+    temperatura_bulbo_humedo,
 )
+from core.camara import ForzantesAire
 
 # ---------------------------------------------------------------------------
 # Helper: kwargs base para un secador armario tipo (10 kg de fruta)
@@ -326,14 +330,6 @@ class TestValidacionEntradas:
 # ===========================================================================
 # Tests del motor termodinámico transitorio (S3) — simular_secado
 # ===========================================================================
-
-
-from calculos.camara_termodinamica import (
-    ResultadoMotorTermodinamico,
-    simular_secado,
-)
-from calculos.psicrometria import temperatura_bulbo_humedo
-from core.camara import ForzantesAire
 
 # v_viento default de los tests: 2.5 m/s → h_w = 5.7 + 3.8·2.5 = 15.2 W/(m²·K)
 # (reproduce el U_total = 0.5 del fixture pared 3-nodos en _kwargs_base).

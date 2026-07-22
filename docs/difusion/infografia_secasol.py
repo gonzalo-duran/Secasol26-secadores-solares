@@ -15,7 +15,7 @@ from __future__ import annotations
 import math
 import os
 
-from reportlab.lib.colors import HexColor, Color
+from reportlab.lib.colors import Color, HexColor
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
@@ -252,12 +252,10 @@ def draw(c: canvas.Canvas) -> None:
         c.setFillColor(BLANCO)
         c.setFont("Helvetica-Bold", 9.3)
         lines = lab.split("\n")
-        ly = py - 20 - (0 if len(lines) == 1 else 0)
         for j, ln in enumerate(lines):
             c.drawCentredString(px + pw / 2 + 6, py - 20 - j * 11, ln)
         # flecha conectora
         if i < len(pasos) - 1:
-            ax = px + pw + pgap / 2
             c.setStrokeColor(GRIS_CLARO)
             c.setLineWidth(2)
             c.line(px + pw + 3, py - ph / 2, px + pw + pgap - 3, py - ph / 2)

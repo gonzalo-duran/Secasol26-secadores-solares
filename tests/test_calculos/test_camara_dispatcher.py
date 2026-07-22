@@ -23,7 +23,6 @@ from core.camara import (
     CargaProducto,
     ConfiguracionBandejas,
     ConfiguracionFlujo,
-    ConstruccionCamara,
     GeometriaCamara,
 )
 

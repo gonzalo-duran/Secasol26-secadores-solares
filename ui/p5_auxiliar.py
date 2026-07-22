@@ -63,6 +63,7 @@ def _T_entrada_sugerida() -> float:
 def _texto_config_auxiliar(aux: "Auxiliar") -> str:
     """Snapshot .txt del auxiliar (config + cálculos derivados del dataclass)."""
     from datetime import date
+
     from core.auxiliar import TipoAuxiliar, advertencias_auxiliar
 
     sep = "=" * 60
@@ -98,24 +99,24 @@ def _texto_config_auxiliar(aux: "Auxiliar") -> str:
             "",
             "QUEMADOR DE BIOMASA",
             f"  Combustible        : {aux.tipo_biomasa or '—'}",
-            f"  PCI                : " + (f"{aux.PCI_MJ_kg:.2f} MJ/kg" if aux.PCI_MJ_kg else "—"),
-            f"  η quemador         : "
+            "  PCI                : " + (f"{aux.PCI_MJ_kg:.2f} MJ/kg" if aux.PCI_MJ_kg else "—"),
+            "  η quemador         : "
             + (f"{aux.eficiencia_quemador:.1%}" if aux.eficiencia_quemador else "—"),
-            f"  Consumo nominal    : "
+            "  Consumo nominal    : "
             + (
                 f"{aux.consumo_biomasa_kg_h:.3f} kg/h"
                 if aux.consumo_biomasa_kg_h
                 else "(calculado por PCI)"
             ),
-            f"  Consumo efectivo   : " + (f"{consumo:.3f} kg/h" if consumo is not None else "—"),
+            "  Consumo efectivo   : " + (f"{consumo:.3f} kg/h" if consumo is not None else "—"),
         ]
     elif aux.tipo == TipoAuxiliar.RESISTENCIA_ELECTRICA:
         lines += [
             "",
             "RESISTENCIA ELÉCTRICA",
-            f"  Tensión            : "
+            "  Tensión            : "
             + (f"{aux.tension_V:.0f} V" if aux.tension_V else "(no especificada)"),
-            f"  Corriente máx.     : "
+            "  Corriente máx.     : "
             + (
                 f"{aux.corriente_maxima_A:.2f} A" if aux.corriente_maxima_A else "(no especificada)"
             ),
@@ -199,6 +200,7 @@ def _from_json_auxiliar(data: dict) -> "Auxiliar":
 def _json_config_auxiliar(aux: "Auxiliar") -> dict:
     """Snapshot reconstruible (dict) del auxiliar."""
     from datetime import date
+
     from core.auxiliar import TipoAuxiliar, advertencias_auxiliar
 
     base = {
@@ -428,9 +430,7 @@ def render() -> None:
     tipo_biomasa_val: str | None = None
     PCI_val: float | None = None
     eta_quemador_val: float | None = None
-    consumo_override_val: float | None = None
     tension_val: float | None = None
-    corriente_val: float | None = None
 
     if tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
         with st.expander(t("p5.biomasa.titulo"), expanded=False):

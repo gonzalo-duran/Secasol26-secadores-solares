@@ -4,31 +4,42 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S57): **v1.1.0 en producción** · suite pytest **1525 (+1 skip)** ·
-> `origin/main`=`2b56eec`; en working tree, la versión en el panel 🔧 Entorno (sin
-> commitear). **Mejora 38 CERRADA** (fases 1a, 1b,
-> 2, 2b, 3 y 4) y **release 1.1.0 commiteado y pusheado** (`b8a6464`), con el fix de
-> CI del deploy encima (`2b56eec`: clone shallow + skip LFS, que evitaba el corte del
-> clone del Space). La 1.1.0 suma los **exports completos por modo** (PDF/TXT/JSON en
-> Ventana y operación anual, caño maestro, validación/calibración en el reporte) más
-> tres fixes UX salidos de la corrida real del usuario sobre la 1.0.
+> Estado general (S57): **v1.1.0 en producción y verificada en el Space** · suite
+> pytest **1525 (+1 skip)** · `origin/main`=`b047dd5` · ruff y black limpios. **Mejora
+> 38 CERRADA** (fases 1a, 1b, 2, 2b, 3 y 4); la 1.1.0 (`b8a6464`) sumó los **exports
+> completos por modo** (PDF/TXT/JSON en Ventana y operación anual, caño maestro,
+> validación/calibración en el reporte) más tres fixes UX de la corrida real sobre la
+> 1.0, con el fix de CI del deploy encima (`2b56eec`: clone shallow + skip LFS). Las
+> **corridas paramétricas quedaron cerradas** al verificarse e2e en local y en HF.
 
 ## En progreso
 
-- **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
-  resta la verificación manual e2e en Streamlit (etapa 12).
+- **Historia temporal por zona en `simular_cascada`** — deuda de la mejora 38 fase 4:
+  habilitaría el overlay contra termopares fijos del túnel y una previa de N zonas en P4.
 
-- **Verificación post-deploy del Space** — confirmar que HF rebuildeó la 1.1.0 con
-  el workflow corregido (`2b56eec`).
-
-- **Limpieza de ruff** — 47 errores preexistentes en archivos no tocados (eran 14 en
-  S55 con el mismo criterio; parece bump de versión de ruff en el `.venv`). Los
-  archivos tocados en S56 pasan limpio.
+- **`validacion/validacion_cruzada_yacon.py` está roto** — importa
+  `calcular_tiempo_secado_estatico`, que se eliminó en S38 junto con el motor de capa
+  fina. Comparaba capa fina vs termodinámico, así que la mitad de su razón de ser ya no
+  existe: decidir si se borra o se reescribe como comparación B vs C (TD constante vs
+  TD con forzantes sintéticas). Los otros 5 scripts de `validacion/` corren OK.
+  **Ojo:** todos necesitan `PYTHONPATH=.` (`PYTHONPATH=. .venv/bin/python
+  validacion/<script>.py`), lo que el docstring de varios no dice.
 
 - **Inconsistencia viento 2 m vs 10 m** — arrastrada desde la mejora 38; el clima
   medido y NASA POWER no coinciden en la altura de referencia del viento.
 
 ## Completado (hitos recientes)
+
+- **Corridas paramétricas (barridos) en P7 — cerradas (S57)** — la etapa 12
+  (verificación manual e2e, no auto-testeable) quedó confirmada por el usuario: los
+  barridos funcionan **en local y en el Space de HF**. El código estaba completo desde
+  S35 (etapas 1-11, +52 tests, CHANGELOG 0.8.0); era el pendiente más viejo del backlog.
+
+- **Limpieza de ruff (S57)** — de 47 errores a 0. 30 con `--fix` (`I001`, `F401`,
+  `F541`) y 17 a mano: los `E402` eran imports colocados bajo un banner de sección (no
+  hacks de `sys.path`), así que se subieron al tope; los `F841` eran restos de refactor
+  —incluido el andamio de una UI de `consumo_biomasa_kg_h`/`corriente_maxima_A` en P5
+  que nunca se construyó—. Ningún cambio de comportamiento.
 
 - **Versión de Secasol en el panel 🔧 Entorno (S57)** — el panel del sidebar abre con
   `**Secasol** <versión>` antes de Python y las librerías, para ver de un vistazo si el
