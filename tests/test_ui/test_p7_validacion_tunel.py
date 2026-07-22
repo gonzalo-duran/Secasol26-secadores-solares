@@ -81,3 +81,36 @@ class TestDescargasDelTunel:
         ts, y = pares_descarga_tunel(res, pd.Timestamp("2008-01-14", tz="UTC"))
         assert len(ts) == 2
         assert y[1] == pytest.approx(1.5)
+
+
+class TestSnapshotsValidacionTunel:
+    """Helpers puros que persisten la validación del túnel para el reporte PDF."""
+
+    def _metricas(self):
+        from calculos.metricas_validacion import MetricasAjuste
+
+        return MetricasAjuste(
+            n_pares=4, rmse=0.1, mbe=-0.05, mae=0.08, r2=0.98, nse=0.97, d_willmott=0.99
+        )
+
+    def test_snapshot_descargas(self):
+        from ui.p7_resultados import _snapshot_descargas_tunel
+
+        ts = list(pd.date_range("2020-05-15 12:00", periods=3, freq="2h", tz="UTC"))
+        snap = _snapshot_descargas_tunel(
+            ts, np.array([3.0, 2.0, 1.5]), np.array([2.9, 2.1, 1.4]), self._metricas(), "X_producto"
+        )
+        assert snap["variable"] == "X_producto"
+        assert snap["y_med_disp"] == [3.0, 2.0, 1.5]
+        assert snap["metricas"].n_pares == 4
+        assert len(snap["ts"]) == 3
+
+    def test_snapshot_perfil_preserva_nones(self):
+        from ui.p7_resultados import _snapshot_perfil_tunel
+
+        snap = _snapshot_perfil_tunel(
+            "X_producto", [4.0, None, 1.0], [3.8, 2.2, 1.1], self._metricas()
+        )
+        assert snap["magnitud"] == "X_producto"
+        assert snap["y_med_disp"] == [4.0, None, 1.0]
+        assert snap["y_sim_disp"] == pytest.approx([3.8, 2.2, 1.1])

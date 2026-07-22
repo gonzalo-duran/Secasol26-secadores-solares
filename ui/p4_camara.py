@@ -2713,26 +2713,29 @@ def render() -> None:
 
         try:
             if modo_calculo == "termodinamico":
-                if usar_ventana:
-                    fz_aire = _construir_forzantes_ventana(
-                        proyecto=proyecto,
-                        caudal_kg_s=camara.flujo.caudal_masico_kg_s,
-                        P_Pa=P_proyecto_Pa,
-                    )
-                else:
-                    fz_aire = _construir_forzantes_termodinamico(
-                        tipo_forzantes=tipo_forzantes,
-                        T_op_K=T_op_K,
-                        HR_op=HR_op,
-                        caudal_kg_s=camara.flujo.caudal_masico_kg_s,
-                        T_amb_K=T_amb_calc_K,
-                        n_dias=n_dias,
-                        proyecto=proyecto,
-                        p3_eval=st.session_state.get("p3_eval"),
-                        I_g_max_W_m2=I_g_max_W_m2,
-                        P_Pa=P_proyecto_Pa,
-                        dias_consecutivos=dias_consecutivos,
-                    )
+                # El armado de forzantes es pesado (re-corre el colector hora a
+                # hora sobre el lapso): sin spinner parece que la app se colgó.
+                with st.spinner(t("p4.spinner_forzantes")):
+                    if usar_ventana:
+                        fz_aire = _construir_forzantes_ventana(
+                            proyecto=proyecto,
+                            caudal_kg_s=camara.flujo.caudal_masico_kg_s,
+                            P_Pa=P_proyecto_Pa,
+                        )
+                    else:
+                        fz_aire = _construir_forzantes_termodinamico(
+                            tipo_forzantes=tipo_forzantes,
+                            T_op_K=T_op_K,
+                            HR_op=HR_op,
+                            caudal_kg_s=camara.flujo.caudal_masico_kg_s,
+                            T_amb_K=T_amb_calc_K,
+                            n_dias=n_dias,
+                            proyecto=proyecto,
+                            p3_eval=st.session_state.get("p3_eval"),
+                            I_g_max_W_m2=I_g_max_W_m2,
+                            P_Pa=P_proyecto_Pa,
+                            dias_consecutivos=dias_consecutivos,
+                        )
                 # Advertencias del paso de trabajo (ADV_PASO_SINTETICO, fase 1b),
                 # depositadas por _datos_local_paso al resolver el clima real.
                 for _a in st.session_state.get(_PASO_ADV_KEY, []):
@@ -3285,6 +3288,7 @@ def _render_validacion_camara(proyecto) -> None:
 
     with st.expander(t("p4.validacion.titulo"), expanded=False):
         st.caption(t("p4.validacion.intro"))
+        st.info(t("p4.validacion.aviso_orden"))
 
         if proyecto.camara is None:
             st.info(t("p4.validacion.sin_camara"))

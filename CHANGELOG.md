@@ -9,6 +9,33 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Added
 
+- **Exports completos por modo de análisis** — el reporte de prediseño (PDF) y los
+  snapshots TXT/JSON ahora cubren **todos** los modos, no solo Constantes/Transitorio:
+  - **Modo Ventana (gran escala)**: la rama de producción de P7 gana el bloque de
+    exportación (antes no había PDF, TXT ni JSON en ese modo). El reporte incluye la
+    sección **"Producción en ventana"**: producto seco, tasa de régimen, agua evaporada,
+    leña, estado; sub-bloque por subtipo (lotes en batch; avances, X de salida,
+    throughput, cadencia y perfil por zonas en semicontinuo); **diagnóstico del caño
+    maestro** (ΔT media/peor sobre el lapso y ΔP al caudal del sistema — antes sin
+    representación en ningún export; `ResultadoVentana` gana los campos
+    `cano_delta_T_media_K`/`cano_delta_T_minima_K`/`cano_delta_P_Pa` y
+    `armar_forzantes_ventana` devuelve además un dict de diagnósticos); figuras del
+    perfil del túnel y carta psicrométrica. La portada del PDF y el bloque de
+    configuración de TXT/JSON suman **subtipo de gran escala, lapso de la ventana y
+    paso de trabajo**.
+  - **Operación anual de cámara**: si P4 la corrió, entra a los tres exports — agregados
+    anuales (kg/año, eficiencias de Augustus Leon, energías, t de secado promedio),
+    tabla de 12 meses y gráfica de barras kg/mes + η_total (builder
+    `_fig_operacion_anual` extraído para reuso del PDF).
+- **Validación y calibración con datos medidos en el reporte PDF** — sección nueva
+  **"Validación con datos medidos"**, incluida automáticamente si el usuario validó o
+  calibró algo en la sesión (colector en P3, cámara en P4, túnel en P7): overlay
+  medido-vs-simulado, tabla de métricas (RMSE/MBE/MAE/R²/NSE/Willmott), y si hubo
+  calibración la curva objetivo-vs-parámetro con el valor óptimo (los factores de cámara
+  llevan su lectura física y la nota de que son diagnóstico, no diseño). La validación
+  del túnel de P7 ahora **se persiste** en la sesión (snapshots de descargas y perfil
+  por zona) y se invalida al recalcular la ventana.
+
 - **Validación y calibración de cámara y producto (mejora 38, fase 4)** — P4 gana la
   sección **"🔬 Validación con datos medidos"**: se carga el archivo de un ensayo de cámara, se
   elige qué señal validar (**T del aire en cámara, HR del aire, T del producto, humedad del
@@ -137,6 +164,15 @@ Mejoras post-1.0 (sin orden estricto):
 
 ### Fixed
 
+- **Modo Ventana sin botón de reporte** (reporte del usuario, corrida ADITAL): en gran
+  escala + ventana, P7 no mostraba los botones de guardado (TXT/JSON/PDF). Las condiciones
+  representativas de Constantes (T_amb, POA, viento, HR) pasaron a opcionales de punta a
+  punta en los generadores para que la rama de ventana pueda exportar sin sliders.
+- **P4 parecía colgado al calcular cámara en modo ventana**: el armado de forzantes (que
+  re-corre el colector hora a hora sobre el lapso) ocurría fuera del spinner. Ahora el
+  spinner "Armando forzantes del horizonte…" cubre esa etapa.
+- **UX de validación de cámara**: aviso explícito en P4 de que conviene validar después de
+  correr el sistema completo en P7, no como atajo temprano (reporte del usuario).
 - **Gran escala + Ventana: P4 perdía la ventana y caía a un día sintético** — en tipología
   `GRAN_ESCALA` con modo VENTANA, el flag `usar_ventana` de P4 excluía explícitamente la gran
   escala (`and not es_gran_escala`), con el argumento de que el túnel tiene su pipeline propio

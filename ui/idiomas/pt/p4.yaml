@@ -391,6 +391,7 @@ horizonte_recortado: >-
   ⚠️ O horizonte foi recortado para {n} dia(s): o dia de projeto + {solicitado}
   dias cruza o fim do ano climático ({anio}). Escolha um dia de início mais
   cedo (P1) ou menos dias para o horizonte completo.
+spinner_forzantes: Montando as forçantes do horizonte (coletor hora a hora)...
 spinner_integrando: Integrando o motor termodinâmico...
 error_calculo: "❌ Erro no cálculo: {exc}"
 advertencias_calculo: Advertências do cálculo
@@ -519,6 +520,11 @@ validacion:
     Compare a câmara simulada com um ensaio próprio. A câmara é executada
     ISOLADA, forçada com o ar de entrada medido no mesmo arquivo, para que o erro
     do coletor não se misture com o da câmara.
+  aviso_orden: >-
+    💡 Convém validar DEPOIS de rodar o sistema completo na P7 (Resultados):
+    assim o pré-projeto já está fechado e você também pode comparar a cadeia
+    completa coletor→câmara (seção "🔗 Diagnóstico" abaixo). Validar aqui cedo
+    e interromper o fluxo deixa o resto do sistema sem avaliação.
   sin_camara: Configure a câmara para habilitar a validação.
   uploader:
     label: Arquivo do ensaio de câmara (CSV / Excel)

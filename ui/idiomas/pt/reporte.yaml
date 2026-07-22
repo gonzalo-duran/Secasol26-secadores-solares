@@ -35,6 +35,8 @@ portada:
     modo: Modo de análise
     dia: Dia de análise
     fecha_esp: Data específica
+    subtipo: Subtipo grande escala
+    ventana_lapso: Janela de produção
   empl:
     titulo: Localização (P2)
     pendiente: Localização não configurada em P2.
@@ -281,3 +283,86 @@ adv:
   sev: Sev.
   codigo: Código
   mensaje: Mensagem
+ventana:
+  titulo: Produção na janela (grande escala)
+  pendiente: Sem resultados de janela. Execute o cálculo na P7.
+  subtipo: Subtipo
+  horizonte: Horizonte
+  masa_seca: Produto seco produzido
+  agua_evap: Água evaporada
+  tasa_regimen: Taxa de regime
+  status: Estado
+  lena: Lenha consumida
+  batch_titulo: Lotes (batch)
+  batch_lotes: Lotes completos
+  batch_t_medio: Tempo médio de secagem
+  batch_en_progreso: Lote incompleto no fechamento
+  tunel_titulo: Túnel semicontínuo
+  tunel_avances: Avanços (colunas descarregadas)
+  tunel_x_salida: X de saída em regime
+  tunel_throughput: Throughput de produto fresco
+  tunel_cadencia: Cadência de avanço
+  zona: Zona
+  zona_x: X [kg/kg seco]
+  zona_t_aire: T do ar [°C]
+  cano_titulo: Duto mestre (diagnóstico sobre o período)
+  cano_dt_media: ΔT média
+  cano_dt_minima: ΔT mínima (pior)
+  cano_dp: ΔP na vazão do sistema
+  avisos: Avisos do cálculo
+  graficas: Gráficos
+  fig:
+    perfil: Perfil espacial do túnel (X e T por zona)
+anual:
+  titulo: Operação anual da câmara
+  pendiente: Sem resultados anuais. Execute a operação anual na P4.
+  kg_anual: Produção anual (água evaporada)
+  t_promedio: Tempo de secagem médio
+  e_solar: Energia solar anual
+  e_aux: Energia auxiliar anual
+  eta_drying: η drying (média anual)
+  eta_pickup: η pickup (média anual)
+  eta_termica: η térmica (média anual)
+  eta_total: η total (média anual)
+  tabla_titulo: Detalhe mensal
+  col_mes: Mês
+  col_t: t secagem [h]
+  col_conv: Conv.
+  col_kg_batch: kg/lote
+  col_batches: Lotes
+  col_kg_mes: kg/mês
+  col_eta_total: η total
+  graficas: Gráficos
+  fig:
+    kg_mes: Produção mensal e eficiência total
+validacion:
+  titulo: Validação com dados medidos
+  intro: >-
+    Comparação do modelo com ensaios próprios carregados na sessão
+    (melhoria 38). As métricas de diferença estão na unidade do sinal.
+  medido: Medido
+  simulado: Simulado
+  n_pares: Pares comparados
+  colector_titulo: Coletor (P3)
+  camara_titulo: Câmara (P4)
+  tunel_titulo: Túnel semicontínuo (P7)
+  variable: Variável validada
+  forzado_medido: Coletor forçado com o clima do próprio ensaio (Ta + POA medidos).
+  forzado_p2: Coletor forçado com o clima da P2.
+  descargas_titulo: Descargas por avanço (comparação lagrangiana)
+  perfil_titulo: Perfil espacial por zona (comparação euleriana)
+  cal_titulo: Calibração 1-D
+  cal_parametro: Parâmetro varrido
+  cal_objetivo: Função objetivo
+  cal_optimo: Valor ótimo
+  cal_metricas: Métricas no ótimo
+  cal_nota_diagnostico: >-
+    Nota: os fatores de correção da câmara são de diagnóstico; não se aplicam
+    ao projeto nem transferem para outro produto ou vazão.
+  zona: Zona
+  fig:
+    overlay_colector: T de saída do coletor — medido vs simulado
+    overlay_camara: Sinal da câmara — medido vs simulado
+    curva: Curva de calibração (objetivo vs parâmetro)
+    descargas: Descargas do túnel — medido vs simulado
+    perfil: Perfil por zona — medido vs simulado

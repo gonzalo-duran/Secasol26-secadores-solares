@@ -35,6 +35,8 @@ portada:
     modo: Analysis mode
     dia: Analysis day
     fecha_esp: Specific date
+    subtipo: Large-scale subtype
+    ventana_lapso: Production window
   empl:
     titulo: Location (P2)
     pendiente: Location not configured in P2.
@@ -281,3 +283,86 @@ adv:
   sev: Sev.
   codigo: Code
   mensaje: Message
+ventana:
+  titulo: Production window (large scale)
+  pendiente: No window results. Run the calculation in P7.
+  subtipo: Subtype
+  horizonte: Horizon
+  masa_seca: Dry product produced
+  agua_evap: Water evaporated
+  tasa_regimen: Steady-state rate
+  status: Status
+  lena: Firewood consumed
+  batch_titulo: Batches
+  batch_lotes: Completed batches
+  batch_t_medio: Mean drying time
+  batch_en_progreso: Unfinished batch at window close
+  tunel_titulo: Semi-continuous tunnel
+  tunel_avances: Advances (columns discharged)
+  tunel_x_salida: Outlet X at steady state
+  tunel_throughput: Fresh product throughput
+  tunel_cadencia: Advance cadence
+  zona: Zone
+  zona_x: X [kg/kg dry]
+  zona_t_aire: Air T [°C]
+  cano_titulo: Main duct (diagnostics over the window)
+  cano_dt_media: Mean ΔT
+  cano_dt_minima: Minimum ΔT (worst)
+  cano_dp: ΔP at system flow rate
+  avisos: Calculation notices
+  graficas: Charts
+  fig:
+    perfil: Tunnel spatial profile (X and T per zone)
+anual:
+  titulo: Annual chamber operation
+  pendiente: No annual results. Run the annual operation in P4.
+  kg_anual: Annual production (water evaporated)
+  t_promedio: Average drying time
+  e_solar: Annual solar energy
+  e_aux: Annual auxiliary energy
+  eta_drying: η drying (annual mean)
+  eta_pickup: η pickup (annual mean)
+  eta_termica: η thermal (annual mean)
+  eta_total: η total (annual mean)
+  tabla_titulo: Monthly detail
+  col_mes: Month
+  col_t: Drying t [h]
+  col_conv: Conv.
+  col_kg_batch: kg/batch
+  col_batches: Batches
+  col_kg_mes: kg/month
+  col_eta_total: η total
+  graficas: Charts
+  fig:
+    kg_mes: Monthly production and total efficiency
+validacion:
+  titulo: Validation against measured data
+  intro: >-
+    Model comparison against the user's own tests loaded in the session
+    (improvement 38). Difference metrics are in the signal's unit.
+  medido: Measured
+  simulado: Simulated
+  n_pares: Compared pairs
+  colector_titulo: Collector (P3)
+  camara_titulo: Chamber (P4)
+  tunel_titulo: Semi-continuous tunnel (P7)
+  variable: Validated variable
+  forzado_medido: Collector driven by the test's own climate (measured Ta + POA).
+  forzado_p2: Collector driven by the P2 climate.
+  descargas_titulo: Discharges per advance (Lagrangian comparison)
+  perfil_titulo: Spatial profile per zone (Eulerian comparison)
+  cal_titulo: 1-D calibration
+  cal_parametro: Swept parameter
+  cal_objetivo: Objective function
+  cal_optimo: Optimal value
+  cal_metricas: Metrics at the optimum
+  cal_nota_diagnostico: >-
+    Note: chamber correction factors are diagnostic; they are not applied to
+    the design nor do they transfer to another product or flow rate.
+  zona: Zone
+  fig:
+    overlay_colector: Collector outlet T — measured vs simulated
+    overlay_camara: Chamber signal — measured vs simulated
+    curva: Calibration curve (objective vs parameter)
+    descargas: Tunnel discharges — measured vs simulated
+    perfil: Per-zone profile — measured vs simulated

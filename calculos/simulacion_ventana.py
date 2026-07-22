@@ -70,6 +70,11 @@ class ResultadoVentana:
         intervalo_avance_s: Cadencia de avance [s] (para fechar cada descarga).
         t0_utc: Instante absoluto del inicio del lapso (ancla de las descargas).
         lena_consumida_kg: Leña consumida por el híbrido [kg] (Fase 4; hoy 0).
+        cano_delta_T_media_K: ΔT térmica media del caño maestro sobre el lapso
+            [K] (None sin caño maestro). Diagnóstico para el reporte.
+        cano_delta_T_minima_K: ΔT mínima (peor pérdida) del caño maestro [K].
+        cano_delta_P_Pa: Pérdida de carga del caño maestro al caudal del
+            sistema [Pa] (flujo acumulado, ver ``cano_maestro_calc``).
         status: Estado global.
         advertencias: Mensajes integrados.
         aire_T_amb_K, aire_T_ent_K, aire_omega_ent: Estado del aire ambiente y de
@@ -105,6 +110,10 @@ class ResultadoVentana:
     t0_utc: Optional[object] = None
     # Común
     lena_consumida_kg: float = 0.0
+    # Diagnósticos del caño maestro (para los exports; None sin caño).
+    cano_delta_T_media_K: Optional[float] = None
+    cano_delta_T_minima_K: Optional[float] = None
+    cano_delta_P_Pa: Optional[float] = None
     status: str = ""
     advertencias: list[str] = field(default_factory=list)
     # Estados del aire para la carta psicrométrica del proceso (mejora 27).

@@ -123,7 +123,7 @@ def _proyecto(
 def test_forzantes_longitud_y_calentamiento():
     proy = _proyecto(SubtipoGranEscala.BATCH)
     df = _clima_sintetico(dias=2)
-    fz, lena, adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    fz, lena, adv, _diag = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert len(fz.t_s) == len(df)
     assert fz.I_g_POA_W_m2 is not None
     # El colector calienta: T_ent ≥ T_amb en todo el horizonte.
@@ -137,16 +137,43 @@ def test_cano_maestro_modifica_T_ent():
     df = _clima_sintetico(dias=2)
     sin_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=False)
     con_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=True)
-    fz_sin, _, _ = armar_forzantes_ventana(sin_cano, df, P_Pa=88000.0)
-    fz_con, _, _ = armar_forzantes_ventana(con_cano, df, P_Pa=88000.0)
+    fz_sin, _, _, _ = armar_forzantes_ventana(sin_cano, df, P_Pa=88000.0)
+    fz_con, _, _, _ = armar_forzantes_ventana(con_cano, df, P_Pa=88000.0)
     # El caño introduce una ΔT térmica → T_ent difiere.
     assert not np.allclose(fz_sin.T_ent_K, fz_con.T_ent_K)
+
+
+def test_diag_cano_maestro_para_exports():
+    """Con caño maestro, el diag trae ΔT media/mínima y ΔP > 0; sin caño, vacío."""
+    df = _clima_sintetico(dias=2)
+    sin_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=False)
+    con_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=True)
+    _, _, _, diag_sin = armar_forzantes_ventana(sin_cano, df, P_Pa=88000.0)
+    _, _, _, diag_con = armar_forzantes_ventana(con_cano, df, P_Pa=88000.0)
+    assert diag_sin == {}
+    assert "cano_delta_T_media_K" in diag_con
+    assert "cano_delta_T_minima_K" in diag_con
+    assert diag_con["cano_delta_T_minima_K"] <= diag_con["cano_delta_T_media_K"]
+    assert diag_con["cano_delta_P_Pa"] > 0.0
+
+
+def test_calcular_todo_ventana_copia_diag_cano():
+    """El resultado de ventana expone los diagnósticos del caño maestro."""
+    proy = _proyecto(SubtipoGranEscala.BATCH, con_cano=True)
+    df = _clima_sintetico(dias=2)
+    res = calcular_todo_ventana(proy, df, P_Pa=88000.0)
+    assert res.cano_delta_P_Pa is not None and res.cano_delta_P_Pa > 0.0
+    assert res.cano_delta_T_media_K is not None
+
+    sin_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=False)
+    res_sin = calcular_todo_ventana(sin_cano, df, P_Pa=88000.0)
+    assert res_sin.cano_delta_P_Pa is None
 
 
 def test_auxiliar_arranque_suma_lena():
     proy = _proyecto(SubtipoGranEscala.BATCH, con_aux=True)
     df = _clima_sintetico(dias=3)
-    fz, lena, adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    fz, lena, adv, _diag = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert lena > 0.0  # el quemador arrancó en las ventanas mañana/tarde
 
 
@@ -164,8 +191,8 @@ def test_colector_forzado_usa_caudal_sistema():
     proy_rapido.camara.flujo = ConfiguracionFlujo(caudal_masico_kg_s=1.0)
 
     v_diseno_antes = proy_lento.colector.unidad.velocidad_diseno_ms
-    fz_lento, _, _ = armar_forzantes_ventana(proy_lento, df, P_Pa=88000.0)
-    fz_rapido, _, _ = armar_forzantes_ventana(proy_rapido, df, P_Pa=88000.0)
+    fz_lento, _, _, _ = armar_forzantes_ventana(proy_lento, df, P_Pa=88000.0)
+    fz_rapido, _, _, _ = armar_forzantes_ventana(proy_rapido, df, P_Pa=88000.0)
 
     # Mismo banco, menos caudal → el aire sale más caliente al mediodía.
     assert np.max(fz_lento.T_ent_K) > np.max(fz_rapido.T_ent_K) + 5.0
@@ -178,7 +205,7 @@ def test_adv_ventana_caudal_banco_incoherente():
     df = _clima_sintetico(dias=2)
     proy = _proyecto(SubtipoGranEscala.BATCH)
     # Banco: 10 ramas × 0.5 m/s × 0.025 m² ≈ 0.13 kg/s vs sistema 2.0 kg/s.
-    _, _, adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    _, _, adv, _ = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert any("ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE" in a for a in adv)
 
 
@@ -191,7 +218,7 @@ def test_adv_ventana_caudal_coherente_sin_advertencia():
     proy.camara.flujo = ConfiguracionFlujo(caudal_masico_kg_s=0.52)
     # Sección frontal chica para que la velocidad en cámara no dispare la otra.
     proy.camara.geometria = GeometriaCamara(largo_m=3.0, ancho_m=1.0, alto_m=1.2)
-    _, _, adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    _, _, adv, _ = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert not any("ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE" in a for a in adv)
     assert not any("ADV_VENTANA_VELOCIDAD_CAMARA_BAJA" in a for a in adv)
 
@@ -201,7 +228,7 @@ def test_adv_ventana_velocidad_camara_baja():
     df = _clima_sintetico(dias=2)
     proy = _proyecto(SubtipoGranEscala.BATCH)
     proy.camara.flujo = ConfiguracionFlujo(caudal_masico_kg_s=0.05)
-    _, _, adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    _, _, adv, _ = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert any("ADV_VENTANA_VELOCIDAD_CAMARA_BAJA" in a for a in adv)
 
 
@@ -263,7 +290,7 @@ def test_forzantes_ventana_deriva_dt_del_indice():
     """armar_forzantes_ventana deriva el paso del índice (15 min), no asume 3600 s."""
     proy = _proyecto(SubtipoGranEscala.BATCH)
     df = _clima_15min(dias=2)
-    fz, _lena, _adv = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    fz, _lena, _adv, _ = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
     assert len(fz.t_s) == len(df)
     # Paso de la serie de forzantes = 900 s (15 min).
     assert fz.t_s[1] - fz.t_s[0] == pytest.approx(900.0)

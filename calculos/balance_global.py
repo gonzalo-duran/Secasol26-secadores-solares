@@ -1822,7 +1822,7 @@ def armar_forzantes_ventana(
     clima_datos_df,
     *,
     P_Pa: float = 101325.0,
-) -> tuple[ForzantesAire, float, list[str]]:
+) -> tuple[ForzantesAire, float, list[str], dict[str, float]]:
     """Arma las forzantes de cámara sobre la ventana desde clima real horario.
 
     Encadena, hora a hora sobre el lapso ``clima_datos_df`` (slice horario con
@@ -1839,7 +1839,10 @@ def armar_forzantes_ventana(
         P_Pa: Presión representativa [Pa].
 
     Returns:
-        (forzantes, lena_consumida_kg, advertencias).
+        (forzantes, lena_consumida_kg, advertencias, diagnosticos). El último
+        es un dict con los diagnósticos del caño maestro para los exports
+        (``cano_delta_T_media_K``, ``cano_delta_T_minima_K``,
+        ``cano_delta_P_Pa``) — vacío si no hay caño maestro.
     """
     from calculos.clima_calc import calcular_POA_horizonte
     from calculos.psicrometria import humedad_absoluta
@@ -1946,6 +1949,7 @@ def armar_forzantes_ventana(
                 )
 
     # Caño maestro: ΔT térmica entre la salida del banco y la cámara.
+    diagnosticos: dict[str, float] = {}
     cano = getattr(getattr(proyecto.colector, "banco", None), "cano_maestro", None)
     if cano is not None:
         from calculos.cano_maestro_calc import delta_T_cano_maestro
@@ -1966,6 +1970,21 @@ def armar_forzantes_ventana(
             ]
         )
         T_post_cano = T_sal_col + dT_cano
+        # Diagnósticos para los exports: ΔT media/peor y ΔP al caudal del
+        # sistema (la serie dT_cano no se persiste; estos agregados sí).
+        diagnosticos["cano_delta_T_media_K"] = float(np.mean(dT_cano))
+        diagnosticos["cano_delta_T_minima_K"] = float(np.min(dT_cano))
+        try:
+            from calculos.cano_maestro_calc import estimar_delta_P_cano_maestro
+            from calculos.motor_calc import densidad_aire
+
+            T_media_K = float(np.mean(T_sal_col))
+            Q_vol_m3_s = m_dot / densidad_aire(T_media_K, P_Pa)
+            diagnosticos["cano_delta_P_Pa"] = float(
+                estimar_delta_P_cano_maestro(cano, Q_vol_m3_s, T_K=T_media_K, P_Pa=P_Pa)["total"]
+            )
+        except Exception as exc:
+            advertencias.append(f"ADV_VENTANA_CANO_DP: no se pudo estimar ΔP del caño ({exc}).")
     else:
         T_post_cano = T_sal_col
 
@@ -2013,7 +2032,7 @@ def armar_forzantes_ventana(
         t0_utc=df.index[0] if len(df.index) else None,
         Q_rad_aire_W=Q_rad_aire,
     )
-    return forzantes, lena_kg, advertencias
+    return forzantes, lena_kg, advertencias, diagnosticos
 
 
 def _hora_offset_local(clima_datos_df, emplazamiento) -> float:
@@ -2063,9 +2082,13 @@ def calcular_todo_ventana(
             advertencias=errores,
         )
 
-    forzantes, lena_kg, adv = armar_forzantes_ventana(proyecto, clima_datos_df, P_Pa=P_Pa)
+    forzantes, lena_kg, adv, diag = armar_forzantes_ventana(proyecto, clima_datos_df, P_Pa=P_Pa)
     res = simular_ventana(proyecto, forzantes_base=forzantes, P_Pa=P_Pa)
     # La leña del auxiliar se computa al armar las forzantes (calendario de arranque).
     res.lena_consumida_kg = lena_kg
     res.advertencias = list(adv) + list(res.advertencias)
+    # Diagnósticos del caño maestro (para los exports).
+    res.cano_delta_T_media_K = diag.get("cano_delta_T_media_K")
+    res.cano_delta_T_minima_K = diag.get("cano_delta_T_minima_K")
+    res.cano_delta_P_Pa = diag.get("cano_delta_P_Pa")
     return res

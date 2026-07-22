@@ -617,6 +617,23 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
                 cfg.fecha_especifica.isoformat() if cfg.fecha_especifica else None
             ),
         }
+        # Gran escala: el subtipo (batch/semicontinuo) distingue el secador.
+        _subtipo = getattr(cfg, "subtipo_gran_escala", None)
+        if cfg.tipologia == Tipologia.GRAN_ESCALA and _subtipo is not None:
+            lines.append(f"  Subtipo gran escala : {_subtipo.value}")
+            json_cfg["subtipo_gran_escala"] = _subtipo.value
+        # Modo ventana: el lapso y el paso de trabajo definen la corrida.
+        _v_ini = getattr(cfg, "ventana_inicio", None)
+        _v_fin = getattr(cfg, "ventana_fin", None)
+        if cfg.modo_analisis == ModoAnalisis.VENTANA and _v_ini is not None and _v_fin is not None:
+            lines.append(f"  Ventana producción  : {_v_ini.isoformat()} → {_v_fin.isoformat()}")
+            json_cfg["ventana_inicio"] = _v_ini.isoformat()
+            json_cfg["ventana_fin"] = _v_fin.isoformat()
+        _paso_s = getattr(cfg, "paso_trabajo_s", None)
+        if _paso_s is not None and float(_paso_s) != 3600.0:
+            lines.append(f"  Paso de trabajo     : {float(_paso_s) / 60.0:.0f} min")
+        if _paso_s is not None:
+            json_cfg["paso_trabajo_s"] = float(_paso_s)
     else:
         lines.append("  (sin configurar)")
 
@@ -723,10 +740,11 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
 def _texto_resultados_completo(
     proyecto,
     res: "ResultadosCompletos",
-    T_amb_C: float,
-    I_g: float,
-    v_viento: float,
-    HR_cam_pct: float,
+    T_amb_C: Optional[float] = None,
+    I_g: Optional[float] = None,
+    v_viento: Optional[float] = None,
+    HR_cam_pct: Optional[float] = None,
+    res_anual=None,
 ) -> str:
     from datetime import date
 
@@ -746,14 +764,20 @@ def _texto_resultados_completo(
     # Bloque P1/P2/clima
     meta_lines, _meta_dict = _bloque_meta_emplazamiento_clima(proyecto)
     lines += meta_lines
-    lines += [
-        "",
-        "CONDICIONES DE OPERACIÓN REPRESENTATIVAS (P7)",
-        f"  T ambiente          : {T_amb_C:.1f} °C",
-        f"  Irradiancia (POA)   : {I_g:.0f} W/m²",
-        f"  Velocidad viento    : {v_viento:.1f} m/s",
-        f"  HR aire entrada     : {HR_cam_pct:.0f} %",
-    ]
+    # En modo Ventana no hay sliders de condiciones representativas: el bloque
+    # solo se emite cuando las condiciones existen (Constantes/Transitorio).
+    if T_amb_C is not None:
+        lines += [
+            "",
+            "CONDICIONES DE OPERACIÓN REPRESENTATIVAS (P7)",
+            f"  T ambiente          : {T_amb_C:.1f} °C",
+        ]
+        if I_g is not None:
+            lines.append(f"  Irradiancia (POA)   : {I_g:.0f} W/m²")
+        if v_viento is not None:
+            lines.append(f"  Velocidad viento    : {v_viento:.1f} m/s")
+        if HR_cam_pct is not None:
+            lines.append(f"  HR aire entrada     : {HR_cam_pct:.0f} %")
 
     # --- Colector ---
     if proyecto.colector is not None:
@@ -981,6 +1005,14 @@ def _texto_resultados_completo(
         if f_sol is not None:
             lines.append(f"  Fracción solar: {f_sol:.1%}")
 
+    # Producción en ventana (gran escala) y operación anual, si aplican.
+    from calculos.simulacion_ventana import ResultadoVentana
+
+    if isinstance(res, ResultadoVentana):
+        lines += _texto_resultado_ventana(res)
+    if res_anual is not None:
+        lines += _texto_operacion_anual(res_anual)
+
     lines.append("")
     return "\n".join(lines)
 
@@ -988,10 +1020,11 @@ def _texto_resultados_completo(
 def _json_resultados_completo(
     proyecto,
     res: "ResultadosCompletos",
-    T_amb_C: float,
-    I_g: float,
-    v_viento: float,
-    HR_cam_pct: float,
+    T_amb_C: Optional[float] = None,
+    I_g: Optional[float] = None,
+    v_viento: Optional[float] = None,
+    HR_cam_pct: Optional[float] = None,
+    res_anual=None,
 ) -> dict:
     """Snapshot completo reconstruible (dict) del prediseño."""
     from datetime import date
@@ -1171,7 +1204,190 @@ def _json_resultados_completo(
                 "desviacion_vs_diseno": _desviacion_caudal_natural(res_chim, proyecto),
             }
     snapshot["resultados_globales"] = res_globales
+
+    # Producción en ventana (gran escala): bloque propio del ResultadoVentana.
+    from calculos.simulacion_ventana import ResultadoVentana
+
+    if isinstance(res, ResultadoVentana):
+        snapshot["resultado_ventana"] = _json_resultado_ventana(res)
+
+    # Operación anual de cámara (si P4 la corrió): convive con el resto.
+    if res_anual is not None:
+        snapshot["operacion_anual"] = _json_operacion_anual(res_anual)
     return snapshot
+
+
+# ---------------------------------------------------------------------------
+# Exports del modo Ventana (gran escala) y de la operación anual — helpers
+# puros (sin session_state): los consumen TXT, JSON y el reporte PDF.
+# ---------------------------------------------------------------------------
+
+
+def _texto_resultado_ventana(res) -> list[str]:
+    """Bloque de texto (ES, artefacto de exportación) de un ResultadoVentana."""
+    lines = [
+        "",
+        "PRODUCCIÓN EN VENTANA (GRAN ESCALA)",
+        f"  Subtipo             : {res.subtipo}",
+        f"  Horizonte           : {res.horizonte_s / 86400.0:.1f} días "
+        f"({res.horizonte_s / 3600.0:.0f} h)",
+        f"  Producto seco       : {res.masa_seca_producida_kg:.1f} kg",
+        f"  Agua evaporada      : {res.masa_evaporada_kg:.1f} kg",
+    ]
+    if res.tasa_regimen_kg_dia is not None:
+        lines.append(f"  Tasa de régimen     : {res.tasa_regimen_kg_dia:.1f} kg/día")
+    if res.lena_consumida_kg > 0:
+        lines.append(f"  Leña consumida      : {res.lena_consumida_kg:.1f} kg")
+    lines.append(f"  Estado              : {res.status}")
+
+    if res.subtipo == "BATCH":
+        lines += [
+            "",
+            "  LOTES (BATCH)",
+            f"    Lotes completos   : {res.n_batches_completos}",
+        ]
+        if res.t_secado_medio_s is not None:
+            lines.append(f"    t secado medio    : {res.t_secado_medio_s / 3600.0:.1f} h")
+        if res.batch_en_progreso:
+            lines.append("    (quedó un lote sin completar al cierre de la ventana)")
+    elif res.subtipo == "SEMICONTINUO":
+        lines += [
+            "",
+            "  TÚNEL SEMICONTINUO",
+            f"    Avances (columnas descargadas): {res.n_avances}",
+        ]
+        if res.X_salida_regimen is not None:
+            lines.append(f"    X salida en régimen: {res.X_salida_regimen:.3f} kg/kg seco")
+        if res.throughput_fresco_kg_dia is not None:
+            lines.append(f"    Throughput fresco  : {res.throughput_fresco_kg_dia:.1f} kg/día")
+        if res.intervalo_avance_s is not None:
+            lines.append(f"    Cadencia de avance : {res.intervalo_avance_s / 3600.0:.1f} h")
+        if res.perfil_X_zonas is not None and len(res.perfil_X_zonas):
+            lines.append("    Perfil X por zona (entrada → salida):")
+            for i, x_z in enumerate(res.perfil_X_zonas):
+                t_z = (
+                    f" | T aire = {float(res.perfil_T_aire_zonas_K[i]) - 273.15:.1f} °C"
+                    if res.perfil_T_aire_zonas_K is not None and len(res.perfil_T_aire_zonas_K) > i
+                    else ""
+                )
+                lines.append(f"      Zona {i + 1}: X = {float(x_z):.3f} kg/kg seco{t_z}")
+
+    if res.cano_delta_P_Pa is not None:
+        lines += [
+            "",
+            "  CAÑO MAESTRO (diagnóstico sobre el lapso)",
+            f"    ΔT media          : {res.cano_delta_T_media_K:+.2f} K",
+            f"    ΔT mínima (peor)  : {res.cano_delta_T_minima_K:+.2f} K",
+            f"    ΔP al caudal sist.: {res.cano_delta_P_Pa:.1f} Pa",
+        ]
+
+    for adv in res.advertencias or []:
+        lines.append(f"  ⚠ {adv}")
+    return lines
+
+
+def _json_resultado_ventana(res) -> dict:
+    """Dict JSON-serializable (vía to_jsonable) de un ResultadoVentana."""
+
+    def _lista(arr):
+        return [float(v) for v in arr] if arr is not None else None
+
+    return {
+        "subtipo": res.subtipo,
+        "horizonte_s": res.horizonte_s,
+        "masa_seca_producida_kg": res.masa_seca_producida_kg,
+        "masa_evaporada_kg": res.masa_evaporada_kg,
+        "tasa_regimen_kg_dia": res.tasa_regimen_kg_dia,
+        "lena_consumida_kg": res.lena_consumida_kg,
+        "status": res.status,
+        # BATCH
+        "n_batches_completos": res.n_batches_completos,
+        "t_secado_medio_s": res.t_secado_medio_s,
+        "batch_en_progreso": res.batch_en_progreso,
+        # SEMICONTINUO
+        "n_avances": res.n_avances,
+        "X_salida_regimen": res.X_salida_regimen,
+        "throughput_fresco_kg_dia": res.throughput_fresco_kg_dia,
+        "perfil_X_zonas": _lista(res.perfil_X_zonas),
+        "perfil_T_aire_zonas_K": _lista(res.perfil_T_aire_zonas_K),
+        "perfil_omega_aire_zonas": _lista(res.perfil_omega_aire_zonas),
+        "X_salida_por_avance": _lista(res.X_salida_por_avance),
+        "T_prod_salida_por_avance_K": _lista(res.T_prod_salida_por_avance_K),
+        "intervalo_avance_s": res.intervalo_avance_s,
+        "t0_utc": (res.t0_utc.isoformat() if res.t0_utc is not None else None),
+        # Caño maestro (diagnóstico)
+        "cano_delta_T_media_K": res.cano_delta_T_media_K,
+        "cano_delta_T_minima_K": res.cano_delta_T_minima_K,
+        "cano_delta_P_Pa": res.cano_delta_P_Pa,
+        # Estados del aire (carta psicrométrica)
+        "aire_T_amb_K": res.aire_T_amb_K,
+        "aire_T_ent_K": res.aire_T_ent_K,
+        "aire_omega_ent": res.aire_omega_ent,
+        "aire_T_salida_K": res.aire_T_salida_K,
+        "aire_omega_salida": res.aire_omega_salida,
+        "advertencias": list(res.advertencias or []),
+    }
+
+
+def _texto_operacion_anual(res_anual) -> list[str]:
+    """Bloque de texto (ES) de la operación anual de cámara (Augustus Leon)."""
+    lines = [
+        "",
+        "OPERACIÓN ANUAL DE CÁMARA",
+        f"  Producción anual    : {res_anual.kg_secados_anual:.1f} kg (agua evaporada)",
+        f"  t secado promedio   : {res_anual.t_secado_promedio_h:.1f} h",
+        f"  E solar anual       : {res_anual.E_solar_anual_MJ:.0f} MJ",
+        f"  E auxiliar anual    : {res_anual.E_auxiliar_anual_MJ:.0f} MJ",
+        "  Eficiencias medias (Augustus Leon):",
+        f"    η drying  = {res_anual.eta_drying_anual_media:.3f}",
+        f"    η pickup  = {res_anual.eta_pickup_anual_media:.3f}",
+        f"    η térmica = {res_anual.eta_termica_anual_media:.3f}",
+        f"    η total   = {res_anual.eta_total_anual_media:.3f}",
+        "",
+        "  DETALLE MENSUAL",
+        "  mes | t_sec[h] | conv | kg/batch | n_batch | kg/mes | η_dry | η_pick | η_term | η_tot",
+    ]
+    for p in res_anual.puntos_mensuales:
+        lines.append(
+            f"  {p.mes:3d} | {p.t_secado_h:8.1f} | {'sí' if p.convergio else 'NO':>4} | "
+            f"{p.m_evap_kg_por_batch:8.2f} | {p.n_batches:7d} | {p.kg_secados_mes:6.1f} | "
+            f"{p.eta_drying:5.3f} | {p.eta_pickup:6.3f} | {p.eta_termica:6.3f} | "
+            f"{p.eta_total:5.3f}"
+        )
+    for adv in res_anual.advertencias or []:
+        lines.append(f"  ⚠ {adv}")
+    return lines
+
+
+def _json_operacion_anual(res_anual) -> dict:
+    """Dict JSON-serializable de ResultadosAnualCamara."""
+    return {
+        "kg_secados_anual": res_anual.kg_secados_anual,
+        "t_secado_promedio_h": res_anual.t_secado_promedio_h,
+        "E_solar_anual_MJ": res_anual.E_solar_anual_MJ,
+        "E_auxiliar_anual_MJ": res_anual.E_auxiliar_anual_MJ,
+        "eta_drying_anual_media": res_anual.eta_drying_anual_media,
+        "eta_pickup_anual_media": res_anual.eta_pickup_anual_media,
+        "eta_termica_anual_media": res_anual.eta_termica_anual_media,
+        "eta_total_anual_media": res_anual.eta_total_anual_media,
+        "advertencias": list(res_anual.advertencias or []),
+        "puntos_mensuales": [
+            {
+                "mes": p.mes,
+                "t_secado_h": p.t_secado_h,
+                "convergio": p.convergio,
+                "m_evap_kg_por_batch": p.m_evap_kg_por_batch,
+                "n_batches": p.n_batches,
+                "kg_secados_mes": p.kg_secados_mes,
+                "eta_drying": p.eta_drying,
+                "eta_pickup": p.eta_pickup,
+                "eta_termica": p.eta_termica,
+                "eta_total": p.eta_total,
+                "advertencias": list(p.advertencias or []),
+            }
+            for p in res_anual.puntos_mensuales
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1668,6 +1884,8 @@ def _render_ventana(proyecto) -> None:
             res = calcular_todo_ventana(proyecto, df_ventana)
         st.session_state["p7_resultado_ventana"] = res
         st.session_state["p7_t_calc_ventana_s"] = _time.perf_counter() - _t0
+        # Resultado nuevo → la validación del túnel persistida queda obsoleta.
+        st.session_state.pop("p7_valtun_resultado", None)
 
     res = st.session_state.get("p7_resultado_ventana")
     if res is None:
@@ -1678,6 +1896,11 @@ def _render_ventana(proyecto) -> None:
     if t_calc is not None:
         st.caption(t("p7.ventana.t_calc", t=t_calc))
     _render_resultados_ventana(res, proyecto)
+
+    # Exportación (txt / JSON / PDF) también en modo ventana. Las condiciones
+    # representativas de Constantes no existen acá → quedan en None.
+    if getattr(res, "status", "") != "error":
+        _render_botones_guardado(proyecto, res)
 
 
 def _omega_amb_constantes(res, proyecto) -> Optional[float]:
@@ -2264,6 +2487,12 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     st.dataframe(df_meses, width="stretch")
 
     # Gráfica de barras kg/mes con línea η_total
+    mostrar_plotly(_fig_operacion_anual(res_anual), nombre="operacion_anual")
+
+
+def _fig_operacion_anual(res_anual):
+    """Barras kg/mes + línea η_total (eje secundario). Reusada por el PDF."""
+    meses_nombres = t("graficas.meses_abbr").split(",")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_bar(
         x=meses_nombres,
@@ -2288,17 +2517,25 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     )
     fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_kg"), secondary_y=False)
     fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_eta"), secondary_y=True)
-    mostrar_plotly(fig, nombre="operacion_anual")
+    return fig
 
 
 def _render_botones_guardado(
-    proyecto, res, *, T_amb_C: float, I_g: float, v_viento: float, HR_cam_pct: float
+    proyecto,
+    res,
+    *,
+    T_amb_C: Optional[float] = None,
+    I_g: Optional[float] = None,
+    v_viento: Optional[float] = None,
+    HR_cam_pct: Optional[float] = None,
 ) -> None:
     """Renderiza el bloque de botones .txt / .json / PDF al pie de P7.
 
-    Compartido entre la rama de modo transitorio y la de constantes
-    representativas. ``res`` puede ser ``ResultadosCompletos`` o
-    ``ResultadosCompletosTransitorio`` — ambos funcionan vía ``getattr``.
+    Compartido entre las ramas de modo transitorio, constantes representativas
+    y ventana de producción. ``res`` puede ser ``ResultadosCompletos``,
+    ``ResultadosCompletosTransitorio`` o ``ResultadoVentana`` — todos funcionan
+    vía ``getattr``. Las condiciones representativas (sliders de Constantes)
+    son opcionales: en modo Ventana no existen y quedan en ``None``.
     """
     from ui.componentes.serializacion import (
         dump_json,
@@ -2307,6 +2544,8 @@ def _render_botones_guardado(
     )
 
     st.divider()
+    # Operación anual de cámara (si P4 la corrió): entra a los tres exports.
+    res_anual = st.session_state.get("p4_resultado_anual")
     texto_res = _texto_resultados_completo(
         proyecto,
         res,
@@ -2314,6 +2553,7 @@ def _render_botones_guardado(
         I_g=I_g,
         v_viento=v_viento,
         HR_cam_pct=HR_cam_pct,
+        res_anual=res_anual,
     )
     json_res = _json_resultados_completo(
         proyecto,
@@ -2322,6 +2562,7 @@ def _render_botones_guardado(
         I_g=I_g,
         v_viento=v_viento,
         HR_cam_pct=HR_cam_pct,
+        res_anual=res_anual,
     )
     col_txt, col_json = st.columns(2)
     with col_txt:
@@ -2409,6 +2650,35 @@ def _perfil_medido_desde_editor(filas, n_zonas: int):
         pares.append((i, v))
     pares.sort()
     return [z for z, _ in pares], [v for _, v in pares]
+
+
+def _snapshot_descargas_tunel(ts, y_med_disp, y_sim_disp, metricas, variable: str) -> dict:
+    """Snapshot persistible de la comparación de descargas del túnel.
+
+    Helper puro (testeable sin servidor): lo consume el reporte PDF vía
+    ``st.session_state["p7_valtun_resultado"]["descargas"]``. Los valores ya
+    están en unidad de display.
+    """
+    return {
+        "ts": list(ts),
+        "y_med_disp": [float(v) for v in y_med_disp],
+        "y_sim_disp": [float(v) for v in y_sim_disp],
+        "metricas": metricas,
+        "variable": variable,
+    }
+
+
+def _snapshot_perfil_tunel(magnitud: str, y_med_disp, y_sim_disp, metricas) -> dict:
+    """Snapshot persistible de la comparación de perfil por zona del túnel.
+
+    ``y_med_disp`` puede traer None en las zonas sin sensor (se preserva).
+    """
+    return {
+        "magnitud": magnitud,
+        "y_med_disp": [None if v is None else float(v) for v in y_med_disp],
+        "y_sim_disp": [float(v) for v in y_sim_disp],
+        "metricas": metricas,
+    }
 
 
 def _render_validacion_tunel(proyecto, res) -> None:
@@ -2529,6 +2799,10 @@ def _render_validacion_tunel(proyecto, res) -> None:
                 n=int(metricas.n_pares),
             )
         )
+        # Persistir para el reporte PDF (sección de validación).
+        st.session_state.setdefault("p7_valtun_resultado", {})["perfil"] = _snapshot_perfil_tunel(
+            magnitud, y_med_alineado, list(perfil_sim_disp), metricas
+        )
 
 
 def _render_descargas_tunel(res, cm, ingerir_referencia, evaluar_ajuste, fig_overlay) -> None:
@@ -2643,4 +2917,12 @@ def _render_descargas_tunel(res, cm, ingerir_referencia, evaluar_ajuste, fig_ove
             r2=f"{metricas.r2:.3f}",
             n=int(metricas.n_pares),
         )
+    )
+    # Persistir para el reporte PDF (sección de validación).
+    st.session_state.setdefault("p7_valtun_resultado", {})["descargas"] = _snapshot_descargas_tunel(
+        ts,
+        a_display(np.asarray(y_med), "X_producto"),
+        a_display(np.asarray(y_sim_al), "X_producto"),
+        metricas,
+        "X_producto",
     )

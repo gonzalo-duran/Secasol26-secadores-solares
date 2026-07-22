@@ -314,7 +314,9 @@ def _figuras_p4(proyecto, session_state, tr: Tr) -> list[tuple[str, bytes]]:
     return out
 
 
-def _figuras_p7(res, tr: Tr, proyecto=None, *, HR_cam_pct: float = 20.0) -> list[tuple[str, bytes]]:
+def _figuras_p7(
+    res, tr: Tr, proyecto=None, *, HR_cam_pct: float | None = 20.0
+) -> list[tuple[str, bytes]]:
     """Devuelve [(título, png_bytes), ...] del balance global (P7)."""
     out: list[tuple[str, bytes]] = []
     if res is None:
@@ -339,7 +341,11 @@ def _figuras_p7(res, tr: Tr, proyecto=None, *, HR_cam_pct: float = 20.0) -> list
             omega_amb = None
             # Modo Constantes (sin forzantes): ω desde HR_cam + T_ent + P.
             T_in = getattr(res, "T_entrada_camara_K", None)
-            if T_in is not None and getattr(res, "forzantes_aplicadas", None) is None:
+            if (
+                T_in is not None
+                and HR_cam_pct is not None
+                and getattr(res, "forzantes_aplicadas", None) is None
+            ):
                 try:
                     P_Pa, _ = presion_representativa_proyecto(proyecto)
                 except Exception:
@@ -354,6 +360,51 @@ def _figuras_p7(res, tr: Tr, proyecto=None, *, HR_cam_pct: float = 20.0) -> list
                 out.append((tr("global.fig.carta"), png))
         except Exception:
             pass
+    return out
+
+
+def _figuras_ventana(res, tr: Tr, proyecto=None) -> list[tuple[str, bytes]]:
+    """Figuras del modo Ventana (gran escala): perfil del túnel + carta."""
+    out: list[tuple[str, bytes]] = []
+    if res is None:
+        return out
+    # Perfil espacial del túnel (solo semicontinuo con perfil disponible).
+    if getattr(res, "perfil_X_zonas", None) is not None and len(res.perfil_X_zonas):
+        try:
+            from ui.p7_resultados import _fig_perfil_tunel
+
+            png = _fig_a_png(_fig_perfil_tunel(res))
+            if png:
+                out.append((tr("ventana.fig.perfil"), png))
+        except Exception:
+            pass
+    # Carta psicrométrica del proceso (fig_carta_psicrometrica ya soporta
+    # ResultadoVentana vía los campos aire_*).
+    if proyecto is not None:
+        try:
+            from ui.componentes.carta_psicrometrica import fig_carta_psicrometrica
+
+            png = _fig_a_png(fig_carta_psicrometrica(res, proyecto))
+            if png:
+                out.append((tr("global.fig.carta"), png))
+        except Exception:
+            pass
+    return out
+
+
+def _figuras_anual(res_anual, tr: Tr) -> list[tuple[str, bytes]]:
+    """Figura de barras kg/mes + η_total de la operación anual (si convierte)."""
+    out: list[tuple[str, bytes]] = []
+    if res_anual is None:
+        return out
+    try:
+        from ui.p7_resultados import _fig_operacion_anual
+
+        png = _fig_a_png(_fig_operacion_anual(res_anual))
+        if png:
+            out.append((tr("anual.fig.kg_mes"), png))
+    except Exception:
+        pass
     return out
 
 
@@ -586,6 +637,15 @@ def _portada(
     ]
     if snap_cfg.get("fecha_especifica"):
         rows_cfg.append([tr("portada.p1.fecha_esp"), snap_cfg["fecha_especifica"]])
+    if snap_cfg.get("subtipo_gran_escala"):
+        rows_cfg.append([tr("portada.p1.subtipo"), _fmt(snap_cfg.get("subtipo_gran_escala"))])
+    if snap_cfg.get("ventana_inicio") and snap_cfg.get("ventana_fin"):
+        rows_cfg.append(
+            [
+                tr("portada.p1.ventana_lapso"),
+                f"{snap_cfg['ventana_inicio']} → {snap_cfg['ventana_fin']}",
+            ]
+        )
     elems.append(_tabla_kv(rows_cfg))
     elems.append(Spacer(1, 10))
 
@@ -1227,6 +1287,509 @@ def _seccion_resultados_globales(
     return elems
 
 
+def _seccion_ventana(styles, tr: Tr, snap_ventana: dict, figuras: list[tuple[str, bytes]]) -> list:
+    """Sección de producción en ventana (gran escala, batch/semicontinuo).
+
+    Consume el snapshot ``resultado_ventana`` de ``_json_resultado_ventana``
+    (dict puro), no el dataclass — mismo criterio que el resto de secciones.
+    """
+    elems: list = [Paragraph(tr("ventana.titulo"), styles["h1"])]
+    if not snap_ventana:
+        return elems + _seccion_pendiente(styles, tr("ventana.pendiente"))
+
+    horizonte_s = snap_ventana.get("horizonte_s") or 0.0
+    rows = [
+        [tr("ventana.subtipo"), _fmt(snap_ventana.get("subtipo"))],
+        [tr("ventana.horizonte"), f"{horizonte_s / 86400.0:.1f} d ({horizonte_s / 3600.0:.0f} h)"],
+        [tr("ventana.masa_seca"), f"{_fmt(snap_ventana.get('masa_seca_producida_kg'))} kg"],
+        [tr("ventana.agua_evap"), f"{_fmt(snap_ventana.get('masa_evaporada_kg'))} kg"],
+        [tr("ventana.tasa_regimen"), f"{_fmt(snap_ventana.get('tasa_regimen_kg_dia'))} kg/d"],
+        [tr("ventana.status"), _fmt(snap_ventana.get("status"))],
+    ]
+    if (snap_ventana.get("lena_consumida_kg") or 0.0) > 0:
+        rows.append([tr("ventana.lena"), f"{_fmt(snap_ventana.get('lena_consumida_kg'))} kg"])
+    elems.append(_tabla_kv(rows))
+
+    subtipo = snap_ventana.get("subtipo")
+    if subtipo == "BATCH":
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(tr("ventana.batch_titulo"), styles["h2"]))
+        t_med = snap_ventana.get("t_secado_medio_s")
+        rows_b = [
+            [tr("ventana.batch_lotes"), _fmt(snap_ventana.get("n_batches_completos"))],
+            [
+                tr("ventana.batch_t_medio"),
+                f"{t_med / 3600.0:.1f} h" if t_med is not None else "—",
+            ],
+            [
+                tr("ventana.batch_en_progreso"),
+                _fmt(snap_ventana.get("batch_en_progreso"), tr=tr),
+            ],
+        ]
+        elems.append(_tabla_kv(rows_b))
+    elif subtipo == "SEMICONTINUO":
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(tr("ventana.tunel_titulo"), styles["h2"]))
+        cadencia_s = snap_ventana.get("intervalo_avance_s")
+        rows_s = [
+            [tr("ventana.tunel_avances"), _fmt(snap_ventana.get("n_avances"))],
+            [tr("ventana.tunel_x_salida"), _fmt(snap_ventana.get("X_salida_regimen"))],
+            [
+                tr("ventana.tunel_throughput"),
+                f"{_fmt(snap_ventana.get('throughput_fresco_kg_dia'))} kg/d",
+            ],
+            [
+                tr("ventana.tunel_cadencia"),
+                f"{cadencia_s / 3600.0:.1f} h" if cadencia_s is not None else "—",
+            ],
+        ]
+        elems.append(_tabla_kv(rows_s))
+        # Perfil por zona (tabla compacta entrada → salida).
+        perfil_X = snap_ventana.get("perfil_X_zonas")
+        if perfil_X:
+            perfil_T = snap_ventana.get("perfil_T_aire_zonas_K") or []
+            filas_zona = [[tr("ventana.zona"), tr("ventana.zona_x"), tr("ventana.zona_t_aire")]]
+            for i, x_z in enumerate(perfil_X):
+                t_c = f"{perfil_T[i] - 273.15:.1f}" if len(perfil_T) > i else "—"
+                filas_zona.append([str(i + 1), f"{x_z:.3f}", t_c])
+            elems.append(Spacer(1, 4))
+            elems.append(
+                Table(
+                    filas_zona,
+                    colWidths=[2.5 * cm, 5.0 * cm, 5.0 * cm],
+                    style=TableStyle(
+                        [
+                            ("FONT", (0, 0), (-1, -1), _FONT_REGULAR, 8.5),
+                            ("FONT", (0, 0), (-1, 0), _FONT_BOLD, 8.5),
+                            ("BACKGROUND", (0, 0), (-1, 0), HexColor("#f0f0f0")),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                            ("TOPPADDING", (0, 0), (-1, -1), 3),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                            ("LINEBELOW", (0, 0), (-1, -1), 0.25, _COLOR_LINEA),
+                        ]
+                    ),
+                    hAlign="LEFT",
+                )
+            )
+
+    # Caño maestro: diagnóstico térmico/hidráulico sobre el lapso.
+    if snap_ventana.get("cano_delta_P_Pa") is not None:
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(tr("ventana.cano_titulo"), styles["h2"]))
+        elems.append(
+            _tabla_kv(
+                [
+                    [
+                        tr("ventana.cano_dt_media"),
+                        f"{snap_ventana.get('cano_delta_T_media_K'):+.2f} K",
+                    ],
+                    [
+                        tr("ventana.cano_dt_minima"),
+                        f"{snap_ventana.get('cano_delta_T_minima_K'):+.2f} K",
+                    ],
+                    [tr("ventana.cano_dp"), f"{_fmt(snap_ventana.get('cano_delta_P_Pa'))} Pa"],
+                ]
+            )
+        )
+
+    # Avisos de runtime (ES, artefactos de calculos/ — mismo criterio que
+    # chimenea.avisos_solver).
+    advs = snap_ventana.get("advertencias") or []
+    if advs:
+        elems.append(Spacer(1, 4))
+        elems.append(Paragraph(tr("ventana.avisos"), styles["h2"]))
+        for a in advs:
+            elems.append(Paragraph(f"⚠ {a}", styles["pendiente"]))  # i18n: exento
+
+    elems.append(Spacer(1, 6))
+    elems += _seccion_figuras(
+        styles,
+        tr("ventana.graficas"),
+        figuras,
+        msg_pendiente=tr("global.graficas_pendiente"),
+    )
+    return elems
+
+
+def _seccion_operacion_anual(
+    styles, tr: Tr, snap_anual: dict, figuras: list[tuple[str, bytes]]
+) -> list:
+    """Sección de operación anual de cámara (eficiencias Augustus Leon).
+
+    Consume el snapshot ``operacion_anual`` de ``_json_operacion_anual``.
+    """
+    elems: list = [Paragraph(tr("anual.titulo"), styles["h1"])]
+    if not snap_anual:
+        return elems + _seccion_pendiente(styles, tr("anual.pendiente"))
+
+    rows = [
+        [tr("anual.kg_anual"), f"{_fmt(snap_anual.get('kg_secados_anual'))} kg"],
+        [tr("anual.t_promedio"), f"{_fmt(snap_anual.get('t_secado_promedio_h'))} h"],
+        [tr("anual.e_solar"), f"{_fmt(snap_anual.get('E_solar_anual_MJ'))} MJ"],
+        [tr("anual.e_aux"), f"{_fmt(snap_anual.get('E_auxiliar_anual_MJ'))} MJ"],
+        [tr("anual.eta_drying"), _fmt(snap_anual.get("eta_drying_anual_media"))],
+        [tr("anual.eta_pickup"), _fmt(snap_anual.get("eta_pickup_anual_media"))],
+        [tr("anual.eta_termica"), _fmt(snap_anual.get("eta_termica_anual_media"))],
+        [tr("anual.eta_total"), _fmt(snap_anual.get("eta_total_anual_media"))],
+    ]
+    elems.append(_tabla_kv(rows))
+
+    puntos = snap_anual.get("puntos_mensuales") or []
+    if puntos:
+        elems.append(Spacer(1, 6))
+        elems.append(Paragraph(tr("anual.tabla_titulo"), styles["h2"]))
+        filas = [
+            [
+                tr("anual.col_mes"),
+                tr("anual.col_t"),
+                tr("anual.col_conv"),
+                tr("anual.col_kg_batch"),
+                tr("anual.col_batches"),
+                tr("anual.col_kg_mes"),
+                tr("anual.col_eta_total"),
+            ]
+        ]
+        for p in puntos:
+            filas.append(
+                [
+                    str(p.get("mes", "—")),
+                    f"{p.get('t_secado_h', 0.0):.1f}",
+                    "✓" if p.get("convergio") else "—",
+                    f"{p.get('m_evap_kg_por_batch', 0.0):.2f}",
+                    str(p.get("n_batches", "—")),
+                    f"{p.get('kg_secados_mes', 0.0):.1f}",
+                    f"{p.get('eta_total', 0.0) * 100:.2f} %",
+                ]
+            )
+        elems.append(
+            Table(
+                filas,
+                colWidths=[1.5 * cm, 2.2 * cm, 1.8 * cm, 2.6 * cm, 2.2 * cm, 2.4 * cm, 2.4 * cm],
+                style=TableStyle(
+                    [
+                        ("FONT", (0, 0), (-1, -1), _FONT_REGULAR, 8.5),
+                        ("FONT", (0, 0), (-1, 0), _FONT_BOLD, 8.5),
+                        ("BACKGROUND", (0, 0), (-1, 0), HexColor("#f0f0f0")),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                        ("LINEBELOW", (0, 0), (-1, -1), 0.25, _COLOR_LINEA),
+                    ]
+                ),
+                hAlign="LEFT",
+            )
+        )
+
+    advs = snap_anual.get("advertencias") or []
+    for a in advs:
+        elems.append(Paragraph(f"⚠ {a}", styles["pendiente"]))  # i18n: exento
+
+    elems.append(Spacer(1, 6))
+    elems += _seccion_figuras(
+        styles,
+        tr("anual.graficas"),
+        figuras,
+        msg_pendiente=tr("global.graficas_pendiente"),
+    )
+    return elems
+
+
+def _datos_validacion(session_state) -> dict:
+    """Normaliza los resultados de validación/calibración persistidos en la sesión.
+
+    Devuelve un dict con hasta tres bloques (``colector``/``camara``/``tunel``),
+    listo para que ``_seccion_validacion`` y ``_figuras_validacion`` lo consuman.
+    Vacío si el usuario no validó nada — la sección entera se omite del PDF.
+    Todo va en unidad de display (°C, kg/kg seco, etc.).
+    """
+    out: dict = {}
+
+    # --- Colector (P3): las métricas se recomputan desde la señal persistida
+    # (mismo camino puro que el render de P3). La señal puede referir a un
+    # proyecto ya mutado → try/except amplio.
+    val3 = session_state.get("p3_val_resultado")
+    cal3 = session_state.get("p3_cal_resultado")
+    if val3 or cal3:
+        bloque: dict = {"cal": cal3}
+        try:
+            if val3 is not None and val3.get("t_sim") is not None:
+                from calculos.ingesta_referencia import evaluar_ajuste
+
+                bloque["forzado_medido"] = bool(val3.get("forzado_medido"))
+                metricas, y_med_K, y_sim_K, ts = evaluar_ajuste(
+                    val3["senal"], val3["t_sim"], val3["y_sim_K"]
+                )
+                if metricas is not None:
+                    bloque.update(
+                        {
+                            "metricas": metricas,
+                            "unidad": "°C",
+                            "ts": list(ts),
+                            "y_med": [float(v) - 273.15 for v in y_med_K],
+                            "y_sim": [float(v) - 273.15 for v in y_sim_K],
+                        }
+                    )
+        except Exception:
+            pass
+        out["colector"] = bloque
+
+    # --- Cámara (P4): el resultado ya trae métricas y series en SI.
+    val4 = session_state.get("p4_val_resultado")
+    cal4 = session_state.get("p4_cal_resultado")
+    if val4 or cal4:
+        bloque = {"cal": cal4}
+        try:
+            if val4 is not None and val4.get("metricas") is not None:
+                import numpy as _np
+
+                from calculos.validacion_camara import a_display, unidad_display
+
+                var = val4["variable"]
+                bloque.update(
+                    {
+                        "variable": var,
+                        "unidad": unidad_display(var),
+                        "metricas": val4["metricas"],
+                        "ts": list(val4["ts"]),
+                        "y_med": [float(v) for v in a_display(_np.asarray(val4["y_med"]), var)],
+                        "y_sim": [float(v) for v in a_display(_np.asarray(val4["y_sim"]), var)],
+                    }
+                )
+        except Exception:
+            pass
+        out["camara"] = bloque
+
+    # --- Túnel (P7): snapshots ya en display (descargas + perfil por zona).
+    valtun = session_state.get("p7_valtun_resultado")
+    if valtun:
+        out["tunel"] = valtun
+    return out
+
+
+def _figuras_validacion(datos: dict, tr: Tr) -> dict[str, list[tuple[str, bytes]]]:
+    """Figuras (PNG) de la sección de validación, por bloque."""
+    out: dict[str, list[tuple[str, bytes]]] = {"colector": [], "camara": [], "tunel": []}
+    if not datos:
+        return out
+    from ui.componentes.validacion_widget import (
+        fig_curva_calibracion,
+        fig_overlay,
+        fig_perfil_zonas,
+    )
+
+    med_lbl = tr("validacion.medido")
+    sim_lbl = tr("validacion.simulado")
+
+    def _overlay_png(bloque: dict, y_lbl: str, titulo: str) -> bytes | None:
+        try:
+            return _fig_a_png(
+                fig_overlay(
+                    bloque["ts"],
+                    bloque["y_med"],
+                    bloque["y_sim"],
+                    medido_lbl=med_lbl,
+                    simulado_lbl=sim_lbl,
+                    titulo=titulo,
+                    y_lbl=y_lbl,
+                )
+            )
+        except Exception:
+            return None
+
+    def _curva_png(cal) -> bytes | None:
+        try:
+            return _fig_a_png(
+                fig_curva_calibracion(
+                    cal,
+                    x_lbl=str(cal.parametro),
+                    y_lbl=str(cal.objetivo_nombre),
+                    titulo=tr("validacion.fig.curva"),
+                    optimo_lbl=tr("validacion.cal_optimo"),
+                )
+            )
+        except Exception:
+            return None
+
+    for clave, titulo_key in (("colector", "validacion.fig.overlay_colector"),):
+        bloque = datos.get(clave) or {}
+        if bloque.get("metricas") is not None:
+            png = _overlay_png(bloque, f"T [{bloque.get('unidad', '°C')}]", tr(titulo_key))
+            if png:
+                out[clave].append((tr(titulo_key), png))
+        if bloque.get("cal") is not None:
+            png = _curva_png(bloque["cal"])
+            if png:
+                out[clave].append((tr("validacion.fig.curva"), png))
+
+    bloque = datos.get("camara") or {}
+    if bloque.get("metricas") is not None:
+        y_lbl = f"{bloque.get('variable', '')} [{bloque.get('unidad', '')}]"
+        png = _overlay_png(bloque, y_lbl, tr("validacion.fig.overlay_camara"))
+        if png:
+            out["camara"].append((tr("validacion.fig.overlay_camara"), png))
+    if bloque.get("cal") is not None:
+        png = _curva_png(bloque["cal"])
+        if png:
+            out["camara"].append((tr("validacion.fig.curva"), png))
+
+    tunel = datos.get("tunel") or {}
+    desc = tunel.get("descargas")
+    if desc is not None:
+        try:
+            png = _fig_a_png(
+                fig_overlay(
+                    desc["ts"],
+                    desc["y_med_disp"],
+                    desc["y_sim_disp"],
+                    medido_lbl=med_lbl,
+                    simulado_lbl=sim_lbl,
+                    titulo=tr("validacion.fig.descargas"),
+                    y_lbl="X [kg/kg]",
+                )
+            )
+            if png:
+                out["tunel"].append((tr("validacion.fig.descargas"), png))
+        except Exception:
+            pass
+    perfil = tunel.get("perfil")
+    if perfil is not None:
+        try:
+            n = len(perfil["y_sim_disp"])
+            png = _fig_a_png(
+                fig_perfil_zonas(
+                    list(range(1, n + 1)),
+                    perfil.get("y_med_disp"),
+                    perfil["y_sim_disp"],
+                    medido_lbl=med_lbl,
+                    simulado_lbl=sim_lbl,
+                    titulo=tr("validacion.fig.perfil"),
+                    x_lbl=tr("validacion.zona"),
+                    y_lbl=str(perfil.get("magnitud", "")),
+                )
+            )
+            if png:
+                out["tunel"].append((tr("validacion.fig.perfil"), png))
+        except Exception:
+            pass
+    return out
+
+
+def _seccion_validacion(
+    styles, tr: Tr, datos: dict, figuras: dict[str, list[tuple[str, bytes]]]
+) -> list:
+    """Sección "Validación con datos medidos": métricas + calibración por bloque.
+
+    Solo se llama si ``datos`` no está vacío (la sección se omite sin nota de
+    pendiente cuando el usuario no validó nada).
+    """
+    idioma = getattr(tr, "idioma", IDIOMA_DEFAULT)
+    elems: list = [Paragraph(tr("validacion.titulo"), styles["h1"])]
+    elems.append(Paragraph(tr("validacion.intro"), styles["pendiente"]))
+    elems.append(Spacer(1, 6))
+
+    def _tabla_metricas(metricas, unidad: str):
+        from ui.componentes.validacion_widget import filas_metricas
+
+        rows = []
+        for mid, val, uni in filas_metricas(metricas, unidad):
+            label = traducir(f"p4.validacion.metrica.{mid}", idioma, default=mid.upper())
+            rows.append([label, f"{val:.3g}" + (f" {uni}" if uni else "")])
+        rows.append([tr("validacion.n_pares"), str(int(metricas.n_pares))])
+        return _tabla_kv(rows)
+
+    def _bloque_calibracion(cal) -> list:
+        m = cal.metricas_optimo
+        sub: list = [Spacer(1, 4), Paragraph(tr("validacion.cal_titulo"), styles["h2"])]
+        rows = [
+            [tr("validacion.cal_parametro"), str(cal.parametro)],
+            [tr("validacion.cal_objetivo"), str(cal.objetivo_nombre)],
+            [tr("validacion.cal_optimo"), _fmt(cal.valor_optimo)],
+        ]
+        if m is not None:
+            rows.append(
+                [
+                    tr("validacion.cal_metricas"),
+                    f"RMSE {m.rmse:.3g} | MBE {m.mbe:+.3g} | R² {m.r2:.3f}",
+                ]
+            )
+        sub.append(_tabla_kv(rows))
+        # Factores de cámara: diagnóstico, no parámetro de diseño. Misma
+        # lectura física que la UI de P4 (namespace p4.calibracion.*).
+        if str(cal.parametro).startswith("factor_") and cal.valor_optimo is not None:
+            if cal.valor_optimo > 1.05:
+                lectura = traducir("p4.calibracion.lectura_alto", idioma)
+            elif cal.valor_optimo < 0.95:
+                lectura = traducir("p4.calibracion.lectura_bajo", idioma)
+            else:
+                lectura = traducir("p4.calibracion.lectura_neutro", idioma)
+            sub.append(Paragraph(lectura, styles["pendiente"]))
+            sub.append(Paragraph(tr("validacion.cal_nota_diagnostico"), styles["pendiente"]))
+        return sub
+
+    def _figs(clave: str) -> list:
+        sub: list = []
+        for titulo_fig, png in figuras.get(clave, []) or []:
+            sub.append(Spacer(1, 4))
+            sub.append(Paragraph(titulo_fig, styles["p_celda"]))
+            sub.append(Image(io.BytesIO(png), width=15.5 * cm, height=15.5 * cm * 0.55))
+        return sub
+
+    # --- Colector ---
+    bloque = datos.get("colector")
+    if bloque:
+        elems.append(Paragraph(tr("validacion.colector_titulo"), styles["h2"]))
+        if "forzado_medido" in bloque:
+            forzado = (
+                tr("validacion.forzado_medido")
+                if bloque["forzado_medido"]
+                else tr("validacion.forzado_p2")
+            )
+            elems.append(Paragraph(forzado, styles["pendiente"]))
+        if bloque.get("metricas") is not None:
+            elems.append(_tabla_metricas(bloque["metricas"], bloque.get("unidad", "°C")))
+        elems += _figs("colector")
+        if bloque.get("cal") is not None:
+            elems += _bloque_calibracion(bloque["cal"])
+        elems.append(Spacer(1, 8))
+
+    # --- Cámara ---
+    bloque = datos.get("camara")
+    if bloque:
+        elems.append(Paragraph(tr("validacion.camara_titulo"), styles["h2"]))
+        var = bloque.get("variable")
+        if var:
+            var_lbl = traducir(f"p4.validacion.variable.{var}", idioma, default=var)
+            elems.append(
+                _tabla_kv([[tr("validacion.variable"), f"{var_lbl} [{bloque.get('unidad', '')}]"]])
+            )
+        if bloque.get("metricas") is not None:
+            elems.append(_tabla_metricas(bloque["metricas"], bloque.get("unidad", "")))
+        elems += _figs("camara")
+        if bloque.get("cal") is not None:
+            elems += _bloque_calibracion(bloque["cal"])
+        elems.append(Spacer(1, 8))
+
+    # --- Túnel (semicontinuo) ---
+    tunel = datos.get("tunel")
+    if tunel:
+        elems.append(Paragraph(tr("validacion.tunel_titulo"), styles["h2"]))
+        desc = tunel.get("descargas")
+        if desc is not None and desc.get("metricas") is not None:
+            elems.append(Paragraph(tr("validacion.descargas_titulo"), styles["p_celda"]))
+            from calculos.validacion_camara import unidad_display as _ud
+
+            elems.append(_tabla_metricas(desc["metricas"], _ud(desc.get("variable", "X_producto"))))
+        perfil = tunel.get("perfil")
+        if perfil is not None and perfil.get("metricas") is not None:
+            elems.append(Spacer(1, 4))
+            elems.append(Paragraph(tr("validacion.perfil_titulo"), styles["p_celda"]))
+            from calculos.validacion_camara import unidad_display as _ud
+
+            elems.append(_tabla_metricas(perfil["metricas"], _ud(perfil.get("magnitud", ""))))
+        elems += _figs("tunel")
+    return elems
+
+
 def _bloque_advertencias(styles, tr: Tr, advs: list[dict] | None) -> list:
     if not advs:
         return []
@@ -1282,10 +1845,10 @@ def generar_reporte_pdf(
     proyecto,
     session_state,
     res,
-    T_amb_C: float,
-    I_g: float,
-    v_viento: float,
-    HR_cam_pct: float,
+    T_amb_C: float | None = None,
+    I_g: float | None = None,
+    v_viento: float | None = None,
+    HR_cam_pct: float | None = None,
     idioma: str = IDIOMA_DEFAULT,
 ) -> bytes:
     """Genera el reporte PDF completo del prediseño.
@@ -1334,6 +1897,14 @@ def generar_reporte_pdf(
     # como Transitorio (arrays + agregados).
     res_chim = getattr(res, "chimenea", None) if res is not None else None
 
+    # Dispatch por tipo de resultado: en modo Ventana (gran escala) la sección
+    # global se reemplaza por la de producción; la operación anual (si P4 la
+    # corrió) se agrega en cualquier modo.
+    from calculos.simulacion_ventana import ResultadoVentana
+
+    es_ventana = isinstance(res, ResultadoVentana)
+    res_anual = session_state.get("p4_resultado_anual")
+
     # Snapshot completo (para sección global)
     snap_full = _json_resultados_completo(
         proyecto,
@@ -1342,13 +1913,21 @@ def generar_reporte_pdf(
         I_g=I_g,
         v_viento=v_viento,
         HR_cam_pct=HR_cam_pct,
+        res_anual=res_anual,
     )
 
     # Recolección de figuras (esto puede tardar varios segundos)
     figs_p2 = _figuras_p2(proyecto, tr)
     figs_p3 = _figuras_p3(session_state, tr)
     figs_p4 = _figuras_p4(proyecto, session_state, tr)
-    figs_p7 = _figuras_p7(res, tr, proyecto, HR_cam_pct=HR_cam_pct)
+    figs_p7 = [] if es_ventana else _figuras_p7(res, tr, proyecto, HR_cam_pct=HR_cam_pct)
+    figs_ventana = _figuras_ventana(res, tr, proyecto) if es_ventana else []
+    figs_anual = _figuras_anual(res_anual, tr) if res_anual is not None else []
+
+    # Validación/calibración con datos medidos (colector/cámara/túnel): la
+    # sección entra automáticamente si el usuario validó algo en la sesión.
+    datos_val = _datos_validacion(session_state)
+    figs_val = _figuras_validacion(datos_val, tr) if datos_val else {}
 
     # Logos
     assets_dir = Path(__file__).parent.parent / "assets"
@@ -1412,15 +1991,39 @@ def generar_reporte_pdf(
         story.append(PageBreak())
         story += _seccion_chimenea(styles, tr, snap_chim, res_chim)
 
-    # 7. Resultados globales (incluye gráfica balance)
+    # 7. Resultados globales (incluye gráfica balance) — o producción en
+    # ventana cuando el resultado es un ResultadoVentana (gran escala).
     story.append(PageBreak())
-    story += _seccion_resultados_globales(
-        styles,
-        tr,
-        snap_global=snap_full.get("resultados_globales") or {},
-        condiciones=snap_full.get("condiciones_operacion_P7") or {},
-        figuras=figs_p7,
-    )
+    if es_ventana:
+        story += _seccion_ventana(
+            styles,
+            tr,
+            snap_ventana=snap_full.get("resultado_ventana") or {},
+            figuras=figs_ventana,
+        )
+    else:
+        story += _seccion_resultados_globales(
+            styles,
+            tr,
+            snap_global=snap_full.get("resultados_globales") or {},
+            condiciones=snap_full.get("condiciones_operacion_P7") or {},
+            figuras=figs_p7,
+        )
+
+    # 8. Operación anual de cámara (si P4 la corrió — convive con cualquier modo)
+    if res_anual is not None:
+        story.append(PageBreak())
+        story += _seccion_operacion_anual(
+            styles,
+            tr,
+            snap_anual=snap_full.get("operacion_anual") or {},
+            figuras=figs_anual,
+        )
+
+    # 9. Validación con datos medidos (solo si el usuario validó/calibró algo)
+    if datos_val:
+        story.append(PageBreak())
+        story += _seccion_validacion(styles, tr, datos_val, figs_val)
 
     doc.build(story)
     return buf.getvalue()

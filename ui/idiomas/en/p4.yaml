@@ -388,6 +388,7 @@ horizonte_recortado: >-
   ⚠️ The horizon was trimmed to {n} day(s): the design day + {solicitado}
   days crosses the end of the climate year ({anio}). Choose an earlier start
   day (P1) or fewer days for the full horizon.
+spinner_forzantes: Building the horizon forcings (collector hour by hour)...
 spinner_integrando: Integrating the thermodynamic engine...
 error_calculo: "❌ Calculation error: {exc}"
 advertencias_calculo: Calculation warnings
@@ -516,6 +517,11 @@ validacion:
     Compare the simulated chamber against your own test. The chamber runs
     ISOLATED, driven by the inlet air measured in the same file, so that the
     collector's error does not mix with the chamber's.
+  aviso_orden: >-
+    💡 It is best to validate AFTER running the full system in P7 (Results):
+    the pre-design is then complete and you can also compare the full
+    collector→chamber chain (the "🔗 Diagnostics" section below). Validating
+    here early and stopping leaves the rest of the system unevaluated.
   sin_camara: Configure the chamber to enable validation.
   uploader:
     label: Chamber test file (CSV / Excel)
