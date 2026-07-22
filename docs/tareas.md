@@ -4,29 +4,48 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
-> Estado general (S55): **v1.0.0 en producción** · suite pytest **1497 (+1 skip)** ·
-> `origin/main`=`3f2f668`. **Mejora 38 CERRADA: fases 1a, 1b, 2, 2b, 3 (colector) y
-> 4 (cámara y producto) implementadas.** Hasta la fase 3 está **commiteado y pusheado**
-> (`628e451`), más el fix del `ZeroDivisionError` del Space (`e8eec34`). La **fase 4
-> completa** queda en **working tree sin commitear**, junto con dos fixes de bugs
-> reportados por el usuario (gran escala + ventana en P4; aviso de nodo único en
-> semicontinuo). Pendiente: probarla en Streamlit con un ensayo real de cámara y
-> decidir el commit.
+> Estado general (S57): **v1.1.0 en producción** · suite pytest **1525 (+1 skip)** ·
+> `origin/main`=`2b56eec`; en working tree, la versión en el panel 🔧 Entorno (sin
+> commitear). **Mejora 38 CERRADA** (fases 1a, 1b,
+> 2, 2b, 3 y 4) y **release 1.1.0 commiteado y pusheado** (`b8a6464`), con el fix de
+> CI del deploy encima (`2b56eec`: clone shallow + skip LFS, que evitaba el corte del
+> clone del Space). La 1.1.0 suma los **exports completos por modo** (PDF/TXT/JSON en
+> Ventana y operación anual, caño maestro, validación/calibración en el reporte) más
+> tres fixes UX salidos de la corrida real del usuario sobre la 1.0.
 
 ## En progreso
-
-- **Mejora 38 fase 4 — validación/calibración de cámara y producto (S55)** —
-  implementada completa (E1–E6) en **working tree sin commitear**. Falta: **probarla
-  en Streamlit con un ensayo real de cámara** (lo único que ningún test cubre; en la
-  fase 2 fue probándolo que salieron los bugs importantes) y decidir el commit —
-  conviene separarlo en fase 4 / fixes de bugs / `t0_utc`. Ver
-  `docs/bitacora/bitacora_sesion55.md` y `docs/notas/plan_datos_medidos_4.md`.
-  Sigue la inconsistencia viento 2 m vs 10 m.
 
 - **Corridas paramétricas (barridos) en P7** — código completo (etapas 1-11);
   resta la verificación manual e2e en Streamlit (etapa 12).
 
+- **Verificación post-deploy del Space** — confirmar que HF rebuildeó la 1.1.0 con
+  el workflow corregido (`2b56eec`).
+
+- **Limpieza de ruff** — 47 errores preexistentes en archivos no tocados (eran 14 en
+  S55 con el mismo criterio; parece bump de versión de ruff en el `.venv`). Los
+  archivos tocados en S56 pasan limpio.
+
+- **Inconsistencia viento 2 m vs 10 m** — arrastrada desde la mejora 38; el clima
+  medido y NASA POWER no coinciden en la altura de referencia del viento.
+
 ## Completado (hitos recientes)
+
+- **Versión de Secasol en el panel 🔧 Entorno (S57)** — el panel del sidebar abre con
+  `**Secasol** <versión>` antes de Python y las librerías, para ver de un vistazo si el
+  Space corre el mismo código que el repo local (un deploy que no rebuildeó deja
+  producción con código viejo y el mismo entorno de librerías). La versión sale de
+  `core/version.py::__version__` — no del `CHANGELOG.md` ni de los tags, que **no se
+  deployan** al Space; `tests/test_core/test_version.py` ata esa constante al último
+  encabezado liberado del changelog.
+
+- **Release 1.1.0 — exports completos por modo (S56)** — el reporte PDF y los
+  snapshots TXT/JSON dejan de cubrir solo Constantes/Transitorio: se suman el modo
+  **Ventana** (producción, perfil del túnel, descargas, leña, diagnóstico del **caño
+  maestro**) y el panel de **operación anual** (agregados + 12 puntos mensuales), más
+  la sección de **validación/calibración con datos medidos** (colector, cámara y
+  túnel), que entra al PDF automáticamente si existe. Incluye tres fixes UX de la
+  primera corrida real del usuario sobre la 1.0 en el Space. Ver
+  `docs/bitacora/bitacora_sesion56.md`.
 
 - **Mejora 38 — toma de datos externos medidos (S51–S55)** — lazo completo
   **ingesta → validación → calibración**. Fases 1a (clima medido en P2), 1b (motor

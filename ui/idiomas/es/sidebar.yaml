@@ -28,9 +28,9 @@ como_empezar:
 entorno:
   titulo: 🔧 Entorno
   caption: >-
-    Versión de Python y de las librerías de cálculo que está corriendo
-    esta instancia. Útil para comparar el repo local con el despliegue
-    remoto: mismos números requieren el mismo entorno.
+    Versión de Secasol, de Python y de las librerías de cálculo que está
+    corriendo esta instancia. Útil para comparar el repo local con el
+    despliegue remoto: mismos números requieren el mismo entorno.
   no_instalado: no instalado
 contacto:
   titulo: 📬 Contacto

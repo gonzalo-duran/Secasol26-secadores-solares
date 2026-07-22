@@ -28,7 +28,7 @@ como_empezar:
 entorno:
   titulo: 🔧 Ambiente
   caption: >-
-    Versão do Python e das bibliotecas de cálculo desta instância.
+    Versão do Secasol, do Python e das bibliotecas de cálculo desta instância.
     Útil para comparar o repositório local com a implantação remota:
     mesmos números exigem o mesmo ambiente.
   no_instalado: não instalado

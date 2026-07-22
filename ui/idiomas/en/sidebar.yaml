@@ -28,7 +28,7 @@ como_empezar:
 entorno:
   titulo: 🔧 Environment
   caption: >-
-    Python and calculation-library versions running in this instance.
+    Secasol, Python and calculation-library versions running in this instance.
     Useful to compare the local repo against the remote deployment:
     identical numbers require identical environments.
   no_instalado: not installed

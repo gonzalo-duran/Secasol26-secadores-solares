@@ -12,24 +12,31 @@ import platform
 import streamlit as st
 
 from core.proyecto import Proyecto
+from core.version import __version__ as VERSION_SECASOL
 from ui.componentes.header import render_header
 from ui.componentes.idiomas import idioma_actual, selector_idioma, t
 
 
 def _diagnostico_entorno() -> str:
-    """Devuelve un resumen del entorno de ejecución (Python + librerías clave).
+    """Devuelve un resumen del entorno de ejecución (Secasol + Python + librerías).
 
     Se usa para diagnosticar discrepancias entre el repo local y el despliegue
     remoto (Hugging Face Spaces): si dos entornos corren versiones distintas de
-    Python o de las librerías de cálculo, los resultados numéricos pueden diferir
-    aunque el código y los datos sean idénticos. Mostrarlo en la UI hace visible
-    "qué está corriendo realmente" en cada lado.
+    Secasol, de Python o de las librerías de cálculo, los resultados numéricos
+    pueden diferir aunque los datos de entrada sean idénticos. Mostrarlo en la UI
+    hace visible "qué está corriendo realmente" en cada lado — y la versión de
+    Secasol es lo primero a comparar, porque un deploy que no rebuildeó deja al
+    Space corriendo código viejo con el mismo entorno de librerías.
 
     Returns:
-        Texto markdown con la versión de Python y de cada librería relevante.
+        Texto markdown con la versión de Secasol, de Python y de cada librería
+        relevante.
     """
     libs = ["numpy", "scipy", "pandas", "pvlib", "streamlit", "plotly", "pyarrow"]
-    lineas = [f"**Python** `{platform.python_version()}`"]
+    lineas = [
+        f"**Secasol** `{VERSION_SECASOL}`",  # i18n: exento (marca)
+        f"**Python** `{platform.python_version()}`",
+    ]
     for nombre in libs:
         try:
             ver = importlib.metadata.version(nombre)
