@@ -109,6 +109,7 @@ def _es_solo_en_pt(clave: str) -> bool:
     return clave.startswith(_FAMILIAS_SOLO_EN_PT)
 
 
+@pytest.mark.i18n_paridad
 def test_paridad_de_claves_entre_idiomas():
     """EN y PT tienen el mismo set de claves que ES (salvo familias EN/PT-only)."""
     claves_es = set(cargar_diccionario("es"))
@@ -133,6 +134,7 @@ def _placeholders(plantilla: str) -> set[str]:
     return {campo for _, campo, _, _ in Formatter().parse(plantilla) if campo}
 
 
+@pytest.mark.i18n_paridad
 def test_paridad_de_placeholders():
     """Cada clave usa el mismo set de placeholders nombrados en los 3 idiomas."""
     dicc = {lang: cargar_diccionario(lang) for lang in IDIOMAS}
@@ -278,6 +280,7 @@ def test_claves_derivadas_de_enums_existen_en_es():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.i18n_paridad
 def test_catalogo_descripciones_traducidas():
     """Todo item de catálogo con `descripcion` trae `descripcion_en`/`_pt` no vacías."""
     import yaml
@@ -337,6 +340,7 @@ def _contexto_por_codigo() -> dict[str, set[str]]:
     return ctx
 
 
+@pytest.mark.i18n_paridad
 def test_todos_los_codigos_tienen_plantilla_en_los_tres_idiomas():
     """Cada código de advertencia de core/ tiene mensaje+sugerencia en es/en/pt."""
     codigos = _codigos_de_core()

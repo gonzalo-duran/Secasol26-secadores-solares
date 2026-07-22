@@ -19,3 +19,12 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    # Invariantes i18n que comparan los TRES idiomas entre sí (o los catálogos
+    # completos). No son evaluables tras editar un solo YAML: mientras se agrega
+    # una clave a es/ y todavía no a en/pt, fallan por construcción. El hook de
+    # PostToolUse los excluye (`-m 'not i18n_paridad'`) y el de Stop corre solo
+    # estos, cuando los tres idiomas ya están escritos. `pytest` a secas los
+    # corre igual que siempre.
+    "i18n_paridad: invariante cross-idioma, solo válido con los 3 YAML escritos",
+]
