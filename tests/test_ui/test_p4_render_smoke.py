@@ -11,6 +11,7 @@ cada script tiene que ser autocontenido (nada de helpers module-level).
 
 from __future__ import annotations
 
+import pytest
 from streamlit.testing.v1 import AppTest
 
 
@@ -215,3 +216,115 @@ def test_semicontinuo_avisa_que_la_previa_es_de_un_nodo():
     textos = " ".join(w.value for w in at.warning)
     assert "P7" in textos, "la previa de semicontinuo debe remitir a P7"
     assert "nodo" in textos.lower()
+
+
+# ---------------------------------------------------------------------------
+# Caudal de cámara acoplado al del colector (S58)
+# ---------------------------------------------------------------------------
+
+
+def _script_caudal_colector() -> None:
+    import streamlit as st
+
+    from core.camara import Camara, CargaProducto
+    from core.colector import BancoColectores, Colector, ColectorUnidad
+    from core.emplazamiento import Emplazamiento
+    from core.proyecto import Configuracion, Proyecto, Tipologia
+
+    if "proyecto" not in st.session_state:
+        p = Proyecto(configuracion=Configuracion(tipologia=Tipologia.ARMARIO))
+        p.emplazamiento = Emplazamiento()
+        p.colector = Colector(
+            unidad=ColectorUnidad(largo_m=2.5, velocidad_diseno_ms=2.0),
+            banco=BancoColectores(n_serie=1, n_paralelo=1),
+        )
+        p.camara = Camara(carga_producto=CargaProducto(producto_id="manzana"))
+        st.session_state.proyecto = p
+
+    import ui.p4_camara as p4
+
+    p4.render()
+
+
+def test_el_caudal_de_camara_arranca_en_el_del_colector():
+    """Sistema hermético: lo que sale del banco entra a la cámara.
+
+    Reportado por el usuario (S58) sobre un armario en Salta: el caudal de P4
+    arrancaba en el default de ``ConfiguracionFlujo`` (0.030 kg/s) mientras el
+    banco entregaba 0.055, y la única señal era una advertencia al final de la
+    corrida anual (``ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE``).
+    """
+    from calculos.balance_global import caudal_masico_banco_kg_s
+    from core.camara import ConfiguracionFlujo
+    from ui.p4_camara import _P_ref_Pa, _T_amb_ref_K
+
+    at = AppTest.from_function(_script_caudal_colector)
+    at.run(timeout=90)
+    assert not at.exception
+
+    proy = at.session_state["proyecto"]
+    # Caudal del banco evaluado en las condiciones del sitio, que es lo mismo
+    # que mira ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE.
+    esperado = caudal_masico_banco_kg_s(proy.colector, _T_amb_ref_K(proy), _P_ref_Pa(proy))
+
+    caudales = [n for n in at.number_input if "kg/s" in (n.label or "")]
+    assert caudales, "no se encontró el number_input de caudal másico"
+    assert caudales[0].value == pytest.approx(esperado, rel=1e-3)
+    assert caudales[0].value != pytest.approx(
+        ConfiguracionFlujo().caudal_masico_kg_s
+    ), "el caudal no puede quedarse en el default de fábrica habiendo colector"
+    assert caudales[0].disabled, "con el caudal atado al colector el input va deshabilitado"
+
+
+def test_desacoplar_el_caudal_deja_editarlo():
+    """Desacoplar es legítimo (mezcla con aire ambiente) y debe ser posible."""
+    at = AppTest.from_function(_script_caudal_colector)
+    at.session_state["p4_flujo_seguir_colector"] = False
+    at.run(timeout=90)
+    assert not at.exception
+
+    caudales = [n for n in at.number_input if "kg/s" in (n.label or "")]
+    assert caudales and not caudales[0].disabled
+
+
+class TestSeguirColectorDefault:
+    """Cuándo el caudal de cámara arranca atado al del colector.
+
+    Es una **decisión persistida**, no una deducción. Deducirla comparando el
+    caudal guardado con el del banco era frágil: el del banco es
+    ``v·A·n·ρ(T_amb, P)``, así que recalcular el clima con otro año movía ρ y el
+    checkbox se destildaba solo al cargar un proyecto (S58, reportado por el
+    usuario).
+    """
+
+    def test_activo_por_default(self):
+        from core.camara import ConfiguracionFlujo
+        from ui.p4_camara import _seguir_colector_default
+
+        assert _seguir_colector_default(ConfiguracionFlujo(), 0.055) is True
+
+    def test_respeta_la_decision_guardada_de_desacoplar(self):
+        """Desacoplar es legítimo (mezcla con aire ambiente) y debe sobrevivir."""
+        from core.camara import ConfiguracionFlujo
+        from ui.p4_camara import _seguir_colector_default
+
+        flujo = ConfiguracionFlujo(caudal_masico_kg_s=0.12, seguir_caudal_colector=False)
+        assert _seguir_colector_default(flujo, 0.055) is False
+
+    def test_un_caudal_distinto_no_lo_desactiva_por_si_solo(self):
+        """El caso que rompía: ρ cambia con el año y el caudal ya no coincide."""
+        from core.camara import ConfiguracionFlujo
+        from ui.p4_camara import _seguir_colector_default
+
+        flujo = ConfiguracionFlujo(caudal_masico_kg_s=0.16410, seguir_caudal_colector=True)
+        assert _seguir_colector_default(flujo, 0.16395) is True
+
+    def test_snapshot_viejo_sin_el_campo_cae_a_la_coincidencia(self):
+        """Back-compat: sin decisión que leer, se infiere con 2 % de tolerancia."""
+        from ui.p4_camara import _seguir_colector_default
+
+        class _FlujoViejo:
+            caudal_masico_kg_s = 0.055
+
+        assert _seguir_colector_default(_FlujoViejo(), 0.0551) is True
+        assert _seguir_colector_default(_FlujoViejo(), 0.12) is False

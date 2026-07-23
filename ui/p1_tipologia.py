@@ -59,10 +59,73 @@ def _clave_paso(paso_s: float) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _render_cargar_proyecto() -> None:
+    """Carga de un proyecto completo guardado desde P7.
+
+    Vive en P1 porque es donde se empieza: cargar acá deja las siete pestañas
+    servidas. Limpia el estado de todas las pestañas (``p1_``…``p7_``) para que
+    los widgets releen del proyecto cargado y no de los valores cacheados de la
+    sesión anterior — el mismo patrón de los cargadores por sección.
+    """
+    import json
+
+    from ui.componentes.carga_proyecto import (
+        ErrorCargaProyecto,
+        cargar_proyecto_completo,
+        resumen_clima_snapshot,
+    )
+    from ui.componentes.serializacion import limpiar_session_state_prefijo
+
+    with st.expander(t("p1.cargar.titulo"), expanded=False):
+        st.caption(t("p1.cargar.caption"))
+        archivo = st.file_uploader(
+            t("p1.cargar.uploader"),
+            type=["json"],
+            key="p1_cargar_proyecto",
+            help=t("p1.cargar.help"),
+        )
+        if archivo is None:
+            return
+
+        try:
+            contenido = archivo.read()
+            if isinstance(contenido, bytes):
+                contenido = contenido.decode("utf-8")
+            datos = json.loads(contenido)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            st.error(t("p1.cargar.error_archivo", exc=exc))
+            return
+
+        if not st.button(t("p1.cargar.confirmar"), type="primary", key="p1_cargar_confirmar"):
+            st.info(t("p1.cargar.pendiente", nombre=archivo.name))
+            return
+
+        try:
+            proyecto_nuevo, avisos = cargar_proyecto_completo(datos)
+        except ErrorCargaProyecto as exc:
+            st.error(f"❌ {exc}")  # i18n: exento (mensaje con código, queda ES)
+            return
+
+        for prefijo in ("p1_", "p2_", "p3_", "p4_", "p5_", "p6_", "p7_", "cam_"):
+            limpiar_session_state_prefijo(st.session_state, prefijo)
+        st.session_state.proyecto = proyecto_nuevo
+
+        st.success(t("p1.cargar.exito", nombre=proyecto_nuevo.meta.nombre))
+        # El clima no viaja en el snapshot (8760 filas): hay que rebajarlo en P2.
+        clima_snap = resumen_clima_snapshot(datos)
+        if clima_snap and clima_snap.get("anio"):
+            st.warning(t("p1.cargar.clima_pendiente", anio=clima_snap["anio"]))
+        for aviso in avisos:
+            st.warning(f"⚠️ {aviso}")  # i18n: exento (detalle de la sección que falló)
+        st.rerun()
+
+
 def render() -> None:
     """Renderiza la Pestaña 1 — Tipología y Configuración."""
     st.header(t("p1.header"))
     boton_manual(SLUG_POR_SECCION["p1"])
+
+    _render_cargar_proyecto()
 
     proyecto = st.session_state.proyecto
     meta: Meta = proyecto.meta

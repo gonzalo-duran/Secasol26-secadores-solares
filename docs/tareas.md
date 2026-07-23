@@ -17,11 +17,6 @@ decisiones de diseño en [[docs/decisiones]].
 - **Historia temporal por zona en `simular_cascada`** — deuda de la mejora 38 fase 4:
   habilitaría el overlay contra termopares fijos del túnel y una previa de N zonas en P4.
 
-- **Modo anual: no arrancar lotes con mal pronóstico** (S57) — hoy el encadenado
-  carga un lote aunque el día venga nublado; un operador miraría el cielo. Infla los
-  lotes frustrados con casos que en la práctica no ocurrirían. Es el pendiente más
-  importante que dejó la discusión sobre qué significa "simulación anual".
-
 - **`PoliticaRecarga` no se persiste** (S57) — vive en los widgets de P4, así que
   sobrevive la sesión pero no un guardar/cargar del proyecto. Falta decidir dónde
   guardarla: se acaba de eliminar `OperacionAnualConfig` de `Camara` y no conviene

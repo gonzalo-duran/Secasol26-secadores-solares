@@ -28,9 +28,9 @@ avance de columnas, sin lotes— y no está cubierto todavía; se rechaza con un
 error explícito en vez de devolver un número sin sentido.
 
 Ver ``docs/notas/plan_anual_8760.md`` §4 para los límites físicos del modelo
-(CSTR de nodo único, colector cuasi-estacionario, y sobre todo: el encadenado
-supone recarga inmediata sin turnos ni tiempo de carga, y carga lotes aunque el
-clima venga malo, así que el resultado es una **cota superior** de producción).
+(CSTR de nodo único, colector cuasi-estacionario, y sobre todo: el operador
+decide con **pronóstico perfecto**, así que el resultado es la cota superior de
+la buena decisión).
 """
 
 from __future__ import annotations
@@ -74,6 +74,9 @@ class PuntoMensualAnual:
             None si no se completó ninguno.
         E_solar_MJ: Energía solar sobre el plano del colector durante las horas
             del mes [MJ]. Se integra por mes calendario, no por lote.
+        E_auxiliar_MJ: Energía que el auxiliar entregó al aire durante las horas
+            del mes [MJ]. Mismo criterio de integración que la solar: es un
+            flujo. Cero sin auxiliar.
         horas: Horas de clima que el mes aportó a la simulación.
         dias_operables: Días del mes cuya irradiación diaria sobre el plano del
             colector superó el umbral de operabilidad.
@@ -91,6 +94,7 @@ class PuntoMensualAnual:
     masa_evaporada_kg: float = 0.0
     duracion_media_h: Optional[float] = None
     E_solar_MJ: float = 0.0
+    E_auxiliar_MJ: float = 0.0
     horas: int = 0
     dias_operables: int = 0
     dias: int = 0
@@ -144,6 +148,11 @@ class ResultadosAnual:
             evaporada [MJ/kg]. Métrica de comparación estándar entre secadores.
         dias_operables: Días del año con irradiación diaria sobre el umbral.
         umbral_dia_operable_MJ_m2: Umbral usado [MJ/m²·día].
+        dias_salteados_pronostico: Días en que el secador estaba libre y no se
+            cargó lote porque el día no llegaba al umbral de pronóstico. Es
+            **decisión de operación**, no disponibilidad del recurso: se lee
+            junto a ``dias_operables`` (cuántos días el sol alcanzaba) para
+            separar "no había sol" de "había sol pero el secador estaba ocupado".
         lena_consumida_kg: Leña del auxiliar en el año [kg].
         horas_simuladas: Horas de clima efectivamente simuladas.
         area_colector_m2: Área del banco usada para integrar la energía solar.
@@ -171,12 +180,50 @@ class ResultadosAnual:
     energia_especifica_MJ_kg: Optional[float] = None
     dias_operables: int = 0
     umbral_dia_operable_MJ_m2: float = 0.0
+    dias_salteados_pronostico: int = 0
     lena_consumida_kg: float = 0.0
     horas_simuladas: int = 0
     area_colector_m2: float = 0.0
     superficie_n_solves: int = 0
     status: str = ""
     advertencias: list[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Vigencia del resultado
+# ---------------------------------------------------------------------------
+
+
+#: Secciones del proyecto que determinan el resultado anual. Las tres primeras
+#: entran al balance; el emplazamiento fija la posición solar y la presión, y la
+#: configuración, la tipología y el modo con el que se corrió el año.
+SECCIONES_ANUAL = ("configuracion", "emplazamiento", "colector", "camara", "auxiliar")
+
+
+def hash_entradas_anual(proyecto: "Proyecto", politica=None) -> str:
+    """Huella de todo lo que determina el resultado del modo anual.
+
+    El resultado anual se calcula en P4 y se **muestra** en P7 y en el reporte,
+    que no lo recalculan. Sin una huella, cambiar el auxiliar (o el colector, o
+    la cámara) después de correr el año dejaba a P7 mostrando números viejos sin
+    ninguna señal: en un reporte real del usuario (S58) el bloque global decía
+    ``E_aux = 74 MJ`` y el bloque anual, ``0 MJ`` — el año se había corrido antes
+    de configurar P5.
+
+    Envuelve el mecanismo general de ``core.huellas`` fijando las secciones del
+    modo anual y sumando la política de recarga, que no es sección del proyecto
+    (vive en los widgets de P4).
+
+    Args:
+        proyecto: Proyecto a huellear.
+        politica: ``PoliticaRecarga`` usada (o None para la default).
+
+    Returns:
+        Hash SHA-256 hexadecimal.
+    """
+    from core.huellas import huella_entradas
+
+    return huella_entradas(proyecto, SECCIONES_ANUAL, extras={"politica": politica})
 
 
 # ---------------------------------------------------------------------------
@@ -439,12 +486,30 @@ def simular_anual(
     POA_arr = np.asarray(getattr(forzantes, "I_g_POA_W_m2", None), dtype=float)
     if POA_arr.size != n_horas:
         POA_arr = np.zeros(n_horas, dtype=float)
+    # Potencia del auxiliar hora a hora (0 si no hay): se integra por mes con el
+    # mismo criterio que el sol, porque también es un flujo. Sin esto el aporte
+    # del auxiliar solo existía como total del año y no se veía en qué meses
+    # trabaja — justo lo que un híbrido necesita mostrar (S58).
+    Q_aux_arr = np.asarray(diag.get("Q_aux_W_serie", []), dtype=float)
+    if Q_aux_arr.size != n_horas:
+        Q_aux_arr = np.zeros(n_horas, dtype=float)
+
     E_solar_mes = {m: 0.0 for m in _MESES}
+    E_aux_mes = {m: 0.0 for m in _MESES}
     horas_mes = {m: 0 for m in _MESES}
     for m in _MESES:
         sel = meses_hora == m
         horas_mes[m] = int(sel.sum())
         E_solar_mes[m] = float(POA_arr[sel].sum() * A_col * _SEGUNDOS_POR_HORA / 1e6)
+        E_aux_mes[m] = float(Q_aux_arr[sel].sum() * _SEGUNDOS_POR_HORA / 1e6)
+
+    # El total anual del auxiliar se recompone de los meses en vez de tomar el
+    # escalar del solver: aquel integra con regla trapezoidal sobre el horizonte
+    # completo y acá se integra por rectángulos hora a hora, igual que la solar.
+    # La diferencia es ~1 % (medios pasos en los extremos), pero si el total no
+    # fuera la suma de sus meses la tabla mensual contradiría al resumen.
+    if Q_aux_arr.any():
+        E_aux_MJ = float(sum(E_aux_mes.values()))
 
     operables_mes, dias_mes = _dias_operables_por_mes(
         POA_arr, clima_datos_df.index, tz_local, umbral_dia_operable_MJ_m2
@@ -488,6 +553,7 @@ def simular_anual(
             masa_evaporada_kg=evap_mes[m],
             duracion_media_h=(float(np.mean(duraciones_mes[m])) if duraciones_mes[m] else None),
             E_solar_MJ=E_solar_mes[m],
+            E_auxiliar_MJ=E_aux_mes[m],
             horas=horas_mes[m],
             dias_operables=operables_mes[m],
             dias=dias_mes[m],
@@ -550,6 +616,7 @@ def simular_anual(
         energia_especifica_MJ_kg=(E_solar_anual / m_evap if m_evap > 0 else None),
         dias_operables=int(sum(operables_mes.values())),
         umbral_dia_operable_MJ_m2=float(umbral_dia_operable_MJ_m2),
+        dias_salteados_pronostico=int(getattr(res_v, "n_dias_salteados_pronostico", 0)),
         lena_consumida_kg=float(lena_kg),
         horas_simuladas=n_horas,
         area_colector_m2=A_col,

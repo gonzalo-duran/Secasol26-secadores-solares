@@ -529,6 +529,46 @@ def _velocidad_modulo_desde_caudal(
     return float(m_punto_kgs) / (rho * A_canal * n_par)
 
 
+def caudal_masico_banco_kg_s(
+    colector,
+    T_aire_K: float,
+    P_amb_Pa: float = 101325.0,
+) -> float:
+    """Caudal másico que el banco entrega a su velocidad de diseño [kg/s].
+
+    Inversa de :func:`_velocidad_modulo_desde_caudal`, y con la **misma**
+    convención de sección y densidad: ``n_paralelo · v_diseño · ancho ·
+    espaciado · ρ(T, P)``.
+
+    Es el caudal que la cámara debería recibir en un sistema hermético —lo que
+    sale del colector entra a la cámara— y por eso lo consume tanto la UI (P4,
+    para proponer el caudal de cámara) como la advertencia de coherencia
+    ``ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE``. Compartir la función es lo que
+    garantiza que la advertencia no dispare sobre el valor que la propia UI
+    propuso.
+
+    Args:
+        colector: Objeto ``Colector`` (usa ``unidad`` y ``banco``).
+        T_aire_K: Temperatura a la que se evalúa la densidad [K]. Por
+            convención es la del aire que entra al colector (ambiente), que es
+            donde se fija el caudal másico.
+        P_amb_Pa: Presión del sitio [Pa].
+
+    Returns:
+        Caudal másico del banco [kg/s]. 0.0 si la geometría es degenerada.
+    """
+    from calculos.motor_calc import densidad_aire
+
+    u = colector.unidad
+    b = colector.banco
+    rho = densidad_aire(float(T_aire_K), float(P_amb_Pa))
+    A_canal = float(u.ancho_m) * float(u.espaciado_m)
+    n_par = max(1, int(b.n_paralelo))
+    if A_canal <= 0 or rho <= 0:
+        return 0.0
+    return float(u.velocidad_diseno_ms) * A_canal * n_par * rho
+
+
 def _z0_terreno(proyecto) -> float:
     """Rugosidad aerodinámica del terreno del sitio [m].
 
@@ -2040,9 +2080,10 @@ def armar_forzantes_ventana(
         _u = proyecto.colector.unidad
         _b = proyecto.colector.banco
         _rho_ref = _densidad_aire(float(np.mean(T_amb)), P_Pa)
-        m_banco_diseno = (
-            _b.n_paralelo * _u.velocidad_diseno_ms * _u.ancho_m * _u.espaciado_m * _rho_ref
-        )
+        # Misma función que usa P4 para proponer el caudal de cámara: si el
+        # usuario aceptó la propuesta, el ratio da exactamente 1 y esta
+        # advertencia no dispara.
+        m_banco_diseno = caudal_masico_banco_kg_s(proyecto.colector, float(np.mean(T_amb)), P_Pa)
         if m_banco_diseno > 0:
             _ratio = m_banco_diseno / m_dot_sistema
             if _ratio > 1.5 or _ratio < (1.0 / 1.5):
@@ -2144,6 +2185,10 @@ def armar_forzantes_ventana(
             # η_total (sin ella, η_total degenera en η_drying — era el defecto
             # del anual de día típico, que la hardcodeaba en cero).
             diagnosticos["E_aux_MJ"] = float(aux_tr.E_aux_MJ)
+            # Serie de potencia del auxiliar: el modo anual la desagrega por mes.
+            # Sin ella el aporte del auxiliar solo existe como total del año y no
+            # se puede ver en qué meses realmente trabaja (S58).
+            diagnosticos["Q_aux_W_serie"] = np.asarray(aux_tr.Q_efectivo_W, dtype=float)
             advertencias.extend(aux_tr.advertencias_unicas)
         except Exception as exc:
             advertencias.append(f"ADV_VENTANA_AUXILIAR: {exc}")

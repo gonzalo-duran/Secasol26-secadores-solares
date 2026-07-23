@@ -1,4 +1,22 @@
 header: 1 · Typology and Analysis Setup
+cargar:
+  titulo: 📂 Load a full project
+  caption: >-
+    Picks up a project saved from tab 7 (a `..._prediseno_completo_....json`
+    file). It replaces EVERYTHING currently loaded: typology, site, collector,
+    chamber, backup heater and fan.
+  uploader: Project .json file
+  help: >-
+    It must be the "complete predesign" JSON that P7 downloads. Single-section
+    files (collector only, chamber only) are loaded from their own tab.
+  confirmar: ✅ Load and replace the current project
+  pendiente: "File **{nombre}** read. Press the button to replace the current project."
+  error_archivo: "❌ Could not read the file: {exc}"
+  exito: ✅ Project **{nombre}** loaded. Check tabs 2 to 6.
+  clima_pendiente: >-
+    ⚠️ Weather data is not stored in the file (8760 rows). The project was saved
+    with year **{anio}**: download it again in tab 2 before computing. If you
+    already fetched it for this site, it comes straight from the cache.
 metadatos:
   titulo: Project metadata
   nombre:

@@ -7,11 +7,121 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **El operador no carga lotes en días de mal pronóstico** (S58). Hasta ahora el
+  encadenado cargaba un lote cada vez que el secador quedaba libre, aunque el día
+  viniera nublado: el lote se arrastraba sin terminar, ocupaba la cámara e inflaba el
+  conteo de lotes frustrados con casos que en la práctica no ocurren, porque un operador
+  mira el cielo antes de llenar el secador.
+
+  `PoliticaRecarga` gana `exigir_pronostico` (activo por defecto) y
+  `umbral_pronostico_MJ_m2` (default 8 MJ/m²·día, el mismo umbral con el que ya se
+  contaban los días operables). Antes de cargar, se integra la irradiación del **día de
+  carga** sobre el plano del colector; si no llega al umbral, se espera al día
+  siguiente. Configurable en P4, junto a la política de recarga.
+
+  **El pronóstico es perfecto**: la decisión usa la irradiación que el día efectivamente
+  va a tener, no una predicción con error. Es una idealización deliberada —da la cota
+  superior de la buena decisión— y está documentada como tal en la clase, en P4, en P7 y
+  en el reporte PDF. El sesgo va en sentido opuesto al de la espera de recarga y ambos
+  son chicos frente a la variabilidad interanual del recurso.
+
+  Métrica nueva `dias_salteados_pronostico`, que se lee **junto a** `dias_operables`
+  para separar "no había sol" de "había sol pero el secador estaba ocupado". Se expone
+  en P4, en el detalle de P7 y en los tres exports (TXT/JSON/PDF).
+
+### Added
+
+- **Cargar un proyecto completo** (S58, pedido del usuario). P7 sabía **guardar** el
+  proyecto entero (`..._prediseno_completo.json`) pero no había forma de volver a
+  cargarlo: solo existían cargadores por sección (colector, cámara, auxiliar, motor,
+  chimenea), meta/configuración/emplazamiento no se cargaban en ningún lado, y el archivo
+  completo no servía ni para cargar de a partes porque `parsear_json_seccion` valida el
+  campo `seccion` de la raíz —que dice `"prediseno_completo"`— y lo rechazaba. El
+  snapshot completo era un artefacto de archivo, no un "guardar proyecto".
+
+  Nuevo expander **"📂 Cargar proyecto completo"** en P1, que es donde se empieza:
+  `ui/componentes/carga_proyecto.py` desarma el JSON y reparte cada sub-dict al
+  deserializador que ya existía. Una sección que falle (un id de catálogo que cambió) no
+  aborta la carga: se omite y se avisa, porque recuperar el proyecto al 90 % es mejor que
+  rechazar el archivo. El clima **no viaja** en el snapshot (8760 filas): se avisa con qué
+  año se guardó para rebajarlo en P2, que sale de la caché parquet.
+
+- **Detección de resultados desactualizados — mecanismo general** (S58). El resultado del
+  modo anual se calcula en P4 y P7 y el reporte lo **muestran sin recalcularlo**; el mismo
+  hueco lo tenían el horizonte transitorio (lo arma P4, lo consume P7) y los resultados de
+  P7 (transitorio, constantes y ventana), que alimentan los exports TXT/JSON/PDF. En todos,
+  cambiar la configuración después de calcular dejaba números viejos en pantalla sin
+  ninguna señal.
+
+  Ahora cada resultado se guarda junto a la huella (`core.huellas.huella_entradas`) de todo
+  lo que lo determina —secciones del proyecto + clima + condiciones de borde—; si al
+  renderizar no coincide, P7 lo marca, ofrece **rehacer** el aire (horizonte) o
+  **recalcular** (anual) ahí mismo, y la exportación se bloquea en vez de escribir números
+  viejos. El registro vive en un solo lugar (`ui/componentes/vigencia.py`): agregar un
+  resultado derivado nuevo es una fila más, no otro parche por caso. Estrena
+  `core.advertencias.calcular_hash_entradas`, que existía sin un solo consumidor.
+
+- **Tres gráficas nuevas del análisis anual** en P7 y en el reporte PDF: energía mensual
+  (solar incidente vs auxiliar entregado al aire), duración media de lote por mes con p50
+  y p90 del año como referencia, y días operables vs días del mes. La de producción
+  mensual suma el agua evaporada junto al producto seco, que eran justamente las dos
+  cantidades que el modo anual viejo confundía.
+
+- `PuntoMensualAnual.E_auxiliar_MJ` — la energía del auxiliar, desagregada por mes. El
+  aporte del auxiliar solo existía como total del año, así que no se podía ver **en qué
+  meses** trabaja, que es lo que un híbrido necesita mostrar.
+
+### Fixed
+
+- **El análisis anual de P7 podía mostrar (y exportar) resultados de otra configuración**
+  (S58, detectado sobre un reporte del usuario). P7 no recalcula el año: reproduce el
+  objeto que P4 dejó en `session_state`, y ese objeto no se invalidaba nunca. En el
+  reporte real, dos bloques del **mismo PDF** se contradecían: `resultados_globales`
+  daba `E_auxiliar = 74.34 MJ` y `fracción solar = 0.769`, mientras `operacion_anual`
+  daba `0.0 MJ` y `1.000` — el año se había corrido antes de configurar el auxiliar en
+  P5. El cálculo estaba bien (el auxiliar entra al anual por `armar_forzantes_ventana`);
+  lo que faltaba era detectar que el resultado había quedado viejo.
+
+- **Dos secciones de corridas paramétricas en modo anual.** El panel anual se montó
+  encima del flujo de transitorio/constantes sin cortarlo, así que se renderizaban los
+  barridos del anual y después, otra vez, los del modo de día. Ahora se muestra una sola
+  sección, la del modo que se está corriendo.
+
+- **`z0_terreno_m` no entraba al snapshot del proyecto.** La rugosidad del terreno
+  (S57, entra al perfil de viento del extractor de la chimenea) faltaba en el export del
+  emplazamiento, así que un proyecto guardado y vuelto a cargar la perdía y caía al
+  default. Lo destapó el round-trip del cargador nuevo.
+
+- **El caudal de la cámara no seguía al del colector** (S58, reportado por el usuario
+  sobre un armario en Salta). El sistema es hermético —lo que sale del banco entra a la
+  cámara— pero el caudal de P4 arrancaba en el default de fábrica de `ConfiguracionFlujo`
+  (0.030 kg/s) aunque el banco entregara otra cosa (0.055 kg/s en el caso reportado). El
+  usuario que no lo corregía a mano corría el año entero con los dos caudales
+  desacoplados, y la única señal era una advertencia **al final** del cálculo
+  (`ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE`), cuando ya había corrido.
+
+  Ahora el caudal de cámara **sigue al del colector** por defecto, con un checkbox para
+  desacoplarlo — porque desacoplar es legítimo: si el colector está sobredimensionado y
+  el aire sale demasiado caliente, mezclar con aire ambiente baja la temperatura de
+  entrada a costa de un caudal de cámara mayor. Desacoplado, un aviso lo dice en el
+  momento y no al final. El checkbox arranca activado salvo que el proyecto traiga un
+  caudal propio, que no se pisa.
+
+  El valor propuesto sale de la función nueva `balance_global.caudal_masico_banco_kg_s`,
+  que es **la misma** que evalúa la advertencia de coherencia: así el caudal que la UI
+  propone da ratio exactamente 1 y no puede dispararla. El tope del widget dejó de ser
+  fijo en 10 kg/s (habría recortado el caudal de un banco grande).
+
+- **Las notas de "cota superior" de P4, P7 y el reporte PDF decían algo que ya no era
+  cierto**: seguían afirmando que el modelo "recarga apenas termina el anterior, sin
+  turnos ni tiempo de carga" —corregido en 1.2.0 con `PoliticaRecarga`— "y arranca lotes
+  aunque el clima venga malo" —corregido ahora—. Reescritas en los tres idiomas para
+  decir cuál es hoy la idealización que queda: el pronóstico perfecto.
+
 Mejoras post-1.2 (sin orden estricto):
 
-- **No arrancar lotes con mal pronóstico** en el modo anual: hoy el encadenado carga un
-  lote aunque el día venga nublado, cosa que ningún operador hace, y eso infla los lotes
-  frustrados con casos que en la práctica no ocurrirían.
 - **Persistir `PoliticaRecarga`** en el snapshot del proyecto: hoy vive en los widgets de
   P4, así que sobrevive la sesión pero no un guardar/cargar.
 - Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):

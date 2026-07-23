@@ -230,3 +230,75 @@ class TestErrores:
                 t_s=np.zeros(3),
                 caudal_masico_kg_s=0.0,
             )
+
+
+# ---------------------------------------------------------------------------
+# Agregación de advertencias por código (S58)
+# ---------------------------------------------------------------------------
+
+
+class TestAgregacionDeAdvertencias:
+    """Un setpoint inalcanzable no puede producir un aviso por hora.
+
+    Los mensajes de la corrida escalar llevan el valor de la hora ("T_salida
+    real: 12.5 °C"), así que deduplicar por string exacto no filtraba nada:
+    sobre un año, la corrida real del usuario daba **230 avisos** casi idénticos
+    que tapaban los dos que sí eran distintos (S58). Mismo bug que el del
+    encadenado de lotes en S57, en otro módulo.
+    """
+
+    def _serie_con_setpoint_inalcanzable(self, n=200):
+        """Aire frío y variable + resistencia chica: el setpoint nunca se alcanza."""
+        aux = Auxiliar(
+            tipo=TipoAuxiliar.RESISTENCIA_ELECTRICA,
+            modo_operacion=ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
+            potencia_nominal_W=500.0,
+            set_point_T_K=353.15,  # 80 °C, fuera de alcance
+            temperatura_maxima_salida_K=373.15,
+            disponible_nocturno=True,
+        )
+        t_s = np.arange(n, dtype=float) * 3600.0
+        # Temperaturas todas distintas → cada hora genera un mensaje distinto.
+        T_ent = 280.0 + np.arange(n, dtype=float) * 0.1
+        return calcular_auxiliar_transitorio(
+            aux,
+            T_entrada_K_serie=T_ent,
+            t_s=t_s,
+            caudal_masico_kg_s=0.030,
+        )
+
+    def test_un_solo_aviso_por_codigo(self):
+        res = self._serie_con_setpoint_inalcanzable()
+        codigos = [a.split(":", 1)[0].strip() for a in res.advertencias_unicas]
+        assert len(codigos) == len(set(codigos)), f"códigos repetidos: {codigos}"
+        assert len(res.advertencias_unicas) <= 2, (
+            f"200 horas produjeron {len(res.advertencias_unicas)} avisos: "
+            "la agregación por código no está filtrando"
+        )
+
+    def test_el_aviso_dice_en_cuantas_horas_paso(self):
+        """'Se repitió en N de M horas' es información, no ruido."""
+        res = self._serie_con_setpoint_inalcanzable()
+        assert any("AUX_SET_POINT_NO_ALCANZABLE" in a for a in res.advertencias_unicas)
+        mensaje = next(a for a in res.advertencias_unicas if "AUX_SET_POINT" in a)
+        assert "Se repitió en" in mensaje and "horas de operación" in mensaje
+
+    def test_sin_repeticion_no_agrega_el_conteo(self):
+        """Un aviso que dispara una sola vez se muestra tal cual."""
+        aux = Auxiliar(
+            tipo=TipoAuxiliar.RESISTENCIA_ELECTRICA,
+            modo_operacion=ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
+            potencia_nominal_W=500.0,
+            set_point_T_K=353.15,
+            temperatura_maxima_salida_K=373.15,
+            disponible_nocturno=True,
+        )
+        res = calcular_auxiliar_transitorio(
+            aux,
+            T_entrada_K_serie=np.array([290.0, 290.0]),
+            t_s=np.array([0.0, 3600.0]),
+            caudal_masico_kg_s=0.030,
+        )
+        for a in res.advertencias_unicas:
+            if "Se repitió" in a:
+                assert " de 2 horas" in a

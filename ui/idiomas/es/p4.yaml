@@ -216,7 +216,18 @@ tunel:
     Un carro descargado cada **{cadencia:.1f} h**.
 flujo:
   titulo: Flujo de aire
-  hint_colector: "El colector entrega {q:.1f} L/s → ~{kg:.3f} kg/s (a ρ≈{rho} kg/m³)."
+  hint_colector: "El colector entrega {q:.1f} L/s → ~{kg:.3f} kg/s (a ρ≈{rho:.2f} kg/m³)."
+  seguir_colector:
+    label: Tomar el caudal del colector
+    help: >-
+      El sistema es hermético: lo que sale del banco de colectores entra a la
+      cámara. Con esto activado el caudal de la cámara sigue al del colector y
+      se actualiza solo si cambiás el banco o su velocidad de diseño.
+      Desactivalo si el aire del colector se mezcla con aire ambiente antes de
+      entrar (por ejemplo para bajar la temperatura de entrada).
+    desacoplado: >-
+      ⚠️ El caudal de la cámara no es el del banco. Es válido si hay mezcla con
+      aire ambiente; si no, el colector va a operar fuera de su punto de diseño.
   caudal:
     label: Caudal másico [kg/s]
     help_default: Caudal de aire seco que circula por la cámara.
@@ -372,6 +383,22 @@ anual:
     aviso_cota: >-
       ⚠️ Sin espera, el secador recarga a cualquier hora (incluso de madrugada).
       La producción resultante es una **cota superior**, no una estimación.
+  pronostico:
+    activo:
+      label: No cargar en días de mal pronóstico
+      help: >-
+        Un operador no llena el secador un día que viene nublado: el lote se
+        arrastra sin terminar y ocupa la cámara. Si se desactiva, se carga todos
+        los días que el secador esté libre.
+    umbral:
+      label: Irradiación mínima del día [MJ/m²]
+      help: >-
+        Irradiación diaria sobre el plano del colector por debajo de la cual no
+        se carga lote y se espera al día siguiente. Default 8 MJ/m²·día, el
+        mismo umbral con el que se cuentan los días operables.
+    nota_perfecto: >-
+      ⓘ La decisión usa la irradiación que el día efectivamente va a tener
+      (pronóstico perfecto): es la cota superior de la buena decisión.
   calcular:
     label: ☀️ Calcular año completo
     help: >-
@@ -400,10 +427,13 @@ anual:
   duracion:
     label: Duración media
     help: Tiempo medio de secado de los lotes que se completaron.
+  dias_salteados: >-
+    ⓘ En {n} días el secador estaba libre y no se cargó lote porque el día no
+    llegaba al umbral de irradiación.
   cota_superior: >-
-    ⓘ El modelo recarga un lote apenas termina el anterior, sin turnos ni tiempo
-    de carga y descarga, y arranca lotes aunque el clima venga malo. La
-    producción es una **cota superior** de lo alcanzable.
+    ⓘ El operador del modelo decide con **pronóstico perfecto**: conoce la
+    irradiación que va a tener el día en que carga. La producción es la cota
+    superior de la buena decisión.
 error_config: "❌ Error de configuración: {exc}"
 advertencias_titulo: Advertencias de diseño
 sin_advertencias: ✅ Diseño sin advertencias.

@@ -241,6 +241,27 @@ horizonte:
   boton: ▶ Calcular pipeline transitória
   spinner: Rodando auxiliar(t) + câmara TD + ventilador...
   prompt: ℹ️ Pressione **Calcular** para avaliar a pipeline transitória.
+  desactualizado: >-
+    ⚠️ **As forçantes do horizonte são de uma configuração anterior.** Você
+    mudou o coletor, a câmara, o clima ou o dia de análise depois de montá-las na
+    P4, então elas já não descrevem o ar que entra na câmara. Refaça o horizonte
+    antes de calcular.
+  rehacer: 🔄 Refazer o horizonte com a configuração atual
+  rehacer_help: >-
+    Monta de novo as forçantes T_amb(t), T_sal_col(t), I_g(t), ω(t) com o projeto
+    como está agora, sem voltar à P4.
+  rehacer_spinner: Refazendo as forçantes do horizonte…
+  rehacer_sin_meta: >-
+    ❌ Este horizonte foi salvo com uma versão anterior e não traz os dados para
+    refazê-lo aqui. Volte à P4 e pressione **Calcular**.
+  rehacer_error: "❌ Erro refazendo o horizonte: {exc}"
+vigencia:
+  resultado_viejo: >-
+    ⚠️ Estes resultados foram calculados com uma configuração anterior e não
+    correspondem ao projeto atual. Recalcule para atualizá-los.
+  export_bloqueado: >-
+    ⓘ A exportação (TXT / JSON / PDF) está desabilitada porque os resultados são
+    de uma configuração anterior. Recalcule para exportá-los.
 condiciones:
   titulo: Condições de operação representativas
   caption: >-
@@ -386,9 +407,27 @@ anual_det:
   dispersion: >-
     Duração de lote: mediana {p50:.0f} h, percentil 90 {p90:.0f} h. A diferença
     entre ambos é a variabilidade do clima real.
+  desactualizado: >-
+    ⚠️ **Estes resultados anuais são de uma configuração anterior.** Você mudou o
+    coletor, a câmara, o auxiliar, o clima ou a política de recarga depois de
+    rodar o ano, então os números abaixo já não descrevem o projeto atual e não
+    são exportados para o relatório.
+  recalcular: 🔄 Recalcular o ano com a configuração atual
+  recalcular_help: >-
+    Roda as 8760 h de novo com o projeto como está agora. Leva alguns segundos
+    (o coletor é avaliado por superfície de resposta).
+  recalculando: Recalculando o ano completo…
+  recalcular_sin_clima: ❌ Não há clima carregado para recalcular o ano.
+  recalcular_error: "❌ Erro recalculando o ano: {exc}"
+  export_omitido: >-
+    ⓘ O bloco de análise anual não entra nos arquivos exportados porque está
+    desatualizado. Recalcule acima para incluí-lo.
+  dias_salteados: >-
+    ⓘ Em {n} dias o secador estava livre mas não se carregou lote: o dia não
+    atingia o limiar de irradiação.
   cota_superior: >-
-    ⓘ Recarga imediata, sem turnos nem tempo de carga: a produção é um limite
-    superior.
+    ⓘ O operador decide com previsão perfeita (conhece a irradiação que o dia de
+    carga vai efetivamente ter): a produção é o limite superior da boa decisão.
   csv: ⬇️ Baixar tabela mensal (CSV)
   csv_help: Os mesmos números da tabela, para planilha.
   col_mes: Mês
@@ -404,9 +443,23 @@ anual_det:
   fig_titulo: Produção mensal
   fig_kg: Produto seco [kg]
   fig_lotes: Lotes completados
+  fig_agua: Água evaporada [kg]
   fig_eje_mes: Mês
-  fig_eje_kg: Produto seco [kg]
+  fig_eje_kg: Massa [kg]
   fig_eje_lotes: Lotes
+  fig_energia_titulo: Energia mensal — solar incidente e auxiliar
+  fig_e_solar: Solar incidente [MJ]
+  fig_e_aux: Auxiliar entregue ao ar [MJ]
+  fig_eje_energia: Energia [MJ]
+  fig_dur_titulo: Duração média de lote por mês
+  fig_dur_media: Duração média [h]
+  fig_dur_p50: "p50 do ano: {valor:.0f} h"
+  fig_dur_p90: "p90 do ano: {valor:.0f} h"
+  fig_eje_horas: Duração [h]
+  fig_dias_titulo: "Dias operáveis por mês (limiar {umbral:.0f} MJ/m²·dia)"
+  fig_dias_totales: Dias do mês
+  fig_dias_operables: Dias operáveis
+  fig_eje_dias: Dias
 guardar:
   txt: Salvar pré-dimensionamento completo (.txt)
   json: Salvar pré-dimensionamento completo (.json)

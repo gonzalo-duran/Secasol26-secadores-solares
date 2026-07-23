@@ -90,6 +90,10 @@ class ResultadoVentana:
         t_secado_medio_s: Tiempo medio de secado de un lote [s] (solo BATCH).
         batch_en_progreso: True si al final de la ventana quedó un lote sin
             completar (solo BATCH).
+        n_dias_salteados_pronostico: Días en que hubo oportunidad de cargar y no
+            se cargó porque el día no llegaba al umbral de irradiación (solo
+            BATCH, con ``PoliticaRecarga.exigir_pronostico``). Cero no significa
+            que el criterio no se aplicó: significa que ningún día lo activó.
         n_avances: Columnas descargadas (solo SEMICONTINUO).
         X_salida_regimen: Humedad de salida en régimen (solo SEMICONTINUO).
         throughput_fresco_kg_dia: Caudal de producto fresco procesado [kg/día]
@@ -126,6 +130,7 @@ class ResultadoVentana:
     n_batches_completos: int = 0
     t_secado_medio_s: Optional[float] = None
     batch_en_progreso: bool = False
+    n_dias_salteados_pronostico: int = 0
     lotes: list["LoteVentana"] = field(default_factory=list)
     # SEMICONTINUO
     n_avances: int = 0
@@ -168,17 +173,39 @@ class PoliticaRecarga:
     operador hace eso — descarga y recarga de mañana. Modelar la espera baja la
     producción hacia lo realista (S57, a pedido del usuario).
 
+    Además del *cuándo* horario, la política cubre el **si conviene cargar**: un
+    operador no llena el secador un día que viene nublado. Ver
+    ``exigir_pronostico`` y :func:`_energia_diaria_POA`.
+
     Attributes:
         activa: Si es False se conserva el encadenado inmediato (cota superior).
         hora_carga_h: Hora local del día en que se cargan los lotes [0, 24).
         maniobra_h: Tiempo de descarga + recarga [h]. El lote siguiente no puede
             empezar antes de ``t_fin + maniobra_h``, y además debe caer en la
             hora de carga.
+        exigir_pronostico: Si es True, un lote solo se carga cuando la
+            irradiación del **día de carga** sobre el plano del colector supera
+            ``umbral_pronostico_MJ_m2``; si no, se espera al día siguiente. Con
+            False se carga siempre, que era el comportamiento hasta S58.
+        umbral_pronostico_MJ_m2: Irradiación diaria mínima en el plano del
+            colector para decidir cargar [MJ/m²·día].
+
+    Note:
+        **El pronóstico es perfecto.** La decisión se toma con la irradiación
+        que el día efectivamente va a tener, no con una predicción con error.
+        Es una idealización deliberada (elegida por el usuario en S58): da la
+        **cota superior de la buena decisión** —el operador que nunca se
+        equivoca— y por lo tanto sobrestima levemente la producción respecto de
+        una operación real, que carga algún día que sale nublado y saltea algún
+        día que sale bueno. El sentido del sesgo es opuesto al de ``activa`` y
+        ambos son chicos frente a la variabilidad interanual del recurso.
     """
 
     activa: bool = True
     hora_carga_h: float = 8.0
     maniobra_h: float = 1.0
+    exigir_pronostico: bool = True
+    umbral_pronostico_MJ_m2: float = 8.0
 
     def __post_init__(self) -> None:
         if not (0.0 <= self.hora_carga_h < 24.0):
@@ -187,6 +214,11 @@ class PoliticaRecarga:
             )
         if self.maniobra_h < 0.0:
             raise ValueError(f"RECARGA_MANIOBRA_NEGATIVA: maniobra_h={self.maniobra_h} < 0.")
+        if self.umbral_pronostico_MJ_m2 < 0.0:
+            raise ValueError(
+                f"RECARGA_UMBRAL_NEGATIVO: umbral_pronostico_MJ_m2="
+                f"{self.umbral_pronostico_MJ_m2} < 0."
+            )
 
 
 def _proximo_instante_carga(
@@ -211,6 +243,44 @@ def _proximo_instante_carga(
     hora_actual = (hora_local_t0_h + t_disponible / 3600.0) % 24.0
     espera_h = (politica.hora_carga_h - hora_actual) % 24.0
     return t_disponible + espera_h * 3600.0
+
+
+def _dia_local(t_s: float, hora_local_t0_h: float) -> int:
+    """Índice de día local (0 = día en que arranca el lapso) del instante ``t_s``."""
+    return int(np.floor((hora_local_t0_h + t_s / 3600.0) / 24.0))
+
+
+def _energia_diaria_POA(fz: ForzantesAire, hora_local_t0_h: float) -> dict[int, float]:
+    """Irradiación diaria en el plano del colector, por día local [MJ/m²·día].
+
+    Es la magnitud con la que se decide si vale la pena cargar un lote: el
+    recurso que va a tener el día, no la potencia instantánea del momento de
+    cargar (a las 8 de la mañana el sol siempre es flojo).
+
+    Se agrupa por **día local** y no por día UTC porque la jornada de trabajo
+    del operador es local; el mismo criterio que usa la desagregación mensual
+    del modo anual.
+
+    Args:
+        fz: Forzantes del lapso completo (usa ``I_g_POA_W_m2``).
+        hora_local_t0_h: Hora local del día que corresponde a ``t = 0`` [h].
+
+    Returns:
+        ``{índice_de_día: MJ/m²}``. Dict vacío si no hay POA disponible —el
+        llamador debe interpretarlo como "no se puede decidir", no como "día
+        malo".
+    """
+    poa = getattr(fz, "I_g_POA_W_m2", None)
+    if poa is None:
+        return {}
+    poa_arr = np.asarray(poa, dtype=float)
+    t = np.asarray(fz.t_s, dtype=float)
+    if t.size < 2 or poa_arr.size != t.size:
+        return {}
+    dt = float(t[1] - t[0])
+    dias = np.floor((hora_local_t0_h + t / 3600.0) / 24.0).astype(int)
+    poa_arr = np.nan_to_num(poa_arr, nan=0.0, posinf=0.0, neginf=0.0)
+    return {int(d): float(poa_arr[dias == d].sum() * dt / 1e6) for d in np.unique(dias)}  # W→MJ
 
 
 def _slice_forzantes(fz: ForzantesAire, t0_s: float) -> Optional[ForzantesAire]:
@@ -393,9 +463,34 @@ def _simular_ventana_batch(
     ejemplo_codigo: dict[str, str] = {}
     n_lotes_intentados = 0
 
+    # Irradiación diaria del lapso, para la decisión de cargar (pronóstico).
+    # Se calcula una vez: es una reducción del array de POA, no depende del lote.
+    energia_dia = (
+        _energia_diaria_POA(forzantes_base, hora_local_t0_h) if politica.exigir_pronostico else {}
+    )
+    pronostico_evaluable = bool(energia_dia)
+    if politica.exigir_pronostico and not pronostico_evaluable:
+        res.advertencias.append(
+            "VENTANA_PRONOSTICO_SIN_POA: se pidió no cargar lotes en días de mal "
+            "pronóstico, pero las forzantes no traen irradiación en el plano del "
+            "colector. Se cargan todos los días (el criterio no se aplicó)."
+        )
+    n_dias_salteados = 0
+
     while t_now < horizonte_s and n_batches < _MAX_BATCHES:
         if (horizonte_s - t_now) < _HORIZONTE_MIN_BATCH_S:
             break
+        # ¿Conviene cargar hoy? Un operador no llena el secador un día que viene
+        # nublado: el lote se arrastra sin terminar y ocupa la cámara. Saltear
+        # esos días es lo que separa "el modelo carga siempre" de la operación
+        # real (S58). Nótese que la decisión usa el clima que efectivamente va a
+        # ocurrir — pronóstico perfecto, ver PoliticaRecarga.
+        if pronostico_evaluable:
+            dia = _dia_local(t_now, hora_local_t0_h)
+            if energia_dia.get(dia, 0.0) < politica.umbral_pronostico_MJ_m2:
+                t_now += _SEGUNDOS_POR_DIA
+                n_dias_salteados += 1
+                continue
         fz = _slice_forzantes(forzantes_base, t_now)
         if fz is None:
             break
@@ -484,6 +579,7 @@ def _simular_ventana_batch(
         res.advertencias.append(mensaje)
 
     res.lotes = lotes
+    res.n_dias_salteados_pronostico = n_dias_salteados
     res.n_batches_completos = n_batches
     res.masa_seca_producida_kg = masa_seca
     res.masa_evaporada_kg = masa_evap
@@ -498,10 +594,21 @@ def _simular_ventana_batch(
         res.status = "ok"
     else:
         res.status = "sin_lotes_completos"
-        res.advertencias.append(
-            "VENTANA_BATCH_SIN_LOTES: ningún lote alcanzó X_objetivo dentro de la "
-            "ventana. Ampliá la ventana o revisá las condiciones de secado."
-        )
+        if n_lotes_intentados == 0 and n_dias_salteados > 0:
+            # Distinguir "el secador no seca" de "nunca se dio la orden de
+            # cargar": el diagnóstico y la corrección son distintos.
+            res.advertencias.append(
+                f"VENTANA_PRONOSTICO_BLOQUEA_TODO: no se cargó ningún lote porque "
+                f"ninguno de los {n_dias_salteados} días del lapso llegó a "
+                f"{politica.umbral_pronostico_MJ_m2:.1f} MJ/m² sobre el plano del "
+                "colector. Bajá el umbral de pronóstico o revisá el recurso solar "
+                "del sitio y la orientación del colector."
+            )
+        else:
+            res.advertencias.append(
+                "VENTANA_BATCH_SIN_LOTES: ningún lote alcanzó X_objetivo dentro de la "
+                "ventana. Ampliá la ventana o revisá las condiciones de secado."
+            )
     return res
 
 

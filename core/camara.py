@@ -590,12 +590,20 @@ class ConfiguracionFlujo:
         direccion_flujo: Dirección del flujo de aire en la cámara.
         HR_entrada_fraccion: Humedad relativa del aire en la entrada de la cámara
             [fracción 0–1]. None implica uso de fallback del catálogo.
+        seguir_caudal_colector: Si True, ``caudal_masico_kg_s`` se toma del banco
+            de colectores en vez de fijarse a mano — el sistema es hermético y lo
+            que sale del banco entra a la cámara. Es una **decisión de diseño**
+            del usuario y por eso se persiste: antes se infería comparando el
+            caudal guardado con el del banco, y bastaba recalcular el clima con
+            otro año (ρ cambia con la T media) para que la app dedujera que el
+            usuario los había desacoplado a propósito (S58).
     """
 
     caudal_masico_kg_s: float = 0.030
     fraccion_recirculacion: float = 0.0
     direccion_flujo: DireccionFlujo = DireccionFlujo.HORIZONTAL
     HR_entrada_fraccion: Optional[float] = None
+    seguir_caudal_colector: bool = True
 
     def __post_init__(self) -> None:
         if self.caudal_masico_kg_s <= 0:

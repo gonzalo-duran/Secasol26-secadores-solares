@@ -1,4 +1,22 @@
 header: 1 · Tipologia e Configuração da Análise
+cargar:
+  titulo: 📂 Carregar projeto completo
+  caption: >-
+    Retoma um projeto salvo na aba 7 (arquivo
+    `..._prediseno_completo_....json`). Substitui TUDO o que estiver carregado
+    agora: tipologia, local, coletor, câmara, auxiliar e motor.
+  uploader: Arquivo .json do projeto
+  help: >-
+    Precisa ser o JSON "pré-projeto completo" que a P7 baixa. Arquivos de uma
+    seção isolada (só coletor, só câmara) são carregados na própria aba.
+  confirmar: ✅ Carregar e substituir o projeto atual
+  pendiente: "Arquivo **{nombre}** lido. Aperte o botão para substituir o projeto atual."
+  error_archivo: "❌ Não foi possível ler o arquivo: {exc}"
+  exito: ✅ Projeto **{nombre}** carregado. Confira as abas 2 a 6.
+  clima_pendiente: >-
+    ⚠️ O clima não viaja no arquivo (são 8760 linhas). O projeto foi salvo com o
+    ano **{anio}**: baixe-o de novo na aba 2 antes de calcular. Se já baixou para
+    este local, sai do cache na hora.
 metadatos:
   titulo: Metadados do projeto
   nombre:

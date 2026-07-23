@@ -328,13 +328,18 @@ anual:
   eta_total: η total
   especifica: Energia específica
   dias_operables: Dias operáveis
+  dias_salteados: Dias não carregados (previsão)
   cota_superior: >-
-    O modelo recarrega um lote assim que o anterior termina, sem turnos nem
-    tempo de carga, e inicia lotes mesmo com clima ruim: a produção é um limite
-    superior do alcançável.
+    O operador do modelo decide com previsão perfeita: conhece a irradiação que
+    o dia de carga vai efetivamente ter. A produção é o limite superior da boa
+    decisão — uma operação real carrega em algum dia que sai nublado e pula
+    algum que sai bom.
   graficas: Gráficos da análise anual
   fig:
-    kg_mes: Produção mensal — produto seco e lotes
+    kg_mes: Produção mensal — produto seco, água e lotes
+    energia: Energia mensal — solar incidente e auxiliar
+    duracion: Duração média de lote por mês
+    dias: Dias operáveis por mês
   tabla_titulo: Detalhe mensal
   col_mes: Mês
   col_seca: Seco [kg]

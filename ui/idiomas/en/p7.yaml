@@ -244,6 +244,27 @@ horizonte:
   boton: ▶ Compute transient pipeline
   spinner: Running auxiliary(t) + TD chamber + fan...
   prompt: ℹ️ Press **Compute** to evaluate the transient pipeline.
+  desactualizado: >-
+    ⚠️ **The horizon forcings come from an earlier configuration.** The
+    collector, chamber, weather or analysis day changed after they were built in
+    P4, so they no longer describe the air entering the chamber. Rebuild the
+    horizon before computing.
+  rehacer: 🔄 Rebuild the horizon with the current configuration
+  rehacer_help: >-
+    Rebuilds the T_amb(t), T_col_out(t), I_g(t), ω(t) forcings with the project
+    as it stands now, without going back to P4.
+  rehacer_spinner: Rebuilding the horizon forcings…
+  rehacer_sin_meta: >-
+    ❌ This horizon was saved with an earlier version and lacks the data to
+    rebuild it here. Go back to P4 and press **Compute**.
+  rehacer_error: "❌ Error rebuilding the horizon: {exc}"
+vigencia:
+  resultado_viejo: >-
+    ⚠️ These results were computed with an earlier configuration and do not
+    match the current project. Recompute to update them.
+  export_bloqueado: >-
+    ⓘ Export (TXT / JSON / PDF) is disabled because the results come from an
+    earlier configuration. Recompute to export them.
 condiciones:
   titulo: Representative operating conditions
   caption: >-
@@ -388,8 +409,28 @@ anual_det:
   dispersion: >-
     Batch duration: median {p50:.0f} h, 90th percentile {p90:.0f} h. The gap
     between them is the variability of the real climate.
+  desactualizado: >-
+    ⚠️ **These annual results come from an earlier configuration.** The
+    collector, chamber, backup heater, weather or reload policy changed after
+    the year was run, so the numbers below no longer describe the current
+    project and are not exported to the report.
+  recalcular: 🔄 Re-run the year with the current configuration
+  recalcular_help: >-
+    Runs the 8760 h again with the project as it stands now. Takes a few seconds
+    (the collector is evaluated through its response surface).
+  recalculando: Re-running the full year…
+  recalcular_sin_clima: ❌ No weather data loaded to re-run the year.
+  recalcular_error: "❌ Error re-running the year: {exc}"
+  export_omitido: >-
+    ⓘ The annual analysis block is left out of the exported files because it is
+    out of date. Re-run it above to include it.
+  dias_salteados: >-
+    ⓘ On {n} days the dryer was free but no batch was loaded: the day did not
+    reach the irradiation threshold.
   cota_superior: >-
-    ⓘ Immediate reload, no shifts and no loading time: output is an upper bound.
+    ⓘ The operator decides with a perfect forecast (it knows the irradiation the
+    loading day will actually get): output is the upper bound of good
+    decision-making.
   csv: ⬇️ Download monthly table (CSV)
   csv_help: The same numbers as the table, for a spreadsheet.
   col_mes: Month
@@ -405,9 +446,23 @@ anual_det:
   fig_titulo: Monthly output
   fig_kg: Dry product [kg]
   fig_lotes: Completed batches
+  fig_agua: Water evaporated [kg]
   fig_eje_mes: Month
-  fig_eje_kg: Dry product [kg]
+  fig_eje_kg: Mass [kg]
   fig_eje_lotes: Batches
+  fig_energia_titulo: Monthly energy — incident solar and backup heater
+  fig_e_solar: Incident solar [MJ]
+  fig_e_aux: Backup heater into the air [MJ]
+  fig_eje_energia: Energy [MJ]
+  fig_dur_titulo: Mean batch duration per month
+  fig_dur_media: Mean duration [h]
+  fig_dur_p50: "year p50: {valor:.0f} h"
+  fig_dur_p90: "year p90: {valor:.0f} h"
+  fig_eje_horas: Duration [h]
+  fig_dias_titulo: "Operable days per month (threshold {umbral:.0f} MJ/m²·day)"
+  fig_dias_totales: Days in month
+  fig_dias_operables: Operable days
+  fig_eje_dias: Days
 guardar:
   txt: Save full pre-design (.txt)
   json: Save full pre-design (.json)

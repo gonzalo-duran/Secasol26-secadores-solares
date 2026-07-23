@@ -1,4 +1,23 @@
 header: 1 · Tipología y Configuración del Análisis
+cargar:
+  titulo: 📂 Cargar proyecto completo
+  caption: >-
+    Retoma un proyecto guardado desde la pestaña 7 (archivo
+    `..._prediseno_completo_....json`). Reemplaza TODO lo que tengas cargado
+    ahora: tipología, emplazamiento, colector, cámara, auxiliar y motor.
+  uploader: Archivo .json del proyecto
+  help: >-
+    Tiene que ser el JSON "prediseño completo" que descarga P7. Los archivos de
+    una sección suelta (solo colector, solo cámara) se cargan en su propia
+    pestaña.
+  confirmar: ✅ Cargar y reemplazar el proyecto actual
+  pendiente: "Archivo **{nombre}** leído. Apretá el botón para reemplazar el proyecto actual."
+  error_archivo: "❌ No se pudo leer el archivo: {exc}"
+  exito: ✅ Proyecto **{nombre}** cargado. Revisá las pestañas 2 a 6.
+  clima_pendiente: >-
+    ⚠️ El clima no viaja en el archivo (son 8760 filas). El proyecto se guardó
+    con el año **{anio}**: volvé a descargarlo en la pestaña 2 antes de calcular.
+    Si ya lo bajaste antes para este sitio, sale de la caché al instante.
 metadatos:
   titulo: Metadatos del proyecto
   nombre:

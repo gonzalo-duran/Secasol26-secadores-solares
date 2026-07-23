@@ -393,18 +393,33 @@ def _figuras_ventana(res, tr: Tr, proyecto=None) -> list[tuple[str, bytes]]:
 
 
 def _figuras_anual(res_anual, tr: Tr) -> list[tuple[str, bytes]]:
-    """Figura de barras kg/mes + η_total de la operación anual (si convierte)."""
+    """Figuras del análisis anual: producción, energía, duración y días.
+
+    Son las mismas de P7: el reporte no puede mostrar menos que la pantalla, o
+    el usuario que arma el informe pierde justo lo que estuvo mirando.
+    """
     out: list[tuple[str, bytes]] = []
     if res_anual is None:
         return out
-    try:
-        from ui.p7_resultados import _fig_operacion_anual
+    from ui.p7_resultados import (
+        _fig_anual_dias,
+        _fig_anual_duracion,
+        _fig_anual_energia,
+        _fig_operacion_anual,
+    )
 
-        png = _fig_a_png(_fig_operacion_anual(res_anual))
-        if png:
-            out.append((tr("anual.fig.kg_mes"), png))
-    except Exception:
-        pass
+    for constructor, clave in (
+        (_fig_operacion_anual, "anual.fig.kg_mes"),
+        (_fig_anual_energia, "anual.fig.energia"),
+        (_fig_anual_duracion, "anual.fig.duracion"),
+        (_fig_anual_dias, "anual.fig.dias"),
+    ):
+        try:
+            png = _fig_a_png(constructor(res_anual))
+            if png:
+                out.append((tr(clave), png))
+        except Exception:
+            continue
     return out
 
 
@@ -1439,6 +1454,10 @@ def _seccion_operacion_anual(
         [tr("anual.eta_total"), _fmt(snap_anual.get("eta_total_anual"))],
         [tr("anual.especifica"), f"{_fmt(snap_anual.get('energia_especifica_MJ_kg'))} MJ/kg"],
         [tr("anual.dias_operables"), str(snap_anual.get("dias_operables", "—"))],
+        [
+            tr("anual.dias_salteados"),
+            str(snap_anual.get("dias_salteados_pronostico", "—")),
+        ],
     ]
     elems.append(_tabla_kv(rows))
     elems.append(Paragraph(tr("anual.cota_superior"), styles["caption"]))
@@ -1913,7 +1932,13 @@ def generar_reporte_pdf(
     from calculos.simulacion_ventana import ResultadoVentana
 
     es_ventana = isinstance(res, ResultadoVentana)
-    res_anual = session_state.get("p4_resultado_anual")
+    # Solo si sigue correspondiendo a la configuración actual: un bloque anual
+    # viejo convierte el reporte en un documento que se contradice (S58).
+    from ui.componentes.vigencia import resultado_anual_vigente
+
+    res_anual, _vigente_anual = resultado_anual_vigente(proyecto, session_state)
+    if not _vigente_anual:
+        res_anual = None
 
     # Snapshot completo (para sección global)
     snap_full = _json_resultados_completo(

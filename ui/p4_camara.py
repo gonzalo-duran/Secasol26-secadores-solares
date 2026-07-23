@@ -21,7 +21,9 @@ from plotly.subplots import make_subplots
 
 from calculos.balance_global import (
     armar_forzantes_aire,
+    caudal_masico_banco_kg_s,
     construir_serie_sintetica_dia_tipo,
+    presion_representativa_proyecto,
 )
 from calculos.camara_calc import calcular_camara
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
@@ -66,6 +68,7 @@ from ui.componentes.idiomas import t, t_catalogo
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
+from ui.componentes.vigencia import extras_horizonte, invalidar, registrar, registrar_anual
 
 # ---------------------------------------------------------------------------
 # Constantes de UI
@@ -76,6 +79,10 @@ _T_OP_MAX_C: float = 90.0
 _T_OP_DEFAULT_C: float = 55.0
 
 _HR_DEFAULT_PCT: float = 20.0
+# Default de fábrica de ConfiguracionFlujo.caudal_masico_kg_s: si el valor
+# guardado es exactamente este, nadie lo tocó y el caudal puede seguir al
+# colector sin pisar una decisión del usuario.
+_CAUDAL_FLUJO_DEFAULT_KG_S: float = ConfiguracionFlujo().caudal_masico_kg_s
 
 
 # ---------------------------------------------------------------------------
@@ -706,6 +713,57 @@ def _construir_forzantes_ventana(
     )
 
 
+def _T_amb_ref_K(proyecto) -> float:
+    """Temperatura ambiente de referencia para fijar el caudal másico [K].
+
+    El caudal másico del banco se fija con la densidad del aire que **entra** al
+    colector, que es el ambiente. Usa la media anual del clima si está cargado;
+    si no, 20 °C, que para este uso (proponer un caudal) mueve el resultado
+    menos que el redondeo del widget.
+    """
+    datos = getattr(getattr(proyecto, "clima", None), "datos", None)
+    if datos is not None and "T_amb_K" in getattr(datos, "columns", []):
+        try:
+            T_media = float(np.nanmean(np.asarray(datos["T_amb_K"], dtype=float)))
+            if np.isfinite(T_media) and T_media > 0:
+                return T_media
+        except (TypeError, ValueError):
+            pass
+    return 293.15
+
+
+def _P_ref_Pa(proyecto) -> float:
+    """Presión del sitio [Pa], con caída a la estándar si no se puede derivar."""
+    try:
+        P_Pa, _origen = presion_representativa_proyecto(proyecto)
+        return float(P_Pa)
+    except Exception:
+        return 101325.0
+
+
+def _seguir_colector_default(flujo_prev, m_col: float) -> bool:
+    """¿El checkbox "seguir al colector" arranca activado?
+
+    Lee la **decisión persistida** (``ConfiguracionFlujo.seguir_caudal_colector``)
+    y no la deduce de los números. Deducirla era frágil: el caudal del banco es
+    ``v·A·n·ρ(T_amb, P)``, así que cambiar el año de clima mueve ρ unas décimas
+    de por mil y el caudal guardado dejaba de coincidir → la app concluía que el
+    usuario había desacoplado los caudales a propósito y destildaba el checkbox
+    sola, justo al cargar un proyecto (S58).
+
+    El fallback por coincidencia numérica se conserva **solo** para snapshots
+    anteriores al campo, donde no hay decisión que leer, y con una tolerancia
+    del 2 % en vez de 0.01 %.
+    """
+    decision = getattr(flujo_prev, "seguir_caudal_colector", None)
+    if decision is not None:
+        return bool(decision)
+    caudal_prev = float(getattr(flujo_prev, "caudal_masico_kg_s", 0.0))
+    if abs(caudal_prev - _CAUDAL_FLUJO_DEFAULT_KG_S) < 1e-9:
+        return True
+    return abs(caudal_prev - m_col) <= 0.02 * max(m_col, 1e-9)
+
+
 def _disponibilidad_forzantes_reales(p3_eval, proyecto) -> tuple[bool, str]:
     """Verifica si hay datos suficientes para construir forzantes reales.
 
@@ -1192,6 +1250,9 @@ def _from_json_camara(data: dict) -> "Camara":
             if f_d.get("HR_entrada_fraccion") is not None
             else None
         ),
+        # Back-compat: los snapshots anteriores a S58 no traen la decisión. Se
+        # asume que sí seguía al colector, que es el default de la app.
+        seguir_caudal_colector=bool(f_d.get("seguir_caudal_colector", True)),
     )
 
     # Túnel semicontinuo (opcional; back-compat: ausente → None).
@@ -1326,6 +1387,7 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "direccion_flujo": f.direccion_flujo.value,
             "fraccion_recirculacion": f.fraccion_recirculacion,
             "HR_entrada_fraccion": f.HR_entrada_fraccion,
+            "seguir_caudal_colector": f.seguir_caudal_colector,
         },
         "tunel": (
             {
@@ -1448,6 +1510,32 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
         if not recarga_activa:
             st.warning(t("p4.anual.recarga.aviso_cota"))
 
+        # Decisión de cargar: un operador no llena el secador un día que viene
+        # nublado. Sin esto el modelo carga siempre e infla los lotes que se
+        # arrastran sin terminar (S58).
+        st.divider()
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            exigir_pronostico = st.checkbox(
+                t("p4.anual.pronostico.activo.label"),
+                value=True,
+                key="p4_anual_pronostico_activo",
+                help=t("p4.anual.pronostico.activo.help"),
+            )
+        with pc2:
+            umbral_pronostico = st.number_input(
+                t("p4.anual.pronostico.umbral.label"),
+                min_value=0.0,
+                max_value=40.0,
+                value=8.0,
+                step=1.0,
+                disabled=not exigir_pronostico,
+                key="p4_anual_pronostico_umbral",
+                help=t("p4.anual.pronostico.umbral.help"),
+            )
+        if exigir_pronostico:
+            st.caption(t("p4.anual.pronostico.nota_perfecto"))
+
     calcular_anual = st.button(
         t("p4.anual.calcular.label"),
         type="primary",
@@ -1469,6 +1557,8 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
                 activa=bool(recarga_activa),
                 hora_carga_h=float(hora_carga),
                 maniobra_h=float(maniobra),
+                exigir_pronostico=bool(exigir_pronostico),
+                umbral_pronostico_MJ_m2=float(umbral_pronostico),
             )
         except ValueError as exc:
             st.error(t("p4.anual.error", exc=exc))
@@ -1483,7 +1573,11 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
             except Exception as exc:
                 st.error(t("p4.anual.error_calculo", exc=exc))
                 return
-        st.session_state["p4_resultado_anual"] = res_anual
+        # Huella de las entradas + política usada: P7 y el reporte muestran este
+        # resultado sin recalcularlo, así que necesitan poder detectar que quedó
+        # viejo (S58). Sin esto, cambiar P5 después de correr el año dejaba a P7
+        # mostrando un año sin auxiliar como si fuera el actual.
+        registrar_anual(st.session_state, res_anual, proyecto, politica)
         st.success(t("p4.anual.exito"))
 
     res_anual: ResultadosAnual | None = st.session_state.get("p4_resultado_anual")
@@ -1526,9 +1620,11 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
         ),
         help=t("p4.anual.duracion.help"),
     )
-    # El encadenado supone recarga inmediata, sin turnos ni tiempo de carga, y
-    # arranca lotes aunque el clima venga malo: el resultado es una cota
-    # superior. Decirlo acá evita que el número se lea como una promesa.
+    # El operador del modelo decide con pronóstico perfecto: el resultado es la
+    # cota superior de la buena decisión. Decirlo acá, junto a los números, evita
+    # que se lean como una promesa.
+    if res_anual.dias_salteados_pronostico > 0:
+        st.caption(t("p4.anual.dias_salteados", n=res_anual.dias_salteados_pronostico))
     st.caption(t("p4.anual.cota_superior"))
 
 
@@ -2306,27 +2402,56 @@ def render() -> None:
     with st.expander(t("p4.flujo.titulo"), expanded=False):
         flujo_prev = proyecto.camara.flujo if proyecto.camara is not None else ConfiguracionFlujo()
 
-        # Sugerir caudal del colector si está disponible
-        caudal_sugerido = flujo_prev.caudal_masico_kg_s
+        # Caudal del banco: en un sistema hermético lo que sale del colector es
+        # lo que entra a la cámara, así que el caudal de cámara **sigue** al del
+        # colector por defecto (S58). Antes arrancaba en el default de
+        # ConfiguracionFlujo y el usuario que no lo tocaba corría la cámara con
+        # un caudal que no era el del banco, con la única señal de una
+        # advertencia al final del cálculo.
+        m_col: float | None = None
         hint_caudal = ""
         if proyecto.colector is not None:
             Q_m3s = proyecto.colector.caudal_total_m3_s()
-            rho_est = 1.1
-            m_col = Q_m3s * rho_est
-            hint_caudal = t("p4.flujo.hint_colector", q=Q_m3s * 1000, kg=m_col, rho=rho_est)
+            # Misma densidad que usa la advertencia de coherencia
+            # (ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE) para que el valor propuesto
+            # no la dispare: ρ(T_amb, P_sitio).
+            m_col = caudal_masico_banco_kg_s(
+                proyecto.colector, _T_amb_ref_K(proyecto), _P_ref_Pa(proyecto)
+            )
+            rho_ef = m_col / Q_m3s if Q_m3s > 0 else 1.1
+            hint_caudal = t("p4.flujo.hint_colector", q=Q_m3s * 1000, kg=m_col, rho=rho_ef)
+
+        seguir_colector = False
+        if m_col is not None and m_col > 0:
+            seguir_colector = st.checkbox(
+                t("p4.flujo.seguir_colector.label"),
+                value=_seguir_colector_default(flujo_prev, m_col),
+                key="p4_flujo_seguir_colector",
+                help=t("p4.flujo.seguir_colector.help"),
+            )
+
+        caudal_sugerido = float(m_col) if seguir_colector else flujo_prev.caudal_masico_kg_s
 
         c1, c2 = st.columns(2)
         caudal = c1.number_input(
             t("p4.flujo.caudal.label"),
             min_value=0.001,
-            max_value=10.0,
+            # El tope no puede recortar el caudal del propio banco: un banco
+            # grande mueve más de 10 kg/s y un tope fijo rompería gran escala.
+            max_value=max(10.0, caudal_sugerido * 2.0),
             value=caudal_sugerido,
             step=0.001,
             format="%.4f",
+            disabled=seguir_colector,
             help=hint_caudal or t("p4.flujo.caudal.help_default"),
         )
         if hint_caudal:
             c1.caption(f"💡 {hint_caudal}")  # i18n: exento (hint_caudal ya traducido)
+        if m_col is not None and not seguir_colector:
+            # Desacoplar es legítimo (mezclar aire ambiente para bajar la T de
+            # entrada), pero deja de ser el caudal del banco: decirlo acá evita
+            # que la incoherencia se descubra recién en la advertencia final.
+            c1.caption(t("p4.flujo.seguir_colector.desacoplado"))
 
         _dir_keys = ["horizontal", "vertical_ascendente"]
         _dir_enum = {
@@ -2614,6 +2739,7 @@ def render() -> None:
             fraccion_recirculacion=0.0,
             direccion_flujo=direccion,
             HR_entrada_fraccion=HR_entrada_frac,
+            seguir_caudal_colector=seguir_colector,
         )
         carga = CargaProducto(
             producto_id=prod_id,
@@ -2694,6 +2820,7 @@ def render() -> None:
                 fraccion_recirculacion=0.0,
                 direccion_flujo=direccion,
                 HR_entrada_fraccion=HR_entrada_frac,
+                seguir_caudal_colector=seguir_colector,
             )
             carga = CargaProducto(
                 producto_id=prod_id,
@@ -2804,7 +2931,6 @@ def render() -> None:
                 # Persistir horizonte para que P7 pueda re-correr la pipeline
                 # transitoria con auxiliar + motor (mejora 19).
                 if fz_aire is not None:
-                    st.session_state["p4_forzantes_horizonte"] = fz_aire
                     st.session_state["p4_horizonte_resultado"] = res
                     st.session_state["p4_horizonte_meta"] = {
                         "n_dias": int(n_dias_efectivo),
@@ -2832,9 +2958,20 @@ def render() -> None:
                         "P_proyecto_Pa": P_proyecto_Pa,
                         "dias_consecutivos": dias_consecutivos,
                     }
+                    # Con la huella de las entradas: P7 consume estas forzantes
+                    # sin rehacerlas, así que tiene que poder detectar que el
+                    # colector (o el clima, o el día de análisis) cambió después
+                    # de armarlas. Mismo mecanismo que el resultado anual (S58).
+                    registrar(
+                        st.session_state,
+                        "horizonte",
+                        fz_aire,
+                        proyecto,
+                        extras=extras_horizonte(st.session_state["p4_horizonte_meta"]),
+                    )
                 else:
                     # Modo "Constantes": no hay horizonte transitorio para P7.
-                    st.session_state.pop("p4_forzantes_horizonte", None)
+                    invalidar(st.session_state, "horizonte")
                     st.session_state.pop("p4_horizonte_resultado", None)
                     st.session_state.pop("p4_horizonte_meta", None)
         except Exception as exc:

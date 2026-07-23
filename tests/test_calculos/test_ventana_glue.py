@@ -212,6 +212,40 @@ def test_adv_ventana_caudal_banco_incoherente():
     assert any("ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE" in a for a in adv)
 
 
+def test_caudal_masico_banco_es_inverso_de_la_velocidad():
+    """Ida y vuelta ṁ ↔ v: las dos conversiones comparten sección y densidad."""
+    from calculos.balance_global import (
+        _velocidad_modulo_desde_caudal,
+        caudal_masico_banco_kg_s,
+    )
+
+    proy = _proyecto(SubtipoGranEscala.BATCH)
+    m_dot = caudal_masico_banco_kg_s(proy.colector, 293.15, 88000.0)
+    v = _velocidad_modulo_desde_caudal(proy.colector, m_dot, 293.15, 88000.0)
+    assert v == pytest.approx(proy.colector.unidad.velocidad_diseno_ms, rel=1e-9)
+
+
+def test_el_caudal_propuesto_por_P4_no_dispara_la_advertencia():
+    """Lo que P4 propone como caudal de cámara tiene que dar ratio 1.
+
+    Es la razón de ser de compartir ``caudal_masico_banco_kg_s`` entre la UI y
+    la advertencia: si P4 propusiera el caudal con otra densidad, el usuario
+    aceptaría la propuesta y la corrida le avisaría igual que sus caudales son
+    incoherentes (S58).
+    """
+    from calculos.balance_global import caudal_masico_banco_kg_s
+
+    df = _clima_sintetico(dias=2)
+    proy = _proyecto(SubtipoGranEscala.BATCH)
+    T_amb_medio = float(np.mean(df["T_amb_K"].to_numpy()))
+    proy.camara.flujo = ConfiguracionFlujo(
+        caudal_masico_kg_s=caudal_masico_banco_kg_s(proy.colector, T_amb_medio, 88000.0)
+    )
+    proy.camara.geometria = GeometriaCamara(largo_m=3.0, ancho_m=1.0, alto_m=1.2)
+    _, _, adv, _ = armar_forzantes_ventana(proy, df, P_Pa=88000.0)
+    assert not any("ADV_VENTANA_CAUDAL_BANCO_INCOHERENTE" in a for a in adv)
+
+
 def test_adv_ventana_caudal_coherente_sin_advertencia():
     """Caudal del sistema ≈ caudal de diseño del banco → sin advertencia."""
     df = _clima_sintetico(dias=2)

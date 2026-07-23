@@ -214,7 +214,18 @@ tunel:
     One trolley unloaded every **{cadencia:.1f} h**.
 flujo:
   titulo: Air flow
-  hint_colector: "The collector delivers {q:.1f} L/s → ~{kg:.3f} kg/s (at ρ≈{rho} kg/m³)."
+  hint_colector: "The collector delivers {q:.1f} L/s → ~{kg:.3f} kg/s (at ρ≈{rho:.2f} kg/m³)."
+  seguir_colector:
+    label: Take the collector's flow
+    help: >-
+      The system is sealed: what leaves the collector bank enters the chamber.
+      With this on, the chamber flow follows the collector's and updates by
+      itself when you change the bank or its design velocity. Turn it off if
+      the collector air is mixed with ambient air before entering (for example
+      to bring the inlet temperature down).
+    desacoplado: >-
+      ⚠️ The chamber flow is not the bank's. That is valid if there is mixing
+      with ambient air; otherwise the collector will run off its design point.
   caudal:
     label: Mass flow [kg/s]
     help_default: Dry-air flow circulating through the chamber.
@@ -367,6 +378,22 @@ anual:
     aviso_cota: >-
       ⚠️ With no waiting, the dryer reloads at any hour (even overnight). The
       resulting output is an **upper bound**, not an estimate.
+  pronostico:
+    activo:
+      label: Do not load on days with a bad forecast
+      help: >-
+        An operator does not fill the dryer on a day that looks cloudy: the
+        batch drags on without finishing and keeps the chamber busy. If
+        disabled, a batch is loaded on every day the dryer is free.
+    umbral:
+      label: Minimum daily irradiation [MJ/m²]
+      help: >-
+        Daily irradiation on the collector plane below which no batch is loaded
+        and the dryer waits for the next day. Default 8 MJ/m²·day, the same
+        threshold used to count operable days.
+    nota_perfecto: >-
+      ⓘ The decision uses the irradiation the day will actually get (perfect
+      forecast): it is the upper bound of good decision-making.
   calcular:
     label: ☀️ Run full year
     help: >-
@@ -396,10 +423,13 @@ anual:
   duracion:
     label: Mean duration
     help: Mean drying time of the batches that completed.
+  dias_salteados: >-
+    ⓘ On {n} days the dryer was free and no batch was loaded because the day did
+    not reach the irradiation threshold.
   cota_superior: >-
-    ⓘ The model reloads a batch as soon as the previous one ends, with no
-    shifts and no loading time, and starts batches even in bad weather. Output
-    is an **upper bound** on what is achievable.
+    ⓘ The model's operator decides with a **perfect forecast**: it knows the
+    irradiation the loading day will actually get. Output is the upper bound of
+    good decision-making.
 error_config: "❌ Configuration error: {exc}"
 advertencias_titulo: Design warnings
 sin_advertencias: ✅ Design with no warnings.

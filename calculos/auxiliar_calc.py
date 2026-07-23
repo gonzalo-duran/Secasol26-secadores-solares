@@ -317,7 +317,15 @@ def calcular_auxiliar_transitorio(
     T_salida = np.empty(n, dtype=float)
     delta_T = np.empty(n, dtype=float)
     Q_eff = np.empty(n, dtype=float)
-    advertencias_set: dict[str, None] = {}  # dict preserva orden de inserción
+    # Agregación por CÓDIGO, no por string exacto: los mensajes de la corrida
+    # escalar llevan el valor de la hora ("T_salida real: 12.5 °C"), así que
+    # deduplicar por igualdad no filtra nada. Sobre un año, un setpoint
+    # inalcanzable producía **cientos** de avisos casi idénticos que tapaban
+    # cualquier otro diagnóstico (S58; mismo bug que el del encadenado de lotes
+    # en S57, en otro módulo).
+    conteo_codigo: dict[str, int] = {}
+    ejemplo_codigo: dict[str, str] = {}
+    n_pasos_activos = 0
 
     for i in range(n):
         T_ent_i = float(T_entrada_K_serie[i])
@@ -326,6 +334,7 @@ def calcular_auxiliar_transitorio(
             delta_T[i] = 0.0
             Q_eff[i] = 0.0
             continue
+        n_pasos_activos += 1
         res_i = calcular_auxiliar(
             auxiliar=auxiliar,
             T_entrada_K=T_ent_i,
@@ -335,7 +344,20 @@ def calcular_auxiliar_transitorio(
         delta_T[i] = res_i.delta_T_K
         Q_eff[i] = res_i.Q_efectivo_W
         for msg in res_i.advertencias:
-            advertencias_set[msg] = None
+            codigo = msg.split(":", 1)[0].strip()
+            conteo_codigo[codigo] = conteo_codigo.get(codigo, 0) + 1
+            if codigo not in ejemplo_codigo:
+                ejemplo_codigo[codigo] = msg
+
+    advertencias_set: dict[str, None] = {}  # dict preserva orden de inserción
+    for codigo, n_veces in conteo_codigo.items():
+        mensaje = ejemplo_codigo[codigo]
+        if n_veces > 1:
+            mensaje += (
+                f" · Se repitió en {n_veces} de {n_pasos_activos} horas de "
+                "operación (se muestra la primera)."
+            )
+        advertencias_set[mensaje] = None
 
     # Energía total: trapezoidal sobre Q_efectivo
     E_aux_MJ = float(np.trapezoid(Q_eff, t_s) / 1e6) if n > 1 else 0.0

@@ -32,6 +32,16 @@ from ui.componentes.idiomas import idioma_actual, t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
+from ui.componentes.vigencia import (
+    estado,
+    extras_horizonte,
+    horizonte_vigente,
+    invalidar,
+    politica_anual_guardada,
+    registrar,
+    registrar_anual,
+    resultado_anual_vigente,
+)
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -662,6 +672,10 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             "altitud_m": empl.altitud_m,
             "albedo_suelo": empl.albedo_suelo,
             "zona_horaria": empl.zona_horaria,
+            # Rugosidad del terreno: entra al perfil de viento del extractor de
+            # la chimenea. Faltaba en el snapshot, así que un proyecto guardado y
+            # vuelto a cargar perdía el terreno elegido y caía al default (S58).
+            "z0_terreno_m": getattr(empl, "z0_terreno_m", None),
         }
         if not _es_caja_p7:
             json_empl["acimut_colector_deg_duffie"] = empl.acimut_colector_deg
@@ -1356,7 +1370,10 @@ def _texto_operacion_anual(res_anual) -> list[str]:
         f"  Energía específica  : {_f(res_anual.energia_especifica_MJ_kg)} MJ/kg agua",
         f"  Días operables      : {res_anual.dias_operables}"
         f" (umbral {res_anual.umbral_dia_operable_MJ_m2:.1f} MJ/m²·día)",
-        "  NOTA: recarga inmediata sin turnos ni tiempo de carga → cota superior.",
+        f"  Días no cargados    : {res_anual.dias_salteados_pronostico}"
+        " (secador libre, pero el día no llegaba al umbral de pronóstico)",
+        "  NOTA: el operador decide con pronóstico perfecto → cota superior de la",
+        "        buena decisión.",
         "",
         "  DETALLE MENSUAL",
         "  mes | seco[kg] | agua[kg] | lotes | sin_compl | dur[h] | oper/días | E_sol[MJ]",
@@ -1394,6 +1411,7 @@ def _json_operacion_anual(res_anual) -> dict:
         "energia_especifica_MJ_kg": res_anual.energia_especifica_MJ_kg,
         "dias_operables": res_anual.dias_operables,
         "umbral_dia_operable_MJ_m2": res_anual.umbral_dia_operable_MJ_m2,
+        "dias_salteados_pronostico": res_anual.dias_salteados_pronostico,
         "horas_simuladas": res_anual.horas_simuladas,
         "area_colector_m2": res_anual.area_colector_m2,
         "status": res_anual.status,
@@ -1523,6 +1541,54 @@ def _construir_forzantes_builder_desde_meta(horizonte_meta: dict, p3_eval):
         )
 
     return _builder
+
+
+def _rehacer_horizonte(proyecto, horizonte_meta: dict) -> bool:
+    """Rearma las forzantes del horizonte con la configuración actual, desde P7.
+
+    P4 congela el aire que entra a la cámara y P7 lo consume sin rehacerlo; si
+    entre medio cambió el colector, el clima o el día de análisis, esas
+    forzantes describen otro sistema. Rehacerlas acá evita el viaje a P4 —los
+    kwargs del builder viajan en el meta desde S47, justamente para esto.
+
+    Args:
+        proyecto: Proyecto actual.
+        horizonte_meta: ``p4_horizonte_meta`` persistido por P4.
+
+    Returns:
+        True si las forzantes se rehicieron y quedaron registradas.
+    """
+    builder = _construir_forzantes_builder_desde_meta(
+        horizonte_meta, st.session_state.get("p3_eval")
+    )
+    if builder is None:
+        # Horizonte persistido antes de S47: no trae los kwargs del builder.
+        st.error(t("p7.horizonte.rehacer_sin_meta"))
+        return False
+
+    with st.spinner(t("p7.horizonte.rehacer_spinner")):
+        try:
+            fz = builder(proyecto)
+        except Exception as exc:
+            st.error(t("p7.horizonte.rehacer_error", exc=exc))
+            return False
+    if fz is None:
+        st.error(t("p7.horizonte.rehacer_sin_meta"))
+        return False
+
+    # El horizonte efectivo puede cambiar al rehacerlo (los días reales
+    # consecutivos se truncan en el borde del año), así que el meta se
+    # actualiza: es lo que P7 muestra como duración.
+    meta = dict(horizonte_meta)
+    if len(fz.t_s) > 1:
+        _dt = float(fz.t_s[1] - fz.t_s[0])
+        _ppd = max(1, round(86400.0 / _dt))
+        meta["n_dias"] = max(1, round(len(fz.t_s) / _ppd))
+    st.session_state["p4_horizonte_meta"] = meta
+    registrar(st.session_state, "horizonte", fz, proyecto, extras=extras_horizonte(meta))
+    # El resultado transitorio anterior salió del aire viejo.
+    invalidar(st.session_state, "transitorio")
+    return True
 
 
 def _render_barridos_parametricos(
@@ -1909,12 +1975,12 @@ def _render_ventana(proyecto) -> None:
         _t0 = _time.perf_counter()
         with st.spinner(t("p7.ventana.spinner")):
             res = calcular_todo_ventana(proyecto, df_ventana)
-        st.session_state["p7_resultado_ventana"] = res
+        registrar(st.session_state, "ventana", res, proyecto)
         st.session_state["p7_t_calc_ventana_s"] = _time.perf_counter() - _t0
         # Resultado nuevo → la validación del túnel persistida queda obsoleta.
         st.session_state.pop("p7_valtun_resultado", None)
 
-    res = st.session_state.get("p7_resultado_ventana")
+    res, ventana_vigente = estado(proyecto, st.session_state, "ventana")
     if res is None:
         st.info(t("p7.ventana.prompt"))
         return
@@ -1922,12 +1988,14 @@ def _render_ventana(proyecto) -> None:
     t_calc = st.session_state.get("p7_t_calc_ventana_s")
     if t_calc is not None:
         st.caption(t("p7.ventana.t_calc", t=t_calc))
+    if not ventana_vigente:
+        st.warning(t("p7.vigencia.resultado_viejo"))
     _render_resultados_ventana(res, proyecto)
 
     # Exportación (txt / JSON / PDF) también en modo ventana. Las condiciones
     # representativas de Constantes no existen acá → quedan en None.
     if getattr(res, "status", "") != "error":
-        _render_botones_guardado(proyecto, res)
+        _render_botones_guardado(proyecto, res, vigente=ventana_vigente)
 
 
 def _omega_amb_constantes(res, proyecto) -> Optional[float]:
@@ -2005,11 +2073,18 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Panel anual prominente (modo ANUAL): vista principal arriba
     # -----------------------------------------------------------------------
+    # Las corridas paramétricas se muestran **una sola vez**, en la sección del
+    # modo que se está corriendo. El panel anual se montó arriba del flujo de
+    # transitorio/constantes y ambos llamaban a `_render_barridos_parametricos`,
+    # así que el usuario veía dos secciones de barridos (S58).
+    barridos_mostrados = False
     if modo_analisis == ModoAnalisis.ANUAL:
-        res_anual = st.session_state.get("p4_resultado_anual")
+        res_anual, anual_vigente = resultado_anual_vigente(proyecto, st.session_state)
         if res_anual is not None:
             _render_operacion_anual_detalle(proyecto)
-            _render_barridos_parametricos(proyecto, "anual")
+            if anual_vigente:
+                _render_barridos_parametricos(proyecto, "anual")
+                barridos_mostrados = True
             st.divider()
             _md_titulo = "### " + t("p7.anual_prompt_detalle")
             st.markdown(_md_titulo)
@@ -2020,8 +2095,7 @@ def render() -> None:
     # -----------------------------------------------------------------------
     # Selector modo de cálculo: transitorio (horizonte de P4) vs constantes
     # -----------------------------------------------------------------------
-    fz_horizonte = st.session_state.get("p4_forzantes_horizonte")
-    horizonte_meta = st.session_state.get("p4_horizonte_meta") or {}
+    fz_horizonte, horizonte_meta, horizonte_al_dia = horizonte_vigente(proyecto, st.session_state)
     horizonte_disponible = (
         fz_horizonte is not None and proyecto.camara.modo_calculo == "termodinamico"
     )
@@ -2063,6 +2137,21 @@ def render() -> None:
         st.caption(t("p7.horizonte.caption"))
 
         st.divider()
+        if not horizonte_al_dia:
+            # Las forzantes las armó P4 con otra configuración. Calcular sobre
+            # ellas produciría un resultado que se ve nuevo y es viejo, así que
+            # la puerta se cierra acá: primero rehacer el aire, después calcular.
+            st.error(t("p7.horizonte.desactualizado"))
+            if st.button(
+                t("p7.horizonte.rehacer"),
+                key="p7_btn_rehacer_horizonte",
+                type="primary",
+                help=t("p7.horizonte.rehacer_help"),
+            ):
+                if _rehacer_horizonte(proyecto, horizonte_meta):
+                    st.rerun()
+            return
+
         calcular_tr = st.button(
             t("p7.horizonte.boton"),
             type="primary",
@@ -2078,14 +2167,27 @@ def render() -> None:
                     forzantes_base=fz_horizonte,
                     n_dias=n_dias_hor,
                 )
-            st.session_state["p7_resultados_tr"] = res_tr
+            registrar(
+                st.session_state,
+                "transitorio",
+                res_tr,
+                proyecto,
+                extras=extras_horizonte(horizonte_meta),
+            )
             st.session_state["p7_t_calc_base_s_transitorio"] = _time.perf_counter() - _t0
 
-        if "p7_resultados_tr" not in st.session_state:
+        res_tr, tr_vigente = estado(
+            proyecto,
+            st.session_state,
+            "transitorio",
+            extras=extras_horizonte(horizonte_meta),
+        )
+        if res_tr is None:
             st.info(t("p7.horizonte.prompt"))
             return
 
-        res_tr = st.session_state["p7_resultados_tr"]
+        if not tr_vigente:
+            st.warning(t("p7.vigencia.resultado_viejo"))
         _render_resultados_transitorios(res_tr, proyecto)
         _render_carta_psicrometrica(res_tr, proyecto)
 
@@ -2100,17 +2202,19 @@ def render() -> None:
             I_g=I_sug,
             v_viento=v_sug,
             HR_cam_pct=_HR_CAMARA_DEFAULT_PCT,
+            vigente=tr_vigente,
         )
 
-        _render_barridos_parametricos(
-            proyecto,
-            "transitorio",
-            forzantes_base=fz_horizonte,
-            forzantes_builder=_construir_forzantes_builder_desde_meta(
-                horizonte_meta, st.session_state.get("p3_eval")
-            ),
-            n_dias=n_dias_hor,
-        )
+        if not barridos_mostrados:
+            _render_barridos_parametricos(
+                proyecto,
+                "transitorio",
+                forzantes_base=fz_horizonte,
+                forzantes_builder=_construir_forzantes_builder_desde_meta(
+                    horizonte_meta, st.session_state.get("p3_eval")
+                ),
+                n_dias=n_dias_hor,
+            )
         return  # no caer en el flujo de constantes representativas
 
     # -----------------------------------------------------------------------
@@ -2173,6 +2277,15 @@ def render() -> None:
     st.divider()
     calcular = st.button(t("p7.condiciones.boton"), type="primary")
 
+    # Las condiciones de borde son entradas del cálculo tanto como el equipo:
+    # mover un slider y no recalcular deja el dashboard describiendo otra cosa.
+    extras_cte = {
+        "T_amb_K": float(T_amb_K),
+        "I_g_W_m2": float(I_g),
+        "v_viento_ms": float(v_viento),
+        "HR_camara": float(HR_cam),
+    }
+
     if calcular:
         import time as _time
 
@@ -2186,21 +2299,23 @@ def render() -> None:
                 T_entrada_K=T_amb_K,
                 HR_camara=HR_cam,
             )
-        st.session_state["p7_resultados"] = res
+        registrar(st.session_state, "constantes", res, proyecto, extras=extras_cte)
         st.session_state["p7_t_calc_base_s_constantes"] = _time.perf_counter() - _t0
 
     # Usar resultados almacenados si existen
-    if "p7_resultados" not in st.session_state:
+    res, res_vigente = estado(proyecto, st.session_state, "constantes", extras=extras_cte)
+    if res is None:
         st.info(t("p7.condiciones.prompt"))
         return
-
-    res: ResultadosCompletos = st.session_state["p7_resultados"]
 
     # Errores fatales
     if res.errores:
         st.error(t("p7.errores_fatales"))
         _mostrar_errores(res.errores)
         return
+
+    if not res_vigente:
+        st.warning(t("p7.vigencia.resultado_viejo"))
 
     # Advertencias
     if res.advertencias:
@@ -2445,20 +2560,22 @@ def render() -> None:
         I_g=I_g,
         v_viento=v_viento,
         HR_cam_pct=HR_cam_pct,
+        vigente=res_vigente,
     )
 
     # --- Corridas paramétricas (modo Constantes) ---
-    _render_barridos_parametricos(
-        proyecto,
-        "constantes",
-        condiciones=dict(
-            T_amb_K=T_amb_K,
-            I_g_W_m2=I_g,
-            v_viento_ms=v_viento,
-            T_entrada_K=T_amb_K,
-            HR_camara=HR_cam,
-        ),
-    )
+    if not barridos_mostrados:
+        _render_barridos_parametricos(
+            proyecto,
+            "constantes",
+            condiciones=dict(
+                T_amb_K=T_amb_K,
+                I_g_W_m2=I_g,
+                v_viento_ms=v_viento,
+                T_entrada_K=T_amb_K,
+                HR_camara=HR_cam,
+            ),
+        )
 
 
 def _df_operacion_anual(res_anual):
@@ -2499,6 +2616,32 @@ def _df_operacion_anual(res_anual):
     return pd.DataFrame(filas).set_index(_col_mes)
 
 
+def _recalcular_anual(proyecto) -> None:
+    """Vuelve a correr el año con la configuración actual, desde P7.
+
+    Usa ``proyecto.camara`` tal como está persistida —no los widgets de P4, que
+    esta pestaña no ve— y la política de recarga con la que se corrió la vez
+    anterior. Deja el resultado y su huella en ``session_state``, igual que P4.
+    """
+    from calculos.simulacion_anual import simular_anual
+
+    datos = getattr(getattr(proyecto, "clima", None), "datos", None)
+    if datos is None:
+        st.error(t("p7.anual_det.recalcular_sin_clima"))
+        return
+    politica = politica_anual_guardada(st.session_state)
+    with st.spinner(t("p7.anual_det.recalculando")):
+        try:
+            res = simular_anual(proyecto, datos, politica_recarga=politica)
+        except ValueError as exc:
+            st.error(f"❌ {exc}")  # i18n: exento (mensaje de calculos/, queda ES)
+            return
+        except Exception as exc:
+            st.error(t("p7.anual_det.recalcular_error", exc=exc))
+            return
+    registrar_anual(st.session_state, res, proyecto, politica)
+
+
 def _render_operacion_anual_detalle(proyecto) -> None:
     """Panel detalle del modo anual sobre 8760 h — visible si P4 lo calculó.
 
@@ -2507,13 +2650,29 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     """
     from calculos.simulacion_anual import ResultadosAnual
 
-    res_anual: ResultadosAnual | None = st.session_state.get("p4_resultado_anual")
+    res_anual: ResultadosAnual | None
+    res_anual, vigente = resultado_anual_vigente(proyecto, st.session_state)
     if res_anual is None:
         return
 
     st.divider()
     st.subheader(t("p7.anual_det.titulo"))
     st.caption(t("p7.anual_det.caption"))
+
+    if not vigente:
+        # El resultado se calculó con otra configuración. Mostrar los números
+        # como si fueran actuales es peor que no mostrarlos: el usuario los
+        # exporta y el reporte se contradice a sí mismo (S58).
+        st.error(t("p7.anual_det.desactualizado"))
+        if st.button(
+            t("p7.anual_det.recalcular"),
+            key="p7_anual_recalcular",
+            type="primary",
+            help=t("p7.anual_det.recalcular_help"),
+        ):
+            _recalcular_anual(proyecto)
+            st.rerun()
+        return
 
     if res_anual.advertencias:
         for msg in res_anual.advertencias:
@@ -2577,6 +2736,8 @@ def _render_operacion_anual_detalle(proyecto) -> None:
                 p90=res_anual.duracion_p90_h,
             )
         )
+    if res_anual.dias_salteados_pronostico > 0:
+        st.caption(t("p7.anual_det.dias_salteados", n=res_anual.dias_salteados_pronostico))
     st.caption(t("p7.anual_det.cota_superior"))
 
     df_meses = _df_operacion_anual(res_anual)
@@ -2591,6 +2752,9 @@ def _render_operacion_anual_detalle(proyecto) -> None:
     )
 
     mostrar_plotly(_fig_operacion_anual(res_anual), nombre="operacion_anual")
+    mostrar_plotly(_fig_anual_energia(res_anual), nombre="anual_energia")
+    mostrar_plotly(_fig_anual_duracion(res_anual), nombre="anual_duracion")
+    mostrar_plotly(_fig_anual_dias(res_anual), nombre="anual_dias")
 
 
 def _fig_operacion_anual(res_anual):
@@ -2618,8 +2782,124 @@ def _fig_operacion_anual(res_anual):
         height=400,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
     )
+    fig.add_bar(
+        x=meses_nombres,
+        y=[p.masa_evaporada_kg for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_agua"),
+        marker_color="#9ecae1",
+    )
+    fig.update_layout(
+        title=t("p7.anual_det.fig_titulo"),
+        xaxis_title=t("p7.anual_det.fig_eje_mes"),
+        height=400,
+        barmode="group",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
+    )
     fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_kg"), secondary_y=False)
     fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_lotes"), secondary_y=True)
+    return fig
+
+
+def _fig_anual_energia(res_anual):
+    """Energía mensual: solar incidente vs auxiliar entregado al aire.
+
+    Es la figura que responde "¿cuánto trabaja el auxiliar y cuándo?". Con el
+    auxiliar apagado la serie queda en cero y la figura sigue siendo informativa
+    (estacionalidad del recurso solar).
+    """
+    meses_nombres = t("graficas.meses_abbr").split(",")
+    fig = go.Figure()
+    fig.add_bar(
+        x=meses_nombres,
+        y=[p.E_solar_MJ for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_e_solar"),
+        marker_color="#ff7f0e",
+    )
+    fig.add_bar(
+        x=meses_nombres,
+        y=[p.E_auxiliar_MJ for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_e_aux"),
+        marker_color="#8c564b",
+    )
+    fig.update_layout(
+        title=t("p7.anual_det.fig_energia_titulo"),
+        xaxis_title=t("p7.anual_det.fig_eje_mes"),
+        yaxis_title=t("p7.anual_det.fig_eje_energia"),
+        barmode="group",
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
+    )
+    return fig
+
+
+def _fig_anual_duracion(res_anual):
+    """Duración media de lote por mes, con p50 y p90 del año como referencia.
+
+    La dispersión es lo que el esquema de día típico borraba: con un día
+    promedio todos los lotes duraban lo mismo. Verla mes a mes muestra en qué
+    época el secador se vuelve lento.
+    """
+    meses_nombres = t("graficas.meses_abbr").split(",")
+    fig = go.Figure()
+    fig.add_scatter(
+        x=meses_nombres,
+        y=[p.duracion_media_h for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_dur_media"),
+        mode="lines+markers",
+        line=dict(color="#2ca02c", width=2),
+        marker=dict(size=8),
+        connectgaps=False,  # un mes sin lotes es un hueco, no una interpolación
+    )
+    for valor, clave, dash in (
+        (res_anual.duracion_p50_h, "p7.anual_det.fig_dur_p50", "dot"),
+        (res_anual.duracion_p90_h, "p7.anual_det.fig_dur_p90", "dash"),
+    ):
+        if valor is not None:
+            fig.add_hline(
+                y=valor,
+                line=dict(color="#7f7f7f", width=1, dash=dash),
+                annotation_text=t(clave, valor=valor),
+                annotation_position="top left",
+            )
+    fig.update_layout(
+        title=t("p7.anual_det.fig_dur_titulo"),
+        xaxis_title=t("p7.anual_det.fig_eje_mes"),
+        yaxis_title=t("p7.anual_det.fig_eje_horas"),
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
+    )
+    return fig
+
+
+def _fig_anual_dias(res_anual):
+    """Días del mes vs días operables: disponibilidad del recurso.
+
+    Dice cuántos días el sol alcanzaba el umbral, que es distinto de cuántos se
+    trabajó (el secador puede estar ocupado con un lote en curso).
+    """
+    meses_nombres = t("graficas.meses_abbr").split(",")
+    fig = go.Figure()
+    fig.add_bar(
+        x=meses_nombres,
+        y=[p.dias for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_dias_totales"),
+        marker_color="#c7c7c7",
+    )
+    fig.add_bar(
+        x=meses_nombres,
+        y=[p.dias_operables for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_dias_operables"),
+        marker_color="#17becf",
+    )
+    fig.update_layout(
+        title=t("p7.anual_det.fig_dias_titulo", umbral=res_anual.umbral_dia_operable_MJ_m2),
+        xaxis_title=t("p7.anual_det.fig_eje_mes"),
+        yaxis_title=t("p7.anual_det.fig_eje_dias"),
+        barmode="overlay",
+        height=380,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
+    )
+    fig.update_traces(opacity=0.85)
     return fig
 
 
@@ -2631,6 +2911,7 @@ def _render_botones_guardado(
     I_g: Optional[float] = None,
     v_viento: Optional[float] = None,
     HR_cam_pct: Optional[float] = None,
+    vigente: bool = True,
 ) -> None:
     """Renderiza el bloque de botones .txt / .json / PDF al pie de P7.
 
@@ -2639,6 +2920,12 @@ def _render_botones_guardado(
     ``ResultadosCompletosTransitorio`` o ``ResultadoVentana`` — todos funcionan
     vía ``getattr``. Las condiciones representativas (sliders de Constantes)
     son opcionales: en modo Ventana no existen y quedan en ``None``.
+
+    Args:
+        vigente: False si ``res`` se calculó con otra configuración. En ese
+            caso no se ofrece exportar: un archivo con números viejos sale del
+            programa y se lee después, cuando ya no queda rastro del aviso en
+            pantalla. El dashboard sí los sigue mostrando, marcados.
     """
     from ui.componentes.serializacion import (
         dump_json,
@@ -2647,8 +2934,18 @@ def _render_botones_guardado(
     )
 
     st.divider()
-    # Operación anual de cámara (si P4 la corrió): entra a los tres exports.
-    res_anual = st.session_state.get("p4_resultado_anual")
+    if not vigente:
+        st.warning(t("p7.vigencia.export_bloqueado"))
+        return
+
+    # Operación anual (si P4 la corrió): entra a los tres exports **solo si
+    # sigue vigente**. Exportar un bloque anual calculado con otra configuración
+    # produce reportes que se contradicen a sí mismos — el caso real que abrió
+    # esto tenía E_aux = 74 MJ en el bloque global y 0 MJ en el anual (S58).
+    res_anual, _anual_vigente = resultado_anual_vigente(proyecto, st.session_state)
+    if not _anual_vigente:
+        res_anual = None
+        st.caption(t("p7.anual_det.export_omitido"))
     texto_res = _texto_resultados_completo(
         proyecto,
         res,

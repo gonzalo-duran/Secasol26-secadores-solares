@@ -52,14 +52,19 @@ def calcular_hash_entradas(*secciones: Any) -> str:
     respecto al estado actual de las entradas.
 
     Args:
-        *secciones: Dataclasses de entrada a incluir en el hash.
+        *secciones: Entradas a incluir en el hash. Las dataclasses se expanden
+            a dict; lo demás (``None`` por una sección ausente, un dict de
+            condiciones de borde) se serializa tal cual.
 
     Returns:
         String hexadecimal de 64 caracteres (SHA-256).
     """
     import dataclasses
 
-    datos = [dataclasses.asdict(s) for s in secciones]
+    datos = [
+        dataclasses.asdict(s) if dataclasses.is_dataclass(s) and not isinstance(s, type) else s
+        for s in secciones
+    ]
     serializado = json.dumps(datos, sort_keys=True, default=str)
     return hashlib.sha256(serializado.encode()).hexdigest()
 

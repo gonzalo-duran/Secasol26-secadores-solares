@@ -10,6 +10,8 @@ resultado**, no un dato que el usuario asegura.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,6 +24,7 @@ from calculos.simulacion_anual import (
     _meses_del_indice,
     simular_anual,
 )
+from core.camara import ForzantesAire
 from core.proyecto import Proyecto, SubtipoGranEscala
 from tests.test_calculos.test_ventana_glue import _clima_sintetico, _proyecto
 
@@ -506,3 +509,203 @@ class TestAgregacionDeAdvertencias:
             ejemplo.setdefault(c, m)
         assert list(conteo.values()) == [3]
         assert ejemplo["CAM_HR_FLUJO_ALTA"] == mensajes[0]
+
+
+# ---------------------------------------------------------------------------
+# Decisión de cargar (pronóstico) — S58
+# ---------------------------------------------------------------------------
+
+
+def _forzantes_con_POA(poa_diaria_W_m2: list[float], *, dt_h: float = 1.0) -> ForzantesAire:
+    """Forzantes de N días con POA **constante** dentro de cada día.
+
+    Con POA constante la irradiación diaria es exactamente
+    ``POA · 24 h``, así que el umbral esperado se calcula a mano y el test no
+    depende de la forma del perfil diurno.
+    """
+    n_por_dia = int(round(24.0 / dt_h))
+    poa = np.repeat(np.asarray(poa_diaria_W_m2, dtype=float), n_por_dia)
+    n = poa.size
+    t = np.arange(n, dtype=float) * dt_h * 3600.0
+    return ForzantesAire(
+        t_s=t,
+        T_ent_K=np.full(n, 320.0),
+        omega_ent=np.full(n, 0.008),
+        m_dot_aire_seco_kg_s=np.full(n, 0.05),
+        T_amb_K=np.full(n, 293.0),
+        v_viento_ms=np.full(n, 2.0),
+        I_g_POA_W_m2=poa,
+    )
+
+
+class TestEnergiaDiariaPOA:
+    """La decisión de cargar mira la irradiación **del día**, no la del momento.
+
+    A las 8 de la mañana el sol siempre es flojo: decidir con la irradiancia
+    instantánea del instante de carga rechazaría todos los días.
+    """
+
+    def test_integra_por_dia_local(self):
+        from calculos.simulacion_ventana import _energia_diaria_POA
+
+        # 100 W/m² constantes durante 24 h = 100 · 86400 / 1e6 = 8.64 MJ/m².
+        fz = _forzantes_con_POA([100.0, 200.0])
+        energia = _energia_diaria_POA(fz, hora_local_t0_h=0.0)
+        assert energia[0] == pytest.approx(8.64, rel=1e-6)
+        assert energia[1] == pytest.approx(17.28, rel=1e-6)
+
+    def test_el_dia_se_corta_en_hora_local_no_en_t0(self):
+        """t=0 a las 18 h locales: las primeras 6 h son del día 0, el resto del 1."""
+        from calculos.simulacion_ventana import _energia_diaria_POA
+
+        fz = _forzantes_con_POA([100.0, 100.0])
+        energia = _energia_diaria_POA(fz, hora_local_t0_h=18.0)
+        # Día 0 = 6 h de las 24 h del primer bloque.
+        assert energia[0] == pytest.approx(100.0 * 6 * 3600.0 / 1e6, rel=1e-6)
+        assert set(energia) == {0, 1, 2}
+
+    def test_sin_POA_devuelve_vacio(self):
+        """Dict vacío significa 'no se puede decidir', no 'día malo'."""
+        from calculos.simulacion_ventana import _energia_diaria_POA
+
+        fz = _forzantes_con_POA([100.0])
+        fz_sin_poa = replace(fz, I_g_POA_W_m2=None)
+        assert _energia_diaria_POA(fz_sin_poa, 0.0) == {}
+
+    def test_nan_en_la_POA_no_propaga(self):
+        from calculos.simulacion_ventana import _energia_diaria_POA
+
+        fz = _forzantes_con_POA([100.0])
+        poa = np.asarray(fz.I_g_POA_W_m2, dtype=float).copy()
+        poa[3] = np.nan
+        energia = _energia_diaria_POA(replace(fz, I_g_POA_W_m2=poa), 0.0)
+        assert np.isfinite(energia[0])
+
+    def test_dia_local_respeta_el_origen(self):
+        from calculos.simulacion_ventana import _dia_local
+
+        assert _dia_local(0.0, 0.0) == 0
+        assert _dia_local(23.5 * 3600.0, 0.0) == 0
+        assert _dia_local(0.0, 18.0) == 0
+        assert _dia_local(7.0 * 3600.0, 18.0) == 1  # 18 + 7 = 25 h → día siguiente
+
+
+def _clima_con_dias_nublados(dias: int, nublados: set[int], factor: float = 0.15):
+    """Clima sintético con algunos días atenuados (nubosidad)."""
+    df = _clima_sintetico(dias)
+    dia_de_hora = np.arange(len(df)) // 24
+    escala = np.where(np.isin(dia_de_hora, list(nublados)), factor, 1.0)
+    for col in ("GHI_Wm2", "DNI_Wm2", "DHI_Wm2"):
+        df[col] = df[col].to_numpy() * escala
+    return df
+
+
+class TestPronosticoDeCarga:
+    """No arrancar lotes en días de mal pronóstico (S58).
+
+    Hasta S57 el encadenado cargaba un lote aunque el día viniera nublado: el
+    lote se arrastraba sin terminar, ocupaba la cámara e inflaba el conteo de
+    lotes frustrados con casos que en la práctica no ocurren, porque un operador
+    mira el cielo antes de llenar el secador.
+
+    El pronóstico es **perfecto** por decisión de modelado: la producción que
+    sale es la cota superior de la buena decisión.
+    """
+
+    def test_valida_el_umbral(self):
+        from calculos.simulacion_ventana import PoliticaRecarga
+
+        with pytest.raises(ValueError, match="RECARGA_UMBRAL_NEGATIVO"):
+            PoliticaRecarga(umbral_pronostico_MJ_m2=-1.0)
+
+    def test_umbral_cero_equivale_a_no_exigir_pronostico(self):
+        """Un umbral de 0 no puede cambiar nada: todo día lo supera."""
+        from calculos.balance_global import armar_forzantes_ventana
+        from calculos.simulacion_ventana import PoliticaRecarga, simular_encadenado_lotes
+
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        fz, _l, _a, _d = armar_forzantes_ventana(proy, _clima_con_dias_nublados(20, {5, 6, 7}))
+        sin_criterio = simular_encadenado_lotes(
+            proy, forzantes_base=fz, politica=PoliticaRecarga(exigir_pronostico=False)
+        )
+        umbral_cero = simular_encadenado_lotes(
+            proy, forzantes_base=fz, politica=PoliticaRecarga(umbral_pronostico_MJ_m2=0.0)
+        )
+        assert umbral_cero.n_dias_salteados_pronostico == 0
+        assert umbral_cero.n_batches_completos == sin_criterio.n_batches_completos
+        assert umbral_cero.masa_seca_producida_kg == pytest.approx(
+            sin_criterio.masa_seca_producida_kg
+        )
+
+    def test_saltea_los_dias_nublados(self):
+        from calculos.balance_global import armar_forzantes_ventana
+        from calculos.simulacion_ventana import PoliticaRecarga, simular_encadenado_lotes
+
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        nublados = {3, 4, 5, 6, 7, 8}
+        fz, _l, _a, _d = armar_forzantes_ventana(proy, _clima_con_dias_nublados(20, nublados))
+        res = simular_encadenado_lotes(
+            proy,
+            forzantes_base=fz,
+            politica=PoliticaRecarga(umbral_pronostico_MJ_m2=8.0),
+        )
+        assert res.n_dias_salteados_pronostico > 0
+
+    def test_ningun_lote_arranca_en_un_dia_bajo_el_umbral(self):
+        """Lo que fija el criterio: la carga cae en días que superan el umbral."""
+        from calculos.balance_global import armar_forzantes_ventana
+        from calculos.simulacion_ventana import (
+            PoliticaRecarga,
+            _dia_local,
+            _energia_diaria_POA,
+            simular_encadenado_lotes,
+        )
+
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        fz, _l, _a, _d = armar_forzantes_ventana(
+            proy, _clima_con_dias_nublados(20, {2, 3, 4, 9, 10})
+        )
+        pol = PoliticaRecarga(umbral_pronostico_MJ_m2=8.0)
+        res = simular_encadenado_lotes(proy, forzantes_base=fz, politica=pol)
+        energia = _energia_diaria_POA(fz, 0.0)
+        for lote in res.lotes:
+            dia = _dia_local(lote.t_inicio_s, 0.0)
+            assert energia.get(dia, 0.0) >= pol.umbral_pronostico_MJ_m2, (
+                f"el lote {lote.indice} arrancó el día {dia} con "
+                f"{energia.get(dia, 0.0):.1f} MJ/m²"
+            )
+
+    def test_umbral_inalcanzable_bloquea_todo_con_aviso_propio(self):
+        """'No se dio la orden de cargar' no es 'el secador no seca'."""
+        from calculos.balance_global import armar_forzantes_ventana
+        from calculos.simulacion_ventana import PoliticaRecarga, simular_encadenado_lotes
+
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        fz, _l, _a, _d = armar_forzantes_ventana(proy, _clima_sintetico(10))
+        res = simular_encadenado_lotes(
+            proy, forzantes_base=fz, politica=PoliticaRecarga(umbral_pronostico_MJ_m2=999.0)
+        )
+        assert res.n_batches_completos == 0
+        assert res.status == "sin_lotes_completos"
+        assert any("VENTANA_PRONOSTICO_BLOQUEA_TODO" in a for a in res.advertencias)
+
+    def test_sin_POA_avisa_y_carga_igual(self):
+        """Sin irradiación en el plano no se puede decidir: no se bloquea a ciegas."""
+        from calculos.balance_global import armar_forzantes_ventana
+        from calculos.simulacion_ventana import PoliticaRecarga, simular_encadenado_lotes
+
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        fz, _l, _a, _d = armar_forzantes_ventana(proy, _clima_sintetico(10))
+        res = simular_encadenado_lotes(
+            proy,
+            forzantes_base=replace(fz, I_g_POA_W_m2=None),
+            politica=PoliticaRecarga(umbral_pronostico_MJ_m2=8.0),
+        )
+        assert any("VENTANA_PRONOSTICO_SIN_POA" in a for a in res.advertencias)
+        assert res.n_dias_salteados_pronostico == 0
+
+    def test_el_anual_expone_los_dias_salteados(self):
+        proy = _proyecto(SubtipoGranEscala.BATCH)
+        res = simular_anual(proy, _clima_con_dias_nublados(30, {4, 5, 6, 7, 8, 9}))
+        assert res.dias_salteados_pronostico >= 0
+        assert isinstance(res.dias_salteados_pronostico, int)

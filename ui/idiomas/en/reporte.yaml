@@ -328,13 +328,18 @@ anual:
   eta_total: η total
   especifica: Specific energy
   dias_operables: Operable days
+  dias_salteados: Days not loaded (forecast)
   cota_superior: >-
-    The model reloads a batch as soon as the previous one ends, with no shifts
-    and no loading time, and starts batches even in bad weather: output is an
-    upper bound on what is achievable.
+    The model's operator decides with a perfect forecast: it knows the
+    irradiation the loading day will actually get. Output is the upper bound of
+    good decision-making — a real operation loads on some days that turn out
+    cloudy and skips some that turn out clear.
   graficas: Annual analysis charts
   fig:
-    kg_mes: Monthly output — dry product and batches
+    kg_mes: Monthly output — dry product, water and batches
+    energia: Monthly energy — incident solar and backup heater
+    duracion: Mean batch duration per month
+    dias: Operable days per month
   tabla_titulo: Monthly breakdown
   col_mes: Month
   col_seca: Dry [kg]
