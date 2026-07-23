@@ -7,6 +7,24 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+Mejoras post-1.2 (sin orden estricto):
+
+- **No arrancar lotes con mal pronóstico** en el modo anual: hoy el encadenado carga un
+  lote aunque el día venga nublado, cosa que ningún operador hace, y eso infla los lotes
+  frustrados con casos que en la práctica no ocurrirían.
+- **Persistir `PoliticaRecarga`** en el snapshot del proyecto: hoy vive en los widgets de
+  P4, así que sobrevive la sesión pero no un guardar/cargar.
+- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
+  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
+  en P4.
+- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
+  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
+- `h_w` de McAdams usa el viento a 2 m sin corregir a la altura del equipo.
+- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
+  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [1.2.0] — 2026-07-23
+
 ### Changed
 
 - **Modo anual reescrito sobre las 8760 h reales del clima** (S57). Reemplaza el
@@ -93,17 +111,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   contrato de `Clima` (fracción [0,1]). El motor anual viejo lo enmascaraba: atrapaba
   el fallo mes a mes y devolvía ceros con advertencias, así que el test daba verde con
   los 12 meses fallando en silencio.
-
-Mejoras post-1.1 (sin orden estricto):
-
-- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
-  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
-  en P4.
-- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
-  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
-- `h_w` de McAdams usa el viento a 2 m sin corregir a la altura del equipo.
-- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
-  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
 ## [1.1.0] — 2026-07-21
 
