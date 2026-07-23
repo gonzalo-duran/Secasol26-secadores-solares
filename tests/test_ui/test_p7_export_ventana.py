@@ -125,35 +125,47 @@ class TestHelpersVentana:
 
 
 def _res_anual_sintetico():
-    from calculos.operacion_anual_camara import PuntoMensualCamara, ResultadosAnualCamara
+    from calculos.simulacion_anual import PuntoMensualAnual, ResultadosAnual
 
     puntos = [
-        PuntoMensualCamara(
+        PuntoMensualAnual(
             mes=m,
-            t_secado_h=20.0 + m,
-            convergio=(m != 6),
-            m_evap_kg_por_batch=8.0,
+            lotes_completos=4,
+            lotes_frustrados=(1 if m == 6 else 0),
+            masa_seca_kg=32.0,
+            masa_evaporada_kg=80.0,
+            duracion_media_h=20.0 + m,
+            E_solar_MJ=400.0,
+            horas=730,
+            dias_operables=25,
+            dias=30,
             eta_drying=0.02,
-            eta_pickup=0.3,
-            eta_termica=0.5,
-            eta_total=0.01,
-            E_solar_batch_MJ=100.0,
-            E_auxiliar_batch_MJ=0.0,
-            n_batches=4,
-            kg_secados_mes=32.0,
+            energia_especifica_MJ_kg=5.0,
         )
         for m in range(1, 13)
     ]
-    return ResultadosAnualCamara(
+    return ResultadosAnual(
         puntos_mensuales=puntos,
-        kg_secados_anual=384.0,
-        eta_drying_anual_media=0.02,
-        eta_pickup_anual_media=0.3,
-        eta_termica_anual_media=0.5,
-        eta_total_anual_media=0.01,
+        masa_seca_anual_kg=384.0,
+        masa_evaporada_anual_kg=960.0,
+        n_lotes_completos=48,
+        n_lotes_frustrados=1,
+        duracion_media_h=26.0,
+        duracion_p50_h=25.0,
+        duracion_p90_h=31.0,
         E_solar_anual_MJ=4800.0,
-        E_auxiliar_anual_MJ=0.0,
-        t_secado_promedio_h=26.0,
+        Q_util_colector_MJ=2400.0,
+        E_auxiliar_MJ=0.0,
+        fraccion_solar=1.0,
+        eta_drying_anual=0.02,
+        eta_total_anual=0.02,
+        aprovechamiento_aire=0.05,
+        energia_especifica_MJ_kg=5.0,
+        dias_operables=300,
+        umbral_dia_operable_MJ_m2=8.0,
+        horas_simuladas=8760,
+        area_colector_m2=20.0,
+        status="ok",
     )
 
 
@@ -162,11 +174,21 @@ class TestHelpersAnual:
         from ui.p7_resultados import _texto_operacion_anual
 
         texto = "\n".join(_texto_operacion_anual(_res_anual_sintetico()))
-        assert "OPERACIÓN ANUAL DE CÁMARA" in texto
+        assert "ANÁLISIS ANUAL" in texto
+        # Producto seco y agua evaporada son distintos y ambos aparecen.
         assert "384.0 kg" in texto
+        assert "960.0 kg" in texto
         assert "DETALLE MENSUAL" in texto
-        # 12 filas mensuales
         assert texto.count(" | ") >= 12
+
+    def test_texto_anual_tolera_metricas_ausentes(self):
+        """Un año sin lotes deja duración y eficiencias en None: no debe romper."""
+        from calculos.simulacion_anual import ResultadosAnual
+        from ui.p7_resultados import _texto_operacion_anual
+
+        vacio = ResultadosAnual(puntos_mensuales=[], status="sin_lotes_completos")
+        texto = "\n".join(_texto_operacion_anual(vacio))
+        assert "n/d" in texto
 
     def test_json_anual(self):
         import json
@@ -176,8 +198,10 @@ class TestHelpersAnual:
 
         d = _json_operacion_anual(_res_anual_sintetico())
         assert len(d["puntos_mensuales"]) == 12
-        assert d["puntos_mensuales"][5]["convergio"] is False
-        assert json.loads(dump_json(d))["kg_secados_anual"] == 384.0
+        assert d["puntos_mensuales"][5]["lotes_frustrados"] == 1
+        round_trip = json.loads(dump_json(d))
+        assert round_trip["masa_seca_anual_kg"] == 384.0
+        assert round_trip["masa_evaporada_anual_kg"] == 960.0
 
     def test_txt_completo_incluye_anual(self):
         from ui.p7_resultados import _texto_resultados_completo
@@ -186,7 +210,7 @@ class TestHelpersAnual:
             Proyecto(), _res_ventana_batch(), res_anual=_res_anual_sintetico()
         )
         assert "PRODUCCIÓN EN VENTANA" in texto
-        assert "OPERACIÓN ANUAL DE CÁMARA" in texto
+        assert "ANÁLISIS ANUAL" in texto
 
 
 class TestJsonConCondicionesOpcionales:

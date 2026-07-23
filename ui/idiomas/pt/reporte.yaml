@@ -314,27 +314,35 @@ ventana:
   fig:
     perfil: Perfil espacial do túnel (X e T por zona)
 anual:
-  titulo: Operação anual da câmara
-  pendiente: Sem resultados anuais. Execute a operação anual na P4.
-  kg_anual: Produção anual (água evaporada)
-  t_promedio: Tempo de secagem médio
-  e_solar: Energia solar anual
-  e_aux: Energia auxiliar anual
-  eta_drying: η drying (média anual)
-  eta_pickup: η pickup (média anual)
-  eta_termica: η térmica (média anual)
-  eta_total: η total (média anual)
+  titulo: Análise anual (8760 h)
+  pendiente: Sem resultados anuais. Rode a análise anual em P4.
+  kg_seco: Produto seco do ano
+  kg_agua: Água evaporada do ano
+  lotes: Lotes completados / sem completar
+  duracion: Duração média de lote
+  e_solar: Energia solar incidente
+  q_util: Energia útil do coletor
+  e_aux: Energia do auxiliar
+  frac_solar: Fração solar
+  eta_drying: η secagem (Augustus Leon)
+  eta_total: η total
+  especifica: Energia específica
+  dias_operables: Dias operáveis
+  cota_superior: >-
+    O modelo recarrega um lote assim que o anterior termina, sem turnos nem
+    tempo de carga, e inicia lotes mesmo com clima ruim: a produção é um limite
+    superior do alcançável.
+  graficas: Gráficos da análise anual
+  fig:
+    kg_mes: Produção mensal — produto seco e lotes
   tabla_titulo: Detalhe mensal
   col_mes: Mês
-  col_t: t secagem [h]
-  col_conv: Conv.
-  col_kg_batch: kg/lote
-  col_batches: Lotes
-  col_kg_mes: kg/mês
-  col_eta_total: η total
-  graficas: Gráficos
-  fig:
-    kg_mes: Produção mensal e eficiência total
+  col_seca: Seco [kg]
+  col_evap: Água [kg]
+  col_lotes: Lotes
+  col_frustrados: Sem compl.
+  col_dur: Dur. [h]
+  col_esolar: E solar [MJ]
 validacion:
   titulo: Validação com dados medidos
   intro: >-

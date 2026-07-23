@@ -51,10 +51,10 @@ def test_filtro_por_modo():
     assert "eta_termica_colector" not in fijos_trans
     # Los avanzados anuales solo en anual.
     avz_anual = {k.id for k in kpis_avanzados_para_modo("anual")}
-    assert "kg_secados_anual" in avz_anual
-    assert "eta_total_anual_media" in avz_anual
+    assert "masa_seca_anual_kg" in avz_anual
+    assert "eta_total_anual" in avz_anual
     avz_const = {k.id for k in kpis_avanzados_para_modo("constantes")}
-    assert "kg_secados_anual" not in avz_const
+    assert "masa_seca_anual_kg" not in avz_const
 
 
 # --- Extractores: modo Constantes -----------------------------------------
@@ -111,8 +111,8 @@ def test_extractor_devuelve_none_si_falta_campo():
 
 
 def test_extractor_t_secado_h_modo_anual():
-    """En anual el extractor usa t_secado_promedio_h directamente."""
-    res = SimpleNamespace(t_secado_promedio_h=5.5)
+    """En anual el extractor usa la duración media de lote, ya en horas."""
+    res = SimpleNamespace(duracion_media_h=5.5)
     assert obtener_kpi("t_secado_h").extractor(res) == pytest.approx(5.5)
 
 
@@ -127,13 +127,19 @@ def test_extractor_T_prod_max_y_horas_hr():
 
 def test_extractor_kpis_anuales():
     res = SimpleNamespace(
-        kg_secados_anual=1234.0,
-        eta_total_anual_media=0.41,
+        masa_seca_anual_kg=1234.0,
+        masa_evaporada_anual_kg=3000.0,
+        eta_total_anual=0.41,
         E_solar_anual_MJ=9000.0,
+        dias_operables=280.0,
+        energia_especifica_MJ_kg=3.0,
     )
-    assert obtener_kpi("kg_secados_anual").extractor(res) == pytest.approx(1234.0)
-    assert obtener_kpi("eta_total_anual_media").extractor(res) == pytest.approx(0.41)
+    assert obtener_kpi("masa_seca_anual_kg").extractor(res) == pytest.approx(1234.0)
+    assert obtener_kpi("masa_evaporada_anual_kg").extractor(res) == pytest.approx(3000.0)
+    assert obtener_kpi("eta_total_anual").extractor(res) == pytest.approx(0.41)
     assert obtener_kpi("E_solar_anual_MJ").extractor(res) == pytest.approx(9000.0)
+    assert obtener_kpi("dias_operables").extractor(res) == pytest.approx(280.0)
+    assert obtener_kpi("energia_especifica_MJ_kg").extractor(res) == pytest.approx(3.0)
 
 
 def test_todos_los_kpis_indexados():

@@ -22,7 +22,7 @@ carta:
   proceso: Dryer process
   nota_directa: "direct chamber (non-adiabatic: the translucent roof adds heat)"
   nota_indirecta: "indirect chamber (≈ adiabatic: the outlet point falls on the isenthalp)"
-  nota: "P = {p:.1f} kPa (site altitude) · {camara}"
+  nota: "P = {p:.1f} kPa (site pressure) · {camara}"
   titulo: Psychrometric chart of the drying process
   eje_t: Dry-bulb temperature [°C]
   eje_omega: Absolute humidity ω [g/kg dry air]

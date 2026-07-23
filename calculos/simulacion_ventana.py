@@ -42,12 +42,44 @@ _MAX_BATCHES: int = 10_000
 _HORIZONTE_MIN_BATCH_S: float = 1800.0  # 30 min
 
 
+@dataclass(frozen=True)
+class LoteVentana:
+    """Un lote del encadenado BATCH, con su ubicación temporal en la ventana.
+
+    Existe para que el llamador pueda **fechar** cada lote y atribuirlo a un
+    período (el modo anual lo usa para desagregar la producción por mes). Los
+    tiempos son relativos al inicio de la ventana; el instante absoluto se
+    reconstruye con ``ResultadoVentana.t0_utc``.
+
+    Attributes:
+        indice: Orden del lote en la ventana, empezando en 0.
+        t_inicio_s: Instante de carga, relativo al inicio de la ventana [s].
+        t_fin_s: Instante de descarga (o de corte de la ventana si quedó
+            incompleto), relativo al inicio [s].
+        duracion_s: ``t_fin_s − t_inicio_s`` [s].
+        masa_evaporada_kg: Agua evaporada durante este lote [kg].
+        masa_seca_kg: Producto seco descargado [kg]. Cero si no se completó:
+            un lote a medio secar no es producción.
+        completo: True si alcanzó ``X_objetivo`` dentro de la ventana.
+    """
+
+    indice: int
+    t_inicio_s: float
+    t_fin_s: float
+    duracion_s: float
+    masa_evaporada_kg: float
+    masa_seca_kg: float
+    completo: bool
+
+
 @dataclass
 class ResultadoVentana:
     """Producción acumulada del secador de gran escala sobre la ventana.
 
     Attributes:
         subtipo: "BATCH" | "SEMICONTINUO".
+        lotes: Historia lote a lote del encadenado (solo BATCH), en orden
+            cronológico. Incluye el lote incompleto final si lo hubo.
         horizonte_s: Duración de la ventana simulada [s].
         masa_seca_producida_kg: Masa de producto seco (a su X de salida)
             producida en la ventana [kg].
@@ -94,6 +126,7 @@ class ResultadoVentana:
     n_batches_completos: int = 0
     t_secado_medio_s: Optional[float] = None
     batch_en_progreso: bool = False
+    lotes: list["LoteVentana"] = field(default_factory=list)
     # SEMICONTINUO
     n_avances: int = 0
     X_salida_regimen: Optional[float] = None
@@ -123,6 +156,61 @@ class ResultadoVentana:
     aire_T_salida_K: Optional[float] = None
     aire_omega_salida: Optional[float] = None
     camara_directa: bool = False
+
+
+@dataclass(frozen=True)
+class PoliticaRecarga:
+    """Cuándo se carga el lote siguiente después de descargar el anterior.
+
+    Sin política, el encadenado recarga **en el instante exacto** en que termina
+    el lote previo: si uno cierra a las 3 de la madrugada, el siguiente arranca
+    a las 3 de la madrugada y quema horas sin sol hasta que amanezca. Ningún
+    operador hace eso — descarga y recarga de mañana. Modelar la espera baja la
+    producción hacia lo realista (S57, a pedido del usuario).
+
+    Attributes:
+        activa: Si es False se conserva el encadenado inmediato (cota superior).
+        hora_carga_h: Hora local del día en que se cargan los lotes [0, 24).
+        maniobra_h: Tiempo de descarga + recarga [h]. El lote siguiente no puede
+            empezar antes de ``t_fin + maniobra_h``, y además debe caer en la
+            hora de carga.
+    """
+
+    activa: bool = True
+    hora_carga_h: float = 8.0
+    maniobra_h: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not (0.0 <= self.hora_carga_h < 24.0):
+            raise ValueError(
+                f"RECARGA_HORA_INVALIDA: hora_carga_h={self.hora_carga_h} fuera de [0, 24)."
+            )
+        if self.maniobra_h < 0.0:
+            raise ValueError(f"RECARGA_MANIOBRA_NEGATIVA: maniobra_h={self.maniobra_h} < 0.")
+
+
+def _proximo_instante_carga(
+    t_fin_s: float, politica: PoliticaRecarga, hora_local_t0_h: float
+) -> float:
+    """Instante en que arranca el lote siguiente [s desde el inicio del lapso].
+
+    Es el primer momento que cumple las dos condiciones: haber terminado la
+    maniobra (``t_fin + maniobra_h``) y caer en la hora de carga del día.
+
+    Args:
+        t_fin_s: Instante de descarga del lote anterior [s].
+        politica: Política de recarga.
+        hora_local_t0_h: Hora local del día que corresponde a ``t = 0`` [h].
+
+    Returns:
+        Instante de carga [s]. Con la política inactiva, ``t_fin_s`` sin cambio.
+    """
+    if not politica.activa:
+        return t_fin_s
+    t_disponible = t_fin_s + politica.maniobra_h * 3600.0
+    hora_actual = (hora_local_t0_h + t_disponible / 3600.0) % 24.0
+    espera_h = (politica.hora_carga_h - hora_actual) % 24.0
+    return t_disponible + espera_h * 3600.0
 
 
 def _slice_forzantes(fz: ForzantesAire, t0_s: float) -> Optional[ForzantesAire]:
@@ -228,25 +316,82 @@ def simular_ventana(
     return _simular_ventana_batch(proyecto, forzantes_base, P_Pa, res)
 
 
+def simular_encadenado_lotes(
+    proyecto: "Proyecto",
+    *,
+    forzantes_base: ForzantesAire,
+    P_Pa: float = 101325.0,
+    politica: Optional[PoliticaRecarga] = None,
+    hora_local_t0_h: float = 0.0,
+) -> ResultadoVentana:
+    """Encadena lotes sobre las forzantes, **sin** depender de la tipología.
+
+    Misma física que la rama BATCH de :func:`simular_ventana`, pero sin leer
+    ``configuracion.subtipo_gran_escala`` — que solo existe en GRAN_ESCALA. El
+    modo anual la usa para CAJA / ARMARIO / GRAN_ESCALA-BATCH por igual: el
+    encadenado de lotes no es una particularidad del secador industrial, es
+    cómo opera cualquier secador batch.
+
+    Args:
+        proyecto: Proyecto con cámara configurada.
+        forzantes_base: Forzantes del aire sobre el horizonte completo.
+        P_Pa: Presión representativa [Pa].
+
+    Returns:
+        ``ResultadoVentana`` con ``lotes`` poblado.
+    """
+    camara = proyecto.camara
+    horizonte_s = float(forzantes_base.t_s[-1] - forzantes_base.t_s[0])
+    res = ResultadoVentana(subtipo="BATCH", horizonte_s=horizonte_s)
+
+    if camara is None:
+        res.status = "error"
+        res.advertencias.append("VENTANA_SIN_CAMARA: la simulación requiere cámara.")
+        return res
+
+    res.aire_T_amb_K, res.aire_T_ent_K, res.aire_omega_ent = _estado_aire_repr(forzantes_base)
+    res.camara_directa = (
+        getattr(getattr(camara, "construccion", None), "cubierta_translucida_id", None) is not None
+    )
+    return _simular_ventana_batch(proyecto, forzantes_base, P_Pa, res, politica, hora_local_t0_h)
+
+
 def _simular_ventana_batch(
     proyecto: "Proyecto",
     forzantes_base: ForzantesAire,
     P_Pa: float,
     res: ResultadoVentana,
+    politica: Optional[PoliticaRecarga] = None,
+    hora_local_t0_h: float = 0.0,
 ) -> ResultadoVentana:
-    """Encadena lotes sobre la ventana (recarga event-driven al alcanzar X_obj)."""
+    """Encadena lotes sobre la ventana.
+
+    Cada lote arranca cuando la :class:`PoliticaRecarga` lo permite: por defecto
+    a la hora de carga del día siguiente a la descarga, no en el instante exacto
+    en que el anterior terminó. Con ``politica.activa = False`` se recupera el
+    encadenado inmediato, que es una cota superior de producción.
+    """
     camara = proyecto.camara
     p = camara.carga_producto
     m_seco_total = p.masa_total_kg / (1.0 + p.humedad_inicial_X)
     masa_seca_por_lote = m_seco_total * (1.0 + p.humedad_objetivo_X)
+    politica = politica if politica is not None else PoliticaRecarga()
 
     horizonte_s = res.horizonte_s
-    t_now = 0.0
+    # Primer lote: también respeta la hora de carga (arrancar a medianoche del
+    # 1-1 sería el mismo artificio que recargar a las 3 AM).
+    t_now = _proximo_instante_carga(0.0, politica, hora_local_t0_h) if politica.activa else 0.0
+    t_ciclos: list[float] = []
     t_secados: list[float] = []
     masa_seca = 0.0
     masa_evap = 0.0
     n_batches = 0
-    vistos: set[str] = set()
+    lotes: list[LoteVentana] = []
+    # Advertencias agregadas por código (ver el bucle): cuántos lotes las
+    # dispararon y el primer mensaje de cada una como muestra.
+    conteo_codigo: dict[str, int] = {}
+    ejemplo_codigo: dict[str, str] = {}
+    n_lotes_intentados = 0
 
     while t_now < horizonte_s and n_batches < _MAX_BATCHES:
         if (horizonte_s - t_now) < _HORIZONTE_MIN_BATCH_S:
@@ -256,6 +401,7 @@ def _simular_ventana_batch(
             break
         T_ref, HR_ref = _T_HR_referencia(fz, P_Pa)
         T_amb_ref = float(np.mean(fz.T_amb_K))
+        n_lotes_intentados += 1
         sub = calcular_camara(
             camara=camara,
             T_operacion_K=T_ref,
@@ -265,16 +411,37 @@ def _simular_ventana_batch(
             t_max_s=float(fz.t_s[-1]),
             forzantes_aire=fz,
         )
+        # Agregación por CÓDIGO, no por string exacto: los mensajes llevan el
+        # número de horas del lote ("... durante 5.6 h"), así que deduplicar por
+        # igualdad no filtra nada — sobre un año de 52 lotes eso inundaba la
+        # pantalla con ~100 avisos casi idénticos (S57).
         for a in sub.advertencias:
-            if a not in vistos:
-                vistos.add(a)
-                res.advertencias.append(a)
+            codigo = a.split(":", 1)[0].strip()
+            conteo_codigo[codigo] = conteo_codigo.get(codigo, 0) + 1
+            if codigo not in ejemplo_codigo:
+                ejemplo_codigo[codigo] = a
 
         if sub.status == "X_obj_alcanzado" and sub.t_secado_s is not None:
             masa_seca += masa_seca_por_lote
             masa_evap += float(sub.masa_evaporada_total_kg)
             t_secados.append(float(sub.t_secado_s))
-            t_now += float(sub.t_secado_s)
+            t_fin = t_now + float(sub.t_secado_s)
+            lotes.append(
+                LoteVentana(
+                    indice=n_batches,
+                    t_inicio_s=t_now,
+                    t_fin_s=t_fin,
+                    duracion_s=float(sub.t_secado_s),
+                    masa_evaporada_kg=float(sub.masa_evaporada_total_kg),
+                    masa_seca_kg=masa_seca_por_lote,
+                    completo=True,
+                )
+            )
+            # El ciclo es secado + espera hasta la próxima hora de carga: es lo
+            # que gobierna la tasa de régimen, no el secado solo.
+            t_siguiente = _proximo_instante_carga(t_fin, politica, hora_local_t0_h)
+            t_ciclos.append(t_siguiente - t_now)
+            t_now = t_siguiente
             n_batches += 1
             # Salida de cámara representativa (primer lote, instante de máxima
             # evaporación) — para la carta psicrométrica del proceso.
@@ -286,18 +453,48 @@ def _simular_ventana_batch(
                     res.aire_omega_salida = float(np.asarray(sub.omega_flujo_kg_kg)[j])
         else:
             # No completó en el clima restante → lote en progreso al cierre.
+            # Se registra igual: su agua evaporada cuenta y su existencia es
+            # información (el anual reporta lotes frustrados), pero no aporta
+            # producto seco.
             masa_evap += float(sub.masa_evaporada_total_kg)
+            lotes.append(
+                LoteVentana(
+                    indice=n_batches,
+                    t_inicio_s=t_now,
+                    t_fin_s=horizonte_s,
+                    duracion_s=max(0.0, horizonte_s - t_now),
+                    masa_evaporada_kg=float(sub.masa_evaporada_total_kg),
+                    masa_seca_kg=0.0,
+                    completo=False,
+                )
+            )
             res.batch_en_progreso = True
             break
 
+    # Un aviso por código, con cuántos lotes lo dispararon. Sobre un año son
+    # decenas de lotes: repetir el mismo diagnóstico por cada uno esconde los
+    # avisos que sí son distintos.
+    for codigo, n_veces in conteo_codigo.items():
+        mensaje = ejemplo_codigo[codigo]
+        if n_veces > 1:
+            mensaje += (
+                f" · Se repitió en {n_veces} de {n_lotes_intentados} lotes "
+                "(se muestra el primero)."
+            )
+        res.advertencias.append(mensaje)
+
+    res.lotes = lotes
     res.n_batches_completos = n_batches
     res.masa_seca_producida_kg = masa_seca
     res.masa_evaporada_kg = masa_evap
     if t_secados:
         t_medio = float(np.mean(t_secados))
         res.t_secado_medio_s = t_medio
-        # Tasa de régimen: un lote cada t_secado_medio.
-        res.tasa_regimen_kg_dia = masa_seca_por_lote / (t_medio / _SEGUNDOS_POR_DIA)
+        # Tasa de régimen: un lote por **ciclo**, y el ciclo incluye la espera
+        # hasta la próxima hora de carga. Usar solo el tiempo de secado
+        # sobrestimaría la producción sostenible en la fracción ociosa.
+        t_ciclo_medio = float(np.mean(t_ciclos)) if t_ciclos else t_medio
+        res.tasa_regimen_kg_dia = masa_seca_por_lote / (t_ciclo_medio / _SEGUNDOS_POR_DIA)
         res.status = "ok"
     else:
         res.status = "sin_lotes_completos"

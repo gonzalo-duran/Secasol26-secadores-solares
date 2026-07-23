@@ -51,3 +51,6 @@ docs/notas/dataset/**/*.xlsx
 
 # Config local de Claude Code (por máquina — no se versiona)
 .claude/settings.local.json
+
+# Reportes PDF generados por la app en corridas manuales (artefactos, no fuente)
+reporte_*.pdf

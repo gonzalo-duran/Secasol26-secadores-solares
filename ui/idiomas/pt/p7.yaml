@@ -361,31 +361,52 @@ tabla:
   bal_fs: Balanço — Fração solar
   no_convergio: não convergiu
 anual_det:
-  titulo: Operação anual da câmara
+  titulo: Análise anual — detalhe mensal
   caption: >-
-    Resultados do motor termodinâmico rodado mês a mês sobre o dia típico,
-    escalado pela quantidade de batches/mês configurada em P4. Eficiências
-    segundo o método Augustus Leon (RSER 2002).
-  kg_anual: kg secados/ano
-  eta_media: η_total média
-  t_prom: t_secagem média
-  e_solar: Energia solar anual
+    O ano simulado hora a hora com clima real. Cada lote é atribuído ao mês em
+    que é descarregado.
+  kg_seco: Produto seco
+  kg_agua: Água evaporada
+  lotes: Lotes completados
+  lotes_frustrados: "{n} sem completar"
+  especifica: MJ/kg água
+  e_solar: Energia solar
+  frac_solar: Fração solar
+  frac_solar_help: >-
+    Energia útil fornecida pelo coletor sobre o total colocado no ar (coletor +
+    auxiliar). Compara energias úteis, não a irradiância incidente.
+  eta_drying: η secagem
+  eta_drying_help: >-
+    Fração da radiação incidente sobre o coletor convertida em evaporação
+    (Augustus Leon).
+  dias_operables: Dias operáveis
+  dias_operables_help: >-
+    Dias cuja irradiação diária superou {umbral} MJ/m². Mede disponibilidade do
+    recurso, não dias efetivamente trabalhados.
+  dispersion: >-
+    Duração de lote: mediana {p50:.0f} h, percentil 90 {p90:.0f} h. A diferença
+    entre ambos é a variabilidade do clima real.
+  cota_superior: >-
+    ⓘ Recarga imediata, sem turnos nem tempo de carga: a produção é um limite
+    superior.
+  csv: ⬇️ Baixar tabela mensal (CSV)
+  csv_help: Os mesmos números da tabela, para planilha.
   col_mes: Mês
-  col_t: t_secagem [h]
-  col_conv: Convergiu
-  col_mevap: m_evap/batch [kg]
-  col_batches: batches/mês
-  col_kg: kg/mês
-  col_drying: η_drying [%]
-  col_pickup: η_pickup [%]
-  col_termica: η_térmica [%]
-  col_total: η_total [%]
-  fig_kg: kg/mês
-  fig_eta: η_total [%]
-  fig_titulo: Produção mensal e eficiência do sistema
+  col_seca: Produto seco [kg]
+  col_evap: Água evap. [kg]
+  col_lotes: Lotes
+  col_frustrados: Sem completar
+  col_dur: Duração média [h]
+  col_operables: Dias operáveis
+  col_esolar: E solar [MJ]
+  col_drying: η secagem [%]
+  col_especifica: MJ/kg água
+  fig_titulo: Produção mensal
+  fig_kg: Produto seco [kg]
+  fig_lotes: Lotes completados
   fig_eje_mes: Mês
-  fig_eje_kg: Produto secado [kg/mês]
-  fig_eje_eta: η_total [%]
+  fig_eje_kg: Produto seco [kg]
+  fig_eje_lotes: Lotes
 guardar:
   txt: Salvar pré-dimensionamento completo (.txt)
   json: Salvar pré-dimensionamento completo (.json)

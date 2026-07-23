@@ -144,13 +144,16 @@ def test_cano_maestro_modifica_T_ent():
 
 
 def test_diag_cano_maestro_para_exports():
-    """Con caño maestro, el diag trae ΔT media/mínima y ΔP > 0; sin caño, vacío."""
+    """Con caño maestro el diag trae ΔT media/mínima y ΔP > 0; sin caño, ninguna
+    de esas claves. (El diag lleva además la energía útil del colector, que no
+    depende del caño — por eso se chequean las claves y no que el dict esté
+    vacío.)"""
     df = _clima_sintetico(dias=2)
     sin_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=False)
     con_cano = _proyecto(SubtipoGranEscala.BATCH, con_cano=True)
     _, _, _, diag_sin = armar_forzantes_ventana(sin_cano, df, P_Pa=88000.0)
     _, _, _, diag_con = armar_forzantes_ventana(con_cano, df, P_Pa=88000.0)
-    assert diag_sin == {}
+    assert not any(k.startswith("cano_") for k in diag_sin)
     assert "cano_delta_T_media_K" in diag_con
     assert "cano_delta_T_minima_K" in diag_con
     assert diag_con["cano_delta_T_minima_K"] <= diag_con["cano_delta_T_media_K"]

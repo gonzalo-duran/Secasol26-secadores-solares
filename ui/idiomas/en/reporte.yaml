@@ -314,27 +314,35 @@ ventana:
   fig:
     perfil: Tunnel spatial profile (X and T per zone)
 anual:
-  titulo: Annual chamber operation
-  pendiente: No annual results. Run the annual operation in P4.
-  kg_anual: Annual production (water evaporated)
-  t_promedio: Average drying time
-  e_solar: Annual solar energy
-  e_aux: Annual auxiliary energy
-  eta_drying: η drying (annual mean)
-  eta_pickup: η pickup (annual mean)
-  eta_termica: η thermal (annual mean)
-  eta_total: η total (annual mean)
-  tabla_titulo: Monthly detail
-  col_mes: Month
-  col_t: Drying t [h]
-  col_conv: Conv.
-  col_kg_batch: kg/batch
-  col_batches: Batches
-  col_kg_mes: kg/month
-  col_eta_total: η total
-  graficas: Charts
+  titulo: Annual analysis (8760 h)
+  pendiente: No annual results. Run the annual analysis in P4.
+  kg_seco: Dry product for the year
+  kg_agua: Evaporated water for the year
+  lotes: Completed / unfinished batches
+  duracion: Mean batch duration
+  e_solar: Incident solar energy
+  q_util: Useful collector energy
+  e_aux: Backup energy
+  frac_solar: Solar fraction
+  eta_drying: η drying (Augustus Leon)
+  eta_total: η total
+  especifica: Specific energy
+  dias_operables: Operable days
+  cota_superior: >-
+    The model reloads a batch as soon as the previous one ends, with no shifts
+    and no loading time, and starts batches even in bad weather: output is an
+    upper bound on what is achievable.
+  graficas: Annual analysis charts
   fig:
-    kg_mes: Monthly production and total efficiency
+    kg_mes: Monthly output — dry product and batches
+  tabla_titulo: Monthly breakdown
+  col_mes: Month
+  col_seca: Dry [kg]
+  col_evap: Water [kg]
+  col_lotes: Batches
+  col_frustrados: Unfin.
+  col_dur: Dur. [h]
+  col_esolar: Solar E [MJ]
 validacion:
   titulo: Validation against measured data
   intro: >-

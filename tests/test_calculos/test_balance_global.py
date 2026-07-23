@@ -1059,3 +1059,84 @@ class TestZ0Terreno:
             pass
 
         assert _z0_terreno(_Pelado()) == Z0_DEFAULT_M
+
+
+class TestReduccionPresionAAltitudDelSitio:
+    """La celda de NASA POWER es de 0.5° y su altitud es el promedio del terreno.
+
+    En montaña eso puede estar muy lejos del sitio: para Salta capital (1187 m)
+    la grilla reporta 2786 m y su presión media (73.1 kPa) es la de esa altura,
+    no la del valle. Usarla tal cual metía 17 % de error en P, que se propaga a
+    toda la psicrometría (ω_sat ∝ P_sat/(P − P_sat)) y bajaba la ebullición de
+    96 a 91 °C. Detectado en S57 sobre un reporte real del usuario.
+    """
+
+    def _proyecto(self, *, altitud_sitio, altitud_nasa, P_nasa=73100.0):
+        import pandas as pd
+
+        from core.clima import Clima
+        from core.emplazamiento import Emplazamiento
+        from core.proyecto import Proyecto
+
+        idx = pd.date_range("2010-01-01", periods=24, freq="h", tz="UTC")
+        proy = Proyecto()
+        proy.emplazamiento = Emplazamiento(altitud_m=altitud_sitio)
+        proy.clima = Clima(
+            datos=pd.DataFrame({"presion_Pa": np.full(24, P_nasa)}, index=idx),
+            anio=2010,
+            altitud_nasa_m=altitud_nasa,
+        )
+        return proy
+
+    def test_caso_salta_real(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P, origen = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=1187.0, altitud_nasa=2786.0)
+        )
+        # 73.1 kPa a 2786 m → ~89 kPa a 1187 m.
+        assert 88_000.0 < P < 90_500.0
+        assert "reducida" in origen
+
+    def test_conserva_el_sesgo_meteorologico_de_la_fuente(self):
+        """No se reemplaza por ISA: se traslada el desvío de la fuente."""
+        from calculos.balance_global import presion_representativa_proyecto
+        from calculos.motor_calc import presion_atmosferica
+
+        P, _ = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=1187.0, altitud_nasa=2786.0)
+        )
+        P_isa_sitio = presion_atmosferica(1187.0)
+        # NASA está ~1.5 % por encima de ISA a 2786 m; ese desvío se preserva.
+        assert P != pytest.approx(P_isa_sitio, rel=1e-4)
+        assert P == pytest.approx(P_isa_sitio, rel=0.05)
+
+    def test_sin_diferencia_de_altitud_no_toca_nada(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P, origen = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=1187.0, altitud_nasa=1190.0)
+        )
+        assert P == pytest.approx(73100.0)
+        assert "reducida" not in origen
+
+    def test_sin_altitud_de_grilla_no_corrige(self):
+        """Clima medido del usuario: no hay altitud de grilla que reducir."""
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P, origen = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=1187.0, altitud_nasa=None)
+        )
+        assert P == pytest.approx(73100.0)
+        assert "reducida" not in origen
+
+    def test_sube_la_presion_al_bajar_de_altura(self):
+        from calculos.balance_global import presion_representativa_proyecto
+
+        P_alto, _ = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=3000.0, altitud_nasa=2786.0)
+        )
+        P_bajo, _ = presion_representativa_proyecto(
+            self._proyecto(altitud_sitio=500.0, altitud_nasa=2786.0)
+        )
+        assert P_bajo > P_alto

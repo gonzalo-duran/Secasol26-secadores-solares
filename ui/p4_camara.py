@@ -11,6 +11,7 @@ cálculo de tiempo de secado via calculos/camara_calc.py.
 
 from __future__ import annotations
 
+from datetime import time as _time
 from typing import Optional
 
 import numpy as np
@@ -31,11 +32,9 @@ from calculos.conversiones_angulo import (
     acimut_ui360_a_duffie,
 )
 from calculos.motor_calc import _D_P_DEFAULT_M, _C_obstruccion_bloqueo
-from calculos.operacion_anual_camara import (
-    ResultadosAnualCamara,
-    calcular_operacion_anual_camara,
-)
 from calculos.psicrometria import humedad_absoluta
+from calculos.simulacion_anual import ResultadosAnual, simular_anual
+from calculos.simulacion_ventana import PoliticaRecarga
 from core import catalogo
 from core.camara import (
     Camara,
@@ -50,7 +49,6 @@ from core.camara import (
     DireccionFlujo,
     ForzantesAire,
     GeometriaCamara,
-    OperacionAnualConfig,
     ParedCamara,
     _modelos_disponibles,
     advertencias_camara,
@@ -1410,28 +1408,45 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
     st.markdown(t("p4.anual.titulo"))
     st.caption(t("p4.anual.caption"))
 
-    # Estado previo (puede ser None si aún no se calculó la cámara)
-    cfg_prev = OperacionAnualConfig()
-    if proyecto.camara is not None and proyecto.camara.operacion_anual is not None:
-        cfg_prev = proyecto.camara.operacion_anual
-
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        batches = st.slider(
-            t("p4.anual.batches.label"),
-            min_value=1,
-            max_value=30,
-            value=int(cfg_prev.batches_por_mes),
-            step=1,
-            help=t("p4.anual.batches.help"),
-            key="p4_anual_batches",
-        )
-    with c2:
-        st.metric(
-            t("p4.anual.dias_batch.label"),
-            f"{30 / batches:.1f}",
-            help=t("p4.anual.dias_batch.help"),
-        )
+    # Política de recarga: cuándo se carga el lote siguiente. Sin esto el modelo
+    # recarga en el instante exacto en que el anterior terminó —a las 3 AM si
+    # tocó— y sobreestima la producción.
+    with st.expander(t("p4.anual.recarga.titulo"), expanded=False):
+        st.caption(t("p4.anual.recarga.caption"))
+        rc1, rc2, rc3 = st.columns(3)
+        with rc1:
+            recarga_activa = st.checkbox(
+                t("p4.anual.recarga.activa.label"),
+                value=True,
+                key="p4_anual_recarga_activa",
+                help=t("p4.anual.recarga.activa.help"),
+            )
+        with rc2:
+            # time_input y no number_input: la hora del día se lee "08:00", no
+            # "8.00". Se convierte a horas decimales para el motor, que razona
+            # en horas desde el inicio del lapso.
+            _hora_widget = st.time_input(
+                t("p4.anual.recarga.hora.label"),
+                value=_time(8, 0),
+                step=1800,  # 30 min
+                disabled=not recarga_activa,
+                key="p4_anual_recarga_hora",
+                help=t("p4.anual.recarga.hora.help"),
+            )
+            hora_carga = float(_hora_widget.hour) + float(_hora_widget.minute) / 60.0
+        with rc3:
+            maniobra = st.number_input(
+                t("p4.anual.recarga.maniobra.label"),
+                min_value=0.0,
+                max_value=12.0,
+                value=1.0,
+                step=0.5,
+                disabled=not recarga_activa,
+                key="p4_anual_recarga_maniobra",
+                help=t("p4.anual.recarga.maniobra.help"),
+            )
+        if not recarga_activa:
+            st.warning(t("p4.anual.recarga.aviso_cota"))
 
     calcular_anual = st.button(
         t("p4.anual.calcular.label"),
@@ -1441,26 +1456,27 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
     )
 
     if calcular_anual:
-        # Construir la cámara desde los widgets y forzar modo termodinámico
-        # (la cascada A+B no usa capa fina).
+        # Construir la cámara desde los widgets y forzar modo termodinámico.
         try:
             camara = camara_builder(modo_calculo_override="termodinamico")
         except (ValueError, NotImplementedError) as exc:
             st.error(t("p4.anual.error_config", exc=exc))
             return
+        proyecto.camara = camara
 
         try:
-            cfg_nuevo = OperacionAnualConfig(batches_por_mes=batches)
+            politica = PoliticaRecarga(
+                activa=bool(recarga_activa),
+                hora_carga_h=float(hora_carga),
+                maniobra_h=float(maniobra),
+            )
         except ValueError as exc:
             st.error(t("p4.anual.error", exc=exc))
             return
 
-        camara.operacion_anual = cfg_nuevo
-        proyecto.camara = camara
-
         with st.spinner(t("p4.anual.spinner")):
             try:
-                res_anual = calcular_operacion_anual_camara(proyecto)
+                res_anual = simular_anual(proyecto, proyecto.clima.datos, politica_recarga=politica)
             except ValueError as exc:
                 st.error(t("p4.anual.error", exc=exc))
                 return
@@ -1470,7 +1486,7 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
         st.session_state["p4_resultado_anual"] = res_anual
         st.success(t("p4.anual.exito"))
 
-    res_anual: ResultadosAnualCamara | None = st.session_state.get("p4_resultado_anual")
+    res_anual: ResultadosAnual | None = st.session_state.get("p4_resultado_anual")
     if res_anual is None:
         return
 
@@ -1481,25 +1497,39 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
     st.markdown(t("p4.anual.resumen"))
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
-        t("p4.anual.kg_secados.label"),
-        f"{res_anual.kg_secados_anual:.0f}",
-        help=t("p4.anual.kg_secados.help"),
+        t("p4.anual.producto_seco.label"),
+        f"{res_anual.masa_seca_anual_kg:.0f} kg",
+        help=t("p4.anual.producto_seco.help"),
     )
     col2.metric(
-        t("p4.anual.eta_total.label"),
-        f"{res_anual.eta_total_anual_media * 100:.1f}%",
-        help=t("p4.anual.eta_total.help"),
+        t("p4.anual.agua_evaporada.label"),
+        f"{res_anual.masa_evaporada_anual_kg:.0f} kg",
+        help=t("p4.anual.agua_evaporada.help"),
     )
     col3.metric(
-        t("p4.anual.t_secado.label"),
-        f"{res_anual.t_secado_promedio_h:.1f} h",
-        help=t("p4.anual.t_secado.help"),
+        t("p4.anual.lotes.label"),
+        f"{res_anual.n_lotes_completos}",
+        delta=(
+            t("p4.anual.lotes.frustrados", n=res_anual.n_lotes_frustrados)
+            if res_anual.n_lotes_frustrados
+            else None
+        ),
+        delta_color="inverse",
+        help=t("p4.anual.lotes.help"),
     )
     col4.metric(
-        t("p4.anual.e_solar.label"),
-        f"{res_anual.E_solar_anual_MJ:.0f} MJ",
-        help=t("p4.anual.e_solar.help"),
+        t("p4.anual.duracion.label"),
+        (
+            f"{res_anual.duracion_media_h:.0f} h"
+            if res_anual.duracion_media_h is not None
+            else "—"  # i18n: exento (marcador de dato ausente)
+        ),
+        help=t("p4.anual.duracion.help"),
     )
+    # El encadenado supone recarga inmediata, sin turnos ni tiempo de carga, y
+    # arranca lotes aunque el clima venga malo: el resultado es una cota
+    # superior. Decirlo acá evita que el número se lea como una promesa.
+    st.caption(t("p4.anual.cota_superior"))
 
 
 # ---------------------------------------------------------------------------

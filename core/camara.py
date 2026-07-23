@@ -679,57 +679,6 @@ class CargaProducto:
 
 
 # ---------------------------------------------------------------------------
-# Configuración de operación anual (solo aplica si modo_analisis == ANUAL)
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class OperacionAnualConfig:
-    """Política de operación anual de la cámara de secado.
-
-    Se usa solo cuando ``proyecto.configuracion.modo_analisis == ANUAL``. Define
-    cuántos batches del producto se asume operar por mes y los umbrales de
-    operabilidad. El motor anual (en ``calculos/operacion_anual_camara.py``)
-    consume esta config para escalar los resultados de un batch representativo
-    mensual a operación de todo el mes.
-
-    Attributes:
-        batches_por_mes: Cantidad de batches completos del producto que el
-            usuario asume operar por mes. Default 10 (≈ 1 batch cada 3 días).
-            Rango operativo razonable: 1–30 batches/mes.
-        I_g_diaria_minima_MJ_m2: Umbral de irradiación diaria total mínima
-            para considerar un día como "operable". Días con I_g_diaria
-            menor a este umbral se descuentan del conteo mensual de días
-            disponibles. Default 8.0 MJ/m²·día (≈ 2.2 kWh/m²·día, mínimo
-            práctico para secador solar funcional).
-        horizonte_horas_batch: Horas máximas del horizonte de simulación
-            por batch en el motor termodinámico. Si el secado no converge
-            antes, se trunca al final del horizonte. Default 72 (3 días).
-    """
-
-    batches_por_mes: int = 10
-    I_g_diaria_minima_MJ_m2: float = 8.0
-    horizonte_horas_batch: int = 72
-
-    def __post_init__(self) -> None:
-        if not (1 <= self.batches_por_mes <= 30):
-            raise ValueError(
-                f"ANUAL_BATCHES_FUERA_RANGO: batches_por_mes={self.batches_por_mes} "
-                "fuera del rango operativo [1, 30]."
-            )
-        if self.I_g_diaria_minima_MJ_m2 < 0:
-            raise ValueError(
-                f"ANUAL_I_G_MINIMA_NEGATIVA: I_g_diaria_minima_MJ_m2="
-                f"{self.I_g_diaria_minima_MJ_m2:.2f} < 0."
-            )
-        if not (24 <= self.horizonte_horas_batch <= 168):
-            raise ValueError(
-                f"ANUAL_HORIZONTE_FUERA_RANGO: horizonte_horas_batch="
-                f"{self.horizonte_horas_batch} fuera del rango [24, 168] h (1–7 días)."
-            )
-
-
-# ---------------------------------------------------------------------------
 # Configuración del túnel semicontinuo (solo subtipo GRAN_ESCALA SEMICONTINUO)
 # ---------------------------------------------------------------------------
 
@@ -862,7 +811,6 @@ class Camara:
     flujo: ConfiguracionFlujo = field(default_factory=ConfiguracionFlujo)
     carga_producto: CargaProducto = field(default_factory=CargaProducto)
     modo_calculo: Literal["capa_fina", "termodinamico"] = "termodinamico"
-    operacion_anual: Optional[OperacionAnualConfig] = None
     tunel: Optional[ConfiguracionTunel] = None
     carros: Optional[ConfiguracionCarros] = None
 

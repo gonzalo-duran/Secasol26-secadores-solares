@@ -7,12 +7,101 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Modo anual reescrito sobre las 8760 h reales del clima** (S57). Reemplaza el
+  esquema de "12 días típicos mensuales", que tenía problemas de fondo detectados en
+  una auditoría: el número titular `kg_secados_anual` era **agua evaporada** rotulada
+  como producto seco (factor 2-4× de sobrelectura); **η_térmica era idénticamente
+  igual a η_colector** (0.5 fijo para cualquier diseño, por cancelación algebraica) y
+  **η_total idéntica a η_drying** (por `E_aux` hardcodeado en 0); el colector real no
+  entraba al cálculo salvo por su área; y `I_g_diaria_minima_MJ_m2` se declaraba y
+  validaba sin usarse nunca.
+
+  El motor nuevo (`calculos/simulacion_anual.py`) reusa el pipeline de ventana ya
+  validado contra ADITAL: encadena lotes event-driven sobre el clima horario real, así
+  que **la cantidad de lotes es un resultado** y la variabilidad del clima aparece
+  (lotes que se alargan, lotes frustrados, dispersión de duración p50/p90).
+
+  Métricas nuevas: producto seco y agua evaporada **separados**, lotes completos vs
+  frustrados, días operables, energía específica [MJ/kg agua], fracción solar (compara
+  energías útiles, no irradiancia incidente contra auxiliar), η_drying y η_total ahora
+  con **auxiliar implementado** (dejan de ser el mismo número), y `aprovechamiento_aire`
+  —deliberadamente no llamado η_pickup, porque no es comparable con esa literatura—.
+  P7 suma **descarga CSV** de la tabla mensual, que no existía.
+
+- **Superficie de respuesta del colector** (`calculos/superficie_colector.py`): el
+  solver estacionario corriendo una vez por hora era el 95 % del costo del anual. Como
+  en los pipelines forzados `T_entrada = T_amb`, el término de pérdidas de
+  Hottel-Whillier-Bliss se anula y la respuesta queda casi afín en POA sobre un espacio
+  de 3 dimensiones. ~180 solves interpolados reemplazan 8760: **3.76 min → 4.7 s (48×)**,
+  con error medio 0.003 K y máximo 0.033 K sobre serie anual real.
+
+- **Política de recarga de lotes** (`simulacion_ventana.PoliticaRecarga`). El
+  encadenado recargaba en el instante exacto en que terminaba el lote anterior —a las
+  3 de la madrugada si tocaba—, cosa que ningún operador hace. Ahora el lote siguiente
+  espera a la hora de carga del día (default 8:00) y respeta un tiempo de maniobra
+  (default 1 h). Sobre un año completo: **58 → 52 lotes, 1044 → 936 kg (−10 %)**. La
+  tasa de régimen pasa a dividir por el **ciclo** (secado + espera) y no solo por el
+  secado, que la sobrestimaba. Se puede desactivar, con aviso de que el número vuelve
+  a ser una cota superior. Configurable en P4.
+
+### Removed
+
+- `calculos/operacion_anual_camara.py`, `OperacionAnualConfig` y el campo
+  `Camara.operacion_anual` (el slider `batches_por_mes` de P4 desaparece: es un
+  resultado). Las eficiencias tautológicas η_térmica y la duplicada η_total del
+  esquema viejo ya no se reportan como tales.
+
+### Fixed
+
+- **La presión del sitio salía de la altitud de la grilla NASA, no del emplazamiento.**
+  La celda de NASA POWER es de 0.5° y su altitud promedia el terreno que abarca: para
+  Salta capital (1187 m) reporta **2786 m**, y `presion_representativa_proyecto` tomaba
+  su presión media (73.1 kPa) tal cual. Error del 17 % en P que se propaga a toda la
+  psicrometría —ω_sat ∝ P_sat/(P − P_sat), así que el aire "podía" cargar más humedad
+  de la real y el secado salía **optimista**— y bajaba el punto de ebullición de 96 a
+  91 °C. Ahora se aplica una **reducción barométrica** de la altitud de grilla a la del
+  sitio (`_reducir_presion_a_altitud_sitio`), que conserva el desvío meteorológico de la
+  fuente respecto de ISA pero lo ubica a la altura correcta: 73.10 → **89.15 kPa** en el
+  caso real. Detectado sobre un reporte PDF del usuario. La leyenda de la carta
+  psicrométrica afirmaba "altitud del emplazamiento", cosa que era falsa; ahora dice
+  "presión del sitio".
+
+- **Claves i18n crudas en el reporte PDF** (`reporte.anual.graficas`,
+  `reporte.anual.fig.kg_mes`): faltaban en los YAML y salían literales. Y el rótulo
+  "Lotes completados (sin completar)" se pisaba con su valor por ser demasiado largo
+  para la columna.
+
+- **El modo anual abortaba en sitios de altura.** Con el aire de entrada por encima de
+  la ebullición local (a 2650 m el agua hierve a 91 °C), `omega_saturacion` lanzaba
+  `PSICRO_PV_EXCEDE_P` y se perdía la simulación entera. Reportado por el usuario. Dos
+  niveles: la métrica `aprovechamiento_aire` excluye esas horas —y el bloque de
+  métricas va envuelto, así ninguna derivada puede tirar abajo una corrida de un año—,
+  y el motor de cámara topea la presión de vapor al 90 % de la total
+  (`_omega_saturacion_acotada`) para no abortar, avisando con `CAM_TD_SOBRE_EBULLICION`
+  que **los resultados de esas horas no son confiables**: el modelo describe
+  evaporación difusiva, no hervor.
+
+- **Aluvión de advertencias repetidas en corridas largas.** La deduplicación comparaba
+  strings exactos, pero los mensajes llevan el número de horas de cada lote ("durante
+  5.6 h"), así que no filtraba nada: 52 lotes daban ~100 avisos casi idénticos y
+  escondían los que sí eran distintos. Ahora se agrupan por **código**, con el conteo
+  de cuántos lotes lo dispararon.
+
+- El fixture de clima de los tests de barrido tenía **HR en porcentaje** violando el
+  contrato de `Clima` (fracción [0,1]). El motor anual viejo lo enmascaraba: atrapaba
+  el fallo mes a mes y devolvía ceros con advertencias, así que el test daba verde con
+  los 12 meses fallando en silencio.
+
 Mejoras post-1.1 (sin orden estricto):
 
 - Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
   habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
   en P4.
-- Refinamiento de la pestaña de análisis anual (métricas integradas sobre 8760 h).
+- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
+  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
+- `h_w` de McAdams usa el viento a 2 m sin corregir a la altura del equipo.
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 

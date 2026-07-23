@@ -366,31 +366,52 @@ tabla:
   bal_fs: Balance — Fracción solar
   no_convergio: no convergió
 anual_det:
-  titulo: Operación anual de cámara
+  titulo: Análisis anual — detalle mensual
   caption: >-
-    Resultados del motor termodinámico corrido mes a mes sobre el día
-    típico, escalado por la cantidad de batches/mes configurada en P4.
-    Eficiencias según método Augustus Leon (RSER 2002).
-  kg_anual: kg secados/año
-  eta_media: η_total media
-  t_prom: t_secado promedio
-  e_solar: Energía solar anual
+    El año simulado hora a hora con clima real. Cada lote se atribuye al mes en
+    que se descarga.
+  kg_seco: Producto seco
+  kg_agua: Agua evaporada
+  lotes: Lotes completados
+  lotes_frustrados: "{n} sin completar"
+  especifica: MJ/kg agua
+  e_solar: Energía solar
+  frac_solar: Fracción solar
+  frac_solar_help: >-
+    Energía útil aportada por el colector sobre el total puesto en el aire
+    (colector + auxiliar). Compara energías útiles, no la irradiancia incidente.
+  eta_drying: η secado
+  eta_drying_help: >-
+    Fracción de la radiación incidente sobre el colector convertida en
+    evaporación (Augustus Leon).
+  dias_operables: Días operables
+  dias_operables_help: >-
+    Días cuya irradiación diaria superó {umbral} MJ/m². Mide disponibilidad del
+    recurso, no días efectivamente trabajados.
+  dispersion: >-
+    Duración de lote: mediana {p50:.0f} h, percentil 90 {p90:.0f} h. La
+    diferencia entre ambos es la variabilidad del clima real.
+  cota_superior: >-
+    ⓘ Recarga inmediata, sin turnos ni tiempo de carga: la producción es una
+    cota superior.
+  csv: ⬇️ Descargar tabla mensual (CSV)
+  csv_help: Los mismos números de la tabla, para planilla.
   col_mes: Mes
-  col_t: t_secado [h]
-  col_conv: Convergió
-  col_mevap: m_evap/batch [kg]
-  col_batches: batches/mes
-  col_kg: kg/mes
-  col_drying: η_drying [%]
-  col_pickup: η_pickup [%]
-  col_termica: η_térmica [%]
-  col_total: η_total [%]
-  fig_kg: kg/mes
-  fig_eta: η_total [%]
-  fig_titulo: Producción mensual y eficiencia del sistema
+  col_seca: Producto seco [kg]
+  col_evap: Agua evap. [kg]
+  col_lotes: Lotes
+  col_frustrados: Sin completar
+  col_dur: Duración media [h]
+  col_operables: Días operables
+  col_esolar: E solar [MJ]
+  col_drying: η secado [%]
+  col_especifica: MJ/kg agua
+  fig_titulo: Producción mensual
+  fig_kg: Producto seco [kg]
+  fig_lotes: Lotes completados
   fig_eje_mes: Mes
-  fig_eje_kg: Producto secado [kg/mes]
-  fig_eje_eta: η_total [%]
+  fig_eje_kg: Producto seco [kg]
+  fig_eje_lotes: Lotes
 guardar:
   txt: Guardar prediseño completo (.txt)
   json: Guardar prediseño completo (.json)

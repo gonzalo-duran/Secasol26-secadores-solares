@@ -165,6 +165,77 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
 _P_REF_NIVEL_MAR_PA: float = 101325.0
 
 
+def empl_de(proyecto):
+    """Emplazamiento del proyecto, o None."""
+    return getattr(proyecto, "emplazamiento", None)
+
+
+# Diferencia de altitud a partir de la cual se reduce la presión de la fuente
+# de clima a la del sitio [m]. Por debajo, la corrección es despreciable frente
+# a la variabilidad sinóptica.
+_DELTA_ALTITUD_REDUCCION_M: float = 50.0
+
+
+def _reducir_presion_a_altitud_sitio(P_fuente_Pa: float, clima, emplazamiento) -> tuple[float, str]:
+    """Baja la presión de la fuente de clima desde su altitud a la del sitio.
+
+    **Por qué hace falta.** La celda de grilla de NASA POWER es de 0.5° y su
+    altitud es el promedio del terreno que abarca. En zonas de montaña eso puede
+    estar muy lejos del sitio real: para Salta capital (1187 m) la grilla reporta
+    **2786 m**, y su presión media (73.1 kPa) es la de esa altura, no la del
+    valle (87.9 kPa en ISA). Usarla tal cual metía un error del 17 % en P, que se
+    propaga a toda la psicrometría — ω_sat ∝ P_sat/(P − P_sat), así que el aire
+    "podía" cargar más humedad de la real y el secado salía optimista. Además
+    bajaba el punto de ebullición de 96 a 91 °C. Detectado en S57 sobre un
+    reporte real del usuario.
+
+    **Qué hace.** Reducción barométrica con la razón de presiones ISA entre
+    ambas altitudes:
+
+        P_sitio = P_fuente · P_ISA(z_sitio) / P_ISA(z_fuente)
+
+    Conserva el desvío meteorológico de la fuente respecto de la estándar (su
+    información sinóptica) pero lo ubica en la altitud correcta. Si falta alguno
+    de los dos datos, o difieren poco, se devuelve la presión sin tocar.
+
+    Args:
+        P_fuente_Pa: Presión media de la fuente de clima [Pa].
+        clima: Objeto ``Clima`` (se lee ``altitud_nasa_m``).
+        emplazamiento: Objeto ``Emplazamiento`` (se lee ``altitud_m``).
+
+    Returns:
+        ``(P_Pa, nota)`` — ``nota`` es un sufijo descriptivo para el origen,
+        vacío si no se aplicó corrección.
+    """
+    from calculos.motor_calc import presion_atmosferica
+
+    z_fuente = getattr(clima, "altitud_nasa_m", None)
+    z_sitio = getattr(emplazamiento, "altitud_m", None)
+    if z_fuente is None or z_sitio is None:
+        return P_fuente_Pa, ""
+    try:
+        z_fuente = float(z_fuente)
+        z_sitio = float(z_sitio)
+    except (TypeError, ValueError):
+        return P_fuente_Pa, ""
+    if abs(z_fuente - z_sitio) < _DELTA_ALTITUD_REDUCCION_M:
+        return P_fuente_Pa, ""
+    try:
+        P_isa_fuente = float(presion_atmosferica(z_fuente))
+        P_isa_sitio = float(presion_atmosferica(z_sitio))
+        if P_isa_fuente <= 0:
+            return P_fuente_Pa, ""
+        P_corregida = P_fuente_Pa * P_isa_sitio / P_isa_fuente
+    except Exception:
+        return P_fuente_Pa, ""
+    if P_corregida <= 0:
+        return P_fuente_Pa, ""
+    return (
+        P_corregida,
+        f" reducida de {z_fuente:.0f} m (grilla) a {z_sitio:.0f} m (sitio)",
+    )
+
+
 def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
     """Presión atmosférica constante a usar en cámara, colector y psicrométricas.
 
@@ -172,6 +243,11 @@ def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
         1. Si ``proyecto.clima`` tiene la columna ``presion_Pa`` con datos
            válidos, se usa su **media anual** como valor único para toda la
            simulación. Captura el sesgo local sin meter variabilidad horaria.
+           Desde S57 esa media se **reduce barométricamente** de la altitud de
+           la grilla de la fuente a la del emplazamiento (ver
+           :func:`_reducir_presion_a_altitud_sitio`): la celda de NASA POWER es
+           de 0.5° y en montaña su altitud puede diferir en más de 1500 m de la
+           del sitio.
         2. Si no hay clima cargado pero ``proyecto.emplazamiento.altitud_m``
            está definido, se calcula con la atmósfera estándar ISA
            troposférica (``motor_calc.presion_atmosferica``).
@@ -207,7 +283,8 @@ def presion_representativa_proyecto(proyecto) -> tuple[float, str]:
                         }
                         fuente = getattr(clima, "fuente", "nasa_power")
                         etiqueta = etiquetas.get(fuente, fuente)
-                        return P, f"media anual {etiqueta} = {P / 1000.0:.2f} kPa"
+                        P, nota = _reducir_presion_a_altitud_sitio(P, clima, empl_de(proyecto))
+                        return P, f"media anual {etiqueta}{nota} = {P / 1000.0:.2f} kPa"
             except Exception:
                 # Si por algún motivo la columna existe pero no es numérica,
                 # caemos al siguiente nivel sin abortar el cálculo.
@@ -1774,6 +1851,7 @@ def _correr_colector_horizonte_forzado(
     I_g_POA_W_m2_serie: np.ndarray,
     P_amb_Pa: float,
     m_dot_sistema_kg_s: Optional[float] = None,
+    superficie=None,
 ) -> tuple[np.ndarray, int]:
     """Corre el colector hora a hora con el caudal que impone el ventilador.
 
@@ -1791,12 +1869,30 @@ def _correr_colector_horizonte_forzado(
     se cuenta la falla — el llamador decide si emitir advertencia. Si no hay
     colector, devuelve (T_amb, 0).
 
+    ``superficie``: ``SuperficieColector`` opcional
+    (``calculos/superficie_colector.py``). Si se pasa, se evalúa por
+    interpolación en vez de resolver hora a hora — mismo modelo, muestreado
+    sobre una grilla. Pensado para horizontes largos (el modo anual, 8760 h),
+    donde el solver hora a hora es el 95 % del costo. Sin ella, el
+    comportamiento es exactamente el previo.
+
     Returns:
-        (T_salida_colector_K(t), n_horas_con_falla_del_solver).
+        (T_salida_colector_K(t), n_horas_con_falla_del_solver). Con
+        ``superficie``, las fallas son las que hubo al muestrear la grilla, no
+        por hora.
     """
     T_amb_arr = np.asarray(T_amb_K_serie, dtype=float)
     if proyecto.colector is None:
         return T_amb_arr.copy(), 0
+
+    if superficie is not None:
+        T_sal = superficie.T_salida_K(
+            np.asarray(I_g_POA_W_m2_serie, dtype=float),
+            T_amb_arr,
+            np.asarray(v_viento_ms_serie, dtype=float),
+        )
+        return np.maximum(T_sal, T_amb_arr), int(getattr(superficie, "n_fallas", 0))
+
     N = len(T_amb_arr)
     T_sal = np.empty(N, dtype=float)
     n_fallas = 0
@@ -1841,6 +1937,7 @@ def armar_forzantes_ventana(
     clima_datos_df,
     *,
     P_Pa: float = 101325.0,
+    superficie_colector=None,
 ) -> tuple[ForzantesAire, float, list[str], dict[str, float]]:
     """Arma las forzantes de cámara sobre la ventana desde clima real horario.
 
@@ -1916,13 +2013,22 @@ def armar_forzantes_ventana(
         I_g_POA_W_m2_serie=POA,
         P_amb_Pa=P_Pa,
         m_dot_sistema_kg_s=m_dot_sistema,
+        superficie=superficie_colector,
     )
     if n_fallas_col > 0:
-        advertencias.append(
-            f"ADV_VENTANA_COLECTOR_FALLO_HORAS: el solver del colector falló en "
-            f"{n_fallas_col} de {n} horas (se asumió T_salida = T_amb, sin aporte "
-            "solar en esas horas). Revisá la configuración del colector."
-        )
+        if superficie_colector is not None:
+            advertencias.append(
+                f"ADV_VENTANA_COLECTOR_FALLO_NODOS: el solver del colector falló en "
+                f"{n_fallas_col} nodos de la superficie de respuesta (se rellenaron "
+                "por interpolación sobre el eje de irradiancia). Revisá la "
+                "configuración del colector."
+            )
+        else:
+            advertencias.append(
+                f"ADV_VENTANA_COLECTOR_FALLO_HORAS: el solver del colector falló en "
+                f"{n_fallas_col} de {n} horas (se asumió T_salida = T_amb, sin aporte "
+                "solar en esas horas). Revisá la configuración del colector."
+            )
 
     # Coherencia de caudales banco ↔ sistema (S41): si el caudal de diseño del
     # banco difiere mucho del que mueve el ventilador, el punto de operación
@@ -2033,9 +2139,28 @@ def armar_forzantes_ventana(
             )
             T_ent = T_post_cano + aux_tr.delta_T_K
             lena_kg = aux_tr.lena_consumida_kg
+            # Energía que el auxiliar entregó al aire. Se propaga por el diag
+            # porque el modo anual la necesita para la fracción solar y para
+            # η_total (sin ella, η_total degenera en η_drying — era el defecto
+            # del anual de día típico, que la hardcodeaba en cero).
+            diagnosticos["E_aux_MJ"] = float(aux_tr.E_aux_MJ)
             advertencias.extend(aux_tr.advertencias_unicas)
         except Exception as exc:
             advertencias.append(f"ADV_VENTANA_AUXILIAR: {exc}")
+
+    # Energía ÚTIL que el colector entregó al aire, ∫ ṁ·cp·(T_sal_col − T_amb) dt.
+    # Es la magnitud comparable con `E_aux_MJ` (ambas son energía puesta en el
+    # aire); la irradiancia incidente sobre el colector no lo es, y mezclarlas
+    # daría una "fracción solar" sin sentido físico.
+    try:
+        from calculos.auxiliar_calc import CP_AIRE as _CP_AIRE
+
+        _m_dot_aire = float(proyecto.camara.flujo.caudal_masico_kg_s)
+        diagnosticos["Q_util_colector_MJ"] = float(
+            _m_dot_aire * _CP_AIRE * np.sum(np.maximum(T_sal_col - T_amb, 0.0)) * dt_s / 1e6
+        )
+    except Exception:
+        pass
 
     forzantes = ForzantesAire(
         t_s=t_s,

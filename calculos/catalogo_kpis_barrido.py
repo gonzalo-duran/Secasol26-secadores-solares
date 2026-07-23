@@ -2,8 +2,8 @@
 
 Cada :class:`KpiBarrido` envuelve un *extractor*: una función tolerante que,
 dado un objeto de resultado (``ResultadosCompletos`` en Constantes,
-``ResultadosCompletosTransitorio`` en Transitorio, o ``ResultadosAnualCamara``
-en Operación anual), devuelve un escalar ``float`` o ``None`` cuando el campo
+``ResultadosCompletosTransitorio`` en Transitorio, o ``ResultadosAnual``
+en Anual), devuelve un escalar ``float`` o ``None`` cuando el campo
 no aplica a ese modo. Esa tolerancia (vía ``getattr`` con default) permite que
 el mismo catálogo de KPIs sirva a los tres modos sin ramificar en la UI.
 
@@ -69,8 +69,8 @@ def _camara_de(res: Any) -> Any | None:
 
 
 def _ext_t_secado_h(res: Any) -> float | None:
-    # Modo anual: promedio mensual ya en horas.
-    promedio = getattr(res, "t_secado_promedio_h", None)
+    # Modo anual: duración media de los lotes completados, ya en horas.
+    promedio = getattr(res, "duracion_media_h", None)
     if promedio is not None:
         return float(promedio)
     cam = _camara_de(res)
@@ -145,7 +145,9 @@ KPIS_FIJOS: tuple[KpiBarrido, ...] = (
         label="Fracción solar",
         unidad="—",
         extractor=lambda res: _attr(res, "fraccion_solar"),
-        modos_validos=_CONST_TRANS,
+        # ResultadosAnual expone el mismo atributo (S57): un solo KPI sirve
+        # para los tres modos en vez de duplicar el id.
+        modos_validos=_CONST_TRANS | frozenset({_ANUAL}),
         formato=".3f",
     ),
     KpiBarrido(
@@ -227,44 +229,60 @@ KPIS_AVANZADOS: tuple[KpiBarrido, ...] = (
         formato=".1f",
     ),
     KpiBarrido(
-        id="kg_secados_anual",
-        label="Producto secado anual",
+        id="masa_seca_anual_kg",
+        label="Producto seco anual",
         unidad="kg/año",
-        extractor=lambda res: _attr(res, "kg_secados_anual"),
+        extractor=lambda res: _attr(res, "masa_seca_anual_kg"),
         modos_validos=frozenset({_ANUAL}),
         formato=".0f",
     ),
     KpiBarrido(
-        id="eta_drying_anual_media",
-        label="η drying anual media",
-        unidad="—",
-        extractor=lambda res: _attr(res, "eta_drying_anual_media"),
+        id="masa_evaporada_anual_kg",
+        label="Agua evaporada anual",
+        unidad="kg/año",
+        extractor=lambda res: _attr(res, "masa_evaporada_anual_kg"),
         modos_validos=frozenset({_ANUAL}),
-        formato=".3f",
+        formato=".0f",
     ),
     KpiBarrido(
-        id="eta_pickup_anual_media",
-        label="η pickup anual media",
-        unidad="—",
-        extractor=lambda res: _attr(res, "eta_pickup_anual_media"),
+        id="n_lotes_completos",
+        label="Lotes completados",
+        unidad="lotes/año",
+        extractor=lambda res: _attr(res, "n_lotes_completos"),
         modos_validos=frozenset({_ANUAL}),
-        formato=".3f",
+        formato=".0f",
     ),
     KpiBarrido(
-        id="eta_termica_anual_media",
-        label="η térmica anual media",
+        id="eta_drying_anual",
+        label="η secado anual",
         unidad="—",
-        extractor=lambda res: _attr(res, "eta_termica_anual_media"),
+        extractor=lambda res: _attr(res, "eta_drying_anual"),
         modos_validos=frozenset({_ANUAL}),
-        formato=".3f",
+        formato=".4f",
     ),
     KpiBarrido(
-        id="eta_total_anual_media",
-        label="η total anual media",
+        id="eta_total_anual",
+        label="η total anual",
         unidad="—",
-        extractor=lambda res: _attr(res, "eta_total_anual_media"),
+        extractor=lambda res: _attr(res, "eta_total_anual"),
         modos_validos=frozenset({_ANUAL}),
-        formato=".3f",
+        formato=".4f",
+    ),
+    KpiBarrido(
+        id="energia_especifica_MJ_kg",
+        label="Energía específica",
+        unidad="MJ/kg agua",
+        extractor=lambda res: _attr(res, "energia_especifica_MJ_kg"),
+        modos_validos=frozenset({_ANUAL}),
+        formato=".1f",
+    ),
+    KpiBarrido(
+        id="dias_operables",
+        label="Días operables",
+        unidad="días/año",
+        extractor=lambda res: _attr(res, "dias_operables"),
+        modos_validos=frozenset({_ANUAL}),
+        formato=".0f",
     ),
     KpiBarrido(
         id="E_solar_anual_MJ",
@@ -275,10 +293,10 @@ KPIS_AVANZADOS: tuple[KpiBarrido, ...] = (
         formato=".0f",
     ),
     KpiBarrido(
-        id="E_auxiliar_anual_MJ",
+        id="E_auxiliar_MJ",
         label="Energía auxiliar anual",
         unidad="MJ/año",
-        extractor=lambda res: _attr(res, "E_auxiliar_anual_MJ"),
+        extractor=lambda res: _attr(res, "E_auxiliar_MJ"),
         modos_validos=frozenset({_ANUAL}),
         formato=".0f",
     ),

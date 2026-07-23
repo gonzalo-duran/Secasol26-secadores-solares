@@ -1330,29 +1330,43 @@ def _json_resultado_ventana(res) -> dict:
 
 
 def _texto_operacion_anual(res_anual) -> list[str]:
-    """Bloque de texto (ES) de la operación anual de cámara (Augustus Leon)."""
+    """Bloque de texto (ES) del análisis anual sobre 8760 h."""
+
+    def _f(v, fmt=".1f", suf=""):
+        return f"{v:{fmt}}{suf}" if v is not None else "n/d"
+
     lines = [
         "",
-        "OPERACIÓN ANUAL DE CÁMARA",
-        f"  Producción anual    : {res_anual.kg_secados_anual:.1f} kg (agua evaporada)",
-        f"  t secado promedio   : {res_anual.t_secado_promedio_h:.1f} h",
-        f"  E solar anual       : {res_anual.E_solar_anual_MJ:.0f} MJ",
-        f"  E auxiliar anual    : {res_anual.E_auxiliar_anual_MJ:.0f} MJ",
-        "  Eficiencias medias (Augustus Leon):",
-        f"    η drying  = {res_anual.eta_drying_anual_media:.3f}",
-        f"    η pickup  = {res_anual.eta_pickup_anual_media:.3f}",
-        f"    η térmica = {res_anual.eta_termica_anual_media:.3f}",
-        f"    η total   = {res_anual.eta_total_anual_media:.3f}",
+        "ANÁLISIS ANUAL (8760 h de clima real)",
+        f"  Producto seco       : {res_anual.masa_seca_anual_kg:.1f} kg",
+        f"  Agua evaporada      : {res_anual.masa_evaporada_anual_kg:.1f} kg",
+        f"  Lotes completados   : {res_anual.n_lotes_completos}"
+        f" (sin completar: {res_anual.n_lotes_frustrados})",
+        f"  Duración de lote    : media {_f(res_anual.duracion_media_h)} h, "
+        f"p50 {_f(res_anual.duracion_p50_h)} h, p90 {_f(res_anual.duracion_p90_h)} h",
+        f"  E solar incidente   : {res_anual.E_solar_anual_MJ:.0f} MJ",
+        f"  Q útil del colector : {res_anual.Q_util_colector_MJ:.0f} MJ",
+        f"  E auxiliar          : {res_anual.E_auxiliar_MJ:.0f} MJ",
+        f"  Leña consumida      : {res_anual.lena_consumida_kg:.1f} kg",
+        f"  Fracción solar      : {_f(res_anual.fraccion_solar, '.3f')}",
+        f"  η secado (drying)   : {_f(res_anual.eta_drying_anual, '.4f')}",
+        f"  η total             : {_f(res_anual.eta_total_anual, '.4f')}",
+        f"  Aprovech. del aire  : {_f(res_anual.aprovechamiento_aire, '.4f')}"
+        "  (no comparable con η_pickup de Augustus Leon)",
+        f"  Energía específica  : {_f(res_anual.energia_especifica_MJ_kg)} MJ/kg agua",
+        f"  Días operables      : {res_anual.dias_operables}"
+        f" (umbral {res_anual.umbral_dia_operable_MJ_m2:.1f} MJ/m²·día)",
+        "  NOTA: recarga inmediata sin turnos ni tiempo de carga → cota superior.",
         "",
         "  DETALLE MENSUAL",
-        "  mes | t_sec[h] | conv | kg/batch | n_batch | kg/mes | η_dry | η_pick | η_term | η_tot",
+        "  mes | seco[kg] | agua[kg] | lotes | sin_compl | dur[h] | oper/días | E_sol[MJ]",
     ]
     for p in res_anual.puntos_mensuales:
         lines.append(
-            f"  {p.mes:3d} | {p.t_secado_h:8.1f} | {'sí' if p.convergio else 'NO':>4} | "
-            f"{p.m_evap_kg_por_batch:8.2f} | {p.n_batches:7d} | {p.kg_secados_mes:6.1f} | "
-            f"{p.eta_drying:5.3f} | {p.eta_pickup:6.3f} | {p.eta_termica:6.3f} | "
-            f"{p.eta_total:5.3f}"
+            f"  {p.mes:3d} | {p.masa_seca_kg:8.1f} | {p.masa_evaporada_kg:8.1f} | "
+            f"{p.lotes_completos:5d} | {p.lotes_frustrados:9d} | "
+            f"{_f(p.duracion_media_h):>6} | {p.dias_operables:4d}/{p.dias:<4d} | "
+            f"{p.E_solar_MJ:9.0f}"
         )
     for adv in res_anual.advertencias or []:
         lines.append(f"  ⚠ {adv}")
@@ -1360,30 +1374,43 @@ def _texto_operacion_anual(res_anual) -> list[str]:
 
 
 def _json_operacion_anual(res_anual) -> dict:
-    """Dict JSON-serializable de ResultadosAnualCamara."""
+    """Dict JSON-serializable de ResultadosAnual (modo anual 8760 h)."""
     return {
-        "kg_secados_anual": res_anual.kg_secados_anual,
-        "t_secado_promedio_h": res_anual.t_secado_promedio_h,
+        "masa_seca_anual_kg": res_anual.masa_seca_anual_kg,
+        "masa_evaporada_anual_kg": res_anual.masa_evaporada_anual_kg,
+        "n_lotes_completos": res_anual.n_lotes_completos,
+        "n_lotes_frustrados": res_anual.n_lotes_frustrados,
+        "duracion_media_h": res_anual.duracion_media_h,
+        "duracion_p50_h": res_anual.duracion_p50_h,
+        "duracion_p90_h": res_anual.duracion_p90_h,
         "E_solar_anual_MJ": res_anual.E_solar_anual_MJ,
-        "E_auxiliar_anual_MJ": res_anual.E_auxiliar_anual_MJ,
-        "eta_drying_anual_media": res_anual.eta_drying_anual_media,
-        "eta_pickup_anual_media": res_anual.eta_pickup_anual_media,
-        "eta_termica_anual_media": res_anual.eta_termica_anual_media,
-        "eta_total_anual_media": res_anual.eta_total_anual_media,
+        "Q_util_colector_MJ": res_anual.Q_util_colector_MJ,
+        "E_auxiliar_MJ": res_anual.E_auxiliar_MJ,
+        "lena_consumida_kg": res_anual.lena_consumida_kg,
+        "fraccion_solar": res_anual.fraccion_solar,
+        "eta_drying_anual": res_anual.eta_drying_anual,
+        "eta_total_anual": res_anual.eta_total_anual,
+        "aprovechamiento_aire": res_anual.aprovechamiento_aire,
+        "energia_especifica_MJ_kg": res_anual.energia_especifica_MJ_kg,
+        "dias_operables": res_anual.dias_operables,
+        "umbral_dia_operable_MJ_m2": res_anual.umbral_dia_operable_MJ_m2,
+        "horas_simuladas": res_anual.horas_simuladas,
+        "area_colector_m2": res_anual.area_colector_m2,
+        "status": res_anual.status,
         "advertencias": list(res_anual.advertencias or []),
         "puntos_mensuales": [
             {
                 "mes": p.mes,
-                "t_secado_h": p.t_secado_h,
-                "convergio": p.convergio,
-                "m_evap_kg_por_batch": p.m_evap_kg_por_batch,
-                "n_batches": p.n_batches,
-                "kg_secados_mes": p.kg_secados_mes,
+                "masa_seca_kg": p.masa_seca_kg,
+                "masa_evaporada_kg": p.masa_evaporada_kg,
+                "lotes_completos": p.lotes_completos,
+                "lotes_frustrados": p.lotes_frustrados,
+                "duracion_media_h": p.duracion_media_h,
+                "dias_operables": p.dias_operables,
+                "dias": p.dias,
+                "E_solar_MJ": p.E_solar_MJ,
                 "eta_drying": p.eta_drying,
-                "eta_pickup": p.eta_pickup,
-                "eta_termica": p.eta_termica,
-                "eta_total": p.eta_total,
-                "advertencias": list(p.advertencias or []),
+                "energia_especifica_MJ_kg": p.energia_especifica_MJ_kg,
             }
             for p in res_anual.puntos_mensuales
         ],
@@ -2434,16 +2461,53 @@ def render() -> None:
     )
 
 
-def _render_operacion_anual_detalle(proyecto) -> None:
-    """Panel detalle de operación anual de cámara — visible si P4 lo calculó.
+def _df_operacion_anual(res_anual):
+    """Tabla mensual del anual, lista para mostrar y para exportar a CSV.
 
-    Muestra tabla 12 meses con t_secado, m_evap/batch, n_batches, kg/mes y
-    las 4 eficiencias Augustus Leon. Más gráfica de barras kg/mes con línea
-    de η_total sobre eje secundario.
+    Función aparte (y pura salvo por ``t()``) para que la vista y la descarga
+    compartan exactamente los mismos números: si divergieran, el CSV dejaría de
+    ser el respaldo de lo que el usuario vio en pantalla.
     """
-    from calculos.operacion_anual_camara import ResultadosAnualCamara
+    import pandas as pd
 
-    res_anual: ResultadosAnualCamara | None = st.session_state.get("p4_resultado_anual")
+    meses_nombres = t("graficas.meses_abbr").split(",")
+    _col_mes = t("p7.anual_det.col_mes")
+    filas = []
+    for p in res_anual.puntos_mensuales:
+        filas.append(
+            {
+                _col_mes: meses_nombres[p.mes - 1],
+                t("p7.anual_det.col_seca"): round(p.masa_seca_kg, 1),
+                t("p7.anual_det.col_evap"): round(p.masa_evaporada_kg, 1),
+                t("p7.anual_det.col_lotes"): p.lotes_completos,
+                t("p7.anual_det.col_frustrados"): p.lotes_frustrados,
+                t("p7.anual_det.col_dur"): (
+                    round(p.duracion_media_h, 1) if p.duracion_media_h is not None else None
+                ),
+                t("p7.anual_det.col_operables"): f"{p.dias_operables}/{p.dias}",
+                t("p7.anual_det.col_esolar"): round(p.E_solar_MJ, 0),
+                t("p7.anual_det.col_drying"): (
+                    round(p.eta_drying * 100, 2) if p.eta_drying is not None else None
+                ),
+                t("p7.anual_det.col_especifica"): (
+                    round(p.energia_especifica_MJ_kg, 1)
+                    if p.energia_especifica_MJ_kg is not None
+                    else None
+                ),
+            }
+        )
+    return pd.DataFrame(filas).set_index(_col_mes)
+
+
+def _render_operacion_anual_detalle(proyecto) -> None:
+    """Panel detalle del modo anual sobre 8760 h — visible si P4 lo calculó.
+
+    Resumen del año, tabla de 12 meses (con descarga CSV) y gráfica de producto
+    seco por mes.
+    """
+    from calculos.simulacion_anual import ResultadosAnual
+
+    res_anual: ResultadosAnual | None = st.session_state.get("p4_resultado_anual")
     if res_anual is None:
         return
 
@@ -2455,55 +2519,94 @@ def _render_operacion_anual_detalle(proyecto) -> None:
         for msg in res_anual.advertencias:
             st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, F5)
 
-    # Resumen anual (mismo que P4 pero acá lo tenemos integrado en P7)
+    # Producción y agua evaporada son cantidades distintas y se muestran como
+    # tales: confundirlas era el defecto del anual anterior.
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric(t("p7.anual_det.kg_anual"), f"{res_anual.kg_secados_anual:.0f}")
-    col2.metric(t("p7.anual_det.eta_media"), f"{res_anual.eta_total_anual_media * 100:.1f}%")
-    col3.metric(t("p7.anual_det.t_prom"), f"{res_anual.t_secado_promedio_h:.1f} h")
-    col4.metric(t("p7.anual_det.e_solar"), f"{res_anual.E_solar_anual_MJ:.0f} MJ")
+    col1.metric(t("p7.anual_det.kg_seco"), f"{res_anual.masa_seca_anual_kg:.0f} kg")
+    col2.metric(t("p7.anual_det.kg_agua"), f"{res_anual.masa_evaporada_anual_kg:.0f} kg")
+    col3.metric(
+        t("p7.anual_det.lotes"),
+        f"{res_anual.n_lotes_completos}",
+        delta=(
+            t("p7.anual_det.lotes_frustrados", n=res_anual.n_lotes_frustrados)
+            if res_anual.n_lotes_frustrados
+            else None
+        ),
+        delta_color="inverse",
+    )
+    col4.metric(
+        t("p7.anual_det.especifica"),
+        (
+            f"{res_anual.energia_especifica_MJ_kg:.1f}"
+            if res_anual.energia_especifica_MJ_kg is not None
+            else "—"  # i18n: exento (marcador de dato ausente)
+        ),
+    )
 
-    # Tabla 12 meses
-    import pandas as pd
+    col5, col6, col7, col8 = st.columns(4)
+    col5.metric(t("p7.anual_det.e_solar"), f"{res_anual.E_solar_anual_MJ:.0f} MJ")
+    col6.metric(
+        t("p7.anual_det.frac_solar"),
+        (
+            f"{res_anual.fraccion_solar * 100:.0f}%"
+            if res_anual.fraccion_solar is not None
+            else "—"  # i18n: exento (marcador de dato ausente)
+        ),
+        help=t("p7.anual_det.frac_solar_help"),
+    )
+    col7.metric(
+        t("p7.anual_det.eta_drying"),
+        (
+            f"{res_anual.eta_drying_anual * 100:.2f}%"
+            if res_anual.eta_drying_anual is not None
+            else "—"  # i18n: exento (marcador de dato ausente)
+        ),
+        help=t("p7.anual_det.eta_drying_help"),
+    )
+    col8.metric(
+        t("p7.anual_det.dias_operables"),
+        f"{res_anual.dias_operables}",
+        help=t("p7.anual_det.dias_operables_help", umbral=res_anual.umbral_dia_operable_MJ_m2),
+    )
 
-    meses_nombres = t("graficas.meses_abbr").split(",")
-    _col_mes = t("p7.anual_det.col_mes")
-    filas = []
-    for p in res_anual.puntos_mensuales:
-        filas.append(
-            {
-                _col_mes: meses_nombres[p.mes - 1],
-                t("p7.anual_det.col_t"): round(p.t_secado_h, 1),
-                t("p7.anual_det.col_conv"): "✓" if p.convergio else "—",
-                t("p7.anual_det.col_mevap"): round(p.m_evap_kg_por_batch, 2),
-                t("p7.anual_det.col_batches"): p.n_batches,
-                t("p7.anual_det.col_kg"): round(p.kg_secados_mes, 1),
-                t("p7.anual_det.col_drying"): round(p.eta_drying * 100, 2),
-                t("p7.anual_det.col_pickup"): round(p.eta_pickup * 100, 1),
-                t("p7.anual_det.col_termica"): round(p.eta_termica * 100, 1),
-                t("p7.anual_det.col_total"): round(p.eta_total * 100, 2),
-            }
+    if res_anual.duracion_p50_h is not None:
+        st.caption(
+            t(
+                "p7.anual_det.dispersion",
+                p50=res_anual.duracion_p50_h,
+                p90=res_anual.duracion_p90_h,
+            )
         )
-    df_meses = pd.DataFrame(filas).set_index(_col_mes)
-    st.dataframe(df_meses, width="stretch")
+    st.caption(t("p7.anual_det.cota_superior"))
 
-    # Gráfica de barras kg/mes con línea η_total
+    df_meses = _df_operacion_anual(res_anual)
+    st.dataframe(df_meses, width="stretch")
+    st.download_button(
+        t("p7.anual_det.csv"),
+        data=df_meses.to_csv(encoding="utf-8"),
+        file_name="secasol_anual_mensual.csv",  # i18n: exento (nombre de archivo)
+        mime="text/csv",
+        key="p7_anual_csv",
+        help=t("p7.anual_det.csv_help"),
+    )
+
     mostrar_plotly(_fig_operacion_anual(res_anual), nombre="operacion_anual")
 
 
 def _fig_operacion_anual(res_anual):
-    """Barras kg/mes + línea η_total (eje secundario). Reusada por el PDF."""
+    """Barras de producto seco por mes + línea de lotes. Reusada por el PDF."""
     meses_nombres = t("graficas.meses_abbr").split(",")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_bar(
         x=meses_nombres,
-        y=[p.kg_secados_mes for p in res_anual.puntos_mensuales],
+        y=[p.masa_seca_kg for p in res_anual.puntos_mensuales],
         name=t("p7.anual_det.fig_kg"),
         marker_color="#1f77b4",
     )
     fig.add_scatter(
         x=meses_nombres,
-        y=[p.eta_total * 100 for p in res_anual.puntos_mensuales],
-        name=t("p7.anual_det.fig_eta"),
+        y=[p.lotes_completos for p in res_anual.puntos_mensuales],
+        name=t("p7.anual_det.fig_lotes"),
         mode="lines+markers",
         line=dict(color="#d62728", width=2),
         marker=dict(size=8),
@@ -2516,7 +2619,7 @@ def _fig_operacion_anual(res_anual):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.5, xanchor="center"),
     )
     fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_kg"), secondary_y=False)
-    fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_eta"), secondary_y=True)
+    fig.update_yaxes(title_text=t("p7.anual_det.fig_eje_lotes"), secondary_y=True)
     return fig
 
 

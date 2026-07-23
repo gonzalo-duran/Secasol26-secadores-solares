@@ -22,7 +22,7 @@ carta:
   proceso: Proceso del secador
   nota_directa: "cámara directa (no adiabática: el techo translúcido aporta calor)"
   nota_indirecta: "cámara indirecta (≈ adiabática: el punto de salida cae sobre la isentálpica)"
-  nota: "P = {p:.1f} kPa (altitud del emplazamiento) · {camara}"
+  nota: "P = {p:.1f} kPa (presión del sitio) · {camara}"
   titulo: Carta psicrométrica del proceso de secado
   eje_t: Temperatura de bulbo seco [°C]
   eje_omega: Humedad absoluta ω [g/kg aire seco]

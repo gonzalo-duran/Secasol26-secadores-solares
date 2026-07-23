@@ -363,31 +363,51 @@ tabla:
   bal_fs: Balance — Solar fraction
   no_convergio: did not converge
 anual_det:
-  titulo: Chamber annual operation
+  titulo: Annual analysis — monthly breakdown
   caption: >-
-    Results of the thermodynamic engine run month by month over the typical
-    day, scaled by the number of batches/month set in P4. Efficiencies per
-    the Augustus Leon method (RSER 2002).
-  kg_anual: kg dried/year
-  eta_media: mean η_total
-  t_prom: mean drying time
-  e_solar: Annual solar energy
+    The year simulated hour by hour with real climate. Each batch is credited to
+    the month it is unloaded.
+  kg_seco: Dry product
+  kg_agua: Evaporated water
+  lotes: Completed batches
+  lotes_frustrados: "{n} unfinished"
+  especifica: MJ/kg water
+  e_solar: Solar energy
+  frac_solar: Solar fraction
+  frac_solar_help: >-
+    Useful energy supplied by the collector over the total put into the air
+    (collector + backup). Compares useful energy, not incident irradiance.
+  eta_drying: η drying
+  eta_drying_help: >-
+    Fraction of the radiation incident on the collector converted into
+    evaporation (Augustus Leon).
+  dias_operables: Operable days
+  dias_operables_help: >-
+    Days whose daily irradiation exceeded {umbral} MJ/m². Measures resource
+    availability, not days actually worked.
+  dispersion: >-
+    Batch duration: median {p50:.0f} h, 90th percentile {p90:.0f} h. The gap
+    between them is the variability of the real climate.
+  cota_superior: >-
+    ⓘ Immediate reload, no shifts and no loading time: output is an upper bound.
+  csv: ⬇️ Download monthly table (CSV)
+  csv_help: The same numbers as the table, for a spreadsheet.
   col_mes: Month
-  col_t: drying t [h]
-  col_conv: Converged
-  col_mevap: m_evap/batch [kg]
-  col_batches: batches/month
-  col_kg: kg/month
-  col_drying: η_drying [%]
-  col_pickup: η_pickup [%]
-  col_termica: η_thermal [%]
-  col_total: η_total [%]
-  fig_kg: kg/month
-  fig_eta: η_total [%]
-  fig_titulo: Monthly production and system efficiency
+  col_seca: Dry product [kg]
+  col_evap: Evap. water [kg]
+  col_lotes: Batches
+  col_frustrados: Unfinished
+  col_dur: Mean duration [h]
+  col_operables: Operable days
+  col_esolar: Solar E [MJ]
+  col_drying: η drying [%]
+  col_especifica: MJ/kg water
+  fig_titulo: Monthly output
+  fig_kg: Dry product [kg]
+  fig_lotes: Completed batches
   fig_eje_mes: Month
-  fig_eje_kg: Dried product [kg/month]
-  fig_eje_eta: η_total [%]
+  fig_eje_kg: Dry product [kg]
+  fig_eje_lotes: Batches
 guardar:
   txt: Save full pre-design (.txt)
   json: Save full pre-design (.json)

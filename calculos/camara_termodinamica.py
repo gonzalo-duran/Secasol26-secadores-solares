@@ -47,7 +47,7 @@ from calculos.psicrometria import (
     calor_latente_vaporizacion,
     cp_aire_humedo,
     entalpia_aire_humedo,
-    omega_saturacion,
+    presion_vapor_saturacion,
 )
 from core.camara import ForzantesAire
 
@@ -55,6 +55,45 @@ from core.camara import ForzantesAire
 _CP_AGUA_LIQ_J_KGK: float = 4186.0  # cp del agua líquida (para cp_prod variable)
 _HR_SAT_UMBRAL: float = 0.95  # umbral para advertencia HR_flujo alta
 _MAX_STEP_TOPE_S: float = 3600.0  # tope del paso del integrador (nodos horarios)
+
+# Tope de la presión de vapor de saturación como fracción de la presión total.
+# A presión reducida el agua hierve por debajo de 100 °C (a 2650 m, ~73 kPa,
+# hierve a 91 °C) y ``P_sat(T) → P`` hace divergir ω_sat: la humedad de
+# saturación no está definida por encima de la ebullición. Ver
+# :func:`_omega_saturacion_acotada`.
+_FRAC_P_SAT_MAX: float = 0.90
+
+
+def _omega_saturacion_acotada(T_K: float, P_Pa: float) -> float:
+    """ω de saturación con la presión de vapor topeada a una fracción de P.
+
+    **Por qué existe.** ``omega_saturacion`` lanza ``PSICRO_PV_EXCEDE_P`` cuando
+    ``P_sat(T) ≥ P`` — correctamente, porque ahí el agua hierve y la saturación
+    deja de ser el mecanismo que gobierna. Pero eso abortaba la simulación
+    entera cuando el producto se acercaba a la ebullición local, cosa que pasa
+    en sitios de altura con aire de entrada muy caliente (reportado por el
+    usuario en S57: sitio a 73 kPa, aire a 92.8 °C, ebullición a 91.1 °C).
+
+    **Qué hace.** Topea ``P_sat`` a ``_FRAC_P_SAT_MAX·P``, lo que acota ω_sat a
+    un valor grande pero finito (~5.6 kg/kg contra los ~0.05 típicos) y deja que
+    el balance acoplado responda: una evaporación enorme enfría el producto y lo
+    devuelve por debajo de la ebullición.
+
+    **Qué NO hace.** No modela el hervor. El tope es arbitrario y en ese régimen
+    los resultados **no son confiables**: si el producto llega ahí, el problema
+    es de diseño (colector sobredimensionado para el caudal), no de numérica —
+    y además ninguna fruta se seca sana a esa temperatura. ``simular_secado``
+    emite ``CAM_TD_SOBRE_EBULLICION`` cuando el tope se activa.
+
+    Args:
+        T_K: Temperatura [K].
+        P_Pa: Presión total [Pa].
+
+    Returns:
+        ω_sat [kg_agua/kg_aire_seco], siempre finito.
+    """
+    P_sat = min(presion_vapor_saturacion(T_K), _FRAC_P_SAT_MAX * P_Pa)
+    return 0.622 * P_sat / (P_Pa - P_sat)
 
 
 def _max_step_desde_forzantes(t_fz: np.ndarray) -> float:
@@ -227,7 +266,7 @@ def resolver_estado_camara(
         raise ValueError(f"CAM_TD_P_NO_POSITIVA: P={P_Pa:.1f} Pa ≤ 0.")
 
     # --- 1) Humedad absoluta de superficie del producto ---
-    omega_sat_prod = omega_saturacion(T_prod_K, P_Pa)
+    omega_sat_prod = _omega_saturacion_acotada(T_prod_K, P_Pa)
     a_w = aw_func(X_prod_kg_kg)
     # Clip por tolerancia numérica de la inversión GAB (puede dar a_w ≈ 1+ε).
     a_w_clipped = max(0.0, min(1.0, a_w))
@@ -750,6 +789,21 @@ def simular_secado(
             f"MOTOR_TD_T_MAX_ALCANZADO: el producto no alcanzó X_obj="
             f"{X_prod_objetivo_kg_kg:.4f} dentro de t_max={t_max_s_eff:.0f} s. "
             f"X final = {sol.y[1, -1]:.4f}."
+        )
+
+    # --- Aviso de operación por encima de la ebullición local ---
+    # El tope de `_omega_saturacion_acotada` evita que la corrida aborte, pero en
+    # ese régimen el modelo está fuera de su dominio: hay que decirlo fuerte.
+    _T_prod_max_K = float(np.max(sol.y[0])) if sol.y.size else 0.0
+    if presion_vapor_saturacion(_T_prod_max_K) >= _FRAC_P_SAT_MAX * P_Pa:
+        advertencias.append(
+            f"CAM_TD_SOBRE_EBULLICION: el producto alcanzó "
+            f"{_T_prod_max_K - 273.15:.1f} °C, cerca o por encima de la ebullición del "
+            f"agua a la presión del sitio ({P_Pa / 1000:.1f} kPa). Se topeó la humedad "
+            "de saturación para no abortar, pero **los resultados de esas horas no son "
+            "confiables**: el modelo describe evaporación difusiva, no hervor. Suele "
+            "indicar un colector sobredimensionado para el caudal — y ninguna fruta se "
+            "seca sana a esa temperatura."
         )
 
     # --- Reconstrucción de variables algebraicas en cada t guardado ---

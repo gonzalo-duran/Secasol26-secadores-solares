@@ -338,51 +338,72 @@ t_amb_origen:
   media_anual: "média anual NASA POWER = {t:.1f} °C"
   fallback: "fallback 25 °C (sem clima carregado)"
 anual:
-  sin_clima: ℹ️ **Operação anual** disponível apenas com clima carregado em P2.
+  sin_clima: ℹ️ **Análise anual** disponível apenas com clima carregado em P2.
   clima_incompleto: >-
-    ⚠️ A operação anual precisa de clima dos 12 meses; o clima carregado
-    cobre {n_meses} mês(es). Com dados medidos de uma campanha parcial, use
-    os modos Diário, multidia ou Janela de produção.
-  sin_colector: >-
-    ⚠️ A operação anual da câmara requer um coletor configurado
-    em P3 (modelo linear de pré-dimensionamento).
-  titulo: "### 📅 Operação anual da câmara (cascata A + B)"
+    ⚠️ A análise anual precisa dos 12 meses; o clima carregado cobre
+    {n_meses}. Para campanhas parciais use os modos Diário / Janela.
+  sin_colector: ⚠️ A análise anual precisa de um coletor configurado em P3.
+  titulo: "### ☀️ Análise anual (8760 h)"
   caption: >-
-    Roda o motor termodinâmico sobre o dia típico de cada mês, calcula
-    as 4 eficiências de Augustus Leon (RSER 2002) e escala para operação
-    mensal com a quantidade de batches configurada. O detalhe por mês
-    é mostrado em P7.
-  batches:
-    label: Batches do produto por mês
-    help: >-
-      Quantidade de batches completos do produto que se assume
-      operar por mês. 10 batches/mês ≈ 1 batch a cada 3 dias.
-  dias_batch:
-    label: Dias/batch (aprox.)
-    help: 30 dias/mês ÷ batches/mês
+    Simula o ano inteiro hora a hora com clima real: o secador encadeia lotes
+    um após o outro, cada um com o tempo que efetivamente levou. A quantidade
+    de lotes é um **resultado**, não um dado a informar.
+  recarga:
+    titulo: 🔁 Política de recarga
+    caption: >-
+      Quando o lote seguinte é carregado após descarregar o anterior. Sem isso o
+      modelo recarrega no instante exato em que o lote terminou — às 3 da manhã
+      se calhar —, coisa que nenhum operador faz.
+    activa:
+      label: Esperar a hora de carga
+      help: >-
+        Se desativado, o lote seguinte começa assim que o anterior termina, a
+        qualquer hora. Isso dá um limite superior de produção, não uma
+        estimativa.
+    hora:
+      label: Hora de carga
+      help: Hora local do dia em que os lotes são carregados. Padrão 8:00.
+    maniobra:
+      label: Manobra [h]
+      help: >-
+        Tempo de descarga + recarga. O lote seguinte não pode começar antes de
+        terminar a manobra, e além disso deve cair na hora de carga.
+    aviso_cota: >-
+      ⚠️ Sem espera, o secador recarrega a qualquer hora (inclusive de
+      madrugada). A produção resultante é um **limite superior**, não uma
+      estimativa.
   calcular:
-    label: 📅 Calcular operação anual
+    label: ☀️ Calcular ano completo
     help: >-
-      Constrói a câmara com os valores atuais dos widgets,
-      fixa modo_calculo=termodinamico e roda 12 simulações (~30 s).
-  error_config: "❌ Erro de configuração: {exc}"
+      Roda as 8760 h. O coletor é avaliado com uma superfície de resposta
+      interpolada (mesmo modelo, ~48× mais rápido); demora cerca de 20 s.
+  spinner: Simulando o ano hora a hora...
+  exito: ✅ Ano simulado. Veja o detalhe mensal em P7.
   error: "❌ {exc}"
+  error_config: "❌ Configuração inválida: {exc}"
   error_calculo: "❌ Erro no cálculo anual: {exc}"
-  spinner: Rodando o motor termodinâmico mês a mês...
-  exito: ✅ Operação anual calculada. Ver detalhe mensal em P7.
-  resumen: "**Resumo anual**"
-  kg_secados:
-    label: kg secados/ano
-    help: Soma de kg de produto fresco secados nos 12 meses.
-  eta_total:
-    label: η_total média
-    help: Eficiência global do sistema ponderada por kg/mês.
-  t_secado:
-    label: t_secagem média
-    help: Média sobre meses que convergiram ao X_objetivo.
-  e_solar:
-    label: Energia solar anual
-    help: Sobre o plano do coletor durante batches operativos.
+  resumen: "**Resumo do ano**"
+  producto_seco:
+    label: Produto seco
+    help: >-
+      Massa de produto seco descarregado no ano, na sua umidade objetivo. NÃO é
+      a água evaporada — são grandezas distintas e ambas são mostradas.
+  agua_evaporada:
+    label: Água evaporada
+    help: Água total retirada do produto no ano.
+  lotes:
+    label: Lotes completados
+    frustrados: "{n} sem completar"
+    help: >-
+      Lotes que atingiram a umidade objetivo. Os frustrados foram carregados
+      mas não chegaram ao objetivo com o clima que tiveram.
+  duracion:
+    label: Duração média
+    help: Tempo médio de secagem dos lotes que se completaram.
+  cota_superior: >-
+    ⓘ O modelo recarrega um lote assim que o anterior termina, sem turnos nem
+    tempo de carga e descarga, e inicia lotes mesmo com clima ruim. A produção
+    é um **limite superior** do alcançável.
 error_config: "❌ Erro de configuração: {exc}"
 advertencias_titulo: Advertências de projeto
 sin_advertencias: ✅ Projeto sem advertências.

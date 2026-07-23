@@ -1423,16 +1423,25 @@ def _seccion_operacion_anual(
         return elems + _seccion_pendiente(styles, tr("anual.pendiente"))
 
     rows = [
-        [tr("anual.kg_anual"), f"{_fmt(snap_anual.get('kg_secados_anual'))} kg"],
-        [tr("anual.t_promedio"), f"{_fmt(snap_anual.get('t_secado_promedio_h'))} h"],
+        [tr("anual.kg_seco"), f"{_fmt(snap_anual.get('masa_seca_anual_kg'))} kg"],
+        [tr("anual.kg_agua"), f"{_fmt(snap_anual.get('masa_evaporada_anual_kg'))} kg"],
+        [
+            tr("anual.lotes"),
+            f"{snap_anual.get('n_lotes_completos', 0)} "
+            f"({snap_anual.get('n_lotes_frustrados', 0)})",
+        ],
+        [tr("anual.duracion"), f"{_fmt(snap_anual.get('duracion_media_h'))} h"],
         [tr("anual.e_solar"), f"{_fmt(snap_anual.get('E_solar_anual_MJ'))} MJ"],
-        [tr("anual.e_aux"), f"{_fmt(snap_anual.get('E_auxiliar_anual_MJ'))} MJ"],
-        [tr("anual.eta_drying"), _fmt(snap_anual.get("eta_drying_anual_media"))],
-        [tr("anual.eta_pickup"), _fmt(snap_anual.get("eta_pickup_anual_media"))],
-        [tr("anual.eta_termica"), _fmt(snap_anual.get("eta_termica_anual_media"))],
-        [tr("anual.eta_total"), _fmt(snap_anual.get("eta_total_anual_media"))],
+        [tr("anual.q_util"), f"{_fmt(snap_anual.get('Q_util_colector_MJ'))} MJ"],
+        [tr("anual.e_aux"), f"{_fmt(snap_anual.get('E_auxiliar_MJ'))} MJ"],
+        [tr("anual.frac_solar"), _fmt(snap_anual.get("fraccion_solar"))],
+        [tr("anual.eta_drying"), _fmt(snap_anual.get("eta_drying_anual"))],
+        [tr("anual.eta_total"), _fmt(snap_anual.get("eta_total_anual"))],
+        [tr("anual.especifica"), f"{_fmt(snap_anual.get('energia_especifica_MJ_kg'))} MJ/kg"],
+        [tr("anual.dias_operables"), str(snap_anual.get("dias_operables", "—"))],
     ]
     elems.append(_tabla_kv(rows))
+    elems.append(Paragraph(tr("anual.cota_superior"), styles["caption"]))
 
     puntos = snap_anual.get("puntos_mensuales") or []
     if puntos:
@@ -1441,24 +1450,25 @@ def _seccion_operacion_anual(
         filas = [
             [
                 tr("anual.col_mes"),
-                tr("anual.col_t"),
-                tr("anual.col_conv"),
-                tr("anual.col_kg_batch"),
-                tr("anual.col_batches"),
-                tr("anual.col_kg_mes"),
-                tr("anual.col_eta_total"),
+                tr("anual.col_seca"),
+                tr("anual.col_evap"),
+                tr("anual.col_lotes"),
+                tr("anual.col_frustrados"),
+                tr("anual.col_dur"),
+                tr("anual.col_esolar"),
             ]
         ]
         for p in puntos:
+            _dur = p.get("duracion_media_h")
             filas.append(
                 [
                     str(p.get("mes", "—")),
-                    f"{p.get('t_secado_h', 0.0):.1f}",
-                    "✓" if p.get("convergio") else "—",
-                    f"{p.get('m_evap_kg_por_batch', 0.0):.2f}",
-                    str(p.get("n_batches", "—")),
-                    f"{p.get('kg_secados_mes', 0.0):.1f}",
-                    f"{p.get('eta_total', 0.0) * 100:.2f} %",
+                    f"{p.get('masa_seca_kg', 0.0):.1f}",
+                    f"{p.get('masa_evaporada_kg', 0.0):.1f}",
+                    str(p.get("lotes_completos", 0)),
+                    str(p.get("lotes_frustrados", 0)),
+                    f"{_dur:.1f}" if _dur is not None else "—",
+                    f"{p.get('E_solar_MJ', 0.0):.0f}",
                 ]
             )
         elems.append(

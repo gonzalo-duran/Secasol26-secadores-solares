@@ -25,7 +25,6 @@ from core.camara import (
     ConfiguracionBandejas,
     ConfiguracionFlujo,
     GeometriaCamara,
-    OperacionAnualConfig,
 )
 from core.clima import Clima
 from core.colector import Colector
@@ -392,7 +391,11 @@ def _clima_sintetico() -> pd.DataFrame:
             "DNI_Wm2": GHI * 0.7,
             "DHI_Wm2": GHI * 0.2,
             "WS_ms": np.full(len(ts), 2.5),
-            "HR": 60.0 + 15.0 * np.sin(2 * np.pi * (hora - 4) / 24),
+            # HR como FRACCIÓN [0,1] — es el contrato de `Clima.datos`. Estaba
+            # en porcentaje (60 ± 15) y el motor anual viejo lo enmascaraba:
+            # atrapaba el fallo mes a mes y devolvía ceros con advertencias, así
+            # que el test daba verde con los 12 meses fallando en silencio (S57).
+            "HR": 0.60 + 0.15 * np.sin(2 * np.pi * (hora - 4) / 24),
         },
         index=ts,
     )
@@ -421,7 +424,6 @@ def proyecto_anual() -> Proyecto:
             modelo_capa_fina="logaritmico",
         ),
         modo_calculo="termodinamico",
-        operacion_anual=OperacionAnualConfig(batches_por_mes=4),
     )
     return p
 
@@ -432,14 +434,14 @@ def test_correr_barrido_anual(proyecto_anual):
         valores_si=(8.0, 12.0),
         modo="anual",
         nombre="masa_anual",
-        kpis_extra=("kg_secados_anual", "eta_total_anual_media"),
+        kpis_extra=("masa_seca_anual_kg", "eta_total_anual"),
     )
     res = correr_barrido(proyecto_anual, cfg)
     assert len(res.puntos) == 2
     assert all(pt.error is None for pt in res.puntos)
     for pt in res.puntos:
-        assert pt.kpis.get("kg_secados_anual") is not None
-        assert pt.kpis.get("eta_total_anual_media") is not None
+        assert pt.kpis.get("masa_seca_anual_kg") is not None
+        assert pt.kpis.get("eta_total_anual") is not None
     # El clima se compartió por referencia, no se duplicó ni perdió.
     assert proyecto_anual.clima is not None
     assert proyecto_anual.camara.carga_producto.masa_total_kg == pytest.approx(10.0)

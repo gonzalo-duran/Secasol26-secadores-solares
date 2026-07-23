@@ -37,7 +37,7 @@ from calculos.balance_global import (
 )
 from calculos.catalogo_kpis_barrido import kpis_fijos_para_modo, obtener_kpi
 from calculos.catalogo_parametros_barrido import ParametroBarrido, obtener_parametro
-from calculos.operacion_anual_camara import calcular_operacion_anual_camara
+from calculos.simulacion_anual import simular_anual
 
 
 def _resolver(obj: Any, partes: list[str]) -> Any:
@@ -264,7 +264,10 @@ def _despachar_motor(proyecto: Any, config: BarridoConfig, override: dict | None
             n_dias=config.n_dias or 1,
         )
     if config.modo == "anual":
-        return calcular_operacion_anual_camara(proyecto)
+        # Cada punto simula las 8760 h completas (~20 s con la superficie de
+        # respuesta del colector). Un barrido anual de N puntos cuesta N veces
+        # eso: conviene poca resolución.
+        return simular_anual(proyecto, proyecto.clima.datos)
     raise ValueError(f"BARRIDO_MODO_DESCONOCIDO: '{config.modo}'.")
 
 

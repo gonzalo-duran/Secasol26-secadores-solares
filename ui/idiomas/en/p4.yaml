@@ -335,51 +335,71 @@ t_amb_origen:
   media_anual: "NASA POWER annual mean = {t:.1f} °C"
   fallback: "fallback 25 °C (no climate loaded)"
 anual:
-  sin_clima: ℹ️ **Annual operation** available only with climate loaded in P2.
+  sin_clima: ℹ️ **Annual analysis** available only with climate loaded in P2.
   clima_incompleto: >-
-    ⚠️ Annual operation needs climate data for all 12 months; the loaded
-    climate covers {n_meses} month(s). With measured data from a partial
-    campaign, use the Daily, multi-day or Production-window modes.
-  sin_colector: >-
-    ⚠️ The chamber's annual operation requires a collector configured
-    in P3 (linear pre-design model).
-  titulo: "### 📅 Chamber annual operation (cascade A + B)"
+    ⚠️ The annual analysis needs all 12 months; the loaded climate covers
+    {n_meses}. For partial campaigns use the Daily / Window modes.
+  sin_colector: ⚠️ The annual analysis needs a collector configured in P3.
+  titulo: "### ☀️ Annual analysis (8760 h)"
   caption: >-
-    Runs the thermodynamic engine over each month's typical day, computes
-    the 4 Augustus Leon efficiencies (RSER 2002) and scales to monthly
-    operation with the configured number of batches. The per-month detail
-    is shown in P7.
-  batches:
-    label: Product batches per month
-    help: >-
-      Number of complete product batches assumed to run per month.
-      10 batches/month ≈ 1 batch every 3 days.
-  dias_batch:
-    label: Days/batch (approx.)
-    help: 30 days/month ÷ batches/month
+    Simulates the whole year hour by hour with real climate: the dryer chains
+    batches one after another, each taking however long it actually took. The
+    number of batches is a **result**, not an input.
+  recarga:
+    titulo: 🔁 Reload policy
+    caption: >-
+      When the next batch is loaded after unloading the previous one. Without
+      this the model reloads at the exact instant the batch ended — at 3 a.m. if
+      that is when it happened — which no operator does.
+    activa:
+      label: Wait for the loading hour
+      help: >-
+        If disabled, the next batch starts as soon as the previous one ends, at
+        any hour. That yields an upper bound on output, not an estimate.
+    hora:
+      label: Loading hour
+      help: Local hour of the day when batches are loaded. Default 8:00.
+    maniobra:
+      label: Turnaround [h]
+      help: >-
+        Unloading + loading time. The next batch cannot start before the
+        turnaround ends, and must also fall on the loading hour.
+    aviso_cota: >-
+      ⚠️ With no waiting, the dryer reloads at any hour (even overnight). The
+      resulting output is an **upper bound**, not an estimate.
   calcular:
-    label: 📅 Compute annual operation
+    label: ☀️ Run full year
     help: >-
-      Builds the chamber with the current widget values,
-      sets modo_calculo=thermodynamic and runs 12 simulations (~30 s).
-  error_config: "❌ Configuration error: {exc}"
+      Runs all 8760 h. The collector is evaluated with an interpolated response
+      surface (same model, ~48× faster); takes about 20 s.
+  spinner: Simulating the year hour by hour...
+  exito: ✅ Year simulated. See the monthly breakdown in P7.
   error: "❌ {exc}"
-  error_calculo: "❌ Error in annual calculation: {exc}"
-  spinner: Running the thermodynamic engine month by month...
-  exito: ✅ Annual operation computed. See monthly detail in P7.
-  resumen: "**Annual summary**"
-  kg_secados:
-    label: kg dried/year
-    help: Sum of kg of fresh product dried over the 12 months.
-  eta_total:
-    label: mean η_total
-    help: Overall system efficiency weighted by kg/month.
-  t_secado:
-    label: mean drying time
-    help: Average over months that converged to X_target.
-  e_solar:
-    label: Annual solar energy
-    help: On the collector plane during operating batches.
+  error_config: "❌ Invalid configuration: {exc}"
+  error_calculo: "❌ Error in the annual calculation: {exc}"
+  resumen: "**Year summary**"
+  producto_seco:
+    label: Dry product
+    help: >-
+      Mass of dried product unloaded during the year, at its target moisture.
+      It is NOT the evaporated water — they are different quantities and both
+      are shown.
+  agua_evaporada:
+    label: Evaporated water
+    help: Total water removed from the product during the year.
+  lotes:
+    label: Completed batches
+    frustrados: "{n} unfinished"
+    help: >-
+      Batches that reached the target moisture. Unfinished ones were loaded but
+      never got there with the weather they got.
+  duracion:
+    label: Mean duration
+    help: Mean drying time of the batches that completed.
+  cota_superior: >-
+    ⓘ The model reloads a batch as soon as the previous one ends, with no
+    shifts and no loading time, and starts batches even in bad weather. Output
+    is an **upper bound** on what is achievable.
 error_config: "❌ Configuration error: {exc}"
 advertencias_titulo: Design warnings
 sin_advertencias: ✅ Design with no warnings.
