@@ -313,6 +313,20 @@ ventana:
   graficas: Charts
   fig:
     perfil: Tunnel spatial profile (X and T per zone)
+operacion:
+  titulo: Assumed operation
+  recarga: Reloading
+  encadenado_inmediato: immediate chaining (upper bound on output)
+  hora_carga: Loading time
+  maniobra: Unload and reload turnaround
+  pronostico: Loading decision
+  pronostico_umbral: >-
+    only if the loading day exceeds {umbral} MJ/m² on the collector plane
+  pronostico_off: always loads, regardless of the forecast
+  nota_perfecto: >-
+    The forecast is perfect: the decision uses the irradiation the day actually
+    had, not a prediction with error. It is the upper bound of the right call
+    and slightly overestimates output.
 anual:
   titulo: Annual analysis (8760 h)
   pendiente: No annual results. Run the annual analysis in P4.

@@ -12,6 +12,8 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import ClassVar, Optional
 
+from core.operacion import PoliticaRecarga
+
 VERSION_SOFTWARE = "1.1.0"
 
 
@@ -95,6 +97,13 @@ class Configuracion:
             3600 si el modo es ANUAL. El paso sub-horario re-remuestrea desde
             ``Clima.datos_nativos`` cuando hay resolución nativa fina; si la fuente
             es horaria (NASA) se interpola con aviso de resolución sintética.
+        politica_recarga: Cómo opera el usuario el secador cuando se encadenan
+            lotes sobre clima real — hora de carga, maniobra y si se mira el
+            pronóstico antes de llenar. La leen el modo ANUAL y el modo VENTANA
+            de gran escala. Vive acá, junto a ``ventana_inicio``/``ventana_fin``,
+            porque es escenario de operación y no una propiedad física de la
+            cámara: hasta S58 solo existía en los widgets de P4 y se perdía al
+            guardar/cargar el proyecto (S59).
     """
 
     PASOS_TRABAJO_S: ClassVar[tuple[float, ...]] = (3600.0, 900.0, 600.0, 300.0)
@@ -107,6 +116,7 @@ class Configuracion:
     ventana_inicio: Optional[date] = None
     ventana_fin: Optional[date] = None
     paso_trabajo_s: float = 3600.0
+    politica_recarga: PoliticaRecarga = field(default_factory=PoliticaRecarga)
 
     def __post_init__(self) -> None:
         # Paso de trabajo (fase 1b): solo pasos discretos admitidos; ANUAL siempre

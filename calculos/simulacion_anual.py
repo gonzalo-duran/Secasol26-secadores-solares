@@ -200,7 +200,25 @@ class ResultadosAnual:
 SECCIONES_ANUAL = ("configuracion", "emplazamiento", "colector", "camara", "auxiliar")
 
 
-def hash_entradas_anual(proyecto: "Proyecto", politica=None) -> str:
+def _politica_del_proyecto(proyecto: "Proyecto", explicita=None):
+    """Política de recarga a usar: la explícita, o la del proyecto.
+
+    Args:
+        proyecto: Proyecto del que sale la política por defecto.
+        explicita: ``PoliticaRecarga`` pasada por el llamador, o None.
+
+    Returns:
+        La ``PoliticaRecarga`` efectiva.
+    """
+    if explicita is not None:
+        return explicita
+    from core.operacion import PoliticaRecarga
+
+    cfg = getattr(proyecto, "configuracion", None)
+    return getattr(cfg, "politica_recarga", None) or PoliticaRecarga()
+
+
+def hash_entradas_anual(proyecto: "Proyecto") -> str:
     """Huella de todo lo que determina el resultado del modo anual.
 
     El resultado anual se calcula en P4 y se **muestra** en P7 y en el reporte,
@@ -211,19 +229,19 @@ def hash_entradas_anual(proyecto: "Proyecto", politica=None) -> str:
     de configurar P5.
 
     Envuelve el mecanismo general de ``core.huellas`` fijando las secciones del
-    modo anual y sumando la política de recarga, que no es sección del proyecto
-    (vive en los widgets de P4).
+    modo anual. La política de recarga entra sola: desde S59 cuelga de
+    ``Configuracion``, y ``huella_entradas`` expande las dataclasses anidadas —
+    antes viajaba como ``extras`` porque vivía suelta en los widgets de P4.
 
     Args:
         proyecto: Proyecto a huellear.
-        politica: ``PoliticaRecarga`` usada (o None para la default).
 
     Returns:
         Hash SHA-256 hexadecimal.
     """
     from core.huellas import huella_entradas
 
-    return huella_entradas(proyecto, SECCIONES_ANUAL, extras={"politica": politica})
+    return huella_entradas(proyecto, SECCIONES_ANUAL)
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +410,12 @@ def simular_anual(
             de respuesta interpolada en vez de resolverse hora a hora — mismo
             modelo, ~48× más rápido sobre 8760 h. Ver
             ``calculos/superficie_colector.py``.
+        umbral_dia_operable_MJ_m2: Irradiación diaria mínima para contar el día
+            como operable [MJ/m²·día].
+        politica_recarga: ``PoliticaRecarga`` a usar. Si es None se toma la del
+            proyecto (``proyecto.configuracion.politica_recarga``), que es el
+            camino normal desde S59; el parámetro queda para que los tests
+            puedan barrer políticas sin construir un proyecto por cada una.
 
     Returns:
         ``ResultadosAnual`` con desagregación mensual y agregados del año.
@@ -474,7 +498,7 @@ def simular_anual(
         proyecto,
         forzantes_base=forzantes,
         P_Pa=P_Pa,
-        politica=politica_recarga,
+        politica=_politica_del_proyecto(proyecto, politica_recarga),
         hora_local_t0_h=hora_t0,
     )
     for a in res_v.advertencias:

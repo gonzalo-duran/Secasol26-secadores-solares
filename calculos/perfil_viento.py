@@ -16,6 +16,18 @@ la altura a la que la ingesta normaliza las series medidas. Todo consumidor que
 necesite el viento a otra altura debe pasar por este módulo declarando
 ``z_origen_m=Z_CONTRATO_M`` — nunca asumir 10 m.
 
+**Excepción deliberada — `h_w` de McAdams (ADR-006):** los siete call sites de
+``h_w = 5.7 + 3.8·v`` (colector Tipo 1, Tipos 2/3/4, pared y techo de cámara, film
+externo del caño maestro) **no** pasan por este módulo: consumen el viento de 2 m
+tal cual, aunque el equipo esté típicamente entre 0.5 y 1.5 m sobre el suelo. No es
+un olvido. La regla de arriba aplica al viento como **variable atmosférica** (el
+tope de la chimenea, la ingesta de series medidas), no a la ``v`` empírica de una
+correlación de film: McAdams no tiene altura de referencia —sale de Jürges (1924),
+placa de 0.5 m en túnel de viento con velocidad de corriente libre— y el scatter de
+esa familia de correlaciones (±30–50 %) se come el factor de perfil. El fundamento
+completo, la magnitud medida del sesgo y las condiciones para reabrir la decisión
+están en ``docs/decisiones.md``. **No "arreglar" la incoherencia sin leer el ADR.**
+
 Perfil de capa límite neutra (Monin-Obukhov simplificado, estratificación neutra):
 
     v(z) = v(z_ref) · ln(z/z₀) / ln(z_ref/z₀)

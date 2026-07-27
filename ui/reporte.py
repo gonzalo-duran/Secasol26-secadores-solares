@@ -1302,7 +1302,13 @@ def _seccion_resultados_globales(
     return elems
 
 
-def _seccion_ventana(styles, tr: Tr, snap_ventana: dict, figuras: list[tuple[str, bytes]]) -> list:
+def _seccion_ventana(
+    styles,
+    tr: Tr,
+    snap_ventana: dict,
+    figuras: list[tuple[str, bytes]],
+    politica: dict | None = None,
+) -> list:
     """Sección de producción en ventana (gran escala, batch/semicontinuo).
 
     Consume el snapshot ``resultado_ventana`` de ``_json_resultado_ventana``
@@ -1387,6 +1393,11 @@ def _seccion_ventana(styles, tr: Tr, snap_ventana: dict, figuras: list[tuple[str
                 )
             )
 
+    # La política solo rige el encadenado de lotes: el túnel semicontinuo avanza
+    # columnas por cadencia, así que informarla ahí sería engañoso.
+    if str(snap_ventana.get("subtipo", "")).upper() == "BATCH":
+        elems += _bloque_politica_recarga(styles, tr, politica)
+
     # Caño maestro: diagnóstico térmico/hidráulico sobre el lapso.
     if snap_ventana.get("cano_delta_P_Pa") is not None:
         elems.append(Spacer(1, 6))
@@ -1426,8 +1437,64 @@ def _seccion_ventana(styles, tr: Tr, snap_ventana: dict, figuras: list[tuple[str
     return elems
 
 
+def _politica_snapshot(snap_full: dict) -> dict | None:
+    """Política de recarga del snapshot completo (None si no la trae).
+
+    Vive bajo ``configuracion`` porque cuelga de ``Configuracion`` desde S59.
+    Los snapshots anteriores no la tienen y el bloque simplemente no se dibuja.
+    """
+    return (snap_full.get("configuracion") or {}).get("politica_recarga")
+
+
+def _bloque_politica_recarga(styles, tr: Tr, politica: dict | None) -> list:
+    """Tabla con la operación que produjo el resultado (política de recarga).
+
+    Un reporte que dice "169 lotes" sin decir a qué hora se carga, cuánto dura
+    la maniobra y si se miró el pronóstico no es reproducible: esos cuatro
+    valores mueven el conteo de lotes tanto como el tamaño del colector. Los
+    snapshots TXT/JSON ya la traían desde S59; el PDF mostraba
+    ``dias_salteados_pronostico`` sin decir contra qué umbral (S59).
+
+    Args:
+        styles: Estilos del documento.
+        tr: Traductor del reporte.
+        politica: Dict de ``PoliticaRecarga.a_dict()``, o None si el snapshot es
+            anterior a S59 (en ese caso no se dibuja nada).
+
+    Returns:
+        Lista de flowables; vacía si no hay política que informar.
+    """
+    if not politica:
+        return []
+    if not politica.get("activa", True):
+        filas = [[tr("operacion.recarga"), tr("operacion.encadenado_inmediato")]]
+    else:
+        filas = [
+            [tr("operacion.hora_carga"), f"{_fmt(politica.get('hora_carga_h'))} h"],
+            [tr("operacion.maniobra"), f"{_fmt(politica.get('maniobra_h'))} h"],
+        ]
+    if politica.get("exigir_pronostico", False):
+        filas.append(
+            [
+                tr("operacion.pronostico"),
+                tr(
+                    "operacion.pronostico_umbral",
+                    umbral=_fmt(politica.get("umbral_pronostico_MJ_m2")),
+                ),
+            ]
+        )
+    else:
+        filas.append([tr("operacion.pronostico"), tr("operacion.pronostico_off")])
+
+    elems: list = [Spacer(1, 6), Paragraph(tr("operacion.titulo"), styles["h2"])]
+    elems.append(_tabla_kv(filas))
+    if politica.get("exigir_pronostico", False):
+        elems.append(Paragraph(tr("operacion.nota_perfecto"), styles["caption"]))
+    return elems
+
+
 def _seccion_operacion_anual(
-    styles, tr: Tr, snap_anual: dict, figuras: list[tuple[str, bytes]]
+    styles, tr: Tr, snap_anual: dict, figuras: list[tuple[str, bytes]], politica: dict | None = None
 ) -> list:
     """Sección de operación anual de cámara (eficiencias Augustus Leon).
 
@@ -1461,6 +1528,7 @@ def _seccion_operacion_anual(
     ]
     elems.append(_tabla_kv(rows))
     elems.append(Paragraph(tr("anual.cota_superior"), styles["caption"]))
+    elems += _bloque_politica_recarga(styles, tr, politica)
 
     puntos = snap_anual.get("puntos_mensuales") or []
     if puntos:
@@ -2033,6 +2101,7 @@ def generar_reporte_pdf(
         story += _seccion_ventana(
             styles,
             tr,
+            politica=_politica_snapshot(snap_full),
             snap_ventana=snap_full.get("resultado_ventana") or {},
             figuras=figs_ventana,
         )
@@ -2053,6 +2122,7 @@ def generar_reporte_pdf(
             tr,
             snap_anual=snap_full.get("operacion_anual") or {},
             figuras=figs_anual,
+            politica=_politica_snapshot(snap_full),
         )
 
     # 9. Validación con datos medidos (solo si el usuario validó/calibró algo)

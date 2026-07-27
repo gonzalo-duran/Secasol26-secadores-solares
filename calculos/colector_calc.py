@@ -161,14 +161,28 @@ def _h_viento_W_m2K(v_viento_ms: float) -> tuple[float, list[str]]:
     Válida estrictamente para v < 5 m/s. Para v ≥ 5 m/s se aplica la misma
     expresión pero se emite advertencia COL_VIENTO_FUERA_RANGO_MCADAMS.
 
+    **La velocidad NO se corrige a la altura del colector, a propósito** (ADR-006).
+    El viento llega referido a 2 m (contrato de `Clima`, ver `perfil_viento`) y el
+    colector suele estar entre 0.5 y 1.5 m sobre el suelo, así que el perfil
+    logarítmico daría un factor de 0.6 a 0.9. No se aplica porque McAdams no tiene
+    altura de referencia: sale de Jürges (1924), placa de 0.5 m en túnel de viento
+    con velocidad de corriente libre. El scatter de esta familia de correlaciones
+    (±30–50 %, Palyvos 2008) se come la corrección, y la literatura solar de la que
+    salen los `F_R·U_L` de contraste la aplica con el viento de estación
+    meteorológica. El sesgo resultante sobrestima las pérdidas —subestima el
+    rendimiento— en 0.5 a 5 % de Q_util según altura y rugosidad.
+
     Args:
-        v_viento_ms: Velocidad del viento a 2 m de altura [m/s].
+        v_viento_ms: Velocidad del viento a 2 m de altura [m/s], sin corregir a la
+            altura de montaje del colector (ver arriba).
 
     Returns:
         Tupla (h_wind [W/m²·K], lista_advertencias).
 
     References:
         McAdams, W.H. (1954). Heat Transmission, 3ª ed. McGraw-Hill.
+        Palyvos, J.A. (2008). A survey of wind convection coefficient correlations
+            for building envelope energy systems' modeling. Appl. Therm. Eng. 28.
     """
     advertencias: list[str] = []
     if v_viento_ms >= V_VIENTO_LIMITE_MCADAMS:

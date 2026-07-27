@@ -156,7 +156,11 @@ def delta_T_cano_maestro(
         T_amb_K: Temperatura ambiente [K].
         I_g_W_m2: Irradiancia global sobre la cara superior del caño [W/m²].
         m_dot_as_kg_s: Caudal másico de aire seco total [kg/s].
-        v_viento_ms: Velocidad del viento [m/s] (para h_w McAdams).
+        v_viento_ms: Velocidad del viento [m/s] (para h_w McAdams). Referido a 2 m
+            y **sin corregir a la altura del caño**, a propósito (ADR-006). De todos
+            los consumidores de McAdams éste es el más sensible: con chapa desnuda
+            ``1/h_w`` es el 59 % de la resistencia total a v = 3 m/s, y un cambio de
+            20 % en ``h_w`` mueve U un 8 %. Aislado cae al 8 %.
         P_Pa: Presión total [Pa] (para ρ del film interno).
 
     Returns:

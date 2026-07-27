@@ -295,7 +295,12 @@ def _T_cielo_K(T_amb_K: float) -> float:
 
 
 def _h_viento_W_m2K(v_viento_ms: float) -> tuple[float, list[str]]:
-    """h_wind por McAdams (1954). Retorna (h [W/m²K], advertencias)."""
+    """h_wind por McAdams (1954). Retorna (h [W/m²K], advertencias).
+
+    ``v_viento_ms`` viene referido a 2 m y **no se corrige a la altura del
+    colector**, a propósito: ver ADR-006 y el docstring de
+    :func:`calculos.colector_calc._h_viento_W_m2K` para el fundamento.
+    """
     advertencias: list[str] = []
     if v_viento_ms >= V_VIENTO_LIMITE_MCADAMS:
         advertencias.append(

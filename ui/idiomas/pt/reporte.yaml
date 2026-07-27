@@ -313,6 +313,20 @@ ventana:
   graficas: Gráficos
   fig:
     perfil: Perfil espacial do túnel (X e T por zona)
+operacion:
+  titulo: Operação assumida
+  recarga: Recarga
+  encadenado_inmediato: encadeamento imediato (cota superior de produção)
+  hora_carga: Hora de carga
+  maniobra: Manobra de descarga e recarga
+  pronostico: Decisão de carregar
+  pronostico_umbral: >-
+    apenas se o dia de carga superar {umbral} MJ/m² sobre o plano do coletor
+  pronostico_off: carrega sempre, sem olhar a previsão
+  nota_perfecto: >-
+    A previsão é perfeita: a decisão usa a irradiação que o dia efetivamente
+    teve, não uma predição com erro. É a cota superior da boa decisão e
+    superestima levemente a produção.
 anual:
   titulo: Análise anual (8760 h)
   pendiente: Sem resultados anuais. Rode a análise anual em P4.

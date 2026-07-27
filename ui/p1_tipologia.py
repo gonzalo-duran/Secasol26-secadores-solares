@@ -448,6 +448,12 @@ def render() -> None:
                 ventana_inicio=ventana_inicio_sel,
                 ventana_fin=ventana_fin_sel,
                 paso_trabajo_s=paso_sel,
+                # P1 reconstruye la configuración campo por campo en CADA rerun
+                # (todas las pestañas se renderizan siempre), así que todo campo
+                # que no se propague explícitamente vuelve a su default. La
+                # política de recarga la escribe P4, no esta pestaña: hay que
+                # arrastrarla o se pierde entre reruns.
+                politica_recarga=proyecto.configuracion.politica_recarga,
             )
             proyecto.configuracion = nueva_cfg
         except (ValueError, NotImplementedError) as exc:

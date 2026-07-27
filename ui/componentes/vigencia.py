@@ -35,10 +35,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
-#: Política de recarga con la que P4 corrió el año. No es sección del proyecto
-#: (vive en los widgets de P4), así que viaja aparte y entra como extra.
-CLAVE_POLITICA = "p4_politica_recarga"
-
 #: Secciones que determinan cualquier cosa calculada sobre el aire que entra a
 #: la cámara: la configuración fija tipología y modo, el emplazamiento la
 #: posición solar y la presión, y colector y cámara el propio circuito.
@@ -228,32 +224,24 @@ def invalidar(session_state, nombre: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def politica_anual_guardada(session_state) -> Any:
-    """Política de recarga con la que se corrió el año (None si no hay)."""
-    return session_state.get(CLAVE_POLITICA)
+def registrar_anual(session_state, resultado, proyecto) -> None:
+    """Guarda el resultado anual y su huella.
 
-
-def extras_anual(session_state) -> dict[str, Any]:
-    """Extras del resultado anual: la política con la que se corrió."""
-    return {"politica": politica_anual_guardada(session_state)}
-
-
-def registrar_anual(session_state, resultado, proyecto, politica=None) -> None:
-    """Guarda el resultado anual, la política usada y la huella.
+    La política de recarga ya no viaja aparte: desde S59 cuelga de
+    ``Configuracion``, que es una de las secciones huelleadas, así que cambiarla
+    invalida el resultado igual que cambiar el colector.
 
     Args:
         session_state: ``st.session_state`` (o un dict, para tests).
         resultado: ``ResultadosAnual`` recién calculado.
         proyecto: Proyecto con el que se corrió el año.
-        politica: ``PoliticaRecarga`` usada (None = la default del motor).
     """
-    session_state[CLAVE_POLITICA] = politica
-    registrar(session_state, "anual", resultado, proyecto, extras={"politica": politica})
+    registrar(session_state, "anual", resultado, proyecto)
 
 
 def resultado_anual_vigente(proyecto, session_state) -> tuple[Optional[Any], bool]:
     """Resultado anual guardado y si sigue correspondiendo a la configuración."""
-    return estado(proyecto, session_state, "anual", extras=extras_anual(session_state))
+    return estado(proyecto, session_state, "anual")
 
 
 def horizonte_vigente(proyecto, session_state) -> tuple[Optional[Any], dict, bool]:

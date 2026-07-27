@@ -18,6 +18,7 @@ from core.auxiliar import Auxiliar, CargaArranque, ModoOperacionAuxiliar, TipoAu
 from core.camara import Camara, CargaProducto, ConfiguracionFlujo, GeometriaCamara
 from core.colector import BancoColectores, Colector, ColectorUnidad
 from core.emplazamiento import Emplazamiento
+from core.operacion import PoliticaRecarga
 from core.proyecto import (
     Configuracion,
     DiaAnalisis,
@@ -39,6 +40,14 @@ def _proyecto_completo() -> Proyecto:
             tipologia=Tipologia.ARMARIO,
             modo_analisis=ModoAnalisis.ANUAL,
             dia_analisis=DiaAnalisis.SOLSTICIO_INVIERNO,
+            # Todos los campos distintos del default: si el round-trip los
+            # perdiera, volverían a 8:00 / 1 h / pronóstico on / 8 MJ.
+            politica_recarga=PoliticaRecarga(
+                hora_carga_h=6.5,
+                maniobra_h=2.0,
+                exigir_pronostico=False,
+                umbral_pronostico_MJ_m2=12.0,
+            ),
         )
     )
     p.meta.nombre = "Secador de prueba"
@@ -163,6 +172,29 @@ class TestRoundTrip:
         assert carg.auxiliar.set_point_T_K == pytest.approx(orig.auxiliar.set_point_T_K)
         assert len(carg.auxiliar.cargas_arranque) == len(orig.auxiliar.cargas_arranque)
         assert carg.auxiliar.cargas_arranque[0].hora_inicio_h == pytest.approx(5.0)
+
+    def test_politica_de_recarga(self, _ida_y_vuelta):
+        """La operación se perdía al guardar/cargar: vivía en los widgets (S59).
+
+        Sin esto, reabrir el proyecto y recalcular el año daba otro número que el
+        del reporte guardado, sin ningún aviso.
+        """
+        orig, carg, _ = _ida_y_vuelta
+        assert carg.configuracion.politica_recarga == orig.configuracion.politica_recarga
+
+    def test_un_snapshot_sin_politica_usa_los_defaults(self):
+        """Proyectos guardados antes de S59: los defaults son los que usaron."""
+        datos = _exportar(_proyecto_completo())
+        del datos["configuracion"]["politica_recarga"]
+        proy, avisos = cargar_proyecto_completo(datos)
+        assert proy.configuracion.politica_recarga == PoliticaRecarga()
+        assert avisos == []
+
+    def test_una_politica_corrupta_es_explicita(self):
+        datos = _exportar(_proyecto_completo())
+        datos["configuracion"]["politica_recarga"]["hora_carga_h"] = 25.0
+        with pytest.raises(ErrorCargaProyecto, match="CARGA_POLITICA_INVALIDA"):
+            cargar_proyecto_completo(datos)
 
     def test_el_hash_anual_coincide(self, _ida_y_vuelta):
         """La prueba fuerte: el proyecto cargado es el mismo para el motor.

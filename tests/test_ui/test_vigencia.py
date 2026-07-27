@@ -143,11 +143,22 @@ class TestCompatAnual:
     def test_registrar_anual_y_vigencia(self):
         proy = _proyecto()
         estado_ss: dict = {}
-        vigencia.registrar_anual(estado_ss, "RES_ANUAL", proy, politica=None)
+        vigencia.registrar_anual(estado_ss, "RES_ANUAL", proy)
         val, vig = vigencia.resultado_anual_vigente(proy, estado_ss)
         assert val == "RES_ANUAL" and vig is True
 
-    def test_registrar_anual_guarda_la_politica(self):
+    def test_cambiar_la_politica_invalida_el_anual(self):
+        """La política dejó de viajar aparte: al vivir en `Configuracion`, la
+        huella de la sección la detecta sola (S59)."""
+        from dataclasses import replace
+
+        from core.operacion import PoliticaRecarga
+
+        proy = _proyecto()
         estado_ss: dict = {}
-        vigencia.registrar_anual(estado_ss, "RES", _proyecto(), politica="POL")
-        assert vigencia.politica_anual_guardada(estado_ss) == "POL"
+        vigencia.registrar_anual(estado_ss, "RES", proy)
+        proy.configuracion = replace(
+            proy.configuracion, politica_recarga=PoliticaRecarga(hora_carga_h=6.0)
+        )
+        _val, vig = vigencia.resultado_anual_vigente(proy, estado_ss)
+        assert vig is False

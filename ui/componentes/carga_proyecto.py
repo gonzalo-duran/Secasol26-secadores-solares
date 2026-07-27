@@ -98,6 +98,15 @@ def _reconstruir_configuracion(datos: dict):
             kwargs[campo] = fecha
     if datos.get("paso_trabajo_s") is not None:
         kwargs["paso_trabajo_s"] = float(datos["paso_trabajo_s"])
+    # Política de recarga (S59). Los snapshots anteriores no la traen: en ese
+    # caso `desde_dict` devuelve los defaults, que son los que esas corridas
+    # usaron de hecho, así que el proyecto viejo se reproduce igual.
+    from core.operacion import PoliticaRecarga
+
+    try:
+        kwargs["politica_recarga"] = PoliticaRecarga.desde_dict(datos.get("politica_recarga"))
+    except (TypeError, ValueError) as exc:
+        raise ErrorCargaProyecto(f"CARGA_POLITICA_INVALIDA: {exc}") from exc
     return Configuracion(**kwargs)
 
 

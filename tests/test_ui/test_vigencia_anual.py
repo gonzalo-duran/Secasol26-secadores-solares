@@ -9,6 +9,8 @@ mismo PDF, ``0.0 MJ``.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from calculos.simulacion_anual import hash_entradas_anual
@@ -19,7 +21,6 @@ from core.emplazamiento import Emplazamiento
 from core.proyecto import Configuracion, Proyecto, Tipologia
 from ui.componentes.vigencia import (
     CLAVE_HASH,
-    CLAVE_POLITICA,
     CLAVE_RESULTADO,
     resultado_anual_vigente,
 )
@@ -76,16 +77,26 @@ class TestHashEntradasAnual:
         assert hash_entradas_anual(proy) != antes
 
     def test_cambiar_la_politica_cambia_el_hash(self):
+        """La política vive en `Configuracion` (S59): entra al hash por la sección."""
         proy = _proyecto_base()
-        h_default = hash_entradas_anual(proy, PoliticaRecarga())
-        h_otra = hash_entradas_anual(proy, PoliticaRecarga(hora_carga_h=6.0))
-        assert h_default != h_otra
+        h_default = hash_entradas_anual(proy)
+        proy.configuracion = replace(
+            proy.configuracion, politica_recarga=PoliticaRecarga(hora_carga_h=6.0)
+        )
+        assert hash_entradas_anual(proy) != h_default
 
     def test_el_umbral_de_pronostico_entra_al_hash(self):
         proy = _proyecto_base()
-        h1 = hash_entradas_anual(proy, PoliticaRecarga(umbral_pronostico_MJ_m2=8.0))
-        h2 = hash_entradas_anual(proy, PoliticaRecarga(umbral_pronostico_MJ_m2=15.0))
-        assert h1 != h2
+        proy.configuracion = replace(
+            proy.configuracion,
+            politica_recarga=PoliticaRecarga(umbral_pronostico_MJ_m2=8.0),
+        )
+        h1 = hash_entradas_anual(proy)
+        proy.configuracion = replace(
+            proy.configuracion,
+            politica_recarga=PoliticaRecarga(umbral_pronostico_MJ_m2=15.0),
+        )
+        assert hash_entradas_anual(proy) != h1
 
     def test_no_revienta_sin_clima_ni_colector(self):
         assert isinstance(hash_entradas_anual(Proyecto()), str)
@@ -100,8 +111,7 @@ class TestResultadoAnualVigente:
         proy = _proyecto_base()
         estado = {
             CLAVE_RESULTADO: "resultado",
-            CLAVE_HASH: hash_entradas_anual(proy, None),
-            CLAVE_POLITICA: None,
+            CLAVE_HASH: hash_entradas_anual(proy),
         }
         res, vigente = resultado_anual_vigente(proy, estado)
         assert res == "resultado" and vigente is True
@@ -111,8 +121,7 @@ class TestResultadoAnualVigente:
         proy = _proyecto_base()
         estado = {
             CLAVE_RESULTADO: "resultado",
-            CLAVE_HASH: hash_entradas_anual(proy, None),
-            CLAVE_POLITICA: None,
+            CLAVE_HASH: hash_entradas_anual(proy),
         }
         proy.auxiliar = _auxiliar_del_usuario()
         res, vigente = resultado_anual_vigente(proy, estado)

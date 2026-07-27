@@ -30,6 +30,7 @@ import numpy as np
 from calculos.camara_calc import calcular_camara, calcular_camara_cascada
 from calculos.psicrometria import HR_desde_omega
 from core.camara import ForzantesAire
+from core.operacion import PoliticaRecarga
 from core.proyecto import SubtipoGranEscala
 
 if TYPE_CHECKING:
@@ -163,62 +164,11 @@ class ResultadoVentana:
     camara_directa: bool = False
 
 
-@dataclass(frozen=True)
-class PoliticaRecarga:
-    """Cuándo se carga el lote siguiente después de descargar el anterior.
-
-    Sin política, el encadenado recarga **en el instante exacto** en que termina
-    el lote previo: si uno cierra a las 3 de la madrugada, el siguiente arranca
-    a las 3 de la madrugada y quema horas sin sol hasta que amanezca. Ningún
-    operador hace eso — descarga y recarga de mañana. Modelar la espera baja la
-    producción hacia lo realista (S57, a pedido del usuario).
-
-    Además del *cuándo* horario, la política cubre el **si conviene cargar**: un
-    operador no llena el secador un día que viene nublado. Ver
-    ``exigir_pronostico`` y :func:`_energia_diaria_POA`.
-
-    Attributes:
-        activa: Si es False se conserva el encadenado inmediato (cota superior).
-        hora_carga_h: Hora local del día en que se cargan los lotes [0, 24).
-        maniobra_h: Tiempo de descarga + recarga [h]. El lote siguiente no puede
-            empezar antes de ``t_fin + maniobra_h``, y además debe caer en la
-            hora de carga.
-        exigir_pronostico: Si es True, un lote solo se carga cuando la
-            irradiación del **día de carga** sobre el plano del colector supera
-            ``umbral_pronostico_MJ_m2``; si no, se espera al día siguiente. Con
-            False se carga siempre, que era el comportamiento hasta S58.
-        umbral_pronostico_MJ_m2: Irradiación diaria mínima en el plano del
-            colector para decidir cargar [MJ/m²·día].
-
-    Note:
-        **El pronóstico es perfecto.** La decisión se toma con la irradiación
-        que el día efectivamente va a tener, no con una predicción con error.
-        Es una idealización deliberada (elegida por el usuario en S58): da la
-        **cota superior de la buena decisión** —el operador que nunca se
-        equivoca— y por lo tanto sobrestima levemente la producción respecto de
-        una operación real, que carga algún día que sale nublado y saltea algún
-        día que sale bueno. El sentido del sesgo es opuesto al de ``activa`` y
-        ambos son chicos frente a la variabilidad interanual del recurso.
-    """
-
-    activa: bool = True
-    hora_carga_h: float = 8.0
-    maniobra_h: float = 1.0
-    exigir_pronostico: bool = True
-    umbral_pronostico_MJ_m2: float = 8.0
-
-    def __post_init__(self) -> None:
-        if not (0.0 <= self.hora_carga_h < 24.0):
-            raise ValueError(
-                f"RECARGA_HORA_INVALIDA: hora_carga_h={self.hora_carga_h} fuera de [0, 24)."
-            )
-        if self.maniobra_h < 0.0:
-            raise ValueError(f"RECARGA_MANIOBRA_NEGATIVA: maniobra_h={self.maniobra_h} < 0.")
-        if self.umbral_pronostico_MJ_m2 < 0.0:
-            raise ValueError(
-                f"RECARGA_UMBRAL_NEGATIVO: umbral_pronostico_MJ_m2="
-                f"{self.umbral_pronostico_MJ_m2} < 0."
-            )
+# `PoliticaRecarga` nació acá en S57, pero es modelo de datos: cuelga de
+# `Configuracion.politica_recarga`, viaja en el snapshot del proyecto y entra en la
+# huella de vigencia (S59). Vive en `core/operacion.py`; se reexporta desde este
+# módulo porque es su consumidor natural y hay código (y snapshots de tests) que la
+# importa de acá.
 
 
 def _proximo_instante_carga(
@@ -349,16 +299,27 @@ def simular_ventana(
     *,
     forzantes_base: ForzantesAire,
     P_Pa: float = 101325.0,
+    hora_local_t0_h: float = 0.0,
 ) -> ResultadoVentana:
     """Acumula la producción del secador de gran escala sobre la ventana.
 
     Despacha según ``proyecto.configuracion.subtipo_gran_escala``.
+
+    La rama BATCH encadena lotes, así que obedece la
+    ``Configuracion.politica_recarga`` del proyecto — la misma que usa el modo
+    anual. Hasta S58 este pipeline no la leía y quedaba clavado en los defaults
+    del motor, sin ningún widget que la gobernara: misma física que el anual con
+    la operación fija.
 
     Args:
         proyecto: Proyecto GRAN_ESCALA con cámara configurada.
         forzantes_base: Forzantes del aire sobre la ventana (T_ent = salida del
             colector/auxiliar; horizonte = duración de la ventana).
         P_Pa: Presión representativa [Pa].
+        hora_local_t0_h: Hora local del día que corresponde a ``t = 0`` [h]. La
+            política razona en hora local del sitio ("cargar a las 8" es 8 de la
+            mañana en Salta, no en UTC), así que sin esta ancla la hora de carga
+            se interpreta contra el inicio de la ventana.
 
     Returns:
         ResultadoVentana con producción acumulada, tasa de régimen y diagnósticos.
@@ -382,8 +343,17 @@ def simular_ventana(
     )
 
     if subtipo == SubtipoGranEscala.SEMICONTINUO:
+        # El túnel no encadena lotes: avanza columnas por cadencia. La política
+        # de recarga no aplica.
         return _simular_ventana_semicontinuo(proyecto, forzantes_base, P_Pa, res)
-    return _simular_ventana_batch(proyecto, forzantes_base, P_Pa, res)
+    return _simular_ventana_batch(
+        proyecto,
+        forzantes_base,
+        P_Pa,
+        res,
+        getattr(cfg, "politica_recarga", None),
+        hora_local_t0_h,
+    )
 
 
 def simular_encadenado_lotes(

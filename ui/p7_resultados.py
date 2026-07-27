@@ -37,7 +37,6 @@ from ui.componentes.vigencia import (
     extras_horizonte,
     horizonte_vigente,
     invalidar,
-    politica_anual_guardada,
     registrar,
     registrar_anual,
     resultado_anual_vigente,
@@ -644,6 +643,24 @@ def _bloque_meta_emplazamiento_clima(proyecto) -> tuple[list[str], dict]:
             lines.append(f"  Paso de trabajo     : {float(_paso_s) / 60.0:.0f} min")
         if _paso_s is not None:
             json_cfg["paso_trabajo_s"] = float(_paso_s)
+        # Política de recarga: cómo se opera el secador cuando se encadenan lotes
+        # (modos ANUAL y VENTANA). Sin esto en el snapshot, reabrir el proyecto y
+        # recalcular daba otro número que el del reporte guardado (S59).
+        _pol = getattr(cfg, "politica_recarga", None)
+        if _pol is not None:
+            json_cfg["politica_recarga"] = _pol.a_dict()
+            if _pol.activa:
+                lines.append(
+                    f"  Carga de lotes      : {_pol.hora_carga_h:04.1f} h local, "
+                    f"maniobra {_pol.maniobra_h:.1f} h"
+                )
+            else:
+                lines.append("  Carga de lotes      : encadenado inmediato (cota superior)")
+            if _pol.exigir_pronostico:
+                lines.append(
+                    f"  Pronóstico de carga : exige ≥ {_pol.umbral_pronostico_MJ_m2:.1f} "
+                    "MJ/m² el día de carga (pronóstico perfecto)"
+                )
     else:
         lines.append("  (sin configurar)")
 
@@ -2629,17 +2646,18 @@ def _recalcular_anual(proyecto) -> None:
     if datos is None:
         st.error(t("p7.anual_det.recalcular_sin_clima"))
         return
-    politica = politica_anual_guardada(st.session_state)
+    # La política sale del proyecto (S59): recalcular acá usa exactamente la
+    # misma operación que P4, sin que P7 tenga que acordarse de nada.
     with st.spinner(t("p7.anual_det.recalculando")):
         try:
-            res = simular_anual(proyecto, datos, politica_recarga=politica)
+            res = simular_anual(proyecto, datos)
         except ValueError as exc:
             st.error(f"❌ {exc}")  # i18n: exento (mensaje de calculos/, queda ES)
             return
         except Exception as exc:
             st.error(t("p7.anual_det.recalcular_error", exc=exc))
             return
-    registrar_anual(st.session_state, res, proyecto, politica)
+    registrar_anual(st.session_state, res, proyecto)
 
 
 def _render_operacion_anual_detalle(proyecto) -> None:

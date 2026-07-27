@@ -350,3 +350,67 @@ def test_ventana_1h_vs_15min_converge():
     assert len(df_q) > 3 * len(df_h)
     # Masa seca producida coherente entre pasos (tolerancia amplia: distinta grilla).
     assert res_q.masa_seca_producida_kg == pytest.approx(res_h.masa_seca_producida_kg, rel=0.10)
+
+
+class TestPoliticaRecargaEnVentana:
+    """El modo VENTANA obedece la política del proyecto (S59).
+
+    Hasta S58 este pipeline nunca leía la política: `simular_ventana` llamaba a
+    la rama batch sin pasarla, así que quedaba clavada en los defaults del motor
+    y ningún widget la gobernaba — misma física que el modo anual, con la
+    operación fija.
+    """
+
+    @staticmethod
+    def _con_politica(politica) -> Proyecto:
+        from dataclasses import replace as _replace
+
+        proy = _proyecto(SubtipoGranEscala.BATCH, masa_total_kg=40.0)
+        proy.configuracion = _replace(proy.configuracion, politica_recarga=politica)
+        return proy
+
+    def test_desactivar_la_espera_no_baja_la_produccion(self):
+        """Sin espera de recarga el encadenado es inmediato: es la cota superior."""
+        from core.operacion import PoliticaRecarga
+
+        df = _clima_sintetico(dias=6)
+        con_espera = calcular_todo_ventana(
+            self._con_politica(PoliticaRecarga(activa=True)), df, P_Pa=88000.0
+        )
+        sin_espera = calcular_todo_ventana(
+            self._con_politica(PoliticaRecarga(activa=False)), df, P_Pa=88000.0
+        )
+        assert con_espera.status != "error" and sin_espera.status != "error"
+        assert sin_espera.masa_seca_producida_kg >= con_espera.masa_seca_producida_kg
+
+    def test_la_hora_de_carga_llega_al_motor(self):
+        """Cambiar solo la hora de carga tiene que cambiar el resultado."""
+        from core.operacion import PoliticaRecarga
+
+        df = _clima_sintetico(dias=6)
+        temprano = calcular_todo_ventana(
+            self._con_politica(PoliticaRecarga(hora_carga_h=6.0)), df, P_Pa=88000.0
+        )
+        tarde = calcular_todo_ventana(
+            self._con_politica(PoliticaRecarga(hora_carga_h=18.0)), df, P_Pa=88000.0
+        )
+        assert temprano.status != "error" and tarde.status != "error"
+        lotes_temprano = [(lote.t_inicio_s, lote.t_fin_s) for lote in temprano.lotes]
+        lotes_tarde = [(lote.t_inicio_s, lote.t_fin_s) for lote in tarde.lotes]
+        assert lotes_temprano != lotes_tarde, "la hora de carga no llegó al encadenado"
+
+    def test_el_semicontinuo_ignora_la_politica(self):
+        """El túnel no encadena lotes: avanza columnas por cadencia."""
+        from core.operacion import PoliticaRecarga
+
+        df = _clima_sintetico(dias=4)
+        proy_a = _proyecto(SubtipoGranEscala.SEMICONTINUO, con_tunel=True)
+        proy_b = _proyecto(SubtipoGranEscala.SEMICONTINUO, con_tunel=True)
+        from dataclasses import replace as _replace
+
+        proy_b.configuracion = _replace(
+            proy_b.configuracion, politica_recarga=PoliticaRecarga(activa=False)
+        )
+        res_a = calcular_todo_ventana(proy_a, df, P_Pa=88000.0)
+        res_b = calcular_todo_ventana(proy_b, df, P_Pa=88000.0)
+        assert res_a.masa_seca_producida_kg == pytest.approx(res_b.masa_seca_producida_kg)
