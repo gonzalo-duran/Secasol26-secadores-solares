@@ -74,6 +74,11 @@ perdidas:
       - 2 × 90° elbows (C=0.9 each): {codos:.1f} Pa
       - Bank→duct manifold, junction (C=1.5): {manifold:.1f} Pa
       - Chamber inlet diffuser (C=0.3): {difusor:.1f} Pa
+    bocas: >-
+      ↳ **Chamber openings (P4): {dp:.1f} Pa** — inlet {a_in:.4f} m² / outlet
+      {a_out:.4f} m². Computed on the actual area, they replace the entry, exit
+      and diffuser terms above (which estimate them from the duct velocity, i.e.
+      assuming openings the size of the duct).
   total_preview: >-
     **Estimated total ΔP: {total:.1f} Pa** (col={col:.1f} + cham={cam:.1f} +
     duct={duc:.1f} + minor={sing:.1f})

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from calculos.propiedades_aire import (
+    beta_aire,
     cp_aire,
     k_aire,
     mu_aire,
@@ -52,3 +53,25 @@ def test_propiedades_aire_dict_consistente():
     assert p["pr"] == pr_aire(330.0)
     assert p["cp"] == cp_aire(330.0)
     assert p["rho"] == rho_aire(330.0, 90000.0)
+
+
+def test_beta_gas_ideal():
+    """β = 1/T para gas ideal (Incropera Ec. 9.9)."""
+    assert beta_aire(300.0) == pytest.approx(1.0 / 300.0)
+    assert beta_aire(323.15) == pytest.approx(1.0 / 323.15)
+
+
+def test_beta_decrece_con_T():
+    """A mayor temperatura, menor expansión relativa por grado."""
+    assert beta_aire(350.0) < beta_aire(290.0)
+
+
+def test_PROP_AIRE_T_NO_POSITIVA():
+    """T ≤ 0 K no tiene β definido."""
+    with pytest.raises(ValueError, match="PROP_AIRE_T_NO_POSITIVA"):
+        beta_aire(0.0)
+
+
+def test_propiedades_aire_incluye_beta():
+    """El dict agregado trae β consistente con la función individual."""
+    assert propiedades_aire(330.0, 90000.0)["beta"] == beta_aire(330.0)

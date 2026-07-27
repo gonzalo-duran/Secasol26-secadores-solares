@@ -226,9 +226,30 @@ flujo:
     desacoplado: >-
       ⚠️ The chamber flow is not the bank's. That is valid if there is mixing
       with ambient air; otherwise the collector will run off its design point.
+  renovaciones:
+    label: Air changes per minute [1/min]
+    help: >-
+      How many times per minute the chamber air volume is renewed. It is the
+      way to size a passive dryer: asking for a flow rate in kg/s has no anchor
+      when nothing imposes it. A box driven by thermal draft falls in **1–2 air
+      changes/min**; the factory default in kg/s was equivalent to ~12, an order
+      of magnitude too high, and made the P4 preview estimate half the drying
+      time of P7.
+    equivalencia: >-
+      Equivalent to {m:.4f} kg/s (volume {V:.3f} m³ × ρ {rho:.3f} kg/m³ at the
+      representative ambient temperature).
   caudal:
     label: Mass flow [kg/s]
+    label_referencia: Reference mass flow [kg/s]
     help_default: Dry-air flow circulating through the chamber.
+    help_referencia: >-
+      With natural convection the flow rate is not an input: it is solved as the
+      balance between thermal draft and the resistance of the circuit. This value
+      is still used as the reference for scaling pressure losses and as a
+      fallback during hours with no draft.
+    caption_referencia: >-
+      ℹ️ The actual flow rate is solved by the draft (see openings below). This
+      number is only the scaling reference.
   direccion:
     label: Flow direction
     horizontal: HORIZONTAL
@@ -238,7 +259,63 @@ flujo:
     help: If not specified, the calculation uses the scalar fallback from the catalogue.
   hr_entrada: RH of the air at the chamber inlet [%]
   velocidad: "Estimated superficial velocity: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
+bocas:
+  titulo: "**Air openings (natural convection)**"
+  usar:
+    label: The dryer has inlet and outlet openings
+    help: >-
+      This is sizing in both ways of moving the air, but the effect shows up in
+      different places. With no fan, what moves the air is buoyancy: warm air in
+      the chamber rises and leaves, and ambient air comes in below; the openings
+      are the resistance of that circuit, so their size sets the flow rate. With
+      a fan, the flow rate is imposed by the fan, but the openings set the
+      pressure it must deliver and with it the electrical power you will see in
+      P6.
+  sin_bocas: >-
+    With no openings defined, the calculation uses the fixed flow rate above
+    ({caudal:.4f} kg/s) as if something sustained it. In a passive dryer it is
+    worth defining them.
+  sin_bocas_forzado: >-
+    With no openings defined, P6 estimates the entry and exit losses from the
+    duct velocity, i.e. assuming openings the size of the duct. Defining them
+    refines the pressure the fan must deliver.
+  con_motor: >-
+    With a fan the flow rate does not change: the openings set the pressure it
+    must deliver (and the electrical power). It shows in P6, under singular ΔP.
+  acople_colector: >-
+    The collector outlet and the inlet opening are assumed to have the **same
+    cross-section**. If they do not, the coupling adds a contraction that this
+    model does not represent yet.
+  entrada:
+    label: Inlet opening area [m²]
+    help: Total free area through which ambient air enters (sum of all openings).
+  salida:
+    label: Outlet opening area [m²]
+    help: >-
+      Total free outlet area. It weighs more than the inlet: the leaving air
+      carries away its kinetic energy, so throttling the outlet slows the
+      circuit more than throttling the inlet.
+  con_bocas: >-
+    The flow rate is solved as the balance between thermal draft (the
+    {alto:.2f} m column of the chamber) and the resistance of the openings.
+  con_chimenea: >-
+    With a chimney, the openings add resistance to the circuit: the draft
+    column is the chamber plus the chimney. The outlet opening and the chimney
+    base are assumed to have the **same cross-section**; the discharge to the
+    atmosphere is counted once, at the top.
+  caudal_resuelto: >-
+    With these openings the balance gives ≈ {m5:.4f} kg/s at 5 K above ambient
+    and ≈ {m15:.4f} kg/s at 15 K. The actual ΔT is set by the chamber balance;
+    the definitive flow rate comes from P7.
+  renovaciones_resueltas: >-
+    In air changes: ≈ {r5:.2f} /min at 5 K and ≈ {r15:.2f} /min at 15 K. Use it
+    to align the reference flow rate above with what the draft delivers.
 borde:
+  derivado_ambiente: >-
+    With no collector, the air entering the chamber **is the ambient air**: T ≈
+    {T:.1f} °C and RH ≈ {HR:.0f} %. There is nothing to heat it, so these are
+    not configured ({origen}).
+  hr_sin_clima: "Ambient RH with no climate loaded: {HR:.0f} % is used by default."
   titulo: Chamber inlet air (boundary condition)
   no_aplica: >-
     **Real day** mode active: the inlet air temperature and humidity come
@@ -345,6 +422,12 @@ forzantes:
 t_amb_origen:
   media_anual: "NASA POWER annual mean = {t:.1f} °C"
   fallback: "fallback 25 °C (no climate loaded)"
+ventana_operacion:
+  titulo: "### 🔁 Window operation"
+  caption: >-
+    In a batch production window the dryer reloads just like in the annual
+    analysis, so it follows the same policy. The run is launched from the
+    Results tab.
 anual:
   sin_clima: ℹ️ **Annual analysis** available only with climate loaded in P2.
   clima_incompleto: >-

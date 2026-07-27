@@ -34,7 +34,7 @@ from calculos.auxiliar_calc import (
     calcular_auxiliar,
     calcular_auxiliar_transitorio,
 )
-from calculos.camara_calc import calcular_camara
+from calculos.camara_calc import calcular_camara, estimar_T_flujo_estacionario
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
 from calculos.catalogo_rugosidades import Z0_DEFAULT_M
 from calculos.colector_calc import calcular_colector_tipo1
@@ -163,6 +163,14 @@ def verificar_coherencia_proyecto(proyecto) -> list[str]:
 # ---------------------------------------------------------------------------
 
 _P_REF_NIVEL_MAR_PA: float = 101325.0
+
+# Sub-relajación del lazo de Picard de convección natural (S61). El mapa
+# T_chim → ṁ → T_flujo → T_chim tiene realimentación negativa (más caudal
+# reparte el mismo calor en más masa) y **oscila en 2-ciclo** cuando la
+# pendiente es < −1: se observó con auxiliar fuerte + techo translúcido. Avanzar
+# medio paso (α = 0.5) amortigua la oscilación sin cambiar el punto fijo — el
+# criterio de convergencia se mide sobre el residual sin amortiguar.
+ALFA_SUBRELAJACION: float = 0.5
 
 
 def empl_de(proyecto):
@@ -587,6 +595,32 @@ def _z0_terreno(proyecto) -> float:
     return float(getattr(empl, "z0_terreno_m", Z0_DEFAULT_M))
 
 
+def _areas_bocas(proyecto) -> tuple[Optional[float], Optional[float]]:
+    """Áreas de las bocas de la cámara, o ``(None, None)`` si no están definidas.
+
+    Las bocas son la resistencia del lazo en un secador pasivo **sin** chimenea.
+    Se exige tener las dos: con una sola el equilibrio quedaría indeterminado.
+    """
+    if proyecto.camara is None or not proyecto.camara.flujo.bocas_definidas:
+        return (None, None)
+    f = proyecto.camara.flujo
+    return (float(f.area_entrada_aire_m2), float(f.area_salida_aire_m2))
+
+
+def conveccion_natural_activa(proyecto) -> bool:
+    """True si el caudal lo tiene que resolver el motor de flotabilidad.
+
+    Requiere que no haya ventilador (``motor is None``), que haya cámara, y que
+    el lazo tenga **alguna** resistencia que permita cerrar el equilibrio:
+    chimenea (columna con ducto) o bocas de la cámara (columna corta). Un cajón
+    sin chimenea ni bocas cae al caudal de diseño constante — el comportamiento
+    de toda versión anterior a S61 — porque sin resistencia el tiro no equilibra.
+    """
+    if proyecto.motor is not None or proyecto.camara is None:
+        return False
+    return proyecto.chimenea is not None or proyecto.camara.flujo.bocas_definidas
+
+
 def _caudal_natural_loop(
     proyecto,
     T_amb_K: float,
@@ -595,7 +629,10 @@ def _caudal_natural_loop(
     P_amb_Pa: float = 101325.0,
     v_viento_ms: float = 0.0,
 ) -> dict:
-    """Caudal másico de equilibrio cuando el flujo lo induce la chimenea.
+    """Caudal másico de equilibrio cuando el flujo lo induce la flotabilidad.
+
+    Sirve con chimenea (columna alta con ducto) y sin ella (cajón pasivo, donde
+    la columna es la propia cámara y la resistencia son las bocas).
 
     Construye ``delta_P_resto_fn(m)`` con **escalado cuadrático** alrededor
     del punto de diseño del usuario (caudal de cámara). Es decir:
@@ -620,7 +657,7 @@ def _caudal_natural_loop(
     Returns:
         Dict de ``calculos.chimenea_calc.caudal_natural_kgs``.
     """
-    from calculos.chimenea_calc import caudal_natural_kgs
+    from calculos.chimenea_calc import caudal_natural_kgs, coeficientes_bocas
     from calculos.motor_calc import (
         estimar_delta_P_camara,
         estimar_delta_P_colector,
@@ -629,6 +666,8 @@ def _caudal_natural_loop(
     chim = proyecto.chimenea
     camara = proyecto.camara
     H_camara_m = float(camara.geometria.alto_m)
+    bocas = _areas_bocas(proyecto)
+    K_bocas = coeficientes_bocas(proyecto.colector is not None, chim is not None)
 
     # ΔP de referencia a m_design (usa los estimadores existentes que leen
     # caudal/velocidad de los dataclass — no mutamos nada aquí porque ya
@@ -655,17 +694,21 @@ def _caudal_natural_loop(
     return caudal_natural_kgs(
         T_amb_K=T_amb_K,
         T_chim_K=T_chim_K,
-        diametro_chim_m=chim.diametro_m,
-        altura_chim_m=chim.altura_m,
+        diametro_chim_m=chim.diametro_m if chim is not None else 0.0,
+        altura_chim_m=chim.altura_m if chim is not None else 0.0,
         H_camara_m=H_camara_m,
         delta_P_resto_fn=delta_P_resto_fn,
         P_amb_Pa=P_amb_Pa,
-        extractor_activo=chim.extractor_activo,
-        Cp_turbina=chim.Cp_turbina,
-        Kt_turbina=chim.Kt_turbina,
-        diametro_extractor_m=chim.diametro_extractor_m,
+        extractor_activo=chim.extractor_activo if chim is not None else False,
+        Cp_turbina=chim.Cp_turbina if chim is not None else 0.0,
+        Kt_turbina=chim.Kt_turbina if chim is not None else 0.0,
+        diametro_extractor_m=chim.diametro_extractor_m if chim is not None else None,
         z0_terreno_m=_z0_terreno(proyecto),
         v_viento_ref_ms=v_viento_ms,
+        A_boca_entrada_m2=bocas[0],
+        A_boca_salida_m2=bocas[1],
+        K_boca_entrada=K_bocas[0],
+        K_boca_salida=K_bocas[1],
     )
 
 
@@ -783,7 +826,7 @@ def _caudal_natural_horizonte(
             - advertencias: códigos únicos vistos en cualquier hora.
             - horas_sin_tiro : contador de horas con tiro nulo.
     """
-    from calculos.chimenea_calc import caudal_natural_kgs
+    from calculos.chimenea_calc import caudal_natural_kgs, coeficientes_bocas
     from calculos.motor_calc import (
         estimar_delta_P_camara,
         estimar_delta_P_colector,
@@ -792,6 +835,8 @@ def _caudal_natural_horizonte(
     chim = proyecto.chimenea
     camara = proyecto.camara
     H_camara_m = float(camara.geometria.alto_m)
+    bocas = _areas_bocas(proyecto)
+    K_bocas = coeficientes_bocas(proyecto.colector is not None, chim is not None)
     N = len(T_amb_K_serie)
 
     # ΔP_resto de referencia evaluado a un T_op medio del horizonte.
@@ -820,9 +865,10 @@ def _caudal_natural_horizonte(
     dPC_arr = np.zeros(N)
     dPR_arr = np.zeros(N)
     Re_arr = np.zeros(N)
+    dPB_arr = np.zeros(N)
     advs_set: set[str] = set()
     horas_sin_tiro = 0
-    H_eff_m = chim.altura_m + H_camara_m
+    H_eff_m = (chim.altura_m if chim is not None else 0.0) + H_camara_m
 
     v_viento_arr = (
         np.asarray(v_viento_ms_serie, dtype=float) if v_viento_ms_serie is not None else np.zeros(N)
@@ -833,17 +879,21 @@ def _caudal_natural_horizonte(
             r = caudal_natural_kgs(
                 T_amb_K=float(T_amb_K_serie[i]),
                 T_chim_K=float(T_chim_K_serie[i]),
-                diametro_chim_m=chim.diametro_m,
-                altura_chim_m=chim.altura_m,
+                diametro_chim_m=chim.diametro_m if chim is not None else 0.0,
+                altura_chim_m=chim.altura_m if chim is not None else 0.0,
                 H_camara_m=H_camara_m,
                 delta_P_resto_fn=_dP_resto,
                 P_amb_Pa=P_amb_Pa,
-                extractor_activo=chim.extractor_activo,
-                Cp_turbina=chim.Cp_turbina,
-                Kt_turbina=chim.Kt_turbina,
-                diametro_extractor_m=chim.diametro_extractor_m,
+                extractor_activo=chim.extractor_activo if chim is not None else False,
+                Cp_turbina=chim.Cp_turbina if chim is not None else 0.0,
+                Kt_turbina=chim.Kt_turbina if chim is not None else 0.0,
+                diametro_extractor_m=chim.diametro_extractor_m if chim is not None else None,
                 z0_terreno_m=_z0_terreno(proyecto),
                 v_viento_ref_ms=float(v_viento_arr[i]),
+                A_boca_entrada_m2=bocas[0],
+                A_boca_salida_m2=bocas[1],
+                K_boca_entrada=K_bocas[0],
+                K_boca_salida=K_bocas[1],
             )
         except Exception:
             # Brentq fuera del bracket: marcamos hora como sin tiro.
@@ -853,6 +903,7 @@ def _caudal_natural_horizonte(
         v_arr[i] = r["v_chim_ms"]
         dPT_arr[i] = r["delta_P_tiro_Pa"]
         dPC_arr[i] = r["delta_P_chimenea_Pa"]
+        dPB_arr[i] = r.get("delta_P_bocas_Pa", 0.0)
         dPR_arr[i] = r["delta_P_resto_Pa"]
         Re_arr[i] = r["Re_chimenea"]
         if r["m_punto_kgs"] <= 0:
@@ -866,6 +917,7 @@ def _caudal_natural_horizonte(
         "v_chim_ms": v_arr,
         "delta_P_tiro_Pa": dPT_arr,
         "delta_P_chimenea_Pa": dPC_arr,
+        "delta_P_bocas_Pa": dPB_arr,
         "delta_P_resto_Pa": dPR_arr,
         "Re_chimenea": Re_arr,
         "T_chim_K": np.asarray(T_chim_K_serie, dtype=float).copy(),
@@ -1260,9 +1312,7 @@ def calcular_todo(
         proyecto.colector.unidad.velocidad_diseno_ms if proyecto.colector is not None else None
     )
     _picard_mutado = False
-    chimenea_activa = (
-        proyecto.motor is None and proyecto.chimenea is not None and proyecto.camara is not None
-    )
+    chimenea_activa = conveccion_natural_activa(proyecto)
 
     try:
         if not chimenea_activa:
@@ -1294,20 +1344,36 @@ def calcular_todo(
             # de segundo orden — enfriamiento por evaporación < 3 K — y el
             # solver de capa fina no expone T_aire explícita).
             #
-            # Para CAJA (sin colector) el loop converge trivialmente en
-            # 1 iter: T_chim queda en T_amb + 25 K (heurística del techo
-            # translúcido, no hay variable interna que dependa de ṁ).
+            # Para CAJA (sin colector) el empuje sale del balance de la propia
+            # cámara: `estimar_T_flujo_estacionario` con el caudal de la
+            # iteración. Hasta S60 se usaba la heurística fija T_amb + 25 K, que
+            # **no depende de ṁ** y por lo tanto congelaba el lazo (convergía en
+            # una iteración con un tiro inventado). Con colector se conserva la
+            # heurística T_sal_col − 5 K, que es el camino validado.
             res.advertencias.clear()
 
-            MAX_ITER_PICARD: int = 10
+            MAX_ITER_PICARD: int = 14
             TOL_T_CHIM_K: float = 0.5
 
-            def _T_chim_desde_colector(T_sal_col_K: float) -> float:
+            def _T_chim_desde_colector(T_sal_col_K: float, m_dot_kgs: float) -> float:
                 if proyecto.colector is not None:
                     return max(T_sal_col_K - 5.0, T_amb_K + 1.0)
-                return T_amb_K + 25.0
+                try:
+                    T_flujo = estimar_T_flujo_estacionario(
+                        proyecto.camara,
+                        T_ent_K=T_sal_col_K,
+                        HR_ent=HR_camara,
+                        m_dot_as_kg_s=m_dot_kgs,
+                        T_amb_K=T_amb_K,
+                        P_Pa=P_proyecto_Pa,
+                        v_viento_ms=v_viento_ms,
+                        I_g_W_m2=I_g_W_m2,
+                    )
+                except Exception:
+                    return T_amb_K + 25.0
+                return T_flujo
 
-            T_chim_K_iter = _T_chim_desde_colector(T_salida_colector_K)
+            T_chim_K_iter = _T_chim_desde_colector(T_salida_colector_K, caudal_design_kg_s)
             res_chim_iter: Optional[dict] = None
             iter_count: int = 0
             converged: bool = False
@@ -1370,10 +1436,14 @@ def calcular_todo(
                         )
                         break
 
-                # 3) T_chim nuevo del colector convergido.
-                T_chim_K_new = _T_chim_desde_colector(T_salida_colector_K)
+                # 3) T_chim nuevo del colector (o de la cámara, si no hay).
+                T_chim_K_new = _T_chim_desde_colector(T_salida_colector_K, m_nat)
+                # El residual se mide SIN amortiguar (es el error real del punto
+                # fijo); la sub-relajación solo define hacia dónde se avanza.
                 delta_final = abs(T_chim_K_new - T_chim_K_iter)
-                T_chim_K_iter = T_chim_K_new
+                T_chim_K_iter = (
+                    ALFA_SUBRELAJACION * T_chim_K_new + (1.0 - ALFA_SUBRELAJACION) * T_chim_K_iter
+                )
                 if delta_final < TOL_T_CHIM_K:
                     converged = True
                     break
@@ -1601,7 +1671,7 @@ def calcular_todo_transitorio(
     res.advertencias.append(f"ADV_PRESION_PROYECTO: {_P_origen}.")
 
     caudal_kg_s = proyecto.camara.flujo.caudal_masico_kg_s
-    chimenea_activa = proyecto.motor is None and proyecto.chimenea is not None
+    chimenea_activa = conveccion_natural_activa(proyecto)
 
     def _correr_aux_y_armar_forzantes(
         m_dot_serie: np.ndarray,
@@ -1694,7 +1764,12 @@ def calcular_todo_transitorio(
             T_chim_serie = forzantes_base.T_amb_K + 25.0
         T_chim_serie = np.maximum(T_chim_serie, forzantes_base.T_amb_K + 1.0)
 
-        MAX_ITER_TR: int = 5  # cada iter corre el motor TD: 5 alcanza
+        # Con sub-relajación (α = 0.5) hacen falta ~el doble de pasos que sin
+        # ella (5 → 8 en un cajón pasivo típico), así que el tope histórico de 5
+        # quedaba corto. Cada iteración corre el motor TD completo, pero medido
+        # cuesta ~0.1 s, así que el margen sale gratis: el lazo corta solo al
+        # converger.
+        MAX_ITER_TR: int = 12
         TOL_T_CHIM_K: float = 0.5
         m_ref_kgs = caudal_kg_s  # ancla para escalar ΔP_resto cuadrático
         # Piso para evitar ṁ=0 en horas sin tiro (motor TD interpolaría 0).
@@ -1783,8 +1858,12 @@ def calcular_todo_transitorio(
             )
             T_chim_nueva = np.maximum(T_chim_nueva, forzantes_base.T_amb_K + 1.0)
 
+            # Residual sin amortiguar; el avance sí es sub-relajado (ver
+            # ALFA_SUBRELAJACION: el lazo ṁ↔T_flujo puede oscilar en 2-ciclo).
             delta_final = float(np.max(np.abs(T_chim_nueva - T_chim_serie)))
-            T_chim_serie = T_chim_nueva
+            T_chim_serie = (
+                ALFA_SUBRELAJACION * T_chim_nueva + (1.0 - ALFA_SUBRELAJACION) * T_chim_serie
+            )
             chim_dict_final = chim_dict
             if delta_final < TOL_T_CHIM_K:
                 converged = True
@@ -2272,7 +2351,14 @@ def calcular_todo_ventana(
         )
 
     forzantes, lena_kg, adv, diag = armar_forzantes_ventana(proyecto, clima_datos_df, P_Pa=P_Pa)
-    res = simular_ventana(proyecto, forzantes_base=forzantes, P_Pa=P_Pa)
+    # La política de recarga razona en hora local del sitio; el mismo offset que
+    # alinea el calendario de arranque del auxiliar ancla la hora de carga.
+    res = simular_ventana(
+        proyecto,
+        forzantes_base=forzantes,
+        P_Pa=P_Pa,
+        hora_local_t0_h=_hora_offset_local(clima_datos_df, proyecto.emplazamiento),
+    )
     # La leña del auxiliar se computa al armar las forzantes (calendario de arranque).
     res.lena_consumida_kg = lena_kg
     res.advertencias = list(adv) + list(res.advertencias)

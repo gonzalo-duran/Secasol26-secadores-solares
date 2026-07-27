@@ -228,9 +228,30 @@ flujo:
       ⚠️ A vazão da câmara não é a do banco. É válido se houver mistura com ar
       ambiente; caso contrário o coletor vai operar fora do seu ponto de
       projeto.
+  renovaciones:
+    label: Renovações de ar por minuto [1/min]
+    help: >-
+      Quantas vezes por minuto se renova o volume de ar da câmara. É a forma de
+      dimensionar um secador passivo: pedir uma vazão em kg/s não tem ancoragem
+      quando ninguém a impõe. Um caixote movido por tiragem térmica fica em
+      **1–2 renovações/min**; o padrão de fábrica em kg/s equivalia a ~12, uma
+      ordem de grandeza a mais, e fazia a prévia do P4 estimar metade do tempo
+      de secagem do P7.
+    equivalencia: >-
+      Equivale a {m:.4f} kg/s (volume {V:.3f} m³ × ρ {rho:.3f} kg/m³ à
+      temperatura ambiente representativa).
   caudal:
     label: Vazão mássica [kg/s]
+    label_referencia: Vazão mássica de referência [kg/s]
     help_default: Vazão de ar seco que circula pela câmara.
+    help_referencia: >-
+      Com convecção natural a vazão não é um dado: é resolvida pelo equilíbrio
+      entre a tiragem térmica e a resistência do circuito. Este valor continua
+      a ser usado como referência para escalar as perdas de carga e como
+      recurso nas horas sem tiragem.
+    caption_referencia: >-
+      ℹ️ A vazão real é resolvida pela tiragem (ver bocas, mais abaixo). Este
+      número é apenas a referência de escalonamento.
   direccion:
     label: Direção do fluxo
     horizontal: HORIZONTAL
@@ -240,7 +261,62 @@ flujo:
     help: Se não for especificado, o cálculo usa o fallback escalar do catálogo.
   hr_entrada: UR do ar na entrada da câmara [%]
   velocidad: "Velocidade superficial estimada: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
+bocas:
+  titulo: "**Bocas de ar (convecção natural)**"
+  usar:
+    label: O secador tem bocas de entrada e saída
+    help: >-
+      É dimensionamento nas duas formas de mover o ar, mas o efeito aparece em
+      lugares diferentes. Sem ventilador, o que move o ar é a flutuabilidade: o
+      ar quente da câmara sobe e sai, e entra ar ambiente por baixo; as bocas
+      são a resistência desse circuito, de modo que o seu tamanho decide a
+      vazão. Com ventilador, a vazão é imposta por ele, mas as bocas fixam a
+      pressão que ele tem de entregar e com ela a potência elétrica que você vai
+      ver em P6.
+  sin_bocas: >-
+    Sem bocas definidas, o cálculo usa a vazão fixa acima ({caudal:.4f} kg/s)
+    como se algo a sustentasse. Num secador passivo convém defini-las.
+  sin_bocas_forzado: >-
+    Sem bocas definidas, o P6 estima as perdas de entrada e saída a partir da
+    velocidade do duto, ou seja, supondo bocas do tamanho do duto. Defini-las
+    ajusta a pressão que o ventilador tem de entregar.
+  con_motor: >-
+    Com ventilador a vazão não muda: as bocas fixam a pressão que ele tem de
+    entregar (e a potência elétrica). Vê-se em P6, dentro do ΔP singular.
+  acople_colector: >-
+    Supõe-se que a saída do coletor e a boca de entrada têm a **mesma seção**.
+    Se não tiverem, o acoplamento acrescenta uma contração que este modelo ainda
+    não representa.
+  entrada:
+    label: Área da boca de entrada [m²]
+    help: Área livre total por onde entra o ar ambiente (soma de todas as aberturas).
+  salida:
+    label: Área da boca de saída [m²]
+    help: >-
+      Área livre total de saída. Pesa mais do que a de entrada: o ar que sai
+      leva a sua energia cinética, portanto estrangular a saída trava mais o
+      circuito do que estrangular a entrada.
+  con_bocas: >-
+    A vazão é resolvida pelo equilíbrio entre a tiragem térmica (coluna de
+    {alto:.2f} m da câmara) e a resistência das bocas.
+  con_chimenea: >-
+    Com chaminé, as bocas somam resistência ao circuito: a coluna de tiragem é
+    a câmara mais a chaminé. Supõe-se que a boca de saída e a base da chaminé
+    têm a **mesma seção**; a descarga para o ambiente é contada uma única vez,
+    no topo.
+  caudal_resuelto: >-
+    Com estas bocas, o equilíbrio dá ≈ {m5:.4f} kg/s com 5 K acima do ambiente
+    e ≈ {m15:.4f} kg/s com 15 K. O ΔT real é decidido pelo balanço da câmara; a
+    vazão definitiva sai do P7.
+  renovaciones_resueltas: >-
+    Em renovações de ar: ≈ {r5:.2f} /min com 5 K e ≈ {r15:.2f} /min com 15 K.
+    Serve para alinhar a vazão de referência acima com o que a tiragem dá.
 borde:
+  derivado_ambiente: >-
+    Sem coletor, o ar que entra na câmara **é o ambiente**: T ≈ {T:.1f} °C e UR
+    ≈ {HR:.0f} %. Não há nada que o aqueça, portanto não se configuram
+    ({origen}).
+  hr_sin_clima: "UR ambiente sem clima carregado: usa-se {HR:.0f} % por padrão."
   titulo: Ar de entrada na câmara (condição de contorno)
   no_aplica: >-
     Modo **Dia real** ativo: a temperatura e a umidade do ar de entrada
@@ -349,6 +425,12 @@ forzantes:
 t_amb_origen:
   media_anual: "média anual NASA POWER = {t:.1f} °C"
   fallback: "fallback 25 °C (sem clima carregado)"
+ventana_operacion:
+  titulo: "### 🔁 Operação da janela"
+  caption: >-
+    Na janela de produção por lotes o secador recarrega igual que na análise
+    anual, portanto obedece à mesma política. O cálculo é disparado na aba de
+    Resultados.
 anual:
   sin_clima: ℹ️ **Análise anual** disponível apenas com clima carregado em P2.
   clima_incompleto: >-

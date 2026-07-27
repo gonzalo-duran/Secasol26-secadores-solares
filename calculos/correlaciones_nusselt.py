@@ -1,8 +1,9 @@
-"""Catálogo de correlaciones de Nusselt para colectores solares de aire.
+"""Catálogo de correlaciones de Nusselt para colectores solares de aire y cámara.
 
 Provee todas las correlaciones de transferencia de calor por convección
-utilizadas en los 4 tipos de colector solar de aire. El módulo es
-independiente del core y de la UI.
+utilizadas en los 4 tipos de colector solar de aire y, desde S61, las de
+convección natural de la **cámara** (placa horizontal para las bandejas, placa
+vertical para las paredes). El módulo es independiente del core y de la UI.
 
 Organización
 ------------
@@ -38,6 +39,17 @@ Flujo forzado:
 Flujo natural:
   → hollands_inclinada (único default; rango θ: 0°–75°)
 
+Convección natural / mixta de la cámara (S61)
+----------------------------------------------
+- ``nusselt_placa_horizontal(Ra, inestable)`` — bandejas. Rama fuerte 9.30/9.31
+  o débil 9.32 según el signo de ΔT; ``L = A_s/P`` (Ec. 9.29).
+- ``nusselt_placa_vertical(Ra, Pr)`` — paredes. Churchill-Chu 9.26/9.27, con el
+  piso conductivo ``Nu → 0.68`` que evita que el film interior se anule a
+  caudal casi nulo.
+- ``nusselt_mixto(Nu_F, Nu_N, n)`` — combinador genérico (Ec. 9.64): ``n = 3``
+  para empuje asistido (colector), ``n = 7/2`` para flujo transversal al empuje
+  con placa horizontal (cámara).
+
 Unidades
 --------
 Todas las funciones reciben y devuelven en SI:
@@ -55,6 +67,8 @@ Referencias
 - Sparrow & Liu (1979). Int. J. Heat Mass Transfer 22, 1433-1440.
 - Cengel & Ghajar (2014). Heat and Mass Transfer, 5ª ed. McGraw-Hill.
 - Hollands, Unny, Raithby & Konicek (1976). Solar Energy 18, 183-193.
+- Incropera & DeWitt (7ª ed.), cap. 9 "Free Convection": Ecs. 9.26/9.27
+  (Churchill-Chu, placa vertical), 9.29–9.32 (placa horizontal), 9.64 (mixta).
 """
 
 from __future__ import annotations
@@ -77,6 +91,14 @@ RE_TURBULENTO_MIN: float = 10000.0
 # Umbral de relación L/Dh para considerar efectos de entrada
 L_DH_DESARROLLADO: float = 50.0  # L/Dh ≥ 50 → flujo térmicamente desarrollado
 L_DH_ENTRADA_PRONUNCIADA: float = 10.0  # L/Dh < 10 → Cengel gana a Dittus-Boelter
+
+# Exponentes de combinación mixta (Incropera & DeWitt, Ec. 9.64)
+N_MIXTO_ASISTIDA: float = 3.0  # empuje paralelo al flujo (canal del colector)
+N_MIXTO_TRANSVERSAL: float = 3.5  # empuje ⊥ al flujo (bandeja horizontal de cámara)
+
+# Piso conductivo de la placa vertical (Churchill-Chu, Ec. 9.27): con Ra→0 el
+# Nusselt no cae a cero, tiende a la conducción pura a través de la película.
+_NU_PISO_CONDUCTIVO: float = 0.68
 
 # Tipo de pared caliente
 TipoPared = Literal["una_pared", "dos_paredes"]
@@ -885,6 +907,104 @@ def nusselt_natural_canal(Ra: float, Pr: float) -> float:
     return 0.670 * Ra**0.25 / (1.0 + (0.492 / Pr) ** (9.0 / 16.0)) ** (4.0 / 9.0)
 
 
+def nusselt_placa_horizontal(Ra: float, inestable: bool) -> float:
+    """Nusselt de convección natural sobre **placa horizontal** (Incropera §9.6.2).
+
+    Longitud característica ``L = A_s/P`` (área de la placa sobre su perímetro,
+    Ec. 9.29) — el llamador debe construir ``Ra`` con esa L.
+
+    La correlación depende de si la estratificación resultante es **inestable**
+    (el fluido caliente queda por debajo del frío → celdas convectivas) o
+    **estable** (fluido caliente arriba → el movimiento es marginal):
+
+    - Inestable (superficie caliente mirando arriba, o fría mirando abajo):
+      ``Nu = 0.54·Ra^{1/4}`` (Ec. 9.30, 10⁴ ≲ Ra ≲ 10⁷) y
+      ``Nu = 0.15·Ra^{1/3}`` (Ec. 9.31, 10⁷ ≲ Ra ≲ 10¹¹).
+    - Estable (superficie fría mirando arriba, o caliente mirando abajo):
+      ``Nu = 0.52·Ra^{1/5}`` (Ec. 9.32, 10⁴ ≲ Ra ≲ 10⁹).
+
+    En una bandeja de secado el aire suele estar **más caliente** que el producto
+    (enfriado por evaporación) ⇒ producto = superficie fría mirando arriba ⇒
+    rama **estable**, la débil. Al principio del transitorio, o con la bandeja
+    calentada por el sol, se invierte.
+
+    Las dos ramas inestables se combinan con ``max`` en vez de cortar en
+    Ra = 10⁷: se cruzan en Ra ≈ 2·10⁷ y así la curva queda **continua** (un corte
+    seco metería un salto del ~6 % que el solver ve como discontinuidad).
+
+    Args:
+        Ra: Rayleigh basado en ``L = A_s/P`` [adim].
+        inestable: ``True`` para la rama fuerte (9.30/9.31), ``False`` para la
+            débil (9.32). Lo decide el signo de ΔT y la orientación de la cara.
+
+    Returns:
+        Nusselt medio [adim] (0 si Ra ≤ 0).
+    """
+    if Ra <= 0.0:
+        return 0.0
+    if inestable:
+        return max(0.54 * Ra**0.25, 0.15 * Ra ** (1.0 / 3.0))
+    return 0.52 * Ra**0.2
+
+
+def nusselt_placa_vertical(Ra: float, Pr: float) -> float:
+    """Nusselt de convección natural sobre **placa vertical** — Churchill-Chu.
+
+    Longitud característica = altura de la placa. Combina las dos formas de
+    Incropera & DeWitt tomando la envolvente superior (se cruzan cerca de
+    Ra = 10⁹, justo donde el libro recomienda cambiar de una a otra, así que la
+    curva resultante es continua):
+
+    - Ec. 9.27 (laminar, Ra ≲ 10⁹, más precisa ahí):
+      ``Nu = 0.68 + 0.670·Ra^{1/4}/[1+(0.492/Pr)^{9/16}]^{4/9}``
+    - Ec. 9.26 (todo el rango de Ra):
+      ``Nu = {0.825 + 0.387·Ra^{1/6}/[1+(0.492/Pr)^{9/16}]^{8/27}}²``
+
+    A diferencia de ``nusselt_natural_canal`` (que deja caer Nu→0 a propósito
+    para que la mixta se reduzca al forzado), **acá se conserva el término
+    conductivo**: ambas formas tienden al mismo piso ``Nu → 0.68`` cuando Ra→0.
+    Ese piso es el que evita que el film interior de la pared se anule a caudal
+    casi nulo (y con él ``UA``, dejando la cámara artificialmente adiabática).
+
+    Args:
+        Ra: Rayleigh basado en la altura [adim].
+        Pr: Prandtl [adim].
+
+    Returns:
+        Nusselt medio [adim]. Nunca menor que el piso conductivo 0.68.
+    """
+    if Ra <= 0.0:
+        return _NU_PISO_CONDUCTIVO
+    f_lam = (1.0 + (0.492 / Pr) ** (9.0 / 16.0)) ** (4.0 / 9.0)
+    Nu_927 = _NU_PISO_CONDUCTIVO + 0.670 * Ra**0.25 / f_lam
+    f_all = (1.0 + (0.492 / Pr) ** (9.0 / 16.0)) ** (8.0 / 27.0)
+    Nu_926 = (0.825 + 0.387 * Ra ** (1.0 / 6.0) / f_all) ** 2
+    return max(Nu_927, Nu_926)
+
+
+def nusselt_mixto(Nu_forzado: float, Nu_natural: float, n: float) -> float:
+    """Combinación de convección mixta ``Nu = (Nu_F^n ± Nu_N^n)^{1/n}``.
+
+    Forma general de Churchill (Incropera & DeWitt, Ec. 9.64). El exponente
+    depende de la geometría relativa entre el flujo forzado y el empuje:
+
+    - ``n = 3`` — flotación **asistida** o contraria (empuje paralelo al flujo).
+      Caso del colector: flujo ascendente sobre absorbedor caliente.
+    - ``n = 7/2`` — flujo **transversal** al empuje con placas horizontales.
+      Caso de la cámara: el aire barre horizontalmente y la flotación es
+      vertical (perpendiculares, no asistidas).
+
+    Args:
+        Nu_forzado: Componente de convección forzada [adim].
+        Nu_natural: Componente de convección natural [adim].
+        n: Exponente de combinación (3 asistida, 3.5 transversal).
+
+    Returns:
+        Nusselt de convección mixta [adim].
+    """
+    return (Nu_forzado**n + Nu_natural**n) ** (1.0 / n)
+
+
 def nusselt_mixto_local(
     Re: float, Pr: float, Dh_m: float, x_m: float, pared: TipoPared, Ra: float
 ) -> float:
@@ -908,4 +1028,4 @@ def nusselt_mixto_local(
     """
     Nu_f = nusselt_forzado_local(Re, Pr, Dh_m, x_m, pared)
     Nu_n = nusselt_natural_canal(Ra, Pr)
-    return (Nu_f**3 + Nu_n**3) ** (1.0 / 3.0)
+    return nusselt_mixto(Nu_f, Nu_n, N_MIXTO_ASISTIDA)

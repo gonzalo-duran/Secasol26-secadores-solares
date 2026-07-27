@@ -597,6 +597,14 @@ class ConfiguracionFlujo:
             caudal guardado con el del banco, y bastaba recalcular el clima con
             otro año (ρ cambia con la T media) para que la app dedujera que el
             usuario los había desacoplado a propósito (S58).
+        area_entrada_aire_m2: Área libre de la(s) boca(s) de **entrada** de aire
+            [m²]. ``None`` = sin definir. Junto con ``area_salida_aire_m2``
+            habilita el **motor de convección natural** de un secador pasivo sin
+            chimenea (S61): las bocas son la resistencia del lazo y la altura de
+            la cámara, la columna de tiro. Sin ellas —y sin chimenea— el caudal
+            queda en el valor de diseño constante, que es lo que hacía toda
+            versión anterior.
+        area_salida_aire_m2: Ídem para la(s) boca(s) de **salida** [m²].
     """
 
     caudal_masico_kg_s: float = 0.030
@@ -604,6 +612,23 @@ class ConfiguracionFlujo:
     direccion_flujo: DireccionFlujo = DireccionFlujo.HORIZONTAL
     HR_entrada_fraccion: Optional[float] = None
     seguir_caudal_colector: bool = True
+    area_entrada_aire_m2: Optional[float] = None
+    area_salida_aire_m2: Optional[float] = None
+
+    @property
+    def bocas_definidas(self) -> bool:
+        """True si están cargadas ambas áreas de boca (entrada y salida).
+
+        Es la condición que habilita el motor de flotabilidad sin chimenea: con
+        una sola de las dos el lazo no queda cerrado (falta una resistencia) y
+        el caudal de equilibrio sería indeterminado.
+        """
+        return (
+            self.area_entrada_aire_m2 is not None
+            and self.area_salida_aire_m2 is not None
+            and self.area_entrada_aire_m2 > 0
+            and self.area_salida_aire_m2 > 0
+        )
 
     def __post_init__(self) -> None:
         if self.caudal_masico_kg_s <= 0:
@@ -629,6 +654,16 @@ class ConfiguracionFlujo:
             raise ValueError(
                 f"FLUJO_HR_ENTRADA_INVALIDA: HR_entrada_fraccion={self.HR_entrada_fraccion:.3f} "
                 "fuera del rango válido [0, 1]."
+            )
+        if self.area_entrada_aire_m2 is not None and self.area_entrada_aire_m2 <= 0:
+            raise ValueError(
+                f"FLUJO_AREA_ENTRADA_NO_POSITIVA: area_entrada_aire_m2="
+                f"{self.area_entrada_aire_m2:.4f} m² ≤ 0. Usar None si no está definida."
+            )
+        if self.area_salida_aire_m2 is not None and self.area_salida_aire_m2 <= 0:
+            raise ValueError(
+                f"FLUJO_AREA_SALIDA_NO_POSITIVA: area_salida_aire_m2="
+                f"{self.area_salida_aire_m2:.4f} m² ≤ 0. Usar None si no está definida."
             )
 
 

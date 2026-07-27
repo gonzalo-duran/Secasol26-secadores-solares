@@ -96,6 +96,27 @@ def pr_aire(T_K: float) -> float:
     return cp_aire(T_K) * mu_aire(T_K) / k_aire(T_K)
 
 
+def beta_aire(T_K: float) -> float:
+    """Coeficiente de expansión térmica volumétrica del aire [1/K].
+
+    Para un gas ideal ``β = −(1/ρ)·(∂ρ/∂T)_P = 1/T`` (Incropera & DeWitt,
+    Ec. 9.9). Es el coeficiente de flotación que entra en Grashof
+    ``Gr = g·β·ΔT·L³/ν²`` en todo cálculo de convección natural o mixta.
+
+    Args:
+        T_K: Temperatura [K] (típicamente la de película).
+
+    Returns:
+        β [1/K].
+
+    Raises:
+        ValueError: Si T_K <= 0.
+    """
+    if T_K <= 0.0:
+        raise ValueError(f"PROP_AIRE_T_NO_POSITIVA: T={T_K} K <= 0.")
+    return 1.0 / T_K
+
+
 def rho_aire(T_K: float, P_Pa: float = 101325.0) -> float:
     """Densidad del aire seco [kg/m³] — gas ideal ρ = P/(R·T).
 
@@ -120,7 +141,8 @@ def propiedades_aire(T_K: float, P_Pa: float = 101325.0) -> dict[str, float]:
         P_Pa: Presión absoluta [Pa].
 
     Returns:
-        dict con claves ``k``, ``mu``, ``pr``, ``cp``, ``rho`` (todas SI).
+        dict con claves ``k``, ``mu``, ``pr``, ``cp``, ``rho``, ``beta``
+        (todas SI).
     """
     return {
         "k": k_aire(T_K),
@@ -128,4 +150,5 @@ def propiedades_aire(T_K: float, P_Pa: float = 101325.0) -> dict[str, float]:
         "pr": pr_aire(T_K),
         "cp": cp_aire(T_K),
         "rho": rho_aire(T_K, P_Pa),
+        "beta": beta_aire(T_K),
     }

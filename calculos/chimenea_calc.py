@@ -66,6 +66,20 @@ _RUGOSIDAD_DEFAULT_M: float = 1.5e-4
 # suave desde cámara) + K_salida (1.0, descarga a la atmósfera) = 1.5.
 _K_SINGULAR_DEFAULT: float = 1.5
 
+# Coeficientes de pérdida de las bocas de la cámara (secador pasivo sin
+# chimenea). Son los mismos dos términos que bundlea _K_SINGULAR_DEFAULT, acá
+# separados porque cada boca tiene su propia área. Constantes internas: el
+# usuario carga áreas, que es el dato que conoce de su equipo.
+_K_BOCA_ENTRADA: float = 0.5  # contracción de canto vivo desde ambiente en reposo
+_K_BOCA_SALIDA: float = 1.0  # descarga del chorro a la atmósfera
+# Variantes según lo que haya del otro lado de la boca (ver coeficientes_bocas):
+_K_BOCA_ENTRADA_DUCTEADA: float = 0.3  # expansión ducto de colector → cámara
+_K_BOCA_SALIDA_A_DUCTO: float = 0.5  # contracción cámara → base de chimenea
+# Término de entrada que trae bundleado _K_SINGULAR_DEFAULT. Cuando la boca de
+# salida está definida, esa entrada la aporta la boca (sobre su área real) y hay
+# que descontarla de la chimenea para no contarla dos veces.
+_K_ENTRADA_EN_SINGULAR_CHIM: float = 0.5
+
 # Bracket para brentq al buscar el caudal de equilibrio. Cubre desde flujo
 # imperceptible (1e-8 kg/s ≈ 0.01 g/s) hasta caudales de chimeneas grandes
 # (10 kg/s ≈ 36 000 m³/h). Si el problema cae fuera, brentq lanza ValueError.
@@ -264,6 +278,99 @@ def delta_P_chimenea_Pa(
 
 
 # ---------------------------------------------------------------------------
+# Pérdida de carga de las bocas (secador pasivo sin chimenea)
+# ---------------------------------------------------------------------------
+
+
+def coeficientes_bocas(hay_colector: bool, hay_chimenea: bool) -> tuple[float, float]:
+    """Coeficientes de pérdida de las bocas según la **topología** del secador.
+
+    Las bocas de la cámara no son siempre la misma singularidad: lo que hay
+    aguas arriba y aguas abajo cambia el coeficiente.
+
+    **Entrada:**
+
+    - Sin colector (caja): el aire viene del ambiente en reposo y se contrae al
+      entrar por un borde vivo ⇒ ``K = 0.5``.
+    - Con colector (armario): el aire llega **ducteado** desde la salida del
+      colector y se expande dentro de la cámara ⇒ ``K = 0.3`` (transición tipo
+      difusor, el mismo valor que usa la cadena forzada de
+      ``motor_calc.estimar_delta_P_singulares``).
+
+    **Salida:**
+
+    - Sin chimenea: el chorro descarga a la atmósfera y pierde toda su energía
+      cinética ⇒ ``K = 1.0``.
+    - Con chimenea: la boca **no** descarga al ambiente, alimenta el ducto. La
+      pérdida es la contracción de entrada al ducto (``K = 0.5``) y la descarga
+      real ocurre en el tope de la chimenea, que ya la contabiliza
+      ``K_singular_chim``. Usar 1.0 acá contaría dos veces la misma descarga.
+
+    **Limitación conocida (S61):** se supone que las secciones **coinciden** en
+    los dos acoples —salida de colector ↔ boca de entrada, y boca de salida ↔
+    base de chimenea—. Cuando no coinciden hay una contracción/expansión extra
+    que cambia la presión dinámica y que este modelo **no** representa; queda
+    anotado como corrección futura (ver `docs/notas/estado_conveccion_natural_secasol.md`).
+
+    Args:
+        hay_colector: True si el aire entra a la cámara desde un colector.
+        hay_chimenea: True si la salida de la cámara alimenta una chimenea.
+
+    Returns:
+        ``(K_in, K_out)`` [adim].
+    """
+    K_in = _K_BOCA_ENTRADA_DUCTEADA if hay_colector else _K_BOCA_ENTRADA
+    K_out = _K_BOCA_SALIDA_A_DUCTO if hay_chimenea else _K_BOCA_SALIDA
+    return (K_in, K_out)
+
+
+def delta_P_bocas_Pa(
+    m_punto_kgs: float,
+    A_in_m2: Optional[float],
+    A_out_m2: Optional[float],
+    T_flujo_K: float,
+    P_amb_Pa: float = 101325.0,
+    K_in: float = _K_BOCA_ENTRADA,
+    K_out: float = _K_BOCA_SALIDA,
+) -> float:
+    """Pérdida de carga en las bocas de entrada y salida de la cámara [Pa].
+
+        ΔP_bocas = K_in·½·ρ·v_in²  +  K_out·½·ρ·v_out²
+        v_in  = ṁ/(ρ·A_in)        v_out = ṁ/(ρ·A_out)
+
+    Es la resistencia del lazo en un secador pasivo **sin chimenea** (un cajón
+    o armario con aberturas): sin ella el equilibrio de flotabilidad no tiene
+    solución acotada. Mismo rol que ``K_singular`` en el ducto de chimenea.
+
+    La densidad se evalúa a ``T_flujo`` para las dos bocas. Es una
+    simplificación —el aire entra a T_amb y sale a T_flujo—, coherente con el
+    supuesto de un solo nodo (CSTR) del resto del modelo de cámara: el error
+    queda en el orden del cociente de densidades (~10 % con ΔT = 30 K) y no
+    cambia el orden de magnitud del caudal, que va con √(ΔP).
+
+    Args:
+        m_punto_kgs: Caudal másico [kg/s].
+        A_in_m2: Área libre de la boca de entrada [m²]. None ⇒ sin bocas.
+        A_out_m2: Área libre de la boca de salida [m²]. None ⇒ sin bocas.
+        T_flujo_K: Temperatura del aire dentro de la cámara [K].
+        P_amb_Pa: Presión ambiente [Pa].
+        K_in: Coeficiente de pérdida de la entrada [adim]. Default 0.5
+            (contracción de canto vivo).
+        K_out: Coeficiente de pérdida de la salida [adim]. Default 1.0
+            (pérdida de la energía cinética del chorro que descarga).
+
+    Returns:
+        ΔP [Pa]. 0 si no hay caudal o si falta alguna de las dos áreas.
+    """
+    if m_punto_kgs <= 0 or not A_in_m2 or not A_out_m2 or A_in_m2 <= 0 or A_out_m2 <= 0:
+        return 0.0
+    rho = densidad_aire(T_flujo_K, P_amb_Pa)
+    v_in = m_punto_kgs / (rho * A_in_m2)
+    v_out = m_punto_kgs / (rho * A_out_m2)
+    return (K_in * v_in**2 + K_out * v_out**2) * rho / 2.0
+
+
+# ---------------------------------------------------------------------------
 # Caudal de equilibrio del lazo
 # ---------------------------------------------------------------------------
 
@@ -284,16 +391,28 @@ def caudal_natural_kgs(
     diametro_extractor_m: Optional[float] = None,
     z0_terreno_m: float = 0.05,
     v_viento_ref_ms: float = 0.0,
+    A_boca_entrada_m2: Optional[float] = None,
+    A_boca_salida_m2: Optional[float] = None,
+    K_boca_entrada: float = _K_BOCA_ENTRADA,
+    K_boca_salida: float = _K_BOCA_SALIDA,
 ) -> dict:
-    """Caudal másico de equilibrio del lazo con chimenea solar [kg/s].
+    """Caudal másico de equilibrio del lazo movido por flotabilidad [kg/s].
 
     Resuelve la ecuación de equilibrio motriz vs resistiva:
 
-        ΔP_tiro_térmico + ΔP_turbina_motriz = ΔP_chimenea(ṁ) + ΔP_resto(ṁ)
+        ΔP_tiro_térmico + ΔP_turbina_motriz
+            = ΔP_chimenea(ṁ) + ΔP_bocas(ṁ) + ΔP_resto(ṁ)
 
     donde:
         ΔP_chimenea = fricción + singulares + Kt·turbina (función de ṁ)
+        ΔP_bocas    = entrada + salida de la cámara (función de ṁ)
         ΔP_resto    = colector + cámara + ductos + singulares (función de ṁ)
+
+    **Sirve con o sin chimenea** (S61). Con `diametro_chim_m = altura_chim_m = 0`
+    la columna de tiro es la propia cámara (`H_eff = H_camara_m`) y la
+    resistencia son las bocas: es el secador pasivo tipo cajón, cuyo caudal
+    hasta S60 se suponía constante. Con chimenea y sin bocas el resultado es
+    idéntico al histórico.
 
     El término ΔP_turbina_motriz aparece sólo si ``extractor_activo``. La
     temperatura T_chim se toma como dato; el acoplamiento térmico completo
@@ -302,9 +421,10 @@ def caudal_natural_kgs(
     Args:
         T_amb_K: Temperatura del aire ambiente [K].
         T_chim_K: Temperatura promedio de la columna ascendente [K].
-            Recomendación: usar T_salida_camara.
-        diametro_chim_m: Diámetro interno de la chimenea [m].
-        altura_chim_m: Altura de la chimenea sobre la cámara [m].
+            Recomendación: usar T_salida_camara. Sin chimenea es directamente
+            la temperatura del aire dentro de la cámara.
+        diametro_chim_m: Diámetro interno de la chimenea [m]. 0 = sin chimenea.
+        altura_chim_m: Altura de la chimenea sobre la cámara [m]. 0 = sin chimenea.
         H_camara_m: Altura útil de la cámara (entrada-de-aire a base-de-chimenea) [m].
         delta_P_resto_fn: Callable ``f(m_punto_kgs) → ΔP [Pa]`` que devuelve
             la pérdida de carga del resto del lazo (todo excepto la propia
@@ -323,16 +443,27 @@ def caudal_natural_kgs(
             v_viento por perfil logarítmico.
         v_viento_ref_ms: Velocidad del viento a la altura del contrato de
             ``Clima`` (2 m, ``WS_ms``) [m/s]. Se corrige internamente al tope.
+        A_boca_entrada_m2: Área libre de la boca de entrada de la cámara [m²].
+            None ⇒ sin resistencia de bocas (comportamiento histórico).
+        A_boca_salida_m2: Área libre de la boca de salida [m²].
+        K_boca_entrada, K_boca_salida: Coeficientes de pérdida de las bocas.
+            Dependen de la topología — usar :func:`coeficientes_bocas`. Cuando
+            la boca de salida está definida **y** hay chimenea, el término de
+            entrada al ducto se descuenta de ``K_singular_chim``: lo aporta la
+            boca sobre su área real, y sumarlo dos veces sería contar la misma
+            transición en dos lugares.
 
     Returns:
         Dict con:
             - ``m_punto_kgs``: caudal másico de equilibrio.
-            - ``v_chim_ms``: velocidad media en la chimenea.
+            - ``v_chim_ms``: velocidad media en la chimenea (sin chimenea, la
+              velocidad en la boca de salida).
             - ``delta_P_tiro_Pa``: tiro térmico disponible.
             - ``delta_P_turbina_motriz_Pa``: depresión motriz del extractor
               (0 si no hay extractor).
             - ``delta_P_chimenea_Pa``: pérdida en el ducto de chimenea
               (incluye Kt del extractor si aplica).
+            - ``delta_P_bocas_Pa``: pérdida en las bocas de la cámara.
             - ``delta_P_resto_Pa``: pérdida en el resto del lazo.
             - ``Re_chimenea``: Reynolds en la chimenea.
             - ``H_eff_m``: altura efectiva usada.
@@ -372,6 +503,7 @@ def caudal_natural_kgs(
             "delta_P_tiro_Pa": dPT_termico,
             "delta_P_turbina_motriz_Pa": dPT_turbina,
             "delta_P_chimenea_Pa": 0.0,
+            "delta_P_bocas_Pa": 0.0,
             "delta_P_resto_Pa": 0.0,
             "Re_chimenea": 0.0,
             "H_eff_m": H_eff,
@@ -381,6 +513,27 @@ def caudal_natural_kgs(
             ],
         }
 
+    # La boca de salida se lleva la entrada al ducto: se descuenta del bundle de
+    # singulares de la chimenea para no contar dos veces la misma transición.
+    hay_ducto = diametro_chim_m > 0 and altura_chim_m > 0
+    bocas_activas = bool(A_boca_entrada_m2 and A_boca_salida_m2)
+    K_sing_chim_eff = (
+        max(0.0, K_singular_chim - _K_ENTRADA_EN_SINGULAR_CHIM)
+        if (hay_ducto and bocas_activas)
+        else K_singular_chim
+    )
+
+    def _dP_bocas(m: float) -> float:
+        return delta_P_bocas_Pa(
+            m,
+            A_boca_entrada_m2,
+            A_boca_salida_m2,
+            T_chim_K,
+            P_amb_Pa,
+            K_in=K_boca_entrada,
+            K_out=K_boca_salida,
+        )
+
     def residuo(m: float) -> float:
         dPC = delta_P_chimenea_Pa(
             m,
@@ -389,20 +542,41 @@ def caudal_natural_kgs(
             altura_chim_m,
             P_amb_Pa,
             rugosidad_m,
-            K_singular_chim,
+            K_sing_chim_eff,
             Kt_turbina=Kt_eff,
             diametro_extractor_m=d_ext_eff,
         )
         dPR = float(delta_P_resto_fn(m))
-        return dPT_total - dPC - dPR
+        return dPT_total - dPC - _dP_bocas(m) - dPR
+
+    if residuo(_M_MAX_KGS) > 0.0:
+        # El lazo no ofrece resistencia suficiente para equilibrar el tiro
+        # dentro del bracket. Pasa solo si no hay chimenea NI bocas NI ΔP_resto
+        # (lazo idealmente abierto): el equilibrio sería infinito, no cero.
+        raise ValueError(
+            "CHIM_LAZO_SIN_RESISTENCIA: el tiro no se equilibra dentro de "
+            f"{_M_MAX_KGS} kg/s. Un lazo por convección natural necesita al menos "
+            "una resistencia (chimenea, bocas de la cámara o pérdidas del lecho)."
+        )
 
     m_eq = brentq(residuo, _M_MIN_KGS, _M_MAX_KGS, xtol=1e-8, rtol=1e-6)
 
     rho_chim = densidad_aire(T_chim_K, P_amb_Pa)
-    A_chim = pi * (diametro_chim_m / 2.0) ** 2
-    v_chim = m_eq / (rho_chim * A_chim)
     mu_chim = viscosidad_aire(T_chim_K)
-    Re = rho_chim * v_chim * diametro_chim_m / mu_chim
+    if diametro_chim_m > 0:
+        A_chim = pi * (diametro_chim_m / 2.0) ** 2
+        v_chim = m_eq / (rho_chim * A_chim)
+        Re = rho_chim * v_chim * diametro_chim_m / mu_chim
+    else:
+        # Sin chimenea la velocidad representativa es la de la boca de salida
+        # (es la sección por la que descarga el lazo). Sin ducto no hay Reynolds
+        # de ducto que reportar.
+        v_chim = (
+            m_eq / (rho_chim * A_boca_salida_m2)
+            if A_boca_salida_m2 and A_boca_salida_m2 > 0
+            else 0.0
+        )
+        Re = 0.0
     dPC_eq = delta_P_chimenea_Pa(
         m_eq,
         T_chim_K,
@@ -410,18 +584,25 @@ def caudal_natural_kgs(
         altura_chim_m,
         P_amb_Pa,
         rugosidad_m,
-        K_singular_chim,
+        K_sing_chim_eff,
         Kt_turbina=Kt_eff,
         diametro_extractor_m=d_ext_eff,
     )
     dPR_eq = float(delta_P_resto_fn(m_eq))
+    dPB_eq = _dP_bocas(m_eq)
 
-    if Re < 2300.0:
-        advertencias.append("CHIM_FLUJO_LAMINAR: Re < 2300, fricción dominada por viscosidad.")
-    if v_chim > 5.0:
+    if diametro_chim_m > 0:
+        if Re < 2300.0:
+            advertencias.append("CHIM_FLUJO_LAMINAR: Re < 2300, fricción dominada por viscosidad.")
+        if v_chim > 5.0:
+            advertencias.append(
+                f"CHIM_VEL_ALTA: v_chim = {v_chim:.2f} m/s > 5 m/s. "
+                "Revisar diámetro o pérdidas singulares."
+            )
+    elif v_chim > 5.0:
         advertencias.append(
-            f"CHIM_VEL_ALTA: v_chim = {v_chim:.2f} m/s > 5 m/s. "
-            "Revisar diámetro o pérdidas singulares."
+            f"NAT_VEL_BOCA_ALTA: v_salida = {v_chim:.2f} m/s > 5 m/s. "
+            "Revisar el área de las bocas."
         )
 
     return {
@@ -430,6 +611,7 @@ def caudal_natural_kgs(
         "delta_P_tiro_Pa": float(dPT_termico),
         "delta_P_turbina_motriz_Pa": float(dPT_turbina),
         "delta_P_chimenea_Pa": float(dPC_eq),
+        "delta_P_bocas_Pa": float(dPB_eq),
         "delta_P_resto_Pa": float(dPR_eq),
         "Re_chimenea": float(Re),
         "H_eff_m": float(H_eff),

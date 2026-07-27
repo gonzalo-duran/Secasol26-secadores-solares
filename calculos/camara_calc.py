@@ -16,9 +16,28 @@ Lee del catálogo del producto:
     - propiedades_basicas.calor_especifico_seco → c_ps (sólido seco).
     - isoterma.gab.params → para construir aw_func (actividad de agua).
 
+Coeficientes convectivos interiores (S61)
+-----------------------------------------
+Hasta S60 había **uno solo**, forzado (placa plana con μ/Pr/k congelados a
+~50 °C), compartido entre el producto y el film interior de la pared. A bajo
+caudal —el caso de todo secador de convección natural— eso daba ``h → 0`` y, con
+el film de pared atado a él, ``U_total → 0``: la cámara aparecía perfectamente
+aislada justo cuando más pierde. Ahora hay dos, ambos de convección **mixta** y
+con propiedades del aire variables con T:
+
+- ``coef_conveccion_producto_local`` — placa horizontal (bandeja), rama según el
+  signo de ΔT, combinación transversal ``n = 7/2``.
+- ``coef_conveccion_pared_local`` — placa vertical (Churchill-Chu), combinación
+  asistida ``n = 3``, con el piso conductivo ``Nu → 0.68``.
+
+A velocidades de convección forzada (≳0.5 m/s) el resultado queda dentro del
+~4 % del modelo viejo; la diferencia aparece cuando el flujo se apaga. Ver
+``docs/notas/estado_conveccion_natural_secasol.md``.
+
 Referencias:
     - Mujumdar AS (2007). Handbook of Industrial Drying, 3ª ed. CRC Press.
     - Anderson RB (1946); Guggenheim EA (1966); De Boer JH (1953) — modelo GAB.
+    - Incropera & DeWitt (7ª ed.), cap. 9 "Free Convection".
 """
 
 from __future__ import annotations
@@ -27,15 +46,26 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
+from scipy.optimize import brentq
 
 from calculos.camara_termodinamica import (
     ResultadoCascada,
     ResultadoMotorTermodinamico,
+    resolver_estado_camara,
     simular_cascada,
     simular_secado,
 )
+from calculos.correlaciones_nusselt import (
+    N_MIXTO_ASISTIDA,
+    N_MIXTO_TRANSVERSAL,
+    nusselt_mixto,
+    nusselt_placa_horizontal,
+    nusselt_placa_vertical,
+)
+from calculos.propiedades_aire import propiedades_aire
 from calculos.psicrometria import (
     actividad_agua_desde_X_GAB,
+    calor_latente_vaporizacion,
     densidad_aire_humedo,
     humedad_absoluta,
 )
@@ -55,15 +85,11 @@ if TYPE_CHECKING:
 # delega en simular_secado.
 # ============================================================================
 
-# Propiedades del aire a T_película de referencia (~50 °C, 1 atm). Constantes
-# para v0 — variación < 5 % en el rango operativo de secado solar.
-_MU_AIRE_PA_S: float = 1.96e-5
-_K_AIRE_W_MK: float = 0.028
-_PR_AIRE: float = 0.71
 _LE_AGUA_AIRE: float = 1.0  # número de Lewis para aire-agua
 _CP_AGUA_LIQ_J_KGK: float = 4186.0  # cp del agua líquida (cp efectivo del producto)
 _RE_CRITICO_PLACA: float = 5.0e5  # transición laminar→turbulento
 _ESPESOR_CUBIERTA_DEFAULT_M: float = 0.006  # 6 mm — default del techo translúcido
+_G_MS2: float = 9.81  # aceleración de la gravedad
 
 
 def _h_conv_camara_placa_plana(
@@ -73,18 +99,207 @@ def _h_conv_camara_placa_plana(
     omega_pelicula: float,
     P_Pa: float,
 ) -> float:
-    """Coeficiente convectivo aire→bandeja por correlación de placa plana.
+    """Coeficiente convectivo **forzado** aire→superficie por placa plana.
 
     Re < 5e5: Nu = 0.664·Re^0.5·Pr^(1/3)   (laminar, Pohlhausen)
     Re > 5e5: Nu = 0.037·Re^0.8·Pr^(1/3)   (turbulento, McAdams)
+
+    Desde S61 evalúa μ, k y Pr con ``propiedades_aire(T_película)`` en vez de
+    congelarlas a ~50 °C (mismo criterio que el colector desde S36).
+
+    Args:
+        v_aire_ms: Velocidad media del aire sobre la superficie [m/s].
+        L_caracteristico_m: Longitud de la placa en la dirección del flujo [m].
+        T_pelicula_K: Temperatura de película [K].
+        omega_pelicula: Humedad absoluta de película [kg_w/kg_as] (solo entra en ρ).
+        P_Pa: Presión absoluta [Pa].
+
+    Returns:
+        h forzado [W/(m²·K)].
     """
+    if L_caracteristico_m <= 0.0:
+        return 0.0
+    props = propiedades_aire(T_pelicula_K, P_Pa)
     rho = densidad_aire_humedo(T_pelicula_K, omega_pelicula, P_Pa)
-    Re = rho * v_aire_ms * L_caracteristico_m / _MU_AIRE_PA_S
+    Re = rho * v_aire_ms * L_caracteristico_m / props["mu"]
     if Re < _RE_CRITICO_PLACA:
-        Nu = 0.664 * Re**0.5 * _PR_AIRE ** (1.0 / 3.0)
+        Nu = 0.664 * Re**0.5 * props["pr"] ** (1.0 / 3.0)
     else:
-        Nu = 0.037 * Re**0.8 * _PR_AIRE ** (1.0 / 3.0)
-    return Nu * _K_AIRE_W_MK / L_caracteristico_m
+        Nu = 0.037 * Re**0.8 * props["pr"] ** (1.0 / 3.0)
+    return Nu * props["k"] / L_caracteristico_m
+
+
+def _rayleigh(
+    delta_T_K: float,
+    L_m: float,
+    T_pelicula_K: float,
+    omega_pelicula: float,
+    P_Pa: float,
+) -> float:
+    """Rayleigh ``Ra = g·β·|ΔT|·L³/(ν·α)`` con propiedades a T de película.
+
+    Con β = 1/T_película (gas ideal, Incropera Ec. 9.9). Solo empuje **térmico**:
+    el empuje por concentración de vapor (Ec. 9.65) queda como refinamiento
+    pendiente — ver ``docs/notas/estado_conveccion_natural_secasol.md`` §6.3.
+
+    Args:
+        delta_T_K: Diferencia de temperatura fluido↔superficie [K] (se usa |ΔT|).
+        L_m: Longitud característica [m].
+        T_pelicula_K: Temperatura de película [K].
+        omega_pelicula: Humedad absoluta de película [kg_w/kg_as].
+        P_Pa: Presión absoluta [Pa].
+
+    Returns:
+        Ra [adim] (0 si ΔT o L son nulos).
+    """
+    if L_m <= 0.0 or delta_T_K == 0.0:
+        return 0.0
+    props = propiedades_aire(T_pelicula_K, P_Pa)
+    rho = densidad_aire_humedo(T_pelicula_K, omega_pelicula, P_Pa)
+    nu = props["mu"] / rho
+    alfa = props["k"] / (rho * props["cp"])
+    return _G_MS2 * props["beta"] * abs(delta_T_K) * L_m**3 / (nu * alfa)
+
+
+def _L_caracteristica_bandeja(area_bandeja_m2: float, largo_m: float, ancho_m: float) -> float:
+    """Longitud característica ``L = A_s/P`` de una bandeja (Incropera Ec. 9.29).
+
+    El catálogo de la cámara guarda el **área** de bandeja pero no sus lados, así
+    que se supone una bandeja rectangular con la misma relación de aspecto que la
+    planta de la cámara: ``a = √(A·r)``, ``c = √(A/r)`` con ``r = largo/ancho``.
+    Para una bandeja cuadrada de lado ``s`` da ``L = s/4``, como corresponde.
+
+    Args:
+        area_bandeja_m2: Área de carga de una bandeja [m²].
+        largo_m: Largo de la cámara [m].
+        ancho_m: Ancho de la cámara [m].
+
+    Returns:
+        L característica [m] (0 si el área no es positiva).
+    """
+    if area_bandeja_m2 <= 0.0:
+        return 0.0
+    r = largo_m / ancho_m if ancho_m > 0.0 else 1.0
+    a = (area_bandeja_m2 * r) ** 0.5
+    c = (area_bandeja_m2 / r) ** 0.5
+    perimetro = 2.0 * (a + c)
+    return area_bandeja_m2 / perimetro if perimetro > 0.0 else 0.0
+
+
+def coef_conveccion_producto_local(
+    v_aire_ms: float,
+    T_flujo_K: float,
+    T_prod_K: float,
+    omega: float,
+    P_Pa: float,
+    L_flujo_m: float,
+    L_bandeja_m: float,
+) -> float:
+    """Coeficiente convectivo aire↔producto — convección **mixta transversal**.
+
+    El aire barre la bandeja horizontalmente mientras el empuje actúa en
+    vertical: forzada y natural son **perpendiculares**, no asistidas. Por eso
+    se combinan con ``n = 7/2`` (Incropera Ec. 9.64) y no con el ``n = 3`` del
+    colector.
+
+    - Componente forzada: placa plana sobre ``L_flujo_m`` (largo de cámara).
+    - Componente natural: placa **horizontal** con ``L = A_s/P`` (Ec. 9.29). La
+      rama la decide el signo de ΔT: con el aire más caliente que el producto
+      —caso normal del secado, el producto se enfría por evaporación— la
+      bandeja es una superficie *fría mirando arriba* ⇒ estratificación estable
+      ⇒ rama débil (Ec. 9.32). Con el producto más caliente (transitorio
+      temprano, bandeja insolada) ⇒ rama fuerte (9.30/9.31).
+
+    La combinación se aplica sobre los **coeficientes h** y no sobre los Nusselt
+    porque cada componente usa su propia longitud característica (largo de flujo
+    vs. A/P); es la misma media potencial de la Ec. 9.64.
+
+    Args:
+        v_aire_ms: Velocidad media del aire en la cámara [m/s].
+        T_flujo_K: Temperatura del aire interior [K].
+        T_prod_K: Temperatura del producto [K].
+        omega: Humedad absoluta del aire [kg_w/kg_as].
+        P_Pa: Presión absoluta [Pa].
+        L_flujo_m: Longitud recorrida por el aire (largo de cámara) [m].
+        L_bandeja_m: Longitud característica de la bandeja ``A_s/P`` [m].
+
+    Returns:
+        h aire↔producto [W/(m²·K)].
+    """
+    T_pel = 0.5 * (T_flujo_K + T_prod_K)
+    h_forzado = _h_conv_camara_placa_plana(v_aire_ms, L_flujo_m, T_pel, omega, P_Pa)
+    delta_T = T_flujo_K - T_prod_K
+    Ra = _rayleigh(delta_T, L_bandeja_m, T_pel, omega, P_Pa)
+    # Aire más caliente que el producto (ΔT > 0) ⇒ superficie fría mirando
+    # arriba ⇒ estratificación ESTABLE (rama débil).
+    Nu_nat = nusselt_placa_horizontal(Ra, inestable=delta_T < 0.0)
+    h_natural = (
+        Nu_nat * propiedades_aire(T_pel, P_Pa)["k"] / L_bandeja_m if L_bandeja_m > 0 else 0.0
+    )
+    return nusselt_mixto(h_forzado, h_natural, N_MIXTO_TRANSVERSAL)
+
+
+def coef_conveccion_pared_local(
+    v_aire_ms: float,
+    T_flujo_K: float,
+    T_amb_K: float,
+    omega: float,
+    P_Pa: float,
+    L_flujo_m: float,
+    alto_m: float,
+    R_cond_pared_m2K_W: float,
+    h_w_W_m2K: float,
+) -> float:
+    """Coeficiente convectivo interior aire↔pared — mixta sobre placa vertical.
+
+    Separado del de producto desde S61 (decisión §6.2): comparten el aire pero
+    no la geometría, y sobre todo la pared necesita el **piso conductivo**
+    ``Nu → 0.68`` de Churchill-Chu (Ec. 9.27). Con el film interior atado al
+    coeficiente forzado, a caudal casi nulo ``h → 0`` hacía ``U_total → 0`` y la
+    cámara aparecía perfectamente aislada.
+
+    Combinación mixta con ``n = 3``: sobre una pared vertical el empuje corre a
+    lo largo de la superficie (no transversal como en la bandeja).
+
+    El ΔT que gobierna el empuje es el que cae en la **película interior**, no
+    ``T_flujo − T_amb``. Como la partición depende del propio ``h`` que estamos
+    calculando, se resuelve con dos pasadas de punto fijo (sobra: Nu ~ Ra^{1/4}).
+
+    Args:
+        v_aire_ms: Velocidad media del aire en la cámara [m/s].
+        T_flujo_K: Temperatura del aire interior [K].
+        T_amb_K: Temperatura ambiente exterior [K].
+        omega: Humedad absoluta del aire [kg_w/kg_as].
+        P_Pa: Presión absoluta [Pa].
+        L_flujo_m: Longitud recorrida por el aire (largo de cámara) [m].
+        alto_m: Altura de la pared [m] — longitud característica de la natural.
+        R_cond_pared_m2K_W: Resistencia conductiva de la pared [m²·K/W].
+        h_w_W_m2K: Coeficiente exterior por viento (McAdams) [W/(m²·K)].
+
+    Returns:
+        h aire↔cara interior de la pared [W/(m²·K)].
+    """
+    delta_T_total = T_flujo_K - T_amb_K
+    T_pel = 0.5 * (T_flujo_K + T_amb_K)
+    h_forzado = _h_conv_camara_placa_plana(v_aire_ms, L_flujo_m, T_pel, omega, P_Pa)
+    k_aire = propiedades_aire(T_pel, P_Pa)["k"]
+    R_ext = 1.0 / h_w_W_m2K if h_w_W_m2K > 0.0 else 0.0
+
+    Pr = propiedades_aire(T_pel, P_Pa)["pr"]
+    h = h_forzado
+    delta_T_int = delta_T_total
+    for _ in range(2):
+        Ra = _rayleigh(delta_T_int, alto_m, T_pel, omega, P_Pa)
+        Nu_nat = nusselt_placa_vertical(Ra, Pr)
+        h_natural = Nu_nat * k_aire / alto_m if alto_m > 0 else 0.0
+        h = nusselt_mixto(h_forzado, h_natural, N_MIXTO_ASISTIDA)
+        # Reparto de ΔT por resistencias en serie: la película interior se lleva
+        # R_int/(R_int + R_cond + R_ext) del salto total.
+        if h > 0.0:
+            R_int = 1.0 / h
+            R_total = R_int + R_cond_pared_m2K_W + R_ext
+            delta_T_int = delta_T_total * R_int / R_total if R_total > 0.0 else delta_T_total
+    return h
 
 
 @dataclass
@@ -109,6 +324,7 @@ class _ParamsCamaraTD:
     h_conv_W_m2K: float
     K_m_kg_m2s: float
     coef_transporte_func: Callable[[float, float, float, float], tuple[float, float]]
+    coef_pared_func: Callable[[float, float, float, float], float]
     k_aisl_W_mK: float
     esp_cam_total_m: float
     tau_cubierta_solar: float
@@ -253,13 +469,22 @@ def _construir_params_termodinamico(
     omega_ent = humedad_absoluta(HR_operacion, T_operacion_K, P_Pa)
     T_prod_inicial = p.T_prod_inicial_K if p.T_prod_inicial_K is not None else T_amb_K
 
+    # --- Decomposición de la pared en cascada 3-nodos ---
+    R_cond_pared = cons.pared.R_conduccion_m2K_W
+    esp_cam_total = cons.pared.espesor_total_m
+    k_aisl = esp_cam_total / R_cond_pared
+
     # --- h_conv y K_m congelados (referencia / fallback) ---
     T_pelicula = 0.5 * (T_operacion_K + T_prod_inicial)
     rho_pelicula = densidad_aire_humedo(T_pelicula, omega_ent, P_Pa)
     area_transversal_m2 = g.ancho_m * g.alto_m
     v_aire = f.caudal_masico_kg_s / (rho_pelicula * area_transversal_m2)
-    h_conv = _h_conv_camara_placa_plana(v_aire, g.largo_m, T_pelicula, omega_ent, P_Pa) * (
-        factor_h_conv
+    L_bandeja = _L_caracteristica_bandeja(b.area_bandeja_m2, g.largo_m, g.ancho_m)
+    h_conv = (
+        coef_conveccion_producto_local(
+            v_aire, T_operacion_K, T_prod_inicial, omega_ent, P_Pa, g.largo_m, L_bandeja
+        )
+        * factor_h_conv
     )
     cp_hum = 1006.0 + omega_ent * 1805.0
     K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
@@ -272,16 +497,41 @@ def _construir_params_termodinamico(
         rho = densidad_aire_humedo(T_pel, omega_ent_local, P_Pa)
         v_aire_t = m_dot_local / (rho * area_transversal_m2)
         h = (
-            _h_conv_camara_placa_plana(v_aire_t, g.largo_m, T_pel, omega_ent_local, P_Pa)
+            coef_conveccion_producto_local(
+                v_aire_t,
+                T_ent_local,
+                T_prod_local,
+                omega_ent_local,
+                P_Pa,
+                g.largo_m,
+                L_bandeja,
+            )
             * factor_h_conv
         )
         cp_hum_t = 1006.0 + omega_ent_local * 1805.0
         return h, h / (cp_hum_t * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
-    # --- Decomposición de la pared en cascada 3-nodos ---
-    R_cond_pared = cons.pared.R_conduccion_m2K_W
-    esp_cam_total = cons.pared.espesor_total_m
-    k_aisl = esp_cam_total / R_cond_pared
+    def _coef_pared(
+        T_ent_local: float, T_amb_local: float, m_dot_local: float, h_w_local: float
+    ) -> float:
+        """Film interior de pared/techo, separado del de producto (S61)."""
+        T_pel = 0.5 * (T_ent_local + T_amb_local)
+        rho = densidad_aire_humedo(T_pel, omega_ent, P_Pa)
+        v_aire_t = m_dot_local / (rho * area_transversal_m2)
+        return (
+            coef_conveccion_pared_local(
+                v_aire_t,
+                T_ent_local,
+                T_amb_local,
+                omega_ent,
+                P_Pa,
+                g.largo_m,
+                g.alto_m,
+                R_cond_pared,
+                h_w_local,
+            )
+            * factor_h_conv
+        )
 
     return _ParamsCamaraTD(
         cp_seco=cp_seco,
@@ -295,6 +545,7 @@ def _construir_params_termodinamico(
         h_conv_W_m2K=h_conv,
         K_m_kg_m2s=K_m,
         coef_transporte_func=_coef_transporte,
+        coef_pared_func=_coef_pared,
         k_aisl_W_mK=k_aisl,
         esp_cam_total_m=esp_cam_total,
         tau_cubierta_solar=tau_cub,
@@ -384,6 +635,7 @@ def _calcular_termodinamico(
         P_Pa=P_Pa,
         aw_func=pr.aw_func,
         coef_transporte_func=pr.coef_transporte_func,
+        coef_pared_func=pr.coef_pared_func,
         tau_cubierta_solar=pr.tau_cubierta_solar,
         alfa_producto_solar=pr.alfa_producto_solar,
         A_rad_m2=pr.A_rad_total_m2,
@@ -416,6 +668,109 @@ def _calcular_termodinamico(
         T_max_alcanzada_K=res.T_max_alcanzada_K,
         advertencias=advertencias + list(res.advertencias),
     )
+
+
+def estimar_T_flujo_estacionario(
+    camara: "Camara",
+    T_ent_K: float,
+    HR_ent: float,
+    m_dot_as_kg_s: float,
+    T_amb_K: float,
+    P_Pa: float = 101325.0,
+    v_viento_ms: float = 2.0,
+    I_g_W_m2: float = 0.0,
+) -> float:
+    """Temperatura del aire dentro de la cámara en régimen, sin integrar [K].
+
+    Resuelve **una sola vez** el sistema algebraico del CSTR
+    (``resolver_estado_camara``) con el producto en su estado inicial, en vez de
+    integrar el secado completo. Es O(1) y devuelve exactamente la cantidad que
+    gobierna el empuje del tiro térmico: la temperatura del aire **interior**.
+
+    Existe para el lazo de convección natural (S61). El motor de flotabilidad
+    necesita ``T_flujo`` en cada iteración de Picard, y para un cajón sin
+    colector el balance no tenía de dónde sacarla: usaba la heurística fija
+    ``T_amb + 25 K``, que no depende del caudal y por lo tanto **congelaba el
+    lazo** (convergía trivialmente en una iteración, con un empuje inventado).
+
+    Es una estimación de punto de diseño, no un resultado: toma el producto
+    recién cargado (``T_prod_inicial``, ``X_inicial``), que es cuando el
+    enfriamiento evaporativo es máximo, así que subestima ``T_flujo`` —y con él
+    el tiro— a medida que el producto se seca. Conservador para prediseño.
+
+    Args:
+        camara: Cámara configurada.
+        T_ent_K: Temperatura del aire que entra [K].
+        HR_ent: Humedad relativa del aire que entra [fracción 0–1].
+        m_dot_as_kg_s: Caudal másico de aire seco [kg/s].
+        T_amb_K: Temperatura ambiente exterior [K].
+        P_Pa: Presión total [Pa].
+        v_viento_ms: Viento a 2 m [m/s], para el film exterior McAdams.
+        I_g_W_m2: Irradiancia sobre las caras translúcidas [W/m²]. Alimenta el
+            término radiativo al producto cuando la cámara tiene techo/caras
+            translúcidas; 0 = cámara opaca o sin sol.
+
+    Returns:
+        ``T_flujo`` [K]. Si el caudal no es positivo devuelve ``T_ent_K``.
+    """
+    if m_dot_as_kg_s <= 0:
+        return T_ent_K
+    pr = _construir_params_termodinamico(camara, T_ent_K, HR_ent, T_amb_K, P_Pa)
+    omega_ent = humedad_absoluta(HR_ent, T_ent_K, P_Pa)
+    h_w = 5.7 + 3.8 * max(v_viento_ms, 0.0)  # McAdams (ADR-006: v a 2 m, sin corregir)
+    h_conv, K_m = pr.coef_transporte_func(T_ent_K, pr.T_prod_inicial_K, omega_ent, m_dot_as_kg_s)
+    h_pared = pr.coef_pared_func(T_ent_K, T_amb_K, m_dot_as_kg_s, h_w)
+    # Radiación transmitida que intercepta el PRODUCTO (no el aire: ver
+    # docs/notas/cubiertas translucidas en camara de secado.md).
+    Q_rad_W = I_g_W_m2 * pr.tau_cubierta_solar * pr.alfa_producto_solar * pr.A_rad_total_m2
+
+    def _estado(T_prod_K: float):
+        return resolver_estado_camara(
+            T_prod_K=T_prod_K,
+            X_prod_kg_kg=pr.X_inicial,
+            T_ent_K=T_ent_K,
+            omega_ent_kg_kg=omega_ent,
+            A_prod_m2=pr.A_prod_total_m2,
+            A_cuerpo_m2=pr.A_cuerpo_total_m2,
+            m_dot_as_kg_s=m_dot_as_kg_s,
+            h_conv_W_m2K=h_conv,
+            K_m_kg_m2s=K_m,
+            h_w_W_m2K=h_w,
+            k_aisl_W_mK=pr.k_aisl_W_mK,
+            esp_cam_m=pr.esp_cam_total_m,
+            T_amb_K=T_amb_K,
+            P_Pa=P_Pa,
+            aw_func=pr.aw_func,
+            R_cond_techo_m2K_W=pr.R_cond_techo_m2K_W,
+            A_techo_m2=pr.A_techo_total_m2,
+            h_conv_pared_W_m2K=h_pared,
+        )
+
+    # Estado estacionario del producto: el mismo balance de la EDO con
+    # dT_prod/dt = 0  ⇒  q_prod + Q_rad − ṁ_w·L_v = 0. Es monótono decreciente
+    # en T_prod (más caliente ⇒ menos calor recibido y más evaporación), así
+    # que la raíz es única. Sin esto habría que suponer T_prod, y en una caja
+    # translúcida —donde el aire entra a T_amb y **todo** el calor llega por el
+    # producto insolado— cualquier suposición decide sola el resultado.
+    def _residuo_prod(T_prod_K: float) -> float:
+        est = _estado(T_prod_K)
+        L_v = calor_latente_vaporizacion(min(373.0, max(250.0, T_prod_K)))
+        return est.q_prod_W + Q_rad_W - est.m_dot_w_kg_s * L_v
+
+    T_lo = min(T_amb_K, T_ent_K) - 5.0
+    T_hi = max(T_amb_K, T_ent_K) + 90.0
+    try:
+        if _residuo_prod(T_lo) <= 0.0:
+            T_prod_eq = T_lo
+        elif _residuo_prod(T_hi) >= 0.0:
+            T_prod_eq = T_hi
+        else:
+            T_prod_eq = float(brentq(_residuo_prod, T_lo, T_hi, xtol=1e-3, rtol=1e-6))
+    except (ValueError, ZeroDivisionError):
+        # Sin raíz utilizable, caemos al producto recién cargado (frío): es la
+        # cota conservadora, subestima el tiro.
+        T_prod_eq = pr.T_prod_inicial_K
+    return float(_estado(T_prod_eq).T_flujo_K)
 
 
 def calcular_camara(
@@ -547,6 +902,7 @@ def calcular_camara_cascada(
         P_Pa=P_Pa,
         aw_func=pr.aw_func,
         coef_transporte_func=pr.coef_transporte_func,
+        coef_pared_func=pr.coef_pared_func,
         tau_cubierta_solar=pr.tau_cubierta_solar,
         alfa_producto_solar=pr.alfa_producto_solar,
         A_rad_por_zona_m2=pr.A_rad_total_m2 / N,

@@ -391,6 +391,51 @@ def _texto_config_chimenea(chimenea: Chimenea) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _delta_P_bocas_forzado(
+    proyecto, Q_vol_m3_s: float, P_Pa: float
+) -> tuple[float, dict[str, float]]:
+    """ΔP de las bocas de la cámara en el circuito **forzado** (S61).
+
+    Con ventilador las bocas no cambian el caudal —lo impone el ventilador—
+    pero sí la **presión que tiene que entregar**, y con ella la potencia
+    eléctrica. Es el mismo dato de dimensionamiento que en convección natural,
+    solo que el efecto sale por otro lado.
+
+    Devuelve además los ``K`` que hay que **anular** en
+    ``motor_calc.estimar_delta_P_singulares``: sus términos de entrada, salida y
+    difusor son las mismas transiciones, estimadas sobre la velocidad del ducto
+    —es decir, suponiendo una boca del tamaño del ducto—. Cuando el usuario
+    carga las áreas reales, esas áreas mandan y los genéricos se apagan.
+
+    Args:
+        proyecto: Proyecto con cámara.
+        Q_vol_m3_s: Caudal volumétrico del sistema [m³/s].
+        P_Pa: Presión del sitio [Pa].
+
+    Returns:
+        ``(ΔP_bocas [Pa], overrides de K para estimar_delta_P_singulares)``.
+        Sin bocas definidas: ``(0.0, {})`` — cadena de singulares intacta.
+    """
+    if proyecto is None or proyecto.camara is None or not proyecto.camara.flujo.bocas_definidas:
+        return (0.0, {})
+    from calculos.chimenea_calc import coeficientes_bocas, delta_P_bocas_Pa
+    from calculos.motor_calc import densidad_aire
+
+    f = proyecto.camara.flujo
+    K_in, K_out = coeficientes_bocas(proyecto.colector is not None, proyecto.chimenea is not None)
+    rho = densidad_aire(_T_MEDIA_DEFAULT_K, P_Pa)
+    dP = delta_P_bocas_Pa(
+        Q_vol_m3_s * rho,
+        f.area_entrada_aire_m2,
+        f.area_salida_aire_m2,
+        _T_MEDIA_DEFAULT_K,
+        P_Pa,
+        K_in=K_in,
+        K_out=K_out,
+    )
+    return (dP, {"K_entrada": 0.0, "K_salida": 0.0, "K_difusor": 0.0})
+
+
 def _condiciones_representativas_chimenea(
     proyecto,
 ) -> tuple[float, float, str]:
@@ -1089,14 +1134,22 @@ def render() -> None:
                     n_paralelo = int(proyecto.colector.banco.n_paralelo)
                 except Exception:
                     pass
+            # Bocas de la cámara: cuando el usuario carga sus áreas, las
+            # transiciones de entrada/salida se calculan sobre el área REAL y
+            # reemplazan a los términos genéricos de `estimar_delta_P_singulares`
+            # (que las estimaba sobre la velocidad del ducto, o sea suponiendo
+            # una boca del tamaño del ducto). Sumar ambos sería contar dos veces
+            # la misma transición.
+            dP_bocas_val, K_bocas_sing = _delta_P_bocas_forzado(proyecto, Q_vol_m3s, P_proyecto_Pa)
             sing = estimar_delta_P_singulares(
                 Q_vol_m3_s=Q_vol_m3s,
                 v_ducto_m_s=v_ducto,
                 n_paralelo=n_paralelo,
                 n_codos=2,
                 P_Pa=P_proyecto_Pa,
+                **K_bocas_sing,
             )
-            dP_singulares_val = sing["total"]
+            dP_singulares_val = sing["total"] + dP_bocas_val
             with st.expander(
                 t("p6.perdidas.singulares.titulo", v=dP_singulares_val),
                 expanded=False,
@@ -1119,8 +1172,9 @@ def render() -> None:
                         n_paralelo=n_paralelo,
                         n_codos=2,
                         P_Pa=P_proyecto_Pa,
+                        **K_bocas_sing,
                     )
-                    dP_singulares_val = sing["total"]
+                    dP_singulares_val = sing["total"] + dP_bocas_val
                     v_ducto = v_ducto_input
                 st.caption(
                     t(
@@ -1133,6 +1187,16 @@ def render() -> None:
                         difusor=sing["difusor"],
                     )
                 )
+                if dP_bocas_val > 0:
+                    f_bocas = proyecto.camara.flujo
+                    st.caption(
+                        t(
+                            "p6.perdidas.singulares.bocas",
+                            dp=dP_bocas_val,
+                            a_in=f_bocas.area_entrada_aire_m2,
+                            a_out=f_bocas.area_salida_aire_m2,
+                        )
+                    )
 
             dP_ductos_efectivo = (
                 dP_ductos_val if dP_ductos_val is not None else 0.20 * (dP_col_input + dP_cam_input)

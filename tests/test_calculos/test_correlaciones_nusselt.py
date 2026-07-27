@@ -36,8 +36,11 @@ from calculos.correlaciones_nusselt import (
     nusselt_gnielinski,
     nusselt_heaton,
     nusselt_hollands_inclinada,
+    nusselt_mixto,
     nusselt_mixto_local,
     nusselt_natural_canal,
+    nusselt_placa_horizontal,
+    nusselt_placa_vertical,
     nusselt_shah_london,
     nusselt_shah_london_simetrico,
     nusselt_sparrow_liu,
@@ -657,6 +660,80 @@ class TestNusseltLocal:
         nu_forzado = nusselt_forzado_local(400.0, 0.7, 0.05, 1.0, "una_pared")
         nu_mixto = nusselt_mixto_local(Ra=1e6, **kw)
         assert nu_mixto > nu_forzado
+
+
+class TestConveccionNaturalCamara:
+    """Correlaciones de convección natural de la cámara (Incropera §9.6, S61)."""
+
+    def test_placa_horizontal_rama_estable_debil(self):
+        """Rama estable = Ec. 9.32 exacta (Nu = 0.52·Ra^{1/5})."""
+        assert nusselt_placa_horizontal(1e6, inestable=False) == pytest.approx(0.52 * 1e6**0.2)
+
+    def test_placa_horizontal_inestable_supera_estable(self):
+        """La rama inestable (caliente arriba) transporta más que la estable."""
+        for Ra in (1e4, 1e6, 1e8, 1e10):
+            assert nusselt_placa_horizontal(Ra, inestable=True) > nusselt_placa_horizontal(
+                Ra, inestable=False
+            )
+
+    def test_placa_horizontal_ramas_930_931_continuas(self):
+        """El cruce 9.30↔9.31 es continuo (se toma la envolvente, sin salto)."""
+        Ra_cruce = (0.54 / 0.15) ** 12  # donde 0.54·Ra^{1/4} = 0.15·Ra^{1/3}
+        nu_lo = nusselt_placa_horizontal(Ra_cruce * 0.999, inestable=True)
+        nu_hi = nusselt_placa_horizontal(Ra_cruce * 1.001, inestable=True)
+        assert nu_hi == pytest.approx(nu_lo, rel=1e-3)
+
+    def test_placa_horizontal_930_manda_en_laminar(self):
+        """Por debajo del cruce gobierna 9.30 (0.54·Ra^{1/4})."""
+        assert nusselt_placa_horizontal(1e6, inestable=True) == pytest.approx(0.54 * 1e6**0.25)
+
+    def test_placa_horizontal_931_manda_en_turbulento(self):
+        """Por encima del cruce gobierna 9.31 (0.15·Ra^{1/3})."""
+        assert nusselt_placa_horizontal(1e10, inestable=True) == pytest.approx(
+            0.15 * 1e10 ** (1.0 / 3.0)
+        )
+
+    def test_placa_horizontal_sin_flotacion(self):
+        """Ra ≤ 0 (ΔT nulo) ⇒ sin componente natural."""
+        assert nusselt_placa_horizontal(0.0, inestable=True) == 0.0
+        assert nusselt_placa_horizontal(-1.0, inestable=False) == 0.0
+
+    def test_placa_vertical_piso_conductivo(self):
+        """Con Ra→0 la placa vertical NO cae a cero: piso conductivo Nu→0.68."""
+        assert nusselt_placa_vertical(0.0, 0.71) == pytest.approx(0.68)
+        # Es el mínimo absoluto: ninguna Ra da menos (es lo que le pone piso al
+        # film interior de la pared cuando el caudal se apaga).
+        for Ra in (1e-6, 1e-2, 1.0, 1e2, 1e6):
+            assert nusselt_placa_vertical(Ra, 0.71) >= 0.68
+        assert nusselt_placa_vertical(1e-6, 0.71) < 0.75
+
+    def test_placa_vertical_crece_con_Ra(self):
+        """Monotonía en Ra."""
+        nus = [nusselt_placa_vertical(Ra, 0.71) for Ra in (1e4, 1e6, 1e8, 1e10)]
+        assert nus == sorted(nus)
+
+    def test_placa_vertical_valor_laminar_churchill_chu(self):
+        """Ra=1e6, Pr=0.71 → Ec. 9.27 exacta (rama laminar, la que gobierna)."""
+        Ra, Pr = 1e6, 0.71
+        esperado = 0.68 + 0.670 * Ra**0.25 / (1.0 + (0.492 / Pr) ** (9.0 / 16.0)) ** (4.0 / 9.0)
+        assert nusselt_placa_vertical(Ra, Pr) == pytest.approx(esperado)
+
+    def test_mixto_transversal_menor_que_asistido(self):
+        """n=7/2 (transversal) da menos que n=3 (asistido) con las mismas componentes."""
+        assert nusselt_mixto(5.0, 4.0, 3.5) < nusselt_mixto(5.0, 4.0, 3.0)
+
+    def test_mixto_domina_el_mayor(self):
+        """La media potencial queda entre el máximo y el máximo·2^{1/n}."""
+        for n in (3.0, 3.5):
+            nu = nusselt_mixto(6.0, 2.0, n)
+            assert 6.0 < nu < 6.0 * 2.0 ** (1.0 / n)
+
+    def test_mixto_local_usa_el_combinador_generico(self):
+        """nusselt_mixto_local quedó reescrito sobre nusselt_mixto con n=3."""
+        kw = dict(Re=800.0, Pr=0.7, Dh_m=0.05, x_m=1.0, pared="una_pared")
+        nu_f = nusselt_forzado_local(800.0, 0.7, 0.05, 1.0, "una_pared")
+        nu_n = nusselt_natural_canal(1e6, 0.7)
+        assert nusselt_mixto_local(Ra=1e6, **kw) == pytest.approx(nusselt_mixto(nu_f, nu_n, 3.0))
 
 
 if __name__ == "__main__":

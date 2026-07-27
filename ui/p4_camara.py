@@ -11,6 +11,7 @@ cálculo de tiempo de secado via calculos/camara_calc.py.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import time as _time
 from typing import Optional
 
@@ -36,7 +37,6 @@ from calculos.conversiones_angulo import (
 from calculos.motor_calc import _D_P_DEFAULT_M, _C_obstruccion_bloqueo
 from calculos.psicrometria import humedad_absoluta
 from calculos.simulacion_anual import ResultadosAnual, simular_anual
-from calculos.simulacion_ventana import PoliticaRecarga
 from core import catalogo
 from core.camara import (
     Camara,
@@ -55,6 +55,7 @@ from core.camara import (
     _modelos_disponibles,
     advertencias_camara,
 )
+from core.operacion import PoliticaRecarga
 from core.proyecto import ModoAnalisis
 from ui.componentes.advertencias_widget import render_advertencias
 from ui.componentes.espesores import (
@@ -79,6 +80,12 @@ _T_OP_MAX_C: float = 90.0
 _T_OP_DEFAULT_C: float = 55.0
 
 _HR_DEFAULT_PCT: float = 20.0
+
+# Renovaciones de aire por minuto de referencia para un secador pasivo (S61).
+# Medido sobre el cajón del usuario con clima real: el tiro resuelve 0.94 ren/min
+# y otras geometrías dan 1.1–2.1, así que 1 es un anclaje físico razonable. El
+# default de fábrica en kg/s (0.030) equivalía a ~12 ren/min en una caja chica.
+_RENOVACIONES_MIN_DEFAULT: float = 1.0
 # Default de fábrica de ConfiguracionFlujo.caudal_masico_kg_s: si el valor
 # guardado es exactamente este, nadie lo tocó y el caudal puede seguir al
 # colector sin pisar una decisión del usuario.
@@ -106,18 +113,58 @@ def _mostrar_advertencias(adv_list: list) -> None:
     render_advertencias(adv_list, con_sugerencia=False)
 
 
+def _serie_clima(proyecto, columna: str):
+    """Columna del DataFrame de clima, o None si no hay clima cargado.
+
+    ``Clima`` guarda las series en el DataFrame ``datos`` (columnas de
+    ``COLUMNAS_SI``), **no** como atributos. Leerlas con ``getattr(clima,
+    "T_amb_K")`` devolvía siempre None, así que la T ambiente representativa
+    caía al fallback de 25 °C aunque el clima estuviera cargado (S61).
+    """
+    clima = getattr(proyecto, "clima", None)
+    datos = getattr(clima, "datos", None) if clima is not None else None
+    if datos is None or columna not in getattr(datos, "columns", []):
+        return None
+    arr = np.asarray(datos[columna], dtype=float)
+    return arr if arr.size > 0 else None
+
+
 def _T_amb_representativa_K(proyecto) -> tuple[float, str]:
     """Devuelve T_amb representativa para el motor termodinámico, con su origen.
 
     Si hay clima cargado, usa la media anual; si no, fallback 25 °C.
     """
-    clima = getattr(proyecto, "clima", None)
-    if clima is not None and getattr(clima, "T_amb_K", None) is not None:
-        T_arr = np.asarray(clima.T_amb_K)
-        if T_arr.size > 0:
-            T = float(np.nanmean(T_arr))
-            return T, t("p4.t_amb_origen.media_anual", t=T - 273.15)
+    T_arr = _serie_clima(proyecto, "T_amb_K")
+    if T_arr is not None:
+        T = float(np.nanmean(T_arr))
+        return T, t("p4.t_amb_origen.media_anual", t=T - 273.15)
     return 298.15, t("p4.t_amb_origen.fallback")
+
+
+def _rho_aire_ambiente(proyecto) -> float:
+    """Densidad del aire a la T ambiente representativa y la P del sitio [kg/m³].
+
+    Es la que convierte renovaciones de aire (volumen) a caudal másico (lo que
+    consume el motor). A 10 °C y 1187 m de altitud da ≈ 0.90 kg/m³, bastante
+    lejos del 1.2 de nivel del mar y 20 °C.
+    """
+    T_amb_K, _ = _T_amb_representativa_K(proyecto)
+    return _P_ref_Pa(proyecto) / (287.058 * T_amb_K)
+
+
+def _HR_amb_representativa(proyecto) -> tuple[float, bool]:
+    """HR ambiente representativa [fracción 0–1] y si vino del clima.
+
+    Compañera de :func:`_T_amb_representativa_K`. La necesita el aire de entrada
+    de un secador **sin colector**, donde lo que entra a la cámara es el
+    ambiente y no algo que el usuario elija.
+    """
+    HR_arr = _serie_clima(proyecto, "HR")
+    if HR_arr is not None:
+        HR = float(np.nanmean(HR_arr))
+        if 0.0 < HR <= 1.0:
+            return HR, True
+    return _HR_DEFAULT_PCT / 100.0, False
 
 
 def _grafica_curva_secado(resultados, X_0: float, X_obj: float, prod_id: str) -> go.Figure:
@@ -764,6 +811,159 @@ def _seguir_colector_default(flujo_prev, m_col: float) -> bool:
     return abs(caudal_prev - m_col) <= 0.02 * max(m_col, 1e-9)
 
 
+def _caudal_natural_por_delta_T(
+    proyecto, A_in_m2: float, A_out_m2: float, alto_camara_m: float, delta_T_K: float
+) -> float:
+    """Caudal de equilibrio del lazo natural para un ΔT dado [kg/s].
+
+    Es el mismo motor que usa el balance (`caudal_natural_kgs`), evaluado a un
+    salto térmico impuesto en vez de al que resuelve la cámara. Sirve para
+    dimensionar las bocas: muestra cuánto aire mueve el equipo por cada grado de
+    diferencia con el ambiente, sin depender de que la cámara sea construible ni
+    de correr el secado.
+    """
+    from calculos.chimenea_calc import caudal_natural_kgs, coeficientes_bocas
+
+    T_amb_K, _ = _T_amb_representativa_K(proyecto)
+    chim = proyecto.chimenea
+    K_in, K_out = coeficientes_bocas(proyecto.colector is not None, chim is not None)
+    res = caudal_natural_kgs(
+        T_amb_K=T_amb_K,
+        T_chim_K=T_amb_K + delta_T_K,
+        diametro_chim_m=chim.diametro_m if chim is not None else 0.0,
+        altura_chim_m=chim.altura_m if chim is not None else 0.0,
+        H_camara_m=alto_camara_m,
+        delta_P_resto_fn=lambda _m: 0.0,
+        P_amb_Pa=_P_ref_Pa(proyecto),
+        A_boca_entrada_m2=A_in_m2,
+        A_boca_salida_m2=A_out_m2,
+        K_boca_entrada=K_in,
+        K_boca_salida=K_out,
+    )
+    return float(res.get("m_punto_kgs", 0.0))
+
+
+def _caption_caudal_natural(
+    proyecto,
+    A_in_m2: float,
+    A_out_m2: float,
+    alto_camara_m: float,
+    volumen_camara_m3: float = 0.0,
+) -> None:
+    """Muestra el caudal que resuelve el tiro para dos ΔT de referencia.
+
+    Se dan **dos** puntos y no uno solo porque el ΔT real lo decide el balance
+    de la cámara (y varía hora a hora): lo honesto es mostrar la sensibilidad
+    del área de bocas, no un número único que se leería como predicción. El
+    caudal definitivo sale de P7, que cierra el lazo con el motor completo.
+    """
+    try:
+        m_5 = _caudal_natural_por_delta_T(proyecto, A_in_m2, A_out_m2, alto_camara_m, 5.0)
+        m_15 = _caudal_natural_por_delta_T(proyecto, A_in_m2, A_out_m2, alto_camara_m, 15.0)
+    except Exception:
+        return
+    st.caption(t("p4.bocas.caudal_resuelto", m5=m_5, m15=m_15))
+    # La misma cifra en la unidad con la que se carga el caudal de referencia,
+    # para poder alinear una con otra sin hacer la cuenta a mano.
+    if volumen_camara_m3 and volumen_camara_m3 > 0:
+        rho = _rho_aire_ambiente(proyecto)
+        por_renovacion = volumen_camara_m3 * rho / 60.0
+        if por_renovacion > 0:
+            st.caption(
+                t(
+                    "p4.bocas.renovaciones_resueltas",
+                    r5=m_5 / por_renovacion,
+                    r15=m_15 / por_renovacion,
+                )
+            )
+
+
+def _render_bocas_aire(
+    proyecto,
+    flujo_prev,
+    caudal_kg_s: float,
+    alto_camara_m: float,
+    volumen_camara_m3: float = 0.0,
+) -> tuple[float | None, float | None]:
+    """Widgets de área de boca de entrada y salida de la cámara (S61).
+
+    Son dimensionamiento en **las dos** formas de mover el aire, solo que el
+    efecto sale por lugares distintos:
+
+    - **Sin ventilador** (caja o armario pasivo, con o sin chimenea): las bocas
+      son la resistencia del lazo de flotabilidad, así que el caudal deja de ser
+      el número que carga el usuario y pasa a resolverlo el equilibrio
+      tiro ↔ resistencia.
+    - **Con ventilador**: el caudal lo impone él, pero las bocas fijan la
+      presión que tiene que entregar y con ella la potencia eléctrica (P6).
+
+    Devuelve ``(None, None)`` cuando el usuario no las activa, que es lo que
+    mantiene el comportamiento histórico.
+
+    **No** depende de que ``proyecto.camara`` exista: es un widget y tiene que
+    dibujarse aunque la cámara todavía no sea construible. Atarlo al objeto lo
+    hacía desaparecer justo cuando la configuración era inválida (por ejemplo
+    una pila de bandejas más alta que la cámara), que es cuando el usuario está
+    editando y más necesita ver los controles. La altura llega como parámetro
+    desde el widget de geometría por la misma razón.
+    """
+    if proyecto is None:
+        return (None, None)
+
+    st.markdown("---")
+    st.markdown(t("p4.bocas.titulo"))
+    definidas_prev = bool(getattr(flujo_prev, "bocas_definidas", False))
+    usar = st.checkbox(
+        t("p4.bocas.usar.label"),
+        value=definidas_prev,
+        key="p4_flujo_usar_bocas",
+        help=t("p4.bocas.usar.help"),
+    )
+    if not usar:
+        clave = "p4.bocas.sin_bocas_forzado" if proyecto.motor is not None else "p4.bocas.sin_bocas"
+        st.caption(t(clave, caudal=caudal_kg_s))
+        return (None, None)
+
+    b1, b2 = st.columns(2)
+    area_ent = b1.number_input(
+        t("p4.bocas.entrada.label"),
+        min_value=0.0005,
+        max_value=10.0,
+        value=float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05),
+        step=0.005,
+        format="%.4f",
+        key="p4_flujo_area_entrada",
+        help=t("p4.bocas.entrada.help"),
+    )
+    area_sal = b2.number_input(
+        t("p4.bocas.salida.label"),
+        min_value=0.0005,
+        max_value=10.0,
+        value=float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05),
+        step=0.005,
+        format="%.4f",
+        key="p4_flujo_area_salida",
+        help=t("p4.bocas.salida.help"),
+    )
+    if proyecto.motor is not None:
+        st.caption(t("p4.bocas.con_motor"))
+    else:
+        if proyecto.chimenea is not None:
+            st.caption(t("p4.bocas.con_chimenea"))
+        else:
+            st.caption(t("p4.bocas.con_bocas", alto=float(alto_camara_m)))
+        _caption_caudal_natural(
+            proyecto,
+            float(area_ent),
+            float(area_sal),
+            float(alto_camara_m),
+            volumen_camara_m3,
+        )
+    if proyecto.colector is not None:
+        st.caption(t("p4.bocas.acople_colector"))
+    return (float(area_ent), float(area_sal))
+
+
 def _disponibilidad_forzantes_reales(p3_eval, proyecto) -> tuple[bool, str]:
     """Verifica si hay datos suficientes para construir forzantes reales.
 
@@ -1100,6 +1300,13 @@ def _texto_config_camara(cam: "Camara", session_state=None) -> str:
             if f.HR_entrada_fraccion is not None
             else "(no especificada, fallback)"
         ),
+        "  Bocas de aire      : "
+        + (
+            f"entrada {f.area_entrada_aire_m2:.4f} m² / salida {f.area_salida_aire_m2:.4f} m² "
+            "(caudal por convección natural)"
+            if f.bocas_definidas
+            else "(sin definir — caudal de diseño constante)"
+        ),
     ]
 
     # Advertencias
@@ -1253,6 +1460,18 @@ def _from_json_camara(data: dict) -> "Camara":
         # Back-compat: los snapshots anteriores a S58 no traen la decisión. Se
         # asume que sí seguía al colector, que es el default de la app.
         seguir_caudal_colector=bool(f_d.get("seguir_caudal_colector", True)),
+        # Bocas de aire (S61). Los snapshots previos no las traen → None, que es
+        # el caudal de diseño constante con el que esas corridas se hicieron.
+        area_entrada_aire_m2=(
+            float(f_d["area_entrada_aire_m2"])
+            if f_d.get("area_entrada_aire_m2") is not None
+            else None
+        ),
+        area_salida_aire_m2=(
+            float(f_d["area_salida_aire_m2"])
+            if f_d.get("area_salida_aire_m2") is not None
+            else None
+        ),
     )
 
     # Túnel semicontinuo (opcional; back-compat: ausente → None).
@@ -1388,6 +1607,8 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "fraccion_recirculacion": f.fraccion_recirculacion,
             "HR_entrada_fraccion": f.HR_entrada_fraccion,
             "seguir_caudal_colector": f.seguir_caudal_colector,
+            "area_entrada_aire_m2": f.area_entrada_aire_m2,
+            "area_salida_aire_m2": f.area_salida_aire_m2,
         },
         "tunel": (
             {
@@ -1445,6 +1666,129 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _ventana_encadena_lotes(proyecto) -> bool:
+    """Si el modo VENTANA de este proyecto encadena lotes (y usa la política).
+
+    Solo gran escala en subtipo BATCH: el túnel semicontinuo avanza columnas por
+    cadencia, no recarga. Para CAJA/ARMARIO el modo VENTANA cae al transitorio
+    multidía, que tampoco encadena.
+    """
+    from core.proyecto import SubtipoGranEscala, Tipologia
+
+    cfg = proyecto.configuracion
+    return (
+        getattr(cfg, "tipologia", None) == Tipologia.GRAN_ESCALA
+        and getattr(cfg, "subtipo_gran_escala", None) == SubtipoGranEscala.BATCH
+    )
+
+
+def _render_politica_recarga(proyecto) -> bool:
+    """Widgets de la política de recarga; la escribe en el proyecto.
+
+    La comparten los **dos** pipelines que encadenan lotes sobre clima real: el
+    modo ANUAL y el modo VENTANA de gran escala en subtipo BATCH. Hasta S58 los
+    widgets solo existían en la sección anual, así que en VENTANA la operación
+    quedaba clavada en los defaults del motor sin forma de tocarla (S59).
+
+    Los `value=` salen de la política guardada en el proyecto: un proyecto
+    cargado desde `.json` muestra la operación con la que se guardó, en vez de
+    volver a los defaults en silencio. La carga limpia las claves `p4_*` y
+    rerenderiza, así que son los que se aplican.
+
+    La política se escribe en **cada rerun**, como P4 hace con `proyecto.camara`:
+    mover un widget tiene que marcar el resultado calculado como desactualizado
+    en el acto, igual que cambiar la geometría, y el `.json` exportado tiene que
+    decir lo mismo que muestran los widgets.
+
+    Args:
+        proyecto: Proyecto en curso; se le reemplaza ``configuracion``.
+
+    Returns:
+        True si la política quedó escrita; False si era inválida (ya se mostró
+        el error, el llamador debería cortar).
+    """
+    pol_guardada = proyecto.configuracion.politica_recarga
+    with st.expander(t("p4.anual.recarga.titulo"), expanded=False):
+        st.caption(t("p4.anual.recarga.caption"))
+        rc1, rc2, rc3 = st.columns(3)
+        with rc1:
+            recarga_activa = st.checkbox(
+                t("p4.anual.recarga.activa.label"),
+                value=pol_guardada.activa,
+                key="p4_anual_recarga_activa",
+                help=t("p4.anual.recarga.activa.help"),
+            )
+        with rc2:
+            # time_input y no number_input: la hora del día se lee "08:00", no
+            # "8.00". Se convierte a horas decimales para el motor, que razona
+            # en horas desde el inicio del lapso.
+            _h_int = int(pol_guardada.hora_carga_h)
+            _hora_widget = st.time_input(
+                t("p4.anual.recarga.hora.label"),
+                value=_time(_h_int, int(round((pol_guardada.hora_carga_h - _h_int) * 60.0)) % 60),
+                step=1800,  # 30 min
+                disabled=not recarga_activa,
+                key="p4_anual_recarga_hora",
+                help=t("p4.anual.recarga.hora.help"),
+            )
+            hora_carga = float(_hora_widget.hour) + float(_hora_widget.minute) / 60.0
+        with rc3:
+            maniobra = st.number_input(
+                t("p4.anual.recarga.maniobra.label"),
+                min_value=0.0,
+                max_value=12.0,
+                value=pol_guardada.maniobra_h,
+                step=0.5,
+                disabled=not recarga_activa,
+                key="p4_anual_recarga_maniobra",
+                help=t("p4.anual.recarga.maniobra.help"),
+            )
+        if not recarga_activa:
+            st.warning(t("p4.anual.recarga.aviso_cota"))
+
+        # Decisión de cargar: un operador no llena el secador un día que viene
+        # nublado. Sin esto el modelo carga siempre e infla los lotes que se
+        # arrastran sin terminar (S58).
+        st.divider()
+        pc1, pc2 = st.columns(2)
+        with pc1:
+            exigir_pronostico = st.checkbox(
+                t("p4.anual.pronostico.activo.label"),
+                value=pol_guardada.exigir_pronostico,
+                key="p4_anual_pronostico_activo",
+                help=t("p4.anual.pronostico.activo.help"),
+            )
+        with pc2:
+            umbral_pronostico = st.number_input(
+                t("p4.anual.pronostico.umbral.label"),
+                min_value=0.0,
+                max_value=40.0,
+                value=pol_guardada.umbral_pronostico_MJ_m2,
+                step=1.0,
+                disabled=not exigir_pronostico,
+                key="p4_anual_pronostico_umbral",
+                help=t("p4.anual.pronostico.umbral.help"),
+            )
+        if exigir_pronostico:
+            st.caption(t("p4.anual.pronostico.nota_perfecto"))
+
+    try:
+        proyecto.configuracion = replace(
+            proyecto.configuracion,
+            politica_recarga=PoliticaRecarga(
+                activa=bool(recarga_activa),
+                hora_carga_h=float(hora_carga),
+                maniobra_h=float(maniobra),
+                exigir_pronostico=bool(exigir_pronostico),
+                umbral_pronostico_MJ_m2=float(umbral_pronostico),
+            ),
+        )
+    except ValueError as exc:
+        st.error(t("p4.anual.error", exc=exc))
+        return False
+    return True
+
+
 def _render_operacion_anual(proyecto, camara_builder) -> None:
     """Sección prominente de operación anual de cámara (modo ANUAL).
 
@@ -1470,71 +1814,8 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
     st.markdown(t("p4.anual.titulo"))
     st.caption(t("p4.anual.caption"))
 
-    # Política de recarga: cuándo se carga el lote siguiente. Sin esto el modelo
-    # recarga en el instante exacto en que el anterior terminó —a las 3 AM si
-    # tocó— y sobreestima la producción.
-    with st.expander(t("p4.anual.recarga.titulo"), expanded=False):
-        st.caption(t("p4.anual.recarga.caption"))
-        rc1, rc2, rc3 = st.columns(3)
-        with rc1:
-            recarga_activa = st.checkbox(
-                t("p4.anual.recarga.activa.label"),
-                value=True,
-                key="p4_anual_recarga_activa",
-                help=t("p4.anual.recarga.activa.help"),
-            )
-        with rc2:
-            # time_input y no number_input: la hora del día se lee "08:00", no
-            # "8.00". Se convierte a horas decimales para el motor, que razona
-            # en horas desde el inicio del lapso.
-            _hora_widget = st.time_input(
-                t("p4.anual.recarga.hora.label"),
-                value=_time(8, 0),
-                step=1800,  # 30 min
-                disabled=not recarga_activa,
-                key="p4_anual_recarga_hora",
-                help=t("p4.anual.recarga.hora.help"),
-            )
-            hora_carga = float(_hora_widget.hour) + float(_hora_widget.minute) / 60.0
-        with rc3:
-            maniobra = st.number_input(
-                t("p4.anual.recarga.maniobra.label"),
-                min_value=0.0,
-                max_value=12.0,
-                value=1.0,
-                step=0.5,
-                disabled=not recarga_activa,
-                key="p4_anual_recarga_maniobra",
-                help=t("p4.anual.recarga.maniobra.help"),
-            )
-        if not recarga_activa:
-            st.warning(t("p4.anual.recarga.aviso_cota"))
-
-        # Decisión de cargar: un operador no llena el secador un día que viene
-        # nublado. Sin esto el modelo carga siempre e infla los lotes que se
-        # arrastran sin terminar (S58).
-        st.divider()
-        pc1, pc2 = st.columns(2)
-        with pc1:
-            exigir_pronostico = st.checkbox(
-                t("p4.anual.pronostico.activo.label"),
-                value=True,
-                key="p4_anual_pronostico_activo",
-                help=t("p4.anual.pronostico.activo.help"),
-            )
-        with pc2:
-            umbral_pronostico = st.number_input(
-                t("p4.anual.pronostico.umbral.label"),
-                min_value=0.0,
-                max_value=40.0,
-                value=8.0,
-                step=1.0,
-                disabled=not exigir_pronostico,
-                key="p4_anual_pronostico_umbral",
-                help=t("p4.anual.pronostico.umbral.help"),
-            )
-        if exigir_pronostico:
-            st.caption(t("p4.anual.pronostico.nota_perfecto"))
+    if not _render_politica_recarga(proyecto):
+        return
 
     calcular_anual = st.button(
         t("p4.anual.calcular.label"),
@@ -1552,21 +1833,9 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
             return
         proyecto.camara = camara
 
-        try:
-            politica = PoliticaRecarga(
-                activa=bool(recarga_activa),
-                hora_carga_h=float(hora_carga),
-                maniobra_h=float(maniobra),
-                exigir_pronostico=bool(exigir_pronostico),
-                umbral_pronostico_MJ_m2=float(umbral_pronostico),
-            )
-        except ValueError as exc:
-            st.error(t("p4.anual.error", exc=exc))
-            return
-
         with st.spinner(t("p4.anual.spinner")):
             try:
-                res_anual = simular_anual(proyecto, proyecto.clima.datos, politica_recarga=politica)
+                res_anual = simular_anual(proyecto, proyecto.clima.datos)
             except ValueError as exc:
                 st.error(t("p4.anual.error", exc=exc))
                 return
@@ -1577,7 +1846,7 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
         # resultado sin recalcularlo, así que necesitan poder detectar que quedó
         # viejo (S58). Sin esto, cambiar P5 después de correr el año dejaba a P7
         # mostrando un año sin auxiliar como si fuera el actual.
-        registrar_anual(st.session_state, res_anual, proyecto, politica)
+        registrar_anual(st.session_state, res_anual, proyecto)
         st.success(t("p4.anual.exito"))
 
     res_anual: ResultadosAnual | None = st.session_state.get("p4_resultado_anual")
@@ -2432,9 +2701,70 @@ def render() -> None:
 
         caudal_sugerido = float(m_col) if seguir_colector else flujo_prev.caudal_masico_kg_s
 
+        # --- Cajón pasivo: el caudal se pide en renovaciones de aire ---------
+        # Sin ventilador ni colector, pedir un caudal másico en kg/s no tiene
+        # anclaje: el default de fábrica (0.030 kg/s) son ~12 renovaciones por
+        # minuto en una caja chica, un orden de magnitud por encima de lo que el
+        # tiro puede mover, y la previa de P4 devolvía la mitad del tiempo de
+        # secado que P7. Renovaciones/min es la unidad con la que se dimensiona
+        # ventilación y cae en 1–2 para un cajón pasivo real (S61).
+        _pasivo_sin_colector = proyecto.motor is None and proyecto.colector is None
+        renovaciones_min: float | None = None
+        if _pasivo_sin_colector:
+            V_camara_m3 = largo * ancho * alto
+            rho_amb = _rho_aire_ambiente(proyecto)
+            m_por_renovacion = V_camara_m3 * rho_amb / 60.0
+            # El caudal de fábrica (0.030 kg/s) nunca fue una decisión del
+            # usuario: es el default de `ConfiguracionFlujo`, pensado para
+            # convección forzada, y en una caja chica son ~12 renovaciones/min.
+            # Si el proyecto lo trae tal cual, se arranca del anclaje físico;
+            # si el usuario puso otro número, se respeta convirtiéndolo. Mismo
+            # criterio que `_seguir_colector_default` con el caudal del banco.
+            _caudal_sin_tocar = abs(caudal_sugerido - _CAUDAL_FLUJO_DEFAULT_KG_S) < 1e-9
+            if _caudal_sin_tocar or m_por_renovacion <= 0:
+                ren_prev = _RENOVACIONES_MIN_DEFAULT
+            else:
+                ren_prev = caudal_sugerido / m_por_renovacion
+                # Snapshots de convección forzada: fuera de rango físico, al ancla.
+                if not (0.05 <= ren_prev <= 20.0):
+                    ren_prev = _RENOVACIONES_MIN_DEFAULT
+            renovaciones_min = st.number_input(
+                t("p4.flujo.renovaciones.label"),
+                min_value=0.05,
+                max_value=20.0,
+                value=float(ren_prev),
+                step=0.1,
+                format="%.2f",
+                key="p4_flujo_renovaciones_min",
+                help=t("p4.flujo.renovaciones.help"),
+            )
+            caudal_sugerido = renovaciones_min * m_por_renovacion
+            st.caption(
+                t(
+                    "p4.flujo.renovaciones.equivalencia",
+                    m=caudal_sugerido,
+                    V=V_camara_m3,
+                    rho=rho_amb,
+                )
+            )
+
+        # Con convección natural el caudal deja de ser un dato: lo resuelve el
+        # equilibrio tiro ↔ resistencia. El número sigue haciendo falta como
+        # ancla del escalado cuadrático de pérdidas y como respaldo si no hay
+        # tiro, así que se conserva editable pero cambia de rótulo (S61).
+        _caudal_es_resultado = (
+            proyecto.motor is None
+            and proyecto.camara is not None
+            and (proyecto.chimenea is not None or flujo_prev.bocas_definidas)
+        )
+
         c1, c2 = st.columns(2)
         caudal = c1.number_input(
-            t("p4.flujo.caudal.label"),
+            t(
+                "p4.flujo.caudal.label_referencia"
+                if _caudal_es_resultado
+                else "p4.flujo.caudal.label"
+            ),
             min_value=0.001,
             # El tope no puede recortar el caudal del propio banco: un banco
             # grande mueve más de 10 kg/s y un tope fijo rompería gran escala.
@@ -2442,9 +2772,17 @@ def render() -> None:
             value=caudal_sugerido,
             step=0.001,
             format="%.4f",
-            disabled=seguir_colector,
-            help=hint_caudal or t("p4.flujo.caudal.help_default"),
+            # En cajón pasivo lo gobierna el input de renovaciones de arriba:
+            # queda como lectura para no tener dos controles del mismo número.
+            disabled=seguir_colector or renovaciones_min is not None,
+            help=(
+                t("p4.flujo.caudal.help_referencia")
+                if _caudal_es_resultado
+                else (hint_caudal or t("p4.flujo.caudal.help_default"))
+            ),
         )
+        if _caudal_es_resultado:
+            c1.caption(t("p4.flujo.caudal.caption_referencia"))
         if hint_caudal:
             c1.caption(f"💡 {hint_caudal}")  # i18n: exento (hint_caudal ya traducido)
         if m_col is not None and not seguir_colector:
@@ -2489,6 +2827,12 @@ def render() -> None:
         v_sup = Q_vol / (ancho * alto) if (ancho * alto) > 0 else 0.0
         st.caption(t("p4.flujo.velocidad", v=v_sup, q=Q_vol * 1000))
 
+        # --- Bocas de aire (motor de convección natural, S61) ---
+        # Solo tienen efecto sin ventilador: con motor el caudal lo impone él.
+        area_ent_m2, area_sal_m2 = _render_bocas_aire(
+            proyecto, flujo_prev, caudal, alto, largo * ancho * alto
+        )
+
     # -----------------------------------------------------------------------
     # Sección E: Condiciones de operación
     # -----------------------------------------------------------------------
@@ -2504,11 +2848,34 @@ def render() -> None:
         _real_disp, _ = _disponibilidad_forzantes_reales(st.session_state.get("p3_eval"), proyecto)
         _borde_no_aplica = usar_ventana or (_forz_idx_sel == 2 and _real_disp)
 
+        # Sin colector (cajón pasivo) el aire que entra a la cámara **es** el
+        # ambiente: no hay nada que lo caliente. Dejarlo editable permitía
+        # declarar aire a 55 °C entrando a un cajón sin fuente de calor — y el
+        # rango del slider (30–90 °C) ni siquiera llegaba a las temperaturas
+        # ambiente reales, así que el propio texto de ayuda ("configurar
+        # T ≈ T_amb") pedía algo que el control prohibía (S61).
+        _sin_fuente_de_calor = proyecto is not None and proyecto.colector is None
+
         if _borde_no_aplica:
             st.info(t("p4.borde.no_aplica"))
             # Valores vestigiales para el build (no afectan el cálculo en Día real).
             T_op_C = st.session_state.get("cam_T_op_C", _T_OP_DEFAULT_C)
             HR_op_pct = st.session_state.get("cam_HR_op_pct", _HR_DEFAULT_PCT)
+        elif _sin_fuente_de_calor:
+            T_amb_borde_K, _origen_T = _T_amb_representativa_K(proyecto)
+            HR_amb_borde, _hr_del_clima = _HR_amb_representativa(proyecto)
+            T_op_C = T_amb_borde_K - 273.15
+            HR_op_pct = HR_amb_borde * 100.0
+            st.info(
+                t(
+                    "p4.borde.derivado_ambiente",
+                    T=T_op_C,
+                    HR=HR_op_pct,
+                    origen=_origen_T,
+                )
+            )
+            if not _hr_del_clima:
+                st.caption(t("p4.borde.hr_sin_clima", HR=HR_op_pct))
         else:
             st.caption(t("p4.borde.caption"))
             if es_caja_pre:
@@ -2740,6 +3107,8 @@ def render() -> None:
             direccion_flujo=direccion,
             HR_entrada_fraccion=HR_entrada_frac,
             seguir_caudal_colector=seguir_colector,
+            area_entrada_aire_m2=area_ent_m2,
+            area_salida_aire_m2=area_sal_m2,
         )
         carga = CargaProducto(
             producto_id=prod_id,
@@ -2768,6 +3137,16 @@ def render() -> None:
     if modo_analisis == ModoAnalisis.ANUAL:
         st.divider()
         _render_operacion_anual(proyecto, _build_camara)
+    elif modo_analisis == ModoAnalisis.VENTANA and _ventana_encadena_lotes(proyecto):
+        # El modo VENTANA de gran escala BATCH encadena lotes igual que el anual,
+        # así que obedece la misma política — pero hasta S58 los widgets solo
+        # existían en la sección anual y acá quedaba clavada en los defaults del
+        # motor, sin forma de tocarla. El cálculo se dispara en P7, así que acá va
+        # la política sola, sin botón (S59).
+        st.divider()
+        st.markdown(t("p4.ventana_operacion.titulo"))
+        st.caption(t("p4.ventana_operacion.caption"))
+        _render_politica_recarga(proyecto)
 
     # -----------------------------------------------------------------------
     # Botón de cálculo (batch puntual del día sintético/real)
@@ -2821,6 +3200,8 @@ def render() -> None:
                 direccion_flujo=direccion,
                 HR_entrada_fraccion=HR_entrada_frac,
                 seguir_caudal_colector=seguir_colector,
+                area_entrada_aire_m2=area_ent_m2,
+                area_salida_aire_m2=area_sal_m2,
             )
             carga = CargaProducto(
                 producto_id=prod_id,

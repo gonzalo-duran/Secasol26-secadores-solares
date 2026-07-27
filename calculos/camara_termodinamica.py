@@ -174,6 +174,7 @@ def resolver_estado_camara(
     R_cond_techo_m2K_W: float = 0.0,
     A_techo_m2: float = 0.0,
     Q_rad_aire_W: float = 0.0,
+    h_conv_pared_W_m2K: float | None = None,
 ) -> EstadoCamara:
     """Resuelve el sistema algebraico de cámara (CSTR, cuasi-estacionario).
 
@@ -208,15 +209,19 @@ def resolver_estado_camara(
         A_prod_m2: Área de transferencia con el producto [m²].
         A_cuerpo_m2: Área de paredes externas [m²].
         m_dot_as_kg_s: Caudal másico de aire seco [kg/s].
-        h_conv_W_m2K: Coeficiente convectivo interior aire→producto y
-            aire→pared [W/(m²·K)].
+        h_conv_W_m2K: Coeficiente convectivo interior aire→**producto**
+            [W/(m²·K)]. Si no se pasa ``h_conv_pared_W_m2K``, gobierna también el
+            film interior de pared/techo (comportamiento histórico).
         K_m_kg_m2s: Conductancia másica = ρ·h_m_chilton [kg/(m²·s)].
             El llamador computa esto multiplicando h_m_chilton (m/s) por
             la densidad del aire húmedo evaluada a una T de referencia.
         h_w_W_m2K: Coeficiente convectivo exterior por viento [W/(m²·K)].
-            Calculado por correlación McAdams h_w = 5.7 + 3.8·v_viento.
-            Si h_w = 0, la cara externa queda térmicamente desacoplada del
-            ambiente; T_cam_ext se aproxima a T_cam_int.
+            Calculado por correlación McAdams h_w = 5.7 + 3.8·v_viento, con el
+            viento referido a 2 m y **sin corregir a la altura de la cámara**, a
+            propósito (ADR-006). Con pared aislada da igual (1/h_w es el 4 % de la
+            resistencia total); pesa en techo translúcido (25 %) y chapa sin
+            aislar (32 %). Si h_w = 0, la cara externa queda térmicamente
+            desacoplada del ambiente; T_cam_ext se aproxima a T_cam_int.
         k_aisl_W_mK: Conductividad térmica del aislante de pared [W/(m·K)].
             Si k_aisl = 0, la pared es aislante perfecta: U_total = 0,
             T_cam_int = T_flujo y T_cam_ext = T_amb (no acoplados).
@@ -236,6 +241,12 @@ def resolver_estado_camara(
             intercepta el producto y calienta paredes/piso internos — efecto
             invernadero de la caja). Default 0.0 → sin efecto, back-compat
             exacta con el balance histórico. Ver ``calculos/radiacion_camara.py``.
+        h_conv_pared_W_m2K: Coeficiente convectivo interior aire→**pared/techo**
+            [W/(m²·K)]. Default None → usa ``h_conv_W_m2K`` (back-compat). Desde
+            S61 el wire-up lo calcula aparte con placa vertical (Churchill-Chu),
+            que aporta el piso conductivo ``Nu→0.68``: con el film de pared atado
+            al coeficiente forzado del producto, a caudal casi nulo ``h→0`` hacía
+            ``U_total→0`` y la cámara aparecía perfectamente aislada.
 
     Returns:
         EstadoCamara con T_flujo, ω_flujo, ṁ_w, q_prod, q_pared, T_cam_int,
@@ -282,13 +293,18 @@ def resolver_estado_camara(
     m_dot_w = m_dot_as_kg_s * (omega_flujo - omega_ent_kg_kg)
 
     # --- 4) Cascada resistiva de pared en 3 nodos ---
-    # R_total = 1/h_conv_int + esp_cam/k_aisl + 1/h_w  →  U_total = 1/R_total
+    # R_total = 1/h_conv_pared + esp_cam/k_aisl + 1/h_w  →  U_total = 1/R_total
     # k_aisl = 0  →  R_cond = ∞  →  U_total = 0  (pared aislante perfecta).
-    # h_conv_int = 0 o h_w = 0  →  el film correspondiente domina (R_total = ∞).
-    if k_aisl_W_mK == 0.0 or h_conv_W_m2K == 0.0 or h_w_W_m2K == 0.0:
+    # h_conv_pared = 0 o h_w = 0  →  el film correspondiente domina (R_total = ∞).
+    # El film interior de la pared es propio (placa vertical) desde S61; si el
+    # llamador no lo pasa, se cae al del producto (comportamiento histórico).
+    h_pared = h_conv_W_m2K if h_conv_pared_W_m2K is None else h_conv_pared_W_m2K
+    if h_pared < 0:
+        raise ValueError(f"CAM_TD_H_CONV_PARED_NEGATIVO: h_pared={h_pared:.2f} W/(m²·K) < 0.")
+    if k_aisl_W_mK == 0.0 or h_pared == 0.0 or h_w_W_m2K == 0.0:
         U_total = 0.0
     else:
-        R_total = 1.0 / h_conv_W_m2K + esp_cam_m / k_aisl_W_mK + 1.0 / h_w_W_m2K
+        R_total = 1.0 / h_pared + esp_cam_m / k_aisl_W_mK + 1.0 / h_w_W_m2K
         U_total = 1.0 / R_total
 
     # --- 5) Resolución de (b) — lineal en T_flujo ---
@@ -305,10 +321,10 @@ def resolver_estado_camara(
     hA_p = h_conv_W_m2K * A_prod_m2
 
     # Pérdida conductiva del techo translúcido (vidriado): U_techo en serie con
-    # los mismos films interior (h_conv) y exterior (h_w McAdams) que la pared.
+    # los mismos films interior (h_pared) y exterior (h_w McAdams) que la pared.
     # A_techo=0 (techo opaco, ya contado en A_cuerpo) → UA_techo=0, sin efecto.
-    if A_techo_m2 > 0.0 and R_cond_techo_m2K_W > 0.0 and h_conv_W_m2K > 0.0 and h_w_W_m2K > 0.0:
-        U_techo = 1.0 / (1.0 / h_conv_W_m2K + R_cond_techo_m2K_W + 1.0 / h_w_W_m2K)
+    if A_techo_m2 > 0.0 and R_cond_techo_m2K_W > 0.0 and h_pared > 0.0 and h_w_W_m2K > 0.0:
+        U_techo = 1.0 / (1.0 / h_pared + R_cond_techo_m2K_W + 1.0 / h_w_W_m2K)
         UA_techo = U_techo * A_techo_m2
     else:
         UA_techo = 0.0
@@ -343,7 +359,7 @@ def resolver_estado_camara(
         T_cam_int = T_flujo
         T_cam_ext = T_amb_K
     else:
-        T_cam_int = T_flujo - q_pared / (h_conv_W_m2K * A_cuerpo_m2)
+        T_cam_int = T_flujo - q_pared / (h_pared * A_cuerpo_m2)
         T_cam_ext = T_amb_K + q_pared / (h_w_W_m2K * A_cuerpo_m2)
 
     return EstadoCamara(
@@ -476,6 +492,10 @@ def simular_secado(
     # Firma: (T_ent_K, T_prod_K, omega_ent, m_dot_as) -> (h_conv, K_m_base).
     # Si None, se usan los escalares h_conv_W_m2K / K_m_kg_m2s (congelados).
     coef_transporte_func: Callable[[float, float, float, float], tuple[float, float]] | None = None,
+    # Film interior de pared/techo variable en el tiempo (opcional, S61).
+    # Firma: (T_ent_K, T_amb_K, m_dot_as, h_w) -> h_conv_pared.
+    # Si None, el film de pared queda atado al del producto (histórico).
+    coef_pared_func: Callable[[float, float, float, float], float] | None = None,
     # Radiación solar directa al producto (techo translúcido).
     # Q_rad(t) = I_g(t)·τ·α·A_rad. Defaults 0 → cámara opaca, sin término radiativo.
     tau_cubierta_solar: float = 0.0,
@@ -579,7 +599,7 @@ def simular_secado(
         m_dot = _interp(m_dot_fz, t)
         T_amb = _interp(T_amb_fz, t)
         v_w = _interp(v_viento_fz, t)
-        h_w = 5.7 + 3.8 * v_w  # McAdams
+        h_w = 5.7 + 3.8 * v_w  # McAdams; v a 2 m sin corregir a propósito (ADR-006)
         return T_ent, omega_ent, m_dot, T_amb, h_w
 
     def _Q_rad_t(t: float) -> float:
@@ -633,6 +653,9 @@ def simular_secado(
             h_conv_local, K_m_base = coef_transporte_func(T_ent, T_prod, omega_ent, m_dot)
         else:
             h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
+        h_pared_local = (
+            coef_pared_func(T_ent, T_amb, m_dot, h_w) if coef_pared_func is not None else None
+        )
         K_m_usado = K_m_override if K_m_override is not None else K_m_base
         return resolver_estado_camara(
             T_prod_K=T_prod,
@@ -653,6 +676,7 @@ def simular_secado(
             R_cond_techo_m2K_W=R_cond_techo_m2K_W,
             A_techo_m2=A_techo_m2,
             Q_rad_aire_W=_Q_rad_aire_t(t),
+            h_conv_pared_W_m2K=h_pared_local,
         )
 
     # --- Estado mutable para diagnóstico de política B y HR alta ---
@@ -997,6 +1021,10 @@ def simular_cascada(
     P_Pa: float,
     aw_func: Callable[[float], float],
     coef_transporte_func: Callable[[float, float, float, float], tuple[float, float]] | None = None,
+    # Film interior de pared/techo variable en el tiempo (opcional, S61).
+    # Firma: (T_ent_K, T_amb_K, m_dot_as, h_w) -> h_conv_pared.
+    # Si None, el film de pared queda atado al del producto (histórico).
+    coef_pared_func: Callable[[float, float, float, float], float] | None = None,
     # Radiación solar directa (túnel translúcido — normalmente opaco → 0)
     tau_cubierta_solar: float = 0.0,
     alfa_producto_solar: float = 0.6,
@@ -1093,7 +1121,7 @@ def simular_cascada(
         m_dot = _interp(m_dot_fz, t)
         T_amb = _interp(T_amb_fz, t)
         v_w = _interp(v_viento_fz, t)
-        h_w = 5.7 + 3.8 * v_w
+        h_w = 5.7 + 3.8 * v_w  # McAdams; v a 2 m sin corregir a propósito (ADR-006)
         return T_ent, omega_ent, m_dot, T_amb, h_w
 
     def _Q_rad_t(t: float) -> float:
@@ -1127,6 +1155,9 @@ def simular_cascada(
             h_conv_local, K_m_base = coef_transporte_func(T_ent_zona, T_prod, omega_ent_zona, m_dot)
         else:
             h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
+        h_pared_local = (
+            coef_pared_func(T_ent_zona, T_amb, m_dot, h_w) if coef_pared_func is not None else None
+        )
         K_m_usado = K_m_override if K_m_override is not None else K_m_base
         return resolver_estado_camara(
             T_prod_K=T_prod,
@@ -1147,6 +1178,7 @@ def simular_cascada(
             R_cond_techo_m2K_W=R_cond_techo_m2K_W,
             A_techo_m2=A_techo_por_zona_m2,
             Q_rad_aire_W=Q_rad_aire_zona_W,
+            h_conv_pared_W_m2K=h_pared_local,
         )
 
     def _march_aire(y: np.ndarray, t: float, aplicar_politica_B: bool) -> list[EstadoCamara]:

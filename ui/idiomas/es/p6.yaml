@@ -75,6 +75,11 @@ perdidas:
       - 2 codos 90° (C=0.9 c/u): {codos:.1f} Pa
       - Manifold banco→caño, confluencia (C=1.5): {manifold:.1f} Pa
       - Difusor de entrada a cámara (C=0.3): {difusor:.1f} Pa
+    bocas: >-
+      ↳ **Bocas de la cámara (P4): {dp:.1f} Pa** — entrada {a_in:.4f} m² / salida
+      {a_out:.4f} m². Calculadas sobre el área real, reemplazan a los términos
+      de entrada, salida y difusor de arriba (que los estiman sobre la velocidad
+      del ducto, o sea suponiendo bocas del tamaño del ducto).
   total_preview: >-
     **ΔP total estimada: {total:.1f} Pa** (col={col:.1f} + cam={cam:.1f} +
     duc={duc:.1f} + sing={sing:.1f})

@@ -228,9 +228,30 @@ flujo:
     desacoplado: >-
       ⚠️ El caudal de la cámara no es el del banco. Es válido si hay mezcla con
       aire ambiente; si no, el colector va a operar fuera de su punto de diseño.
+  renovaciones:
+    label: Renovaciones de aire por minuto [1/min]
+    help: >-
+      Cuántas veces por minuto se renueva el volumen de aire de la cámara. Es
+      la forma de dimensionar un secador pasivo: pedir un caudal en kg/s no
+      tiene anclaje cuando nadie lo impone. Un cajón movido por tiro térmico
+      cae en **1–2 renovaciones/min**; el default de fábrica en kg/s equivalía
+      a ~12, un orden de magnitud de más, y hacía que la previa de P4 estimara
+      la mitad del tiempo de secado que P7.
+    equivalencia: >-
+      Equivale a {m:.4f} kg/s (volumen {V:.3f} m³ × ρ {rho:.3f} kg/m³ a la T
+      ambiente representativa).
   caudal:
     label: Caudal másico [kg/s]
+    label_referencia: Caudal másico de referencia [kg/s]
     help_default: Caudal de aire seco que circula por la cámara.
+    help_referencia: >-
+      Con convección natural el caudal no es un dato: lo resuelve el equilibrio
+      entre el tiro térmico y la resistencia del circuito. Este valor se sigue
+      usando como referencia para escalar las pérdidas de carga y como respaldo
+      en las horas sin tiro.
+    caption_referencia: >-
+      ℹ️ El caudal real lo resuelve el tiro (ver bocas, más abajo). Este número
+      es solo la referencia de escalado.
   direccion:
     label: Dirección del flujo
     horizontal: HORIZONTAL
@@ -240,7 +261,62 @@ flujo:
     help: Si no se especifica, el cálculo usa el fallback escalar del catálogo.
   hr_entrada: HR del aire en entrada a la cámara [%]
   velocidad: "Velocidad superficial estimada: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
+bocas:
+  titulo: "**Bocas de aire (convección natural)**"
+  usar:
+    label: El secador tiene bocas de entrada y salida
+    help: >-
+      Es dimensionamiento en las dos formas de mover el aire, pero el efecto
+      sale por lugares distintos. Sin ventilador, lo que mueve el aire es la
+      flotabilidad: el aire caliente de la cámara sube y sale, y entra aire
+      ambiente por abajo; las bocas son la resistencia de ese circuito, así que
+      su tamaño decide el caudal. Con ventilador, el caudal lo impone él, pero
+      las bocas fijan la presión que tiene que entregar y con ella la potencia
+      eléctrica que vas a ver en P6.
+  sin_bocas: >-
+    Sin bocas definidas el cálculo usa el caudal fijo de arriba ({caudal:.4f} kg/s)
+    como si algo lo sostuviera. En un secador pasivo conviene definirlas.
+  sin_bocas_forzado: >-
+    Sin bocas definidas, P6 estima las pérdidas de entrada y salida sobre la
+    velocidad del ducto, o sea suponiendo bocas del tamaño del ducto. Definirlas
+    ajusta la presión que el ventilador tiene que entregar.
+  con_motor: >-
+    Con ventilador el caudal no cambia: las bocas fijan la presión que tiene que
+    entregar (y la potencia eléctrica). Se ve en P6, dentro de ΔP singulares.
+  acople_colector: >-
+    Se supone que la salida del colector y la boca de entrada tienen la **misma
+    sección**. Si no la tienen, el acople agrega una contracción que este modelo
+    todavía no representa.
+  entrada:
+    label: Área de boca de entrada [m²]
+    help: Área libre total por donde entra el aire ambiente (suma de todas las aberturas).
+  salida:
+    label: Área de boca de salida [m²]
+    help: >-
+      Área libre total de salida. Pesa más que la de entrada: el aire que sale
+      se lleva su energía cinética, así que estrangular la salida frena más el
+      circuito que estrangular la entrada.
+  con_bocas: >-
+    El caudal lo resuelve el equilibrio entre el tiro térmico (columna de
+    {alto:.2f} m de la cámara) y la resistencia de las bocas.
+  con_chimenea: >-
+    Con chimenea, las bocas suman resistencia al circuito: la columna de tiro es
+    la cámara más la chimenea. Se supone que la boca de salida y la base de la
+    chimenea tienen la **misma sección**; la descarga al ambiente se cuenta una
+    sola vez, en el tope.
+  caudal_resuelto: >-
+    Con estas bocas, el equilibrio da ≈ {m5:.4f} kg/s con 5 K sobre el ambiente
+    y ≈ {m15:.4f} kg/s con 15 K. El ΔT real lo decide el balance de la cámara;
+    el caudal definitivo sale de P7.
+  renovaciones_resueltas: >-
+    En renovaciones de aire: ≈ {r5:.2f} /min con 5 K y ≈ {r15:.2f} /min con 15 K.
+    Sirve para alinear el caudal de referencia de arriba con lo que da el tiro.
 borde:
+  derivado_ambiente: >-
+    Sin colector, el aire que entra a la cámara **es el ambiente**: T ≈
+    {T:.1f} °C y HR ≈ {HR:.0f} %. No hay nada que lo caliente, así que no se
+    configuran ({origen}).
+  hr_sin_clima: "HR ambiente sin clima cargado: se usa {HR:.0f} % por defecto."
   titulo: Aire de entrada a la cámara (condición de borde)
   no_aplica: >-
     Modo **Día real** activo: la temperatura y la humedad del aire de
@@ -349,6 +425,12 @@ forzantes:
 t_amb_origen:
   media_anual: "media anual NASA POWER = {t:.1f} °C"
   fallback: "fallback 25 °C (sin clima cargado)"
+ventana_operacion:
+  titulo: "### 🔁 Operación de la ventana"
+  caption: >-
+    En la ventana de producción por lotes el secador recarga igual que en el
+    análisis anual, así que obedece la misma política. El cálculo se dispara en
+    la pestaña de Resultados.
 anual:
   sin_clima: ℹ️ **Análisis anual** disponible solo con clima cargado en P2.
   clima_incompleto: >-
