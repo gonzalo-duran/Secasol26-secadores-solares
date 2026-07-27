@@ -26,9 +26,13 @@ Conversiones NASA POWER → SI (realizadas aquí, no en core/):
 
 **Funciones:**
 
+- `aplicar_politica_huecos()`
 - `obtener_clima()`
 - `calcular_POA_horizonte()`
 - `dia_tipo_mensual()`
+- `slice_n_dias_consecutivos()`
+- `slice_clima_ventana()`
+- `resolver_datos_trabajo()`
 
 ## Ver también
 

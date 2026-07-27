@@ -15,15 +15,20 @@ Modelos:
     Colector (canal rectangular) — Darcy-Weisbach:
         ΔP = f × (L/Dh) × (ρ × v²/2)
         Dh = 2·W·e / (W + e)    [diámetro hidráulico canal plano]
-        f  = 64/Re               (laminar, Re < 2 300)
-        f  = 0.316·Re^(-0.25)   (Blasius turbulento, 2 300 ≤ Re < 100 000)
+        f  = 64/Re                         (laminar, Re < 2 300)
+        f  = Haaland(Re, ε/Dh)             (turbulento; aprox. de Colebrook,
+             ASHRAE cap. 21 ec. 19; mismo f en colector, caño maestro y cámara)
         En banco serie: ΔP_rama = ΔP_unidad × n_serie
         En paralelo:   ΔP banco = ΔP rama
 
-    Cámara — flujo HORIZONTAL:
-        ΔP_cam = K_malla × (ρ · v_sup²/2) × n_bandejas
-        v_sup = Q_vol / (ancho × alto)
-        K_malla = 2.0 (malla de alambre, conservador)
+    Cámara — flujo HORIZONTAL (cross-flow, canales EN PARALELO):
+        Los n_canales = n_bandejas−1 espacios entre bandejas están en paralelo:
+        el ΔP del sistema es el de UN canal (no la suma). v_canal reparte el
+        caudal: v_canal = Q_vol / (ancho · espacio_libre · n_canales).
+        ΔP_cam = ΔP_producto + ΔP_malla_lateral, con
+        ΔP_producto = fricción rugosa (Colebrook, ε_eff = max(ε_chapa, d_p)) +
+                      obstrucción por bloqueo C_obs(β), β = espesor_capa/separacion.
+        (Modelo combinado, mejora 29; reemplaza el Blasius + tabla heurística.)
 
     Cámara — flujo VERTICAL_ASCENDENTE:
         Por bandeja: ΔP = ΔP_malla + ΔP_lecho

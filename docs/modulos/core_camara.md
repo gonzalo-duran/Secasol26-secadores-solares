@@ -34,14 +34,17 @@ Convención de unidades (SI estricto):
 **Clases:**
 
 - `DireccionFlujo`
+- `CaraCamara`
 - `GeometriaCamara`
 - `CapaPared`
 - `ParedCamara`
+- `CarasTranslucidas`
 - `ConstruccionCamara`
 - `ConfiguracionBandejas`
 - `ConfiguracionFlujo`
 - `CargaProducto`
-- `OperacionAnualConfig`
+- `ConfiguracionTunel`
+- `ConfiguracionCarros`
 - `Camara`
 - `ForzantesAire`
 

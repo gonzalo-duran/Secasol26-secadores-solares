@@ -17,6 +17,7 @@ Contiene todas las secciones de entrada y el espejo de Resultados.
 
 - `Tipologia`
 - `ModoAnalisis`
+- `SubtipoGranEscala`
 - `DiaAnalisis`
 - `Meta`
 - `Configuracion`

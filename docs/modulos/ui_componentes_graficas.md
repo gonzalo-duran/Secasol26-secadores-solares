@@ -12,6 +12,7 @@ Gráficas reutilizables de la UI compartidas entre pestañas.
 
 **Funciones:**
 
+- `mostrar_plotly()`
 - `grafica_termodinamica_camara()`
 
 ## Ver también

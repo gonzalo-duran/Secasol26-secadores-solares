@@ -19,9 +19,9 @@ Fenómenos modelados:
 - Pérdidas singulares de entrada y salida (K bundleado por defecto = 1.5).
 - Extractor eólico opcional en el tope (turbina sombrero chino): agrega un
   término motriz ΔP = Cp·ρ_amb·v_viento²/2 al balance, donde v_viento se
-  corrige del valor NASA POWER (10 m) a la altura del tope via perfil
-  logarítmico. La turbina también introduce una resistencia adicional al
-  flujo Kt·ρ_chim·v_extractor²/2.
+  corrige de la altura del contrato de `Clima` (2 m, ver `perfil_viento`) a la
+  altura del tope via perfil logarítmico. La turbina también introduce una
+  resistencia adicional al flujo Kt·ρ_chim·v_extractor²/2.
 
 Convención termodinámica:
 - T_chim es la temperatura promedio de la columna ascendente (cámara + chimenea).
@@ -46,6 +46,8 @@ para mantenerse testeable y reusable desde cualquier capa.
 - `delta_P_tiro_Pa()`
 - `delta_P_turbina_motriz_Pa()`
 - `delta_P_chimenea_Pa()`
+- `coeficientes_bocas()`
+- `delta_P_bocas_Pa()`
 - `caudal_natural_kgs()`
 
 ## Ver también

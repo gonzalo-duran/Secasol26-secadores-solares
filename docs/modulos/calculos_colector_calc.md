@@ -26,8 +26,10 @@ Hipótesis principales
   infinitas).
 - Absortividad de la cubierta despreciable.
 - Pérdidas laterales contabilizadas en U_bottom (despreciadas explícitamente).
-- Propiedades del aire (cp, k, mu, Pr) constantes evaluadas a 323 K (50 °C).
-- En convección natural: densidad calculada como gas ideal rho(T, P).
+- Propiedades del aire (cp, k, mu, Pr, rho) dependientes de la temperatura local
+  T_f(x) vía ``calculos.propiedades_aire`` (desde S36; antes constantes a 323 K).
+  Las constantes ``*_AIRE`` que quedan se usan solo para cálculos asesores
+  (Re_medio informativo) y para la cavidad de doble cubierta.
 
 Correlaciones
 -------------
@@ -53,6 +55,7 @@ Referencias
 
 **Funciones:**
 
+- `coef_conveccion_interna_local()`
 - `calcular_colector_tipo1()`
 
 ## Ver también

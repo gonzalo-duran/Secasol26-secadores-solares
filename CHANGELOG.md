@@ -7,6 +7,212 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **La política de recarga se perdía al guardar y cargar el proyecto** (S59). Los cinco
+  campos de `PoliticaRecarga` —hora de carga, maniobra, espera activa, exigir pronóstico
+  y su umbral— vivían solo en los widgets de P4 y en `session_state`, nunca en el objeto
+  `Proyecto`, que es lo único que se serializa. Consecuencia: se guardaba el prediseño
+  completo, se reabría al día siguiente y al recalcular el año salía **otro número que el
+  del reporte guardado, sin ningún aviso** — los widgets habían vuelto a sus defaults.
+  Con los dos campos que sumó S58 el agujero se había ensanchado, porque también se
+  perdía la decisión de mirar el pronóstico, que es la que más mueve el conteo de lotes.
+
+  `PoliticaRecarga` pasa de `calculos/simulacion_ventana.py` a **`core/operacion.py`** y
+  cuelga de `Configuracion.politica_recarga`, junto a `ventana_inicio`/`ventana_fin`, que
+  son parámetros de escenario de operación igual que ella. Estaba en `calculos/` por
+  accidente histórico (nació dentro del módulo de simulación en S57); es una dataclass de
+  datos puros con validación por códigos de error, o sea la forma exacta de un objeto de
+  `core/`. `simulacion_ventana` la reexporta, así que los imports existentes siguen
+  andando. Los snapshots anteriores a S59 no traen el bloque y se cargan con los defaults
+  —que son los que esas corridas usaron de hecho—, así que se reproducen igual.
+
+- **El modo VENTANA de gran escala ignoraba la política de recarga** (S59). `simular_ventana`
+  llamaba a la rama BATCH sin pasarla, de modo que el encadenado quedaba clavado en los
+  defaults del motor y **ningún widget la gobernaba**: misma física que el modo anual, con
+  la operación fija. Ahora la lee del proyecto, igual que el anual. Además recibe el ancla
+  de hora local (el mismo offset que alinea el calendario de arranque del auxiliar), en vez
+  de suponer que `t = 0` es medianoche local. El túnel semicontinuo la ignora a propósito:
+  avanza columnas por cadencia, no encadena lotes.
+
+- **P1 pisaba la política en cada rerun** (S59). P1 reconstruye `Configuracion` campo por
+  campo y en Streamlit todas las pestañas se renderizan siempre, así que cualquier campo
+  que no se propague explícitamente vuelve a su default. Ahora la arrastra.
+
+### Added
+
+- **La política de recarga es editable en modo VENTANA** (S59). Los widgets vivían solo
+  en la sección de análisis anual, así que la ventana de producción por lotes de gran
+  escala encadenaba con los defaults del motor y no había forma de tocarlos. El bloque
+  se extrajo a `_render_politica_recarga` y ahora se muestra en los dos modos; en
+  VENTANA va sin botón, porque el cálculo se dispara en P7. El túnel semicontinuo no lo
+  muestra: avanza columnas por cadencia, no recarga.
+
+- **El reporte PDF informa la operación asumida** (S59). Un reporte que dice "169 lotes"
+  sin decir a qué hora se carga, cuánto dura la maniobra y contra qué umbral se miró el
+  pronóstico no es reproducible: esos valores mueven el conteo de lotes tanto como el
+  tamaño del colector. El PDF traía `dias_salteados_pronostico` sin decir contra qué
+  umbral. Nuevo bloque "Operación asumida" en las secciones de análisis anual y de
+  ventana (solo BATCH), con la nota de que el pronóstico es perfecto. Traducido a los
+  tres idiomas (`reporte.operacion.*`). Los snapshots anteriores a S59 no traen la
+  política y el bloque simplemente no se dibuja.
+
+### Added
+
+- **El secador pasivo sin chimenea deja de tener caudal constante** (S61). Un cajón o
+  armario con bocas de aire, sin ventilador ni chimenea —el caso de mucha aplicación—
+  corría con el **caudal de diseño que cargaba el usuario**, como si algo lo sostuviera.
+  El caudal de un secador pasivo no es un dato: lo fija el equilibrio entre el tiro
+  térmico de la columna de aire caliente y la resistencia del circuito.
+
+  Ahora `ConfiguracionFlujo` acepta **área de boca de entrada y de salida** (P4 → Flujo,
+  solo sin ventilador) y, con las dos definidas, el caudal lo resuelve el mismo motor de
+  flotabilidad que ya usaba la chimenea: `H_eff` pasa a ser la altura de la cámara y las
+  bocas son la resistencia (`K_in = 0.5` de contracción, `K_out = 1.0` de descarga,
+  internos). Con chimenea las bocas son aditivas; **sin bocas ni chimenea el
+  comportamiento es el de siempre**, así que ningún proyecto anterior cambia de resultado.
+
+  El efecto no es cosmético: en un cajón de 1.2 × 0.8 × 1.0 m con techo alveolar y 800 W/m²,
+  el caudal de equilibrio con bocas de 0.05 m² es **0.014 kg/s frente a los 0.05 kg/s** que
+  se cargaban como diseño — el supuesto viejo sobrestimaba el aire movido y con él la
+  producción. En transitorio el caudal respira con el estado térmico y no se apaga de noche:
+  el calor que acumuló el producto sostiene el tiro cuando el ambiente ya se enfrió.
+
+  Sin validar contra datos medidos: no hay dataset de cajón pasivo y los coeficientes de
+  boca son de manual, no ajustados.
+
+- **Las bocas de la cámara también dimensionan el ventilador** (S61). Con ventilador el
+  caudal lo impone él, pero las bocas fijan **la presión que tiene que entregar**, y con
+  ella la potencia eléctrica: son dimensionamiento igual, solo que el efecto sale por otro
+  lado. Hasta ahora el dato no existía y `estimar_delta_P_singulares` estimaba entrada,
+  salida y difusor sobre la velocidad del **ducto** — es decir, suponiendo bocas del tamaño
+  del ducto. Estrangular la entrada de la cámara a la mitad no movía el dimensionado del
+  motor.
+
+  Ahora el bloque de bocas se muestra con o sin ventilador, y cuando las áreas están
+  cargadas P6 calcula su ΔP sobre el área real y **apaga** los tres términos genéricos, que
+  son la misma transición estimada de otra manera (sumar ambos sería contarla dos veces).
+  Codos y manifold, que son del ducto y no de la cámara, quedan intactos. Sin áreas
+  cargadas la cadena de ΔP es exactamente la de antes.
+
+- **Los coeficientes de boca dependen de la topología, no son fijos** (S61). Qué hay del
+  otro lado de cada boca cambia la singularidad: la entrada vale `K = 0.5` en una caja (el
+  aire se contrae desde el ambiente en reposo) pero `K = 0.3` en un armario (llega ducteado
+  del colector y se expande); la salida vale `K = 1.0` sin chimenea (el chorro descarga a la
+  atmósfera y pierde toda su energía cinética) pero `K = 0.5` con chimenea, porque ahí la
+  boca alimenta el ducto y **la descarga real ocurre en el tope**. En ese caso el término de
+  entrada se descuenta del bundle de singulares de la chimenea, así que la descarga se
+  cuenta una sola vez: con la boca de salida a la sección de la chimenea el resultado no
+  cambia, y con una boca más angosta que la chimenea, sí.
+
+  **Limitación anotada:** los dos acoples —salida de colector ↔ boca de entrada y boca de
+  salida ↔ base de chimenea— se suponen de **igual sección**. Cuando no lo son hay una
+  contracción que altera la presión dinámica y que el modelo todavía no representa; queda
+  como corrección futura.
+
+### Fixed
+
+- **La T ambiente representativa de P4 caía siempre al fallback de 25 °C** (S61). El helper
+  leía `clima.T_amb_K`, pero `Clima` guarda las series como **columnas del DataFrame
+  `datos`**, no como atributos: `getattr` devolvía `None` y el cálculo tomaba 25 °C aunque
+  el clima estuviera cargado. En un cajón salteño de julio (media real 10.5 °C) eso son
+  15 K de error en la condición de borde con la que la previa estima pérdidas a paredes y
+  temperatura inicial del producto.
+
+### Changed
+
+- **En un secador sin colector, la T y la HR de entrada dejan de configurarse** (S61). Sin
+  colector el aire que entra a la cámara **es el ambiente**: no hay nada que lo caliente.
+  Los sliders permitían declarar aire a 55 °C entrando a un cajón pasivo, y su rango
+  (30–90 °C) ni siquiera alcanzaba las temperaturas ambiente reales — así que el propio
+  texto de ayuda ("configurar T ≈ T_amb representativa") pedía algo que el control
+  prohibía. Ahora se derivan del clima y se muestran como lectura. Con colector siguen
+  siendo editables, que es donde tienen sentido.
+
+- **En un cajón pasivo el caudal se pide en renovaciones de aire, no en kg/s** (S61). Sin
+  ventilador ni colector, pedir un caudal másico no tiene anclaje: nadie lo impone. El
+  default de fábrica de `ConfiguracionFlujo` (0.030 kg/s, pensado para convección forzada)
+  equivale a **~12 renovaciones/min** en una caja chica, un orden de magnitud por encima de
+  lo que el tiro puede mover — y con él la previa de P4 daba **33 h de secado contra 63.8 h
+  de P7**, casi el doble. Una estimación rápida que difiere así del cálculo riguroso no
+  sirve.
+
+  Ahora se pide **renovaciones de aire por minuto** (default 1), que es la unidad con la que
+  se dimensiona ventilación, y el caudal másico se deriva multiplicando por el volumen de la
+  cámara y ρ a la temperatura ambiente representativa del sitio (no el 1.2 kg/m³ de manual:
+  en Salta a 10 °C el aire pesa ~1.08). Medido sobre el cajón del usuario con clima real, el
+  tiro resuelve **0.94 renovaciones/min**, así que el anclaje de 1 cae a 5 % del caudal real;
+  en agua evaporada la previa pasa de sobrestimar **28 %** a **0.9 %**. Bajo las bocas se
+  muestra además cuántas renovaciones da el equilibrio, para alinear una cosa con la otra.
+  Los proyectos que traen un caudal elegido a mano lo conservan (se convierte); solo se
+  reemplaza el default de fábrica, que nunca fue una decisión.
+
+- **Con convección natural, el caudal de P4 se rotula como referencia** (S61). Deja de
+  presentarse como el caudal del equipo, porque no lo es: lo resuelve el equilibrio
+  tiro ↔ resistencia. Se conserva editable porque el motor lo usa como ancla del escalado
+  de pérdidas y como respaldo en las horas sin tiro. Bajo las bocas se muestra además el
+  caudal de equilibrio para dos saltos térmicos de referencia (5 y 15 K), que es lo que
+  permite dimensionarlas sin salir de P4.
+
+- **El lazo de convección natural converge amortiguado** (S61). El Picard
+  `T_chim → ṁ → T_flujo` avanza medio paso (`α = 0.5`) en vez de saltar al valor nuevo: el
+  mapa tiene realimentación negativa y oscilaba en 2-ciclo con auxiliar fuerte y techo
+  translúcido. El punto fijo es el mismo y el criterio de corte se mide sobre el residual
+  **sin** amortiguar; lo que cambia es que hacen falta ~el doble de iteraciones, así que los
+  topes suben de 10 a 14 (Constantes) y de 5 a 12 (transitorio). Medido, cada iteración
+  cuesta ~0.1 s.
+
+- **El empuje del cajón sale del balance de la cámara, no de una heurística** (S61). En modo
+  Constantes sin colector, la temperatura que alimentaba el tiro era `T_amb + 25 K` fija —
+  no dependía del caudal, así que el lazo convergía en una iteración sobre un tiro
+  inventado. Ahora se calcula con `estimar_T_flujo_estacionario`, que resuelve el CSTR de la
+  cámara una sola vez (sin integrar el secado) con el producto en su estado estacionario.
+  Con colector se conserva la heurística `T_sal_col − 5 K`, que es el camino validado.
+
+- **La cámara pasa a convección mixta con propiedades del aire variables** (S61). El
+  coeficiente convectivo interior era placa plana **forzada** con μ/Pr/k congelados a
+  ~50 °C, y el mismo valor gobernaba el producto *y* el film interior de la pared. A bajo
+  caudal —el régimen de todo secador de convección natural— eso daba dos resultados falsos:
+  `h → 0` cuando en realidad la flotación sostiene la transferencia, y con el film de pared
+  atado a él `U_total → 0`, o sea **la cámara aparecía perfectamente aislada justo cuando
+  más pierde**. El colector ya usaba convección mixta y propiedades locales desde S36; la
+  cámara había quedado atrás.
+
+  Ahora hay **dos** coeficientes, ambos mixtos y con propiedades a la temperatura de
+  película: aire↔producto por **placa horizontal** con `L = A_s/P`, eligiendo rama según el
+  signo de ΔT (débil `0.52·Ra^{1/5}` con el aire más caliente —el caso normal del secado,
+  con el producto enfriado por evaporación—, fuerte `0.54·Ra^{1/4}`/`0.15·Ra^{1/3}` al
+  revés) y combinación **transversal** `n = 7/2`; y aire↔pared/techo por **placa vertical**
+  (Churchill-Chu) con combinación asistida `n = 3` y su piso conductivo `Nu → 0.68`, que es
+  lo que impide que `UA` se anule. Todo con respaldo en Incropera & DeWitt cap. 9
+  (`docs/notas/estado_conveccion_natural_secasol.md` §5 y §9).
+
+  A velocidades de convección forzada (≳0.5 m/s) el resultado queda dentro del ~4 % del
+  modelo anterior, así que los prediseños ventilados no se mueven. A caudal bajo sí: el
+  agua evaporada en 24 h sube ~60 % a `ṁ = 0.05 kg/s` y ~165 % a `ṁ = 0.01 kg/s`. Falta
+  contrastarlo contra datos medidos de cámara. `resolver_estado_camara` acepta el film de
+  pared como parámetro opcional (default = el del producto), de modo que todo llamador
+  previo conserva el resultado exacto.
+
+- **La huella de vigencia del anual se simplifica** (S59). Al vivir la política dentro de
+  `Configuracion` —que ya era una de las secciones huelleadas— entra sola: se eliminaron
+  el `extras={"politica": ...}` de `hash_entradas_anual`, la clave `p4_politica_recarga`
+  de `session_state` y los helpers `politica_anual_guardada`/`extras_anual` de
+  `ui/componentes/vigencia.py`. Tres andamios que existían solo porque la política estaba
+  fuera del proyecto. La política aparece además en los snapshots TXT y JSON.
+
+- **`h_w` de McAdams: se decide no corregir el viento a la altura del equipo** (S59,
+  **ADR-006**, sin cambios de código). El pendiente venía de S57. Se midió el sesgo antes
+  de decidir: corrigiendo el colector de 2 m a su altura real de montaje, `Q_util` sube
+  0.5–2 % (z = 1–1.5 m) y hasta 5–7 % en el extremo (z = 0.5 m, terreno rugoso, v = 5 m/s);
+  en las envolventes `1/h_w` pesa 4 % de la resistencia en pared aislada, 25 % en techo
+  alveolar, 32 % en chapa sin aislar y **59 % en el caño maestro desnudo**. Se deja como
+  está porque McAdams no tiene altura de referencia (Jürges 1924, placa de 0.5 m en túnel
+  con velocidad de corriente libre) y el scatter de esa familia de correlaciones es de
+  ±30–50 %, así que el factor de perfil cae dentro del ruido; el sesgo, además, sobrestima
+  las pérdidas y va a favor de la seguridad. `perfil_viento.py` documenta la excepción para
+  que no se "arregle" en el futuro.
+
 ### Added
 
 - **El operador no carga lotes en días de mal pronóstico** (S58). Hasta ahora el
@@ -30,8 +236,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   Métrica nueva `dias_salteados_pronostico`, que se lee **junto a** `dias_operables`
   para separar "no había sol" de "había sol pero el secador estaba ocupado". Se expone
   en P4, en el detalle de P7 y en los tres exports (TXT/JSON/PDF).
-
-### Added
 
 - **Cargar un proyecto completo** (S58, pedido del usuario). P7 sabía **guardar** el
   proyecto entero (`..._prediseno_completo.json`) pero no había forma de volver a

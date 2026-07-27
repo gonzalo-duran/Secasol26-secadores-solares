@@ -17,6 +17,10 @@ Los cambios se aplican de inmediato a st.session_state.proyecto.
 Si la tipología cambia a CAJA, colector y motor se anulan automáticamente
 (la tipología CAJA no admite colector externo ni motor).
 
+i18n (F1): todos los textos visibles pasan por ``t()`` con claves ``p1.*``
+(ver ``ui/idiomas/``). Los widgets de opciones usan como options los enums
+(valores estables) + ``format_func`` — nunca el rótulo traducido como valor.
+
 ## Clases y funciones
 
 **Funciones:**

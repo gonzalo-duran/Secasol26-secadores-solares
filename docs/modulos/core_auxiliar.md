@@ -20,6 +20,7 @@ Tipos soportados en v0: resistencia eléctrica y quemador de biomasa.
 
 - `TipoAuxiliar`
 - `ModoOperacionAuxiliar`
+- `CargaArranque`
 - `Auxiliar`
 
 **Funciones:**

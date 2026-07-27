@@ -34,11 +34,17 @@ Hipótesis de v0:
 **Funciones:**
 
 - `verificar_coherencia_proyecto()`
+- `empl_de()`
 - `presion_representativa_proyecto()`
+- `resumen_camara()`
+- `caudal_masico_banco_kg_s()`
+- `conveccion_natural_activa()`
 - `armar_forzantes_aire()`
 - `construir_serie_sintetica_dia_tipo()`
 - `calcular_todo()`
 - `calcular_todo_transitorio()`
+- `armar_forzantes_ventana()`
+- `calcular_todo_ventana()`
 
 ## Ver también
 

@@ -30,6 +30,7 @@ con pvlib.irradiance, no se guarda en Colector.
 **Clases:**
 
 - `ColectorUnidad`
+- `CanoMaestro`
 - `BancoColectores`
 - `Colector`
 

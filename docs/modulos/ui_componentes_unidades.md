@@ -28,6 +28,11 @@ Convenciones de ángulos (tres en total):
         Duffie → pvlib:  ψ = (180 + γ) mod 360
         pvlib  → Duffie: γ = (ψ − 180) mod 360; si γ > 180: γ −= 360
 
+Nota: las cuatro conversiones de acimut viven ahora en
+``calculos/conversiones_angulo.py`` (matemática pura, también la consume la
+capa de cálculo) y se re-exportan acá por compatibilidad con los consumidores
+históricos de la UI.
+
 ## Clases y funciones
 
 **Funciones:**
@@ -39,10 +44,6 @@ Convenciones de ángulos (tres en total):
 - `pa_a_hpa()`
 - `porcentaje_a_fraccion()`
 - `fraccion_a_porcentaje()`
-- `acimut_duffie_a_pvlib()`
-- `acimut_duffie_a_ui360()`
-- `acimut_ui360_a_duffie()`
-- `acimut_pvlib_a_duffie()`
 
 ## Ver también
 

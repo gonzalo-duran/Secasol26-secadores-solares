@@ -6,11 +6,12 @@ Ruta: `calculos/correlaciones_nusselt.py`
 
 ## Descripción
 
-Catálogo de correlaciones de Nusselt para colectores solares de aire.
+Catálogo de correlaciones de Nusselt para colectores solares de aire y cámara.
 
 Provee todas las correlaciones de transferencia de calor por convección
-utilizadas en los 4 tipos de colector solar de aire. El módulo es
-independiente del core y de la UI.
+utilizadas en los 4 tipos de colector solar de aire y, desde S61, las de
+convección natural de la **cámara** (placa horizontal para las bandejas, placa
+vertical para las paredes). El módulo es independiente del core y de la UI.
 
 Organización
 ------------
@@ -46,6 +47,17 @@ Flujo forzado:
 Flujo natural:
   → hollands_inclinada (único default; rango θ: 0°–75°)
 
+Convección natural / mixta de la cámara (S61)
+----------------------------------------------
+- ``nusselt_placa_horizontal(Ra, inestable)`` — bandejas. Rama fuerte 9.30/9.31
+  o débil 9.32 según el signo de ΔT; ``L = A_s/P`` (Ec. 9.29).
+- ``nusselt_placa_vertical(Ra, Pr)`` — paredes. Churchill-Chu 9.26/9.27, con el
+  piso conductivo ``Nu → 0.68`` que evita que el film interior se anule a
+  caudal casi nulo.
+- ``nusselt_mixto(Nu_F, Nu_N, n)`` — combinador genérico (Ec. 9.64): ``n = 3``
+  para empuje asistido (colector), ``n = 7/2`` para flujo transversal al empuje
+  con placa horizontal (cámara).
+
 Unidades
 --------
 Todas las funciones reciben y devuelven en SI:
@@ -63,6 +75,8 @@ Referencias
 - Sparrow & Liu (1979). Int. J. Heat Mass Transfer 22, 1433-1440.
 - Cengel & Ghajar (2014). Heat and Mass Transfer, 5ª ed. McGraw-Hill.
 - Hollands, Unny, Raithby & Konicek (1976). Solar Energy 18, 183-193.
+- Incropera & DeWitt (7ª ed.), cap. 9 "Free Convection": Ecs. 9.26/9.27
+  (Churchill-Chu, placa vertical), 9.29–9.32 (placa horizontal), 9.64 (mixta).
 
 ## Clases y funciones
 
@@ -81,6 +95,12 @@ Referencias
 - `nusselt_cengel()`
 - `nusselt_hollands_inclinada()`
 - `calcular_h_int()`
+- `nusselt_forzado_local()`
+- `nusselt_natural_canal()`
+- `nusselt_placa_horizontal()`
+- `nusselt_placa_vertical()`
+- `nusselt_mixto()`
+- `nusselt_mixto_local()`
 
 ## Ver también
 

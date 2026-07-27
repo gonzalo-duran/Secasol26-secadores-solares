@@ -43,11 +43,13 @@ Referencias:
 
 - `EstadoCamara`
 - `ResultadoMotorTermodinamico`
+- `ResultadoCascada`
 
 **Funciones:**
 
 - `resolver_estado_camara()`
 - `simular_secado()`
+- `simular_cascada()`
 
 ## Ver también
 
