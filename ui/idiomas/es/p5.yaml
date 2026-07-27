@@ -128,6 +128,48 @@ efecto:
   set_point_activo: >-
     ℹ️ Control de set point activo: el auxiliar opera al {frac:.0%} de su
     potencia nominal para mantener {t_salida:.1f} °C a la salida.
+tsal_aux:
+  titulo: Temperatura de salida del auxiliar T_sal_aux(t)
+  caption: >-
+    Sobre el horizonte de análisis (P1/P4). La curva de entrada es la salida
+    del colector (o el ambiente en tipología CAJA), modulada por el clima; la
+    banda naranja es el ΔT sensible que aporta el auxiliar. Reproduce el mismo
+    cálculo transitorio que P7.
+  grafica_titulo: "Auxiliar: T de entrada → T de salida"
+  eje_tiempo: Tiempo [h]
+  eje_t: Temperatura [°C]
+  leyenda:
+    t_entrada: T entrada (salida colector / ambiente)
+    t_salida: T salida del auxiliar
+    set_point: "Set-point {v:.1f} °C"
+  sin_horizonte: >-
+    ℹ️ Para ver T_sal_aux(t) configurá y calculá el horizonte transitorio en
+    la pestaña 4 (Cámara) — de ahí sale la T de entrada al auxiliar hora a hora.
+  horizonte_stale: >-
+    ⚠️ El horizonte cambió después de calcularlo en P4; recalculalo allí para
+    que esta gráfica quede al día.
+  caudal_chimenea: >-
+    ℹ️ Hay chimenea: el caudal real lo fija el tiro (lo resuelve P7). Acá se
+    usa el caudal de diseño para estimar el ΔT.
+  error: "❌ Error en el cálculo del auxiliar: {exc}"
+  lectura_inactivo: >-
+    El auxiliar no opera en ningún momento del horizonte (revisá disponibilidad
+    nocturna / calendario de arranque).
+  lectura_sin_sp: >-
+    Sin set-point: el auxiliar aporta un ΔT **constante de {dt:.1f} °C** durante
+    las {horas:.1f} h que opera (calentamiento sensible).
+  lectura_alcanza: >-
+    ✅ Colector + auxiliar alcanza el set-point de {sp:.1f} °C durante
+    **{horas:.1f} h**.
+  lectura_corto: >-
+    ⚠️ Queda corto (potencia insuficiente) durante **{horas:.1f} h**: en esas
+    horas el auxiliar opera a plena potencia sin llegar al set-point.
+  lectura_nunca: >-
+    ⚠️ Con esta potencia, colector + auxiliar **nunca** alcanza el set-point de
+    {sp:.1f} °C en el horizonte.
+  lectura_colector_solo: >-
+    Durante {horas:.1f} h el colector solo ya supera el set-point (el auxiliar
+    no aporta calor en esas horas).
 resumen:
   titulo: Resumen de la configuración
   tipo: "**Tipo:** {v}"

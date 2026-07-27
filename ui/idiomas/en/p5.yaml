@@ -128,6 +128,48 @@ efecto:
   set_point_activo: >-
     ℹ️ Set-point control active: the auxiliary runs at {frac:.0%} of its
     nominal power to keep {t_salida:.1f} °C at the outlet.
+tsal_aux:
+  titulo: Auxiliary outlet temperature T_out_aux(t)
+  caption: >-
+    Over the analysis horizon (P1/P4). The inlet curve is the collector outlet
+    (or ambient in CAJA typology), modulated by the climate; the orange band is
+    the sensible ΔT the auxiliary adds. Reproduces the same transient
+    calculation as P7.
+  grafica_titulo: "Auxiliary: inlet T → outlet T"
+  eje_tiempo: Time [h]
+  eje_t: Temperature [°C]
+  leyenda:
+    t_entrada: Inlet T (collector outlet / ambient)
+    t_salida: Auxiliary outlet T
+    set_point: "Set-point {v:.1f} °C"
+  sin_horizonte: >-
+    ℹ️ To see T_out_aux(t), configure and compute the transient horizon in tab 4
+    (Chamber) — the auxiliary inlet temperature comes from there, hour by hour.
+  horizonte_stale: >-
+    ⚠️ The horizon changed after being computed in P4; recompute it there so this
+    chart is up to date.
+  caudal_chimenea: >-
+    ℹ️ There is a chimney: the real airflow is set by the draft (solved in P7).
+    Here the design airflow is used to estimate ΔT.
+  error: "❌ Error computing the auxiliary: {exc}"
+  lectura_inactivo: >-
+    The auxiliary never operates within the horizon (check nocturnal
+    availability / start-up schedule).
+  lectura_sin_sp: >-
+    No set-point: the auxiliary adds a **constant ΔT of {dt:.1f} °C** during the
+    {horas:.1f} h it operates (sensible heating).
+  lectura_alcanza: >-
+    ✅ Collector + auxiliary reaches the {sp:.1f} °C set-point for
+    **{horas:.1f} h**.
+  lectura_corto: >-
+    ⚠️ Falls short (insufficient power) for **{horas:.1f} h**: in those hours the
+    auxiliary runs at full power without reaching the set-point.
+  lectura_nunca: >-
+    ⚠️ With this power, collector + auxiliary **never** reaches the {sp:.1f} °C
+    set-point within the horizon.
+  lectura_colector_solo: >-
+    For {horas:.1f} h the collector alone already exceeds the set-point (the
+    auxiliary adds no heat in those hours).
 resumen:
   titulo: Configuration summary
   tipo: "**Type:** {v}"

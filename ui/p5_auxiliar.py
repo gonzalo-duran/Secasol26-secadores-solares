@@ -10,9 +10,14 @@ El auxiliar es opcional: si el usuario no lo activa, proyecto.auxiliar = None.
 
 from __future__ import annotations
 
+import numpy as np
+import plotly.graph_objects as go
 import streamlit as st
 
-from calculos.auxiliar_calc import calcular_auxiliar
+from calculos.auxiliar_calc import (
+    ResultadosAuxiliarTransitorio,
+    calcular_auxiliar_transitorio,
+)
 from core.auxiliar import (
     Auxiliar,
     CargaArranque,
@@ -21,16 +26,17 @@ from core.auxiliar import (
     advertencias_auxiliar,
 )
 from ui.componentes.advertencias_widget import render_advertencias
+from ui.componentes.graficas import mostrar_plotly
 from ui.componentes.idiomas import t
 from ui.componentes.manual_contenido import SLUG_POR_SECCION
 from ui.componentes.manual_link import boton_manual
 from ui.componentes.unidades import celsius_a_kelvin, kelvin_a_celsius
+from ui.componentes.vigencia import horizonte_vigente
 
 # ---------------------------------------------------------------------------
 # Constantes de UI
 # ---------------------------------------------------------------------------
 
-_T_SALIDA_DEFAULT_C: float = 60.0
 _T_AMB_DEFAULT_C: float = 25.0
 _T_MAX_DEFAULT_C: float = 70.0
 
@@ -43,16 +49,6 @@ _T_MAX_DEFAULT_C: float = 70.0
 def _mostrar_advertencias(adv_list: list) -> None:
     """Muestra la lista de Advertencia traducida por código (widget único, F5)."""
     render_advertencias(adv_list, con_sugerencia=False)
-
-
-def _T_entrada_sugerida() -> float:
-    """Devuelve la mejor estimación de T_entrada para el auxiliar [K].
-
-    En modo SERIE_POSCOLECTOR: idealmente T_salida del colector.
-    Como los resultados del colector no están en session_state todavía,
-    el usuario la ingresa manualmente. Esta función provee el default.
-    """
-    return celsius_a_kelvin(_T_SALIDA_DEFAULT_C)
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +252,94 @@ def _json_config_auxiliar(aux: "Auxiliar") -> dict:
         ),
     }
     return base
+
+
+# ---------------------------------------------------------------------------
+# Entregable transitorio: T_sal_aux(t)
+# ---------------------------------------------------------------------------
+
+
+def _grafica_tsal_aux(
+    aux_tr: "ResultadosAuxiliarTransitorio", set_point_K: float | None
+) -> go.Figure:
+    """Gráfica del entregable de P5: T_entrada_aux(t) → T_sal_aux(t).
+
+    T_entrada_aux(t) es la salida del colector (o el ambiente en CAJA), modulada
+    por el clima. La banda entre ambas curvas es el ΔT sensible que aporta el
+    auxiliar (ΔT = Q_eff/(ṁ·cp)). Si hay set-point, se dibuja como línea de corte.
+    """
+    t_h = aux_tr.t_s / 3600.0
+    T_ent_C = aux_tr.T_entrada_K - 273.15
+    T_sal_C = aux_tr.T_salida_K - 273.15
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(T_ent_C),
+            name=t("p5.tsal_aux.leyenda.t_entrada"),
+            line=dict(color="#d62728", width=2),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=list(t_h),
+            y=list(T_sal_C),
+            name=t("p5.tsal_aux.leyenda.t_salida"),
+            line=dict(color="#ff7f0e", width=2),
+            fill="tonexty",
+            fillcolor="rgba(255,127,14,0.15)",
+        )
+    )
+    if set_point_K is not None:
+        fig.add_hline(
+            y=set_point_K - 273.15,
+            line=dict(color="#2ca02c", dash="dot", width=1.5),
+            annotation_text=t("p5.tsal_aux.leyenda.set_point", v=set_point_K - 273.15),
+        )
+    fig.update_xaxes(title_text=t("p5.tsal_aux.eje_tiempo"))
+    fig.update_yaxes(title_text=t("p5.tsal_aux.eje_t"))
+    fig.update_layout(
+        title=t("p5.tsal_aux.grafica_titulo"),
+        height=380,
+        hovermode="x unified",
+    )
+    return fig
+
+
+def _lecturas_tsal_aux(aux_tr: "ResultadosAuxiliarTransitorio", set_point_K: float | None) -> None:
+    """Lecturas automáticas de la gráfica T_sal_aux(t).
+
+    Sin set-point: el ΔT es constante mientras el auxiliar opera (calentamiento
+    sensible). Con set-point: cuántas horas colector+aux alcanza el corte, cuántas
+    queda corto por potencia, y si el colector solo ya lo supera.
+    """
+    horas_activo = aux_tr.horas_activo_s / 3600.0
+    if horas_activo <= 0.0:
+        st.info(t("p5.tsal_aux.lectura_inactivo"))
+        return
+    if set_point_K is None:
+        st.info(t("p5.tsal_aux.lectura_sin_sp", dt=aux_tr.delta_T_max_K, horas=horas_activo))
+        return
+
+    tol = 0.1
+    activo = aux_tr.Q_efectivo_W > 0.0
+
+    def _horas(mask: np.ndarray) -> float:
+        return float(np.trapezoid(mask.astype(float), aux_tr.t_s)) / 3600.0
+
+    h_alcanza = _horas(activo & (aux_tr.T_salida_K >= set_point_K - tol))
+    h_corto = _horas(activo & (aux_tr.T_salida_K < set_point_K - tol))
+    h_col = _horas(aux_tr.T_entrada_K >= set_point_K - tol)
+    sp_C = set_point_K - 273.15
+
+    if h_alcanza > 0.0:
+        st.success(t("p5.tsal_aux.lectura_alcanza", sp=sp_C, horas=h_alcanza))
+    if h_corto > 0.0:
+        st.warning(t("p5.tsal_aux.lectura_corto", horas=h_corto))
+    if h_alcanza <= 0.0:
+        st.warning(t("p5.tsal_aux.lectura_nunca", sp=sp_C))
+    if h_col > 0.0:
+        st.caption(t("p5.tsal_aux.lectura_colector_solo", horas=h_col))
 
 
 # ---------------------------------------------------------------------------
@@ -629,99 +713,49 @@ def render() -> None:
             st.success(t("p5.sin_advertencias"))
 
         # -----------------------------------------------------------------------
-        # Sección D: Condiciones de operación y resultados
+        # Sección D: Entregable transitorio — T_sal_aux(t)
         # -----------------------------------------------------------------------
-        st.subheader(t("p5.efecto.titulo"))
+        st.subheader(t("p5.tsal_aux.titulo"))
+        st.caption(t("p5.tsal_aux.caption"))
 
-        col_op1, col_op2 = st.columns(2)
-        with col_op1:
-            T_entrada_hint = (
-                t("p5.efecto.t_entrada.hint_serie")
-                if modo == ModoOperacionAuxiliar.SERIE_POSCOLECTOR
-                else t("p5.efecto.t_entrada.hint_respaldo")
-            )
-            T_entrada_C = st.number_input(
-                t("p5.efecto.t_entrada.label"),
-                min_value=-10.0,
-                max_value=120.0,
-                value=st.session_state.get("aux_T_entrada_C", _T_SALIDA_DEFAULT_C),
-                step=1.0,
-                format="%.1f",
-                help=T_entrada_hint,
-            )
-            st.session_state["aux_T_entrada_C"] = T_entrada_C
-
-        with col_op2:
-            # Caudal: tomar del colector si existe, sino pedir al usuario
-            caudal_default = 0.030
-            caudal_hint = ""
-            if proyecto.colector is not None:
-                Q_m3s = proyecto.colector.caudal_total_m3_s()
-                caudal_default = Q_m3s * 1.1  # ρ ≈ 1.1 kg/m³
-                caudal_hint = t("p5.efecto.caudal.hint_colector", q=Q_m3s * 1000, kg=caudal_default)
-            if proyecto.camara is not None:
-                caudal_default = proyecto.camara.flujo.caudal_masico_kg_s
-                caudal_hint = t("p5.efecto.caudal.hint_camara")
-
-            caudal_kg_s = st.number_input(
-                t("p5.efecto.caudal.label"),
-                min_value=0.001,
-                max_value=10.0,
-                value=caudal_default,
-                step=0.001,
-                format="%.4f",
-                help=caudal_hint or t("p5.efecto.caudal.hint_default"),
-            )
-            if caudal_hint:
-                st.caption(f"💡 {caudal_hint}")  # i18n: exento (caudal_hint ya traducido)
-
-        T_entrada_K = celsius_a_kelvin(T_entrada_C)
-        try:
-            res = calcular_auxiliar(auxiliar, T_entrada_K, caudal_kg_s)
-        except Exception as exc:
-            st.error(t("p5.efecto.error_calculo", exc=exc))
-            return
-
-        if res.advertencias:
-            for msg in res.advertencias:
-                st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, queda ES)
-
-        # Métricas de resultado
-        col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-        col_r1.metric(
-            t("p5.efecto.t_entrada_metric"),
-            f"{kelvin_a_celsius(res.T_entrada_K):.1f} °C",
-        )
-        col_r2.metric(
-            t("p5.efecto.t_salida"),
-            f"{kelvin_a_celsius(res.T_salida_K):.1f} °C",
-            delta=f"+{res.delta_T_K:.1f} °C",
-        )
-        col_r3.metric(
-            t("p5.efecto.potencia_efectiva.label"),
-            f"{res.Q_efectivo_W / 1000:.2f} kW",
-            help=t("p5.efecto.potencia_efectiva.help", frac=res.fraccion_activa),
-        )
-        if res.consumo_biomasa_kg_h is not None:
-            col_r4.metric(
-                t("p5.efecto.consumo_biomasa.label"),
-                f"{res.consumo_biomasa_kg_h:.3f} kg/h",
-                help=t("p5.efecto.consumo_biomasa.help"),
-            )
-        elif res.consumo_electrico_W is not None:
-            col_r4.metric(
-                t("p5.efecto.consumo_electrico"),
-                f"{res.consumo_electrico_W / 1000:.2f} kW",
-            )
-
-        if res.set_point_activo:
-            st.info(
-                t(
-                    "p5.efecto.set_point_activo",
-                    frac=res.fraccion_activa,
-                    t_salida=kelvin_a_celsius(res.T_salida_K),
+        # T_entrada_aux(t) = T_salida_colector(t) (o T_amb en CAJA) sale del
+        # forzante del horizonte que arma P4/P7. El auxiliar se evalúa hora a
+        # hora con el MISMO solver transitorio que usa P7 (calcular_auxiliar_
+        # transitorio): esta gráfica NO recomputa física, la reproduce.
+        fz_h, _meta_h, vigente_h = horizonte_vigente(proyecto, st.session_state)
+        if fz_h is None:
+            st.info(t("p5.tsal_aux.sin_horizonte"))
+        else:
+            _m_dot = getattr(fz_h, "m_dot_aire_seco_kg_s", None)
+            if _m_dot is not None and len(np.asarray(_m_dot)) > 0:
+                caudal_aux = float(np.mean(_m_dot))
+            elif proyecto.camara is not None:
+                caudal_aux = proyecto.camara.flujo.caudal_masico_kg_s
+            else:
+                caudal_aux = 0.030
+            try:
+                aux_tr = calcular_auxiliar_transitorio(
+                    auxiliar,
+                    T_entrada_K_serie=fz_h.T_ent_K,
+                    t_s=fz_h.t_s,
+                    caudal_masico_kg_s=caudal_aux,
+                    I_g_W_m2_serie=getattr(fz_h, "I_g_W_m2", None),
                 )
-            )
+            except Exception as exc:  # noqa: BLE001
+                st.error(t("p5.tsal_aux.error", exc=exc))
+                aux_tr = None
+
+            if aux_tr is not None:
+                if not vigente_h:
+                    st.caption(t("p5.tsal_aux.horizonte_stale"))
+                if proyecto.chimenea is not None and proyecto.motor is None:
+                    st.caption(t("p5.tsal_aux.caudal_chimenea"))
+                mostrar_plotly(
+                    _grafica_tsal_aux(aux_tr, set_point_K), nombre="aux_tsal_transitorio"
+                )
+                _lecturas_tsal_aux(aux_tr, set_point_K)
+                for msg in aux_tr.advertencias_unicas:
+                    st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, queda ES)
 
         # Resumen compacto
         with st.expander(t("p5.resumen.titulo")):
