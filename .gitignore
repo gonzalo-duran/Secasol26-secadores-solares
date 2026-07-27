@@ -54,3 +54,14 @@ docs/notas/dataset/**/*.xlsx
 
 # Reportes PDF generados por la app en corridas manuales (artefactos, no fuente)
 reporte_*.pdf
+
+# Snapshots JSON del proyecto exportados por la app en corridas manuales
+# (contraparte de reporte_*.pdf: mismo artefacto, otra extensión). Las carpetas
+# "tests/test analisis .../" y "tests/tests cajon .../" quedan vacías para git.
+nuevo_proyecto_prediseno_completo_*.json
+
+# Config de vista de Dolphin/KDE (por máquina — no se versiona)
+.directory
+
+# Mensajes de commit preparados para la sesión en curso (temporales)
+.commit_msgs/
