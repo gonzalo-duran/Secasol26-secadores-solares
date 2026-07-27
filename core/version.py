@@ -13,4 +13,4 @@ Al liberar una versión hay que actualizar este valor junto con el `CHANGELOG.md
 
 from __future__ import annotations
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"

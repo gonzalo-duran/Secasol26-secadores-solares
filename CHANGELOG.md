@@ -7,37 +7,29 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-### Fixed
+Mejoras post-1.3 (sin orden estricto):
 
-- **La política de recarga se perdía al guardar y cargar el proyecto** (S59). Los cinco
-  campos de `PoliticaRecarga` —hora de carga, maniobra, espera activa, exigir pronóstico
-  y su umbral— vivían solo en los widgets de P4 y en `session_state`, nunca en el objeto
-  `Proyecto`, que es lo único que se serializa. Consecuencia: se guardaba el prediseño
-  completo, se reabría al día siguiente y al recalcular el año salía **otro número que el
-  del reporte guardado, sin ningún aviso** — los widgets habían vuelto a sus defaults.
-  Con los dos campos que sumó S58 el agujero se había ensanchado, porque también se
-  perdía la decisión de mirar el pronóstico, que es la que más mueve el conteo de lotes.
+- **Auxiliar en modo respaldo** (etapa 2 del spec de convección natural): hoy
+  `RESPALDO_INDEPENDIENTE` aplica su ΔT como si fuera serie, o sea que no tiene física
+  propia. Va a inyectar `Q_aux` en el **nodo de aire** de la cámara, con set-point sobre
+  `T_flujo` y coacción a resistencia eléctrica. En convección natural además refuerza el
+  tiro: más `T_flujo` ⇒ más caudal.
+- **Acoples de sección desigual** entre colector y boca de entrada, y entre boca de salida
+  y chimenea: la contracción altera la presión dinámica y el modelo no la representa.
+- **La ventana y el año ignoran el lazo natural**: `armar_forzantes_ventana` usa el caudal
+  de diseño, así que se pueden cargar bocas y no ver ningún efecto en el modo anual. Es una
+  limitación previa —la chimenea también se ignoraba ahí— pero desde 1.3.0 es visible.
+- **Validar la convección natural contra datos medidos** de cámara y de cajón pasivo: nada
+  de lo de 1.3.0 está contrastado con mediciones y los coeficientes de boca son de manual.
+- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
+  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
+  en P4.
+- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
+  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
+- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
+  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
-  `PoliticaRecarga` pasa de `calculos/simulacion_ventana.py` a **`core/operacion.py`** y
-  cuelga de `Configuracion.politica_recarga`, junto a `ventana_inicio`/`ventana_fin`, que
-  son parámetros de escenario de operación igual que ella. Estaba en `calculos/` por
-  accidente histórico (nació dentro del módulo de simulación en S57); es una dataclass de
-  datos puros con validación por códigos de error, o sea la forma exacta de un objeto de
-  `core/`. `simulacion_ventana` la reexporta, así que los imports existentes siguen
-  andando. Los snapshots anteriores a S59 no traen el bloque y se cargan con los defaults
-  —que son los que esas corridas usaron de hecho—, así que se reproducen igual.
-
-- **El modo VENTANA de gran escala ignoraba la política de recarga** (S59). `simular_ventana`
-  llamaba a la rama BATCH sin pasarla, de modo que el encadenado quedaba clavado en los
-  defaults del motor y **ningún widget la gobernaba**: misma física que el modo anual, con
-  la operación fija. Ahora la lee del proyecto, igual que el anual. Además recibe el ancla
-  de hora local (el mismo offset que alinea el calendario de arranque del auxiliar), en vez
-  de suponer que `t = 0` es medianoche local. El túnel semicontinuo la ignora a propósito:
-  avanza columnas por cadencia, no encadena lotes.
-
-- **P1 pisaba la política en cada rerun** (S59). P1 reconstruye `Configuracion` campo por
-  campo y en Streamlit todas las pestañas se renderizan siempre, así que cualquier campo
-  que no se propague explícitamente vuelve a su default. Ahora la arrastra.
+## [1.3.0] — 2026-07-27
 
 ### Added
 
@@ -56,8 +48,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   ventana (solo BATCH), con la nota de que el pronóstico es perfecto. Traducido a los
   tres idiomas (`reporte.operacion.*`). Los snapshots anteriores a S59 no traen la
   política y el bloque simplemente no se dibuja.
-
-### Added
 
 - **El secador pasivo sin chimenea deja de tener caudal constante** (S61). Un cajón o
   armario con bocas de aire, sin ventilador ni chimenea —el caso de mucha aplicación—
@@ -110,14 +100,67 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   contracción que altera la presión dinámica y que el modelo todavía no representa; queda
   como corrección futura.
 
-### Fixed
+- **El operador no carga lotes en días de mal pronóstico** (S58). Hasta ahora el
+  encadenado cargaba un lote cada vez que el secador quedaba libre, aunque el día
+  viniera nublado: el lote se arrastraba sin terminar, ocupaba la cámara e inflaba el
+  conteo de lotes frustrados con casos que en la práctica no ocurren, porque un operador
+  mira el cielo antes de llenar el secador.
 
-- **La T ambiente representativa de P4 caía siempre al fallback de 25 °C** (S61). El helper
-  leía `clima.T_amb_K`, pero `Clima` guarda las series como **columnas del DataFrame
-  `datos`**, no como atributos: `getattr` devolvía `None` y el cálculo tomaba 25 °C aunque
-  el clima estuviera cargado. En un cajón salteño de julio (media real 10.5 °C) eso son
-  15 K de error en la condición de borde con la que la previa estima pérdidas a paredes y
-  temperatura inicial del producto.
+  `PoliticaRecarga` gana `exigir_pronostico` (activo por defecto) y
+  `umbral_pronostico_MJ_m2` (default 8 MJ/m²·día, el mismo umbral con el que ya se
+  contaban los días operables). Antes de cargar, se integra la irradiación del **día de
+  carga** sobre el plano del colector; si no llega al umbral, se espera al día
+  siguiente. Configurable en P4, junto a la política de recarga.
+
+  **El pronóstico es perfecto**: la decisión usa la irradiación que el día efectivamente
+  va a tener, no una predicción con error. Es una idealización deliberada —da la cota
+  superior de la buena decisión— y está documentada como tal en la clase, en P4, en P7 y
+  en el reporte PDF. El sesgo va en sentido opuesto al de la espera de recarga y ambos
+  son chicos frente a la variabilidad interanual del recurso.
+
+  Métrica nueva `dias_salteados_pronostico`, que se lee **junto a** `dias_operables`
+  para separar "no había sol" de "había sol pero el secador estaba ocupado". Se expone
+  en P4, en el detalle de P7 y en los tres exports (TXT/JSON/PDF).
+
+- **Cargar un proyecto completo** (S58, pedido del usuario). P7 sabía **guardar** el
+  proyecto entero (`..._prediseno_completo.json`) pero no había forma de volver a
+  cargarlo: solo existían cargadores por sección (colector, cámara, auxiliar, motor,
+  chimenea), meta/configuración/emplazamiento no se cargaban en ningún lado, y el archivo
+  completo no servía ni para cargar de a partes porque `parsear_json_seccion` valida el
+  campo `seccion` de la raíz —que dice `"prediseno_completo"`— y lo rechazaba. El
+  snapshot completo era un artefacto de archivo, no un "guardar proyecto".
+
+  Nuevo expander **"📂 Cargar proyecto completo"** en P1, que es donde se empieza:
+  `ui/componentes/carga_proyecto.py` desarma el JSON y reparte cada sub-dict al
+  deserializador que ya existía. Una sección que falle (un id de catálogo que cambió) no
+  aborta la carga: se omite y se avisa, porque recuperar el proyecto al 90 % es mejor que
+  rechazar el archivo. El clima **no viaja** en el snapshot (8760 filas): se avisa con qué
+  año se guardó para rebajarlo en P2, que sale de la caché parquet.
+
+- **Detección de resultados desactualizados — mecanismo general** (S58). El resultado del
+  modo anual se calcula en P4 y P7 y el reporte lo **muestran sin recalcularlo**; el mismo
+  hueco lo tenían el horizonte transitorio (lo arma P4, lo consume P7) y los resultados de
+  P7 (transitorio, constantes y ventana), que alimentan los exports TXT/JSON/PDF. En todos,
+  cambiar la configuración después de calcular dejaba números viejos en pantalla sin
+  ninguna señal.
+
+  Ahora cada resultado se guarda junto a la huella (`core.huellas.huella_entradas`) de todo
+  lo que lo determina —secciones del proyecto + clima + condiciones de borde—; si al
+  renderizar no coincide, P7 lo marca, ofrece **rehacer** el aire (horizonte) o
+  **recalcular** (anual) ahí mismo, y la exportación se bloquea en vez de escribir números
+  viejos. El registro vive en un solo lugar (`ui/componentes/vigencia.py`): agregar un
+  resultado derivado nuevo es una fila más, no otro parche por caso. Estrena
+  `core.advertencias.calcular_hash_entradas`, que existía sin un solo consumidor.
+
+- **Tres gráficas nuevas del análisis anual** en P7 y en el reporte PDF: energía mensual
+  (solar incidente vs auxiliar entregado al aire), duración media de lote por mes con p50
+  y p90 del año como referencia, y días operables vs días del mes. La de producción
+  mensual suma el agua evaporada junto al producto seco, que eran justamente las dos
+  cantidades que el modo anual viejo confundía.
+
+- `PuntoMensualAnual.E_auxiliar_MJ` — la energía del auxiliar, desagregada por mes. El
+  aporte del auxiliar solo existía como total del año, así que no se podía ver **en qué
+  meses** trabaja, que es lo que un híbrido necesita mostrar.
 
 ### Changed
 
@@ -213,71 +256,44 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   las pérdidas y va a favor de la seguridad. `perfil_viento.py` documenta la excepción para
   que no se "arregle" en el futuro.
 
-### Added
-
-- **El operador no carga lotes en días de mal pronóstico** (S58). Hasta ahora el
-  encadenado cargaba un lote cada vez que el secador quedaba libre, aunque el día
-  viniera nublado: el lote se arrastraba sin terminar, ocupaba la cámara e inflaba el
-  conteo de lotes frustrados con casos que en la práctica no ocurren, porque un operador
-  mira el cielo antes de llenar el secador.
-
-  `PoliticaRecarga` gana `exigir_pronostico` (activo por defecto) y
-  `umbral_pronostico_MJ_m2` (default 8 MJ/m²·día, el mismo umbral con el que ya se
-  contaban los días operables). Antes de cargar, se integra la irradiación del **día de
-  carga** sobre el plano del colector; si no llega al umbral, se espera al día
-  siguiente. Configurable en P4, junto a la política de recarga.
-
-  **El pronóstico es perfecto**: la decisión usa la irradiación que el día efectivamente
-  va a tener, no una predicción con error. Es una idealización deliberada —da la cota
-  superior de la buena decisión— y está documentada como tal en la clase, en P4, en P7 y
-  en el reporte PDF. El sesgo va en sentido opuesto al de la espera de recarga y ambos
-  son chicos frente a la variabilidad interanual del recurso.
-
-  Métrica nueva `dias_salteados_pronostico`, que se lee **junto a** `dias_operables`
-  para separar "no había sol" de "había sol pero el secador estaba ocupado". Se expone
-  en P4, en el detalle de P7 y en los tres exports (TXT/JSON/PDF).
-
-- **Cargar un proyecto completo** (S58, pedido del usuario). P7 sabía **guardar** el
-  proyecto entero (`..._prediseno_completo.json`) pero no había forma de volver a
-  cargarlo: solo existían cargadores por sección (colector, cámara, auxiliar, motor,
-  chimenea), meta/configuración/emplazamiento no se cargaban en ningún lado, y el archivo
-  completo no servía ni para cargar de a partes porque `parsear_json_seccion` valida el
-  campo `seccion` de la raíz —que dice `"prediseno_completo"`— y lo rechazaba. El
-  snapshot completo era un artefacto de archivo, no un "guardar proyecto".
-
-  Nuevo expander **"📂 Cargar proyecto completo"** en P1, que es donde se empieza:
-  `ui/componentes/carga_proyecto.py` desarma el JSON y reparte cada sub-dict al
-  deserializador que ya existía. Una sección que falle (un id de catálogo que cambió) no
-  aborta la carga: se omite y se avisa, porque recuperar el proyecto al 90 % es mejor que
-  rechazar el archivo. El clima **no viaja** en el snapshot (8760 filas): se avisa con qué
-  año se guardó para rebajarlo en P2, que sale de la caché parquet.
-
-- **Detección de resultados desactualizados — mecanismo general** (S58). El resultado del
-  modo anual se calcula en P4 y P7 y el reporte lo **muestran sin recalcularlo**; el mismo
-  hueco lo tenían el horizonte transitorio (lo arma P4, lo consume P7) y los resultados de
-  P7 (transitorio, constantes y ventana), que alimentan los exports TXT/JSON/PDF. En todos,
-  cambiar la configuración después de calcular dejaba números viejos en pantalla sin
-  ninguna señal.
-
-  Ahora cada resultado se guarda junto a la huella (`core.huellas.huella_entradas`) de todo
-  lo que lo determina —secciones del proyecto + clima + condiciones de borde—; si al
-  renderizar no coincide, P7 lo marca, ofrece **rehacer** el aire (horizonte) o
-  **recalcular** (anual) ahí mismo, y la exportación se bloquea en vez de escribir números
-  viejos. El registro vive en un solo lugar (`ui/componentes/vigencia.py`): agregar un
-  resultado derivado nuevo es una fila más, no otro parche por caso. Estrena
-  `core.advertencias.calcular_hash_entradas`, que existía sin un solo consumidor.
-
-- **Tres gráficas nuevas del análisis anual** en P7 y en el reporte PDF: energía mensual
-  (solar incidente vs auxiliar entregado al aire), duración media de lote por mes con p50
-  y p90 del año como referencia, y días operables vs días del mes. La de producción
-  mensual suma el agua evaporada junto al producto seco, que eran justamente las dos
-  cantidades que el modo anual viejo confundía.
-
-- `PuntoMensualAnual.E_auxiliar_MJ` — la energía del auxiliar, desagregada por mes. El
-  aporte del auxiliar solo existía como total del año, así que no se podía ver **en qué
-  meses** trabaja, que es lo que un híbrido necesita mostrar.
-
 ### Fixed
+
+- **La política de recarga se perdía al guardar y cargar el proyecto** (S59). Los cinco
+  campos de `PoliticaRecarga` —hora de carga, maniobra, espera activa, exigir pronóstico
+  y su umbral— vivían solo en los widgets de P4 y en `session_state`, nunca en el objeto
+  `Proyecto`, que es lo único que se serializa. Consecuencia: se guardaba el prediseño
+  completo, se reabría al día siguiente y al recalcular el año salía **otro número que el
+  del reporte guardado, sin ningún aviso** — los widgets habían vuelto a sus defaults.
+  Con los dos campos que sumó S58 el agujero se había ensanchado, porque también se
+  perdía la decisión de mirar el pronóstico, que es la que más mueve el conteo de lotes.
+
+  `PoliticaRecarga` pasa de `calculos/simulacion_ventana.py` a **`core/operacion.py`** y
+  cuelga de `Configuracion.politica_recarga`, junto a `ventana_inicio`/`ventana_fin`, que
+  son parámetros de escenario de operación igual que ella. Estaba en `calculos/` por
+  accidente histórico (nació dentro del módulo de simulación en S57); es una dataclass de
+  datos puros con validación por códigos de error, o sea la forma exacta de un objeto de
+  `core/`. `simulacion_ventana` la reexporta, así que los imports existentes siguen
+  andando. Los snapshots anteriores a S59 no traen el bloque y se cargan con los defaults
+  —que son los que esas corridas usaron de hecho—, así que se reproducen igual.
+
+- **El modo VENTANA de gran escala ignoraba la política de recarga** (S59). `simular_ventana`
+  llamaba a la rama BATCH sin pasarla, de modo que el encadenado quedaba clavado en los
+  defaults del motor y **ningún widget la gobernaba**: misma física que el modo anual, con
+  la operación fija. Ahora la lee del proyecto, igual que el anual. Además recibe el ancla
+  de hora local (el mismo offset que alinea el calendario de arranque del auxiliar), en vez
+  de suponer que `t = 0` es medianoche local. El túnel semicontinuo la ignora a propósito:
+  avanza columnas por cadencia, no encadena lotes.
+
+- **P1 pisaba la política en cada rerun** (S59). P1 reconstruye `Configuracion` campo por
+  campo y en Streamlit todas las pestañas se renderizan siempre, así que cualquier campo
+  que no se propague explícitamente vuelve a su default. Ahora la arrastra.
+
+- **La T ambiente representativa de P4 caía siempre al fallback de 25 °C** (S61). El helper
+  leía `clima.T_amb_K`, pero `Clima` guarda las series como **columnas del DataFrame
+  `datos`**, no como atributos: `getattr` devolvía `None` y el cálculo tomaba 25 °C aunque
+  el clima estuviera cargado. En un cajón salteño de julio (media real 10.5 °C) eso son
+  15 K de error en la condición de borde con la que la previa estima pérdidas a paredes y
+  temperatura inicial del producto.
 
 - **El análisis anual de P7 podía mostrar (y exportar) resultados de otra configuración**
   (S58, detectado sobre un reporte del usuario). P7 no recalcula el año: reproduce el
@@ -323,19 +339,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   turnos ni tiempo de carga" —corregido en 1.2.0 con `PoliticaRecarga`— "y arranca lotes
   aunque el clima venga malo" —corregido ahora—. Reescritas en los tres idiomas para
   decir cuál es hoy la idealización que queda: el pronóstico perfecto.
-
-Mejoras post-1.2 (sin orden estricto):
-
-- **Persistir `PoliticaRecarga`** en el snapshot del proyecto: hoy vive en los widgets de
-  P4, así que sobrevive la sesión pero no un guardar/cargar.
-- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
-  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
-  en P4.
-- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
-  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
-- `h_w` de McAdams usa el viento a 2 m sin corregir a la altura del equipo.
-- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
-  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
 ## [1.2.0] — 2026-07-23
 

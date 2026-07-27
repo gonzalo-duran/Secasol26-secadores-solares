@@ -13,8 +13,14 @@ from enum import Enum
 from typing import ClassVar, Optional
 
 from core.operacion import PoliticaRecarga
+from core.version import __version__
 
-VERSION_SOFTWARE = "1.1.0"
+#: Versión estampada en ``Meta.version_software``, o sea la que queda grabada en los
+#: snapshots ``.json`` y en la portada del reporte PDF. Es un alias de la fuente única
+#: (``core/version.py``) y no una constante propia: cuando eran dos valores
+#: independientes se desincronizaron —la app decía 1.2.0 y los reportes 1.1.0— porque
+#: solo el primero está atado al CHANGELOG por ``tests/test_core/test_version.py``.
+VERSION_SOFTWARE = __version__
 
 
 class Tipologia(Enum):
