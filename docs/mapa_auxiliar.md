@@ -200,19 +200,35 @@ flowchart TD
 | **Transitorio** | `_correr_aux_y_armar_forzantes` | `T_sal_col_base(t)` (chimenea o no; el mismo helper) | **No** — aplica si `auxiliar is not None` |
 | **Ventana/Anual** | `armar_forzantes_ventana` | `T_post_caño(t)` (después del caño maestro) | **Sí** — solo `SERIE_POSCOLECTOR` |
 
-> **⚠ Inconsistencia a revisar (no resuelta):** en Constantes y Transitorio el
-> auxiliar aplica su ΔT **sin mirar `modo_operacion`** (trata `RESPALDO_INDEPENDIENTE`
-> igual que `SERIE_POSCOLECTOR`); solo el pipeline de Ventana filtra por
-> `SERIE_POSCOLECTOR`. El modo `RESPALDO_INDEPENDIENTE` no tiene hoy una física
-> propia diferenciada. Anotarlo antes de tocar nada.
+**Modo RESPALDO (desde S62).** No aplica ΔT sobre `T_ent`. Su ruteo es:
+
+| Pipeline | Cómo entra `Q_aux` | Contabilidad |
+|----------|--------------------|--------------|
+| **Constantes** | escalar `Q_aux_max_W` + `T_set_aux_K` a `calcular_camara` | `∫Q_aux dt` del motor, **fuera** del gate de convergencia (la energía existe aunque el lote no termine) |
+| **Transitorio** | serie `forzantes.Q_aux_max_W`, enmascarada con `auxiliar_calc.mascara_disponibilidad` | ídem, vía `res.camara.energia_aux_total_J` |
+| **Ventana/Anual** | no aplica (respaldo es CAJA/ARMARIO; esos modos van por el transitorio) | — |
+
+Dos consecuencias que no son obvias:
+
+- **El respaldo refuerza el tiro.** Con bocas o chimenea, más `Q_aux` ⇒ más `T_flujo`
+  ⇒ más empuje ⇒ más caudal. Por eso `estimar_T_flujo_estacionario` también recibe
+  `Q_aux_max_W`: sin eso el auxiliar calentaba pero el lazo natural resolvía el mismo
+  caudal que sin auxiliar. Medido en un cajón con bocas de 0.05 m²: ṁ pasa de 0.0124
+  a 0.0633 kg/s entre 0 y 3000 W.
+- **La potencia contabilizada es la entregada, no la disponible.** Con set-point el
+  motor modula (`Q_aux = clamp(T_set·den − num_base, 0, Q_max)`), así que integrar el
+  techo sobrestimaría el consumo.
+
+> **✅ CERRADA en S62.** Hasta S61 el auxiliar aplicaba su ΔT **sin mirar
+> `modo_operacion`** en Constantes y Transitorio (trataba `RESPALDO_INDEPENDIENTE`
+> igual que `SERIE_POSCOLECTOR`), así que el modo respaldo no tenía física propia:
+> elegirlo no cambiaba ningún número.
 >
-> **Estado S61:** sigue abierta, y es el **próximo paso** del work stream de convección
-> natural (etapa 2 de `docs/notas/spec_conveccion_natural_y_respaldo.md`). El diseño ya
-> está cerrado con el usuario: `Q_aux` va al **nodo de aire** de la cámara (no precalienta
-> `T_ent`), set-point sobre `T_flujo` modulando `Q_aux` de forma algebraica dentro del
-> solve, coacción a `RESISTENCIA_ELECTRICA` y solo CAJA/ARMARIO. Ahora que el motor de
-> caudal existe (S61), en convección natural `Q_aux` además **refuerza el tiro**: más
-> `T_flujo` ⇒ más `ṁ`.
+> Ahora **la tabla de arriba vale solo para `SERIE_POSCOLECTOR`**. En respaldo el
+> auxiliar no entra por la columna "T que recibe el aux" porque no hay tal cosa:
+> la fuente está **dentro de la cámara** y su potencia se inyecta en el **nodo de
+> aire** del balance (`resolver_estado_camara(..., Q_aux_max_W, T_set_aux_K)`),
+> en el mismo renglón que `Q_rad_aire_W`. Ver §2.2 del spec.
 
 ---
 

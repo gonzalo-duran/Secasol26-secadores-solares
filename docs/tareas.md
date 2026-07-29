@@ -23,10 +23,11 @@ Ver `docs/bitacora/bitacora_sesion61.md` y, para el detalle con mediciones,
 tiro), más las bocas en el circuito forzado y el caudal de referencia en renovaciones de aire.
 Queda, en orden:
 
-- **RESPALDO del auxiliar** (etapa 2 del spec) — `Q_aux` al nodo de aire de la cámara +
-  set-point sobre `T_flujo` + coacción a `RESISTENCIA_ELECTRICA`, solo CAJA/ARMARIO. Hoy
-  `RESPALDO_INDEPENDIENTE` no tiene física propia: aplica su ΔT como si fuera serie.
-  **Es el próximo paso.**
+- ~~**RESPALDO del auxiliar** (etapa 2 del spec)~~ — ✅ **CERRADO en S62** (etapas 2 y 3
+  completas): `Q_aux` al nodo de aire, set-point algebraico sobre `T_flujo`, coacción a
+  `RESISTENCIA_ELECTRICA` con aviso, y UI de P5 (selector restringido + ventana de
+  operación en vez de `T_sal_aux(t)`). El respaldo además **refuerza el tiro**. Falta lo
+  de siempre: contrastarlo contra mediciones.
 
 - **Acoples de sección desigual** — colector↔boca de entrada y boca de salida↔base de
   chimenea se suponen de **igual sección**. Cuando no lo son hay una contracción/expansión

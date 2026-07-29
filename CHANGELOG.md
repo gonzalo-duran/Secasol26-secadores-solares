@@ -7,13 +7,131 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Added
+
+- **El auxiliar en modo respaldo tiene física propia** (S62). Hasta ahora
+  `RESPALDO_INDEPENDIENTE` aplicaba el mismo ΔT sobre el aire de entrada que
+  `SERIE_POSCOLECTOR`: elegir "respaldo" en P5 **no cambiaba ningún número**. El modo
+  describe una fuente que está **dentro de la cámara**, así que ahora su potencia se
+  inyecta en el **nodo de aire** del balance (mismo renglón que la radiación al aire),
+  sin tocar `T_ent`.
+
+  Con set point la potencia se **modula despejándola**, no iterando: como `T_flujo` es
+  lineal en `Q_aux` con el producto congelado, sale `Q_aux = clamp(T_set·den − num_base,
+  0, Q_max)` y el objetivo se alcanza con error nulo. Da 0 si el sol ya lo superó y
+  satura en el techo si el equipo está subdimensionado. Al ser algebraico no rompe la
+  linealidad del solve (mismo criterio que los coeficientes variables de S39).
+
+  **El respaldo refuerza el tiro**, que es la consecuencia que solo era posible después
+  del motor de caudal de S61: más `Q_aux` ⇒ más `T_flujo` ⇒ más empuje ⇒ más caudal. En
+  un cajón con bocas de 0.05 m², ṁ pasa de 0.0124 a 0.0633 kg/s entre 0 y 3000 W. Para
+  eso `estimar_T_flujo_estacionario` también recibe la potencia: sin eso el auxiliar
+  calentaba y el lazo natural seguía resolviendo el caudal del caso sin auxiliar.
+
+  La energía contabilizada es la **entregada** (integral del motor), no potencia ×
+  tiempo, y se reporta aunque el lote no llegue a X_objetivo — que es justo el caso
+  donde interesa saber cuánto se gastó de más.
+
+- **En respaldo la fuente solo puede ser resistencia eléctrica** (S62). Un quemador de
+  biomasa dentro de la cámara volcaría gases de combustión sobre el producto, así que la
+  combinación no describe ningún equipo real. `Auxiliar.__post_init__` la coacciona (no
+  la rechaza, para no romper snapshots viejos) y lo **avisa** con
+  `AUX_RESPALDO_COACCIONADO_A_RESISTENCIA`, porque cambiar la fuente en silencio sería
+  peor que el error que corrige. En P5 el selector de tipo queda restringido y el de modo
+  pasó a ir primero, que es el orden causal.
+
+- **P5 informa la ventana de operación del respaldo** (S62). La gráfica `T_sal_aux(t)` no
+  significa nada cuando el auxiliar no toca la temperatura de entrada, así que en respaldo se
+  reemplaza por una lectura de cuándo el equipo puede operar y con qué potencia, remitiendo a
+  P7 para el efecto térmico — que exige resolver la cámara. Se probó primero como gráfico de
+  disponibilidad y se descartó: un on/off no aportaba información y el eje en kW invitaba a
+  leerlo como una rampa de temperatura hacia una consigna.
+
+- **El auxiliar en respaldo cuenta en los modos ventana y anual** (S62). Esos pipelines solo
+  aplicaban el auxiliar en `SERIE_POSCOLECTOR`, así que configurar un respaldo daba
+  exactamente el mismo resultado que no configurar nada, en silencio. El agujero no era
+  industrial: el afectado principal era el **armario en modo anual**, que es el modo con el
+  que se evalúa producción. Las forzantes del lapso ahora llevan el techo de potencia
+  enmascarado por disponibilidad, la consigna llega al motor de cada lote, y la energía
+  entregada se acumula por lote y se atribuye al **mes de descarga** —el mismo criterio que
+  la producción—, de modo que la tabla mensual suma exactamente el total del año. Alcance:
+  ARMARIO y GRAN_ESCALA-BATCH; el túnel semicontinuo sigue sin soporte y ahora lo avisa
+  (`ADV_TUNEL_RESPALDO_NO_SOPORTADO`), porque repartir una fuente puntual entre N zonas a
+  contracorriente es una decisión de modelo aparte y no es la topología de un túnel real.
+
+- **Los topes de los widgets dejan de bloquear diseños legítimos** (S62). Un `max_value` por
+  debajo de lo que un diseño real necesita no orienta: **bloquea**, y con un modo de falla
+  malo — cuando el valor viene de un proyecto guardado, `st.number_input` no lo recorta sino
+  que lanza `StreamlitValueAboveMaxError` y **rompe el render de la pestaña**, de modo que
+  abrir un prediseño industrial podía tirar un traceback. Ya había pasado dos veces (la
+  velocidad del colector con tope 10 m/s, la potencia del auxiliar con tope 100 kW). Se
+  auditaron los 113 topes de la UI con un criterio explícito: **se justifica solo el
+  definicional** —una fracción ≤ 1, un ángulo ≤ 360, un rendimiento ≤ 100 %, una fecha—. Los
+  20 topes **dimensionales** (dimensiones de cámara y chimenea, cantidad de bandejas y
+  carros, masa de producto, áreas de boca, caudal del ventilador, zonas del túnel, ancho del
+  colector, ramas del banco) pasaron a ser adaptativos, `max(referencia, valor_cargado)`:
+  siguen orientando y ya no truncan.
+
+### Fixed
+
+- **El film convectivo interior de pared se evaluaba con la temperatura equivocada**
+  (S62, detectado por el usuario sobre una corrida real). El wire-up le pasaba a la
+  correlación la temperatura del aire **de entrada**; en tipología CAJA el aire entra a la
+  ambiente, así que `ΔT = 0` **idénticamente**: el Rayleigh se anulaba, la convección natural
+  desaparecía y sobrevivía solo el término forzado a ~0.01 m/s. El resultado era
+  `h ≈ 0.5 W/(m²·K)` en vez de ~2.4 en pared opaca y ~3.7 en vidriado, y un policarbonato de
+  6 mm con `U = 0.47` contra los 3.8 de su ficha técnica: **la cámara quedaba unas 8 veces
+  más aislada de lo que es**. La consecuencia visible era que una resistencia pequeña
+  sostenía cualquier consigna sin esfuerzo, y que el tamaño del equipo auxiliar parecía no
+  importar.
+
+  El film lo gobierna el aire que está **dentro** de la cámara contra el ambiente. Como esa
+  temperatura es justamente la incógnita del balance, el motor ahora resuelve dos veces por
+  paso: la primera estima `T_flujo`, la segunda usa el film corregido. El solve es analítico,
+  así que el costo es despreciable, y una sola refinación alcanza porque la envolvente pesa
+  poco en el denominador. Vale para `simular_secado`, `simular_cascada` y el estimador del
+  tiro `estimar_T_flujo_estacionario` —donde importa doble, porque alimenta el empuje del
+  lazo natural—. **Altera resultados de cámara en todos los modos**: en la corrida de
+  referencia del usuario el consumo del auxiliar sube un 31 % (9.46 → 12.38 MJ) con el tiempo
+  de secado casi igual.
+
+- **El set point del auxiliar en respaldo no llegaba al pipeline transitorio** (S62). El
+  techo de potencia viaja como serie en las forzantes, pero la consigna es un escalar que se
+  pasa aparte, y `_correr_motor_TD` no lo hacía: la resistencia corría **siempre a plena
+  potencia** ignorando el set point. En una corrida real entregaba 500 W con el aire ya a
+  91 °C y la consigna en 60 °C. El modo Constantes sí la respetaba, de modo que las dos rutas
+  hacían física distinta con la misma configuración.
+
+- **La potencia del auxiliar se pedía en kW con un tope de 100** (S62). Escribir `5000`
+  —pensando en watts, que es como se compran estos equipos, como los imprime el reporte y
+  como los guarda el snapshot— daba 5000 kW, chocaba contra el tope y **el valor no se
+  aplicaba**: la corrida seguía con la potencia anterior sin que la pantalla de resultados lo
+  dijera. El campo pasa a **watts y sin tope superior**; un límite arbitrario no tiene
+  fundamento físico y ya había roto gran escala antes.
+
+- **Cada lote del modo anual y ventana perdía la radiación al aire de la cámara** (S62). El
+  recorte de forzantes por lote (`_slice_forzantes`) reconstruía el objeto campo por campo y
+  dejaba afuera `Q_rad_aire_W` —la radiación transmitida que calienta el aire de una cámara
+  translúcida— y `t0_utc`. Como el corte se aplica a **todos** los lotes, el modo anual venía
+  descartando un aporte energético que el modo diario sí contaba: en una cámara translúcida
+  la producción anual sube **78 %** al recuperarlo (de 114 a 203 kg/año en la corrida de
+  referencia, con la duración media de lote cayendo de 91 a 43 h). Cualquier resultado anual
+  anterior de una cámara con caras translúcidas estaba subestimado. El recorte ahora recorre
+  la dataclass, así que todo campo nuevo del contrato viaja solo, y el ancla temporal **se
+  corre con el corte** (antes un lote que arrancaba 30 h después quedaba fechado al inicio de
+  la ventana, lo que desalineaba las descargas del túnel contra un muestreo de campo).
+
+- **El pipeline transitorio perdía la radiación al aire y el ancla temporal** (S62).
+  `_correr_aux_y_armar_forzantes` reconstruía las forzantes campo por campo y dejaba
+  afuera `Q_rad_aire_W` (la radiación que calienta el aire de la cámara radiativa, S47) y
+  `t0_utc` (el ancla que permite contrastar contra datos medidos). Como **los dos** call
+  sites pasan por ahí, afectaba a todas las corridas transitorias. Lo mismo hacía
+  `camara_calc._calcular_termodinamico` con `Q_rad_aire_W` y `energia_rad_aire_total_J` al
+  anexar advertencias. Ambos usan ahora `dataclasses.replace`: enumerar campos deja afuera
+  en silencio todo lo que se agregue después (mismo patrón que el albedo de S36).
+
 Mejoras post-1.3 (sin orden estricto):
 
-- **Auxiliar en modo respaldo** (etapa 2 del spec de convección natural): hoy
-  `RESPALDO_INDEPENDIENTE` aplica su ΔT como si fuera serie, o sea que no tiene física
-  propia. Va a inyectar `Q_aux` en el **nodo de aire** de la cámara, con set-point sobre
-  `T_flujo` y coacción a resistencia eléctrica. En convección natural además refuerza el
-  tiro: más `T_flujo` ⇒ más caudal.
 - **Acoples de sección desigual** entre colector y boca de entrada, y entre boca de salida
   y chimenea: la contracción altera la presión dinámica y el modelo no la representa.
 - **La ventana y el año ignoran el lazo natural**: `armar_forzantes_ventana` usa el caudal

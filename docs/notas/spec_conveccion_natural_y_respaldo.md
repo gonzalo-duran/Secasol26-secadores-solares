@@ -286,6 +286,74 @@ futura.
 
 ---
 
+## 8. Qué se implementó de las etapas 2 y 3 (S62) y en qué se apartó del plan
+
+Implementado tal cual: `Q_aux` al numerador del nodo de aire; set-point por
+`clamp(T_set·den − num_base, 0, Q_max)` resuelto **dentro** del solve, sin iterar;
+coacción `RESPALDO ⇒ RESISTENCIA_ELECTRICA` en `__post_init__`; ruteo en Constantes y
+Transitorio sin tocar `T_ent`; P5 con el selector de tipo restringido y la gráfica
+adaptada; i18n ×3.
+
+**Cuatro cosas que el plan no anticipaba:**
+
+1. **El techo de potencia tuvo que viajar como forzante.** `Q_aux_max` depende de la hora
+   (calendario de arranque, disponibilidad nocturna) y esa lógica vive en
+   `auxiliar_calc`. Se agregó `ForzantesAire.Q_aux_max_W` y se extrajo
+   `auxiliar_calc.mascara_disponibilidad` —antes enterrada dentro de
+   `calcular_auxiliar_transitorio`— para que serie y respaldo compartan **la misma** regla
+   en vez de duplicarla y desincronizarse. En Constantes, que no tiene serie, va un
+   escalar.
+2. **El lazo natural no veía el auxiliar.** `estimar_T_flujo_estacionario` (S61) no
+   recibía `Q_aux`, así que el caudal salía **idéntico** con y sin respaldo: el auxiliar
+   calentaba pero no movía más aire, que es justo el acople que justificaba hacer esto
+   ahora. Lo detectó un test.
+3. **La energía no se reportaba si el lote no terminaba.** El bloque de energías de
+   Constantes está detrás de un gate de convergencia (`BG_TD_NO_CONVERGE`), pensado para
+   `Q × t_secado`. Para respaldo la energía es una integral que existe igual, y el caso
+   donde más interesa es precisamente aquel en que el secado **no** termina. Se reporta
+   fuera del gate.
+4. **Dos reconstrucciones campo por campo perdían datos** (`camara_calc` y
+   `balance_global._correr_aux_y_armar_forzantes`): `Q_rad_aire_W`,
+   `energia_rad_aire_total_J` y `t0_utc` quedaban en su default. Pre-existentes, no
+   introducidas acá; se pasaron a `dataclasses.replace`.
+
+**Contraintuición registrada:** con set-point, la energía **total** puede ser MAYOR que a
+potencia plena, porque a potencia plena el lote termina antes y la integración se corta.
+Comparar siempre potencia media, no la integral, entre corridas de distinta duración.
+
+**Sin validar contra mediciones**, como todo lo de S61.
+
+### 8.1 Correcciones salidas de la primera corrida real (S62)
+
+El usuario corrió una CAJA de 0.25 m³ con 10 kg de manzana y una resistencia de 250 W en
+respaldo (`tests/test analisis armario con resistencia/`), y de ahí salieron tres arreglos:
+
+1. **La máscara de disponibilidad se ataba solo a `I_g_W_m2`.** Donde la irradiancia viaja
+   como POA y ese campo queda en ceros, la máscara daba todo falso y el respaldo se apagaba
+   **sin decir nada** (`E_aux = 0`), mientras P5 —que usa las forzantes del horizonte de
+   P4— dibujaba la potencia disponible: las dos pestañas se contradecían. Ahora
+   `_irradiancia_para_mascara` cae a POA, y si el respaldo **nunca** llega a operar en todo
+   el horizonte se emite `ADV_RESPALDO_NUNCA_OPERA` en vez de reportar un cero mudo.
+2. **`temperatura_maxima_salida_K` no se controlaba en respaldo.** En serie lo hace
+   `calcular_auxiliar` sobre la T de salida del equipo; en respaldo no hay tal salida, así
+   que el límite ahora se contrasta contra `T_flujo` (`AUX_RESPALDO_EXCEDE_T_MAX`). **Solo
+   avisa, no recorta**, como en serie. En la corrida del usuario el producto llegó a 63.4 °C
+   contra un límite declarado de 65 °C sin una sola advertencia.
+3. **El gráfico de P5 se leía como una consigna de temperatura.** Con el eje en kW, los
+   escalones parecían una rampa de calentamiento hacia un set point. Pasó a ser un estado
+   binario "opera / no opera", con la potencia en el título.
+
+**Decisión de modelo confirmada (usuario, S62):** el aporte del respaldo va **100 % al aire
+por convección**, sin reparto radiativo — una resistencia de secador no llega a
+incandescencia y su emisión IR no compite con la convección desde el elemento. El límite del
+supuesto queda documentado en el docstring de `resolver_estado_camara`.
+
+**Lección de diagnóstico:** el primer análisis atribuyó el `E_aux = 0` de una captura al
+bug de la máscara. No era eso: el pipeline real **sí** puebla `I_g_W_m2` (5 puntos en
+P4/P7), y la captura y el `.json` exportado eran de dos corridas distintas (61.5 h con
+`E_aux = 0` vs 37.5 h con 15.26 MJ). El bug de la máscara es real y latente, pero no era ese
+síntoma. Reproducir antes de afirmar causalidad.
+
 ## Ver también
 
 - `docs/mapa_auxiliar.md` — mapa del auxiliar (incluye la inconsistencia de RESPALDO que esto cierra).
