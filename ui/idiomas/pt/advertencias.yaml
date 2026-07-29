@@ -189,6 +189,14 @@ AUX_RESISTENCIA_SIN_TENSION:
     Tensão de alimentação não especificada. Não será calculada a corrente máxima para o
     dimensionamento elétrico.
   sugerencia: Especifique tension_V (220 ou 380 V) para calcular a corrente nominal.
+AUX_RESPALDO_COACCIONADO_A_RESISTENCIA:
+  mensaje: >-
+    O auxiliar em modo RESPALDO_INDEPENDIENTE foi configurado como resistência elétrica: no
+    modo de apoio a fonte fica dentro da câmara e entrega seu calor ao ar por convecção, algo
+    que um queimador de biomassa não pode fazer sem lançar gases de combustão sobre o produto.
+  sugerencia: >-
+    Se o equipamento real é um queimador de biomassa, usar o modo SERIE_POSCOLECTOR: ali ele
+    aquece o ar antes de entrar na câmara, que é como opera um secador híbrido.
 AUX_RESPALDO_SIN_DISPONIBILIDAD_NOCTURNA:
   mensaje: >-
     Auxiliar em modo RESPALDO_INDEPENDIENTE marcado como não disponível à noite. O modo de

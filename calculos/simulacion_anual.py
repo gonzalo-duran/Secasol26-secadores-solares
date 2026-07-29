@@ -532,8 +532,7 @@ def simular_anual(
     # completo y acá se integra por rectángulos hora a hora, igual que la solar.
     # La diferencia es ~1 % (medios pasos en los extremos), pero si el total no
     # fuera la suma de sus meses la tabla mensual contradiría al resumen.
-    if Q_aux_arr.any():
-        E_aux_MJ = float(sum(E_aux_mes.values()))
+    # (el total se recompone MÁS ABAJO, después de sumar el respaldo lote a lote)
 
     operables_mes, dias_mes = _dias_operables_por_mes(
         POA_arr, clima_datos_df.index, tz_local, umbral_dia_operable_MJ_m2
@@ -560,12 +559,22 @@ def simular_anual(
         if mes is None:
             continue
         evap_mes[mes] += float(lote.masa_evaporada_kg)
+        # El respaldo se atribuye al mes de DESCARGA, igual que la producción:
+        # su energía no viaja en una serie horaria (la modula el motor de cada
+        # lote contra T_flujo), así que se reparte lote a lote.
+        E_aux_mes[mes] += float(getattr(lote, "E_auxiliar_MJ", 0.0))
         if lote.completo:
             completos_mes[mes] += 1
             seca_mes[mes] += float(lote.masa_seca_kg)
             duraciones_mes[mes].append(float(lote.duracion_s) / _SEGUNDOS_POR_HORA)
         else:
             frustrados_mes[mes] += 1
+
+    # Recién acá el reparto mensual está completo: trae el auxiliar en SERIE
+    # (serie horaria, arriba) y el de RESPALDO (lote a lote, recién sumado).
+    E_aux_respaldo_MJ = float(getattr(res_v, "E_auxiliar_respaldo_MJ", 0.0))
+    if Q_aux_arr.any() or E_aux_respaldo_MJ > 0.0:
+        E_aux_MJ = float(sum(E_aux_mes.values()))
 
     h_fg_MJ_kg = calor_latente_agua_J_kg(_T_EVAP_REF_K) / 1e6
     puntos = [

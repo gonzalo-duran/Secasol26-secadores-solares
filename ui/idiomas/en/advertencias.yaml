@@ -187,6 +187,14 @@ AUX_RESISTENCIA_SIN_TENSION:
   mensaje: >-
     Supply voltage not specified. Maximum current for electrical sizing will not be computed.
   sugerencia: Specify tension_V (220 or 380 V) to compute the rated current.
+AUX_RESPALDO_COACCIONADO_A_RESISTENCIA:
+  mensaje: >-
+    The auxiliary heater in RESPALDO_INDEPENDIENTE mode was set to electric resistance: in
+    backup mode the source sits inside the chamber and gives its heat to the air by convection,
+    which a biomass burner cannot do without venting combustion gases onto the product.
+  sugerencia: >-
+    If the real equipment is a biomass burner, use SERIE_POSCOLECTOR mode: there it heats the
+    air before it enters the chamber, which is how a hybrid dryer operates.
 AUX_RESPALDO_SIN_DISPONIBILIDAD_NOCTURNA:
   mensaje: >-
     Auxiliary in INDEPENDENT_BACKUP mode marked as not available at night. Backup mode is

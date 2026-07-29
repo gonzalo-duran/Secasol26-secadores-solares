@@ -198,6 +198,14 @@ AUX_RESISTENCIA_SIN_TENSION:
     Tensión de alimentación no especificada. No se calculará corriente máxima para el
     dimensionamiento eléctrico.
   sugerencia: Especificar tension_V (220 o 380 V) para calcular la corriente nominal.
+AUX_RESPALDO_COACCIONADO_A_RESISTENCIA:
+  mensaje: >-
+    El auxiliar en modo RESPALDO_INDEPENDIENTE se configuró como resistencia eléctrica: en
+    respaldo la fuente va dentro de la cámara y entrega su calor al aire por convección, algo
+    que un quemador de biomasa no puede hacer sin volcar gases de combustión sobre el producto.
+  sugerencia: >-
+    Si el equipo real es un quemador de biomasa, usar modo SERIE_POSCOLECTOR: ahí calienta el
+    aire antes de que entre a la cámara, que es como opera un secador híbrido.
 AUX_RESPALDO_SIN_DISPONIBILIDAD_NOCTURNA:
   mensaje: >-
     Auxiliar en modo RESPALDO_INDEPENDIENTE marcado como no disponible nocturno. El modo

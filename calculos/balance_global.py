@@ -20,7 +20,7 @@ Hipótesis de v0:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
@@ -33,6 +33,7 @@ from calculos.auxiliar_calc import (
     ResultadosAuxiliarTransitorio,
     calcular_auxiliar,
     calcular_auxiliar_transitorio,
+    mascara_disponibilidad,
 )
 from calculos.camara_calc import calcular_camara, estimar_T_flujo_estacionario
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
@@ -43,6 +44,7 @@ from calculos.colector_tipos234_calc import (
     calcular_colector_tipo3,
     calcular_colector_tipo4,
 )
+from core.auxiliar import ModoOperacionAuxiliar
 from core.camara import ForzantesAire
 from core.resultados import LV_AGUA_MJ_KG
 
@@ -376,6 +378,67 @@ def _T_salida_camara(solver_cam, T_op_K_fallback: float) -> float:
     return float(T_op_K_fallback)
 
 
+def _irradiancia_para_mascara(forzantes) -> Optional[np.ndarray]:
+    """Serie de irradiancia con la que decidir si el auxiliar está "de día".
+
+    ``mascara_disponibilidad`` necesita una referencia solar cuando el auxiliar
+    no está disponible de noche. El campo natural es ``I_g_W_m2`` (global sobre
+    el techo de cámara), pero **hay pipelines donde queda en ceros y la
+    irradiancia viaja solo como POA** — típicamente una CAJA, donde no hay
+    colector que consuma POA pero el armado sí la calcula. Con la serie en cero
+    la máscara daba todo falso y el respaldo se apagaba **en silencio**: el
+    reporte mostraba `E_aux = 0` mientras P5 dibujaba la potencia disponible
+    desde otras forzantes, o sea que las dos pestañas se contradecían (S62,
+    detectado por el usuario sobre una corrida real).
+
+    El criterio es "¿este campo se llenó?", no "¿es de día?": una serie
+    idénticamente nula significa que nadie la calculó, no tres días de noche.
+
+    Returns:
+        La primera serie no nula entre ``I_g_W_m2`` e ``I_g_POA_W_m2``, o
+        ``None`` si ninguna trae información (ahí la máscara asume día siempre,
+        que es la convención de ``calcular_auxiliar_transitorio``).
+    """
+    for nombre in ("I_g_W_m2", "I_g_POA_W_m2"):
+        serie = getattr(forzantes, nombre, None)
+        if serie is not None and len(serie) and float(np.max(serie)) > 0.0:
+            return serie
+    return None
+
+
+def _avisar_T_max_respaldo(proyecto, res) -> None:
+    """Avisa si el respaldo llevó el aire por encima de su T máxima de salida.
+
+    En modo serie este control lo hace ``calcular_auxiliar`` sobre la T de
+    salida del equipo; en respaldo no hay tal salida —el calor entra al nodo de
+    aire— así que el límite se contrasta contra ``T_flujo``, que es la
+    temperatura a la que queda expuesto el producto.
+
+    **Solo avisa, no recorta**, igual que en serie (ver ``docs/mapa_auxiliar.md``
+    §2.2): el modelo no simula el termostato de seguridad, informa que haría
+    falta uno. Sin esto, el respaldo podía llevar el producto a 63 °C contra un
+    límite declarado de 65 °C sin emitir una sola advertencia (S62).
+    """
+    aux = proyecto.auxiliar
+    if aux is None or aux.modo_operacion != ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE:
+        return
+    cam = res.camara
+    if cam is None:
+        return
+    T_flujo = getattr(cam, "T_flujo_K", None)
+    if T_flujo is None or not len(np.atleast_1d(T_flujo)):
+        return
+    T_pico_K = float(np.max(T_flujo))
+    T_lim_K = aux.temperatura_maxima_salida_K
+    if T_pico_K > T_lim_K:
+        res.advertencias.append(
+            f"AUX_RESPALDO_EXCEDE_T_MAX: el aire de cámara alcanza "
+            f"{T_pico_K - 273.15:.1f} °C, por encima del límite declarado para el "
+            f"auxiliar ({T_lim_K - 273.15:.1f} °C). El modelo NO recorta la potencia: "
+            f"hace falta un termostato de seguridad, o bajar la potencia / subir el caudal."
+        )
+
+
 def _resolver_aux_cam_const(
     proyecto,
     T_sal_colector_K: float,
@@ -397,22 +460,39 @@ def _resolver_aux_cam_const(
         advertencias, errores)``. ``solver_aux`` y ``solver_cam`` pueden
         ser ``None`` si el proyecto no los configura.
     """
+    from core.auxiliar import ModoOperacionAuxiliar
+
     advertencias: list[str] = []
     errores: list[str] = []
 
+    aux = proyecto.auxiliar
+    es_respaldo = (
+        aux is not None and aux.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+    )
+
     T_sal_aux_K = T_sal_colector_K
     solver_aux = None
-    if proyecto.auxiliar is not None:
-        try:
-            solver_aux = calcular_auxiliar(
-                auxiliar=proyecto.auxiliar,
-                T_entrada_K=T_sal_colector_K,
-                caudal_masico_kg_s=caudal_kg_s,
-            )
-            T_sal_aux_K = solver_aux.T_salida_K
-            advertencias.extend(solver_aux.advertencias)
-        except Exception as exc:
-            advertencias.append(f"ADVERTENCIA_AUXILIAR: {exc}")
+    Q_aux_max_W = 0.0
+    T_set_aux_K = None
+    if aux is not None:
+        if es_respaldo:
+            # En respaldo la fuente está DENTRO de la cámara: no precalienta el
+            # aire de entrada (T_sal_aux = T_sal_colector), sino que inyecta su
+            # potencia en el nodo de aire. Por eso no se llama a
+            # `calcular_auxiliar`, que solo sabe aplicar un ΔT aguas arriba.
+            Q_aux_max_W = aux.potencia_efectiva_W()
+            T_set_aux_K = aux.set_point_T_K
+        else:
+            try:
+                solver_aux = calcular_auxiliar(
+                    auxiliar=aux,
+                    T_entrada_K=T_sal_colector_K,
+                    caudal_masico_kg_s=caudal_kg_s,
+                )
+                T_sal_aux_K = solver_aux.T_salida_K
+                advertencias.extend(solver_aux.advertencias)
+            except Exception as exc:
+                advertencias.append(f"ADVERTENCIA_AUXILIAR: {exc}")
 
     solver_cam = None
     T_sal_cam_K = T_sal_aux_K
@@ -424,6 +504,8 @@ def _resolver_aux_cam_const(
                 HR_operacion=HR_camara,
                 T_amb_K=T_amb_K,
                 P_Pa=P_Pa,
+                Q_aux_max_W=Q_aux_max_W,
+                T_set_aux_K=T_set_aux_K,
             )
             T_sal_cam_K = _T_salida_camara(solver_cam, T_sal_aux_K)
             advertencias.extend(solver_cam.advertencias)
@@ -1355,6 +1437,18 @@ def calcular_todo(
             MAX_ITER_PICARD: int = 14
             TOL_T_CHIM_K: float = 0.5
 
+            # El respaldo entra al empuje: calienta el aire de la cámara, y con
+            # bocas o chimenea eso es más tiro y por lo tanto más caudal. Sin
+            # pasarlo acá el auxiliar calentaba pero el lazo natural no se
+            # enteraba, y el caudal salía idéntico al del caso sin auxiliar.
+            _aux_bg = proyecto.auxiliar
+            _es_respaldo_bg = (
+                _aux_bg is not None
+                and _aux_bg.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+            )
+            _Q_aux_lazo_W = _aux_bg.potencia_efectiva_W() if _es_respaldo_bg else 0.0
+            _T_set_lazo_K = _aux_bg.set_point_T_K if _es_respaldo_bg else None
+
             def _T_chim_desde_colector(T_sal_col_K: float, m_dot_kgs: float) -> float:
                 if proyecto.colector is not None:
                     return max(T_sal_col_K - 5.0, T_amb_K + 1.0)
@@ -1368,6 +1462,8 @@ def calcular_todo(
                         P_Pa=P_proyecto_Pa,
                         v_viento_ms=v_viento_ms,
                         I_g_W_m2=I_g_W_m2,
+                        Q_aux_max_W=_Q_aux_lazo_W,
+                        T_set_aux_K=_T_set_lazo_K,
                     )
                 except Exception:
                     return T_amb_K + 25.0
@@ -1499,6 +1595,18 @@ def calcular_todo(
 
     # --- Balance global ---
     if res.camara is not None:
+        # Energía del auxiliar en RESPALDO: se reporta ANTES del bloque de
+        # energías —y fuera de su condición de convergencia— porque no es
+        # potencia × t_secado sino una integral que el motor ya hizo sobre el
+        # horizonte simulado. Existe aunque el lote no llegue a X_objetivo, que
+        # es justo el caso donde interesa saber cuánto se gastó al pedo.
+        if (
+            proyecto.auxiliar is not None
+            and proyecto.auxiliar.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+        ):
+            res.energia_auxiliar_MJ = getattr(res.camara, "energia_aux_total_J", 0.0) / 1e6
+            _avisar_T_max_respaldo(proyecto, res)
+
         t_s, masa_agua = _extraer_t_y_masa(res.camara)
 
         # Masa producto seco — siempre calculable, no depende de t_secado.
@@ -1519,7 +1627,13 @@ def calcular_todo(
         else:
             # Energías [MJ]
             E_sol = (res.colector.Q_util_W * t_s / 1e6) if res.colector else 0.0
-            E_aux = res.auxiliar.Q_efectivo_W * t_s / 1e6 if res.auxiliar else 0.0
+            # En SERIE el auxiliar es un ΔT aguas arriba y su energía sale del
+            # solver propio (potencia × t_secado); en RESPALDO ya quedó calculada
+            # arriba como integral del motor, así que se respeta.
+            if res.energia_auxiliar_MJ is not None:
+                E_aux = res.energia_auxiliar_MJ
+            else:
+                E_aux = res.auxiliar.Q_efectivo_W * t_s / 1e6 if res.auxiliar else 0.0
             E_mot = (
                 (proyecto.motor.potencia_electrica_W * t_s / 1e6)
                 if proyecto.motor is not None and proyecto.motor.potencia_electrica_W
@@ -1693,28 +1807,54 @@ def calcular_todo_transitorio(
         )
         T_ent_arr = T_sal_col_base.copy()
         omega_arr = forzantes_base.omega_ent.copy()
-        if proyecto.auxiliar is not None:
-            try:
-                aux_tr = calcular_auxiliar_transitorio(
-                    proyecto.auxiliar,
-                    T_entrada_K_serie=T_sal_col_base,
-                    t_s=forzantes_base.t_s,
-                    caudal_masico_kg_s=caudal_para_aux_kg_s,
-                    I_g_W_m2_serie=forzantes_base.I_g_W_m2,
-                )
-                res.auxiliar = aux_tr
-                res.energia_auxiliar_MJ = aux_tr.E_aux_MJ
-                T_ent_arr = T_sal_col_base + aux_tr.delta_T_K
-            except Exception as exc:
-                res.advertencias.append(f"ADVERTENCIA_AUXILIAR_TR: {exc}")
-        return ForzantesAire(
-            t_s=forzantes_base.t_s.copy(),
+        Q_aux_max_arr = np.zeros(len(forzantes_base.t_s), dtype=float)
+        aux = proyecto.auxiliar
+        if aux is not None:
+            if aux.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE:
+                # Respaldo: el calor entra al nodo de aire de la cámara, así que
+                # T_ent NO se toca. Acá solo se arma el TECHO de potencia hora a
+                # hora; la modulación por set-point la resuelve el motor, que es
+                # el único que conoce T_flujo.
+                try:
+                    disponible = mascara_disponibilidad(
+                        aux, forzantes_base.t_s, _irradiancia_para_mascara(forzantes_base)
+                    )
+                    Q_aux_max_arr = np.where(disponible, aux.potencia_efectiva_W(), 0.0)
+                    if not bool(np.any(disponible)):
+                        res.advertencias.append(
+                            "ADV_RESPALDO_NUNCA_OPERA: el auxiliar en respaldo no llega a "
+                            "operar en ningún momento del horizonte, así que su aporte es "
+                            "nulo. Con 'disponible nocturno' desactivado solo opera de día, "
+                            "y hace falta irradiancia en las forzantes para distinguir día "
+                            "de noche."
+                        )
+                except Exception as exc:
+                    res.advertencias.append(f"ADVERTENCIA_AUXILIAR_RESPALDO: {exc}")
+            else:
+                try:
+                    aux_tr = calcular_auxiliar_transitorio(
+                        aux,
+                        T_entrada_K_serie=T_sal_col_base,
+                        t_s=forzantes_base.t_s,
+                        caudal_masico_kg_s=caudal_para_aux_kg_s,
+                        I_g_W_m2_serie=forzantes_base.I_g_W_m2,
+                    )
+                    res.auxiliar = aux_tr
+                    res.energia_auxiliar_MJ = aux_tr.E_aux_MJ
+                    T_ent_arr = T_sal_col_base + aux_tr.delta_T_K
+                except Exception as exc:
+                    res.advertencias.append(f"ADVERTENCIA_AUXILIAR_TR: {exc}")
+        # `replace` y no una reconstrucción campo por campo: enumerarlos dejaba
+        # afuera Q_rad_aire_W (la radiación al aire de la cámara radiativa, S47)
+        # y t0_utc (el ancla para contrastar contra datos medidos), que se perdían
+        # en TODAS las corridas transitorias porque los dos call sites pasan por
+        # acá. Mismo patrón que el albedo de S36.
+        return replace(
+            forzantes_base,
             T_ent_K=T_ent_arr,
             omega_ent=omega_arr,
             m_dot_aire_seco_kg_s=np.asarray(m_dot_serie, dtype=float).copy(),
-            T_amb_K=forzantes_base.T_amb_K.copy(),
-            v_viento_ms=forzantes_base.v_viento_ms.copy(),
-            I_g_W_m2=(None if forzantes_base.I_g_W_m2 is None else forzantes_base.I_g_W_m2.copy()),
+            Q_aux_max_W=Q_aux_max_arr,
         )
 
     def _correr_motor_TD(forzantes: ForzantesAire) -> Optional[ResultadoMotorTermodinamico]:
@@ -1728,6 +1868,19 @@ def calcular_todo_transitorio(
             HR_op = HR_camara_fallback
         T_amb_media_K = float(np.mean(forzantes.T_amb_K))
         t_max_s_local = float(forzantes.t_s[-1])
+        # El TECHO de potencia del respaldo viaja en las forzantes
+        # (`Q_aux_max_W`, ya enmascarado), pero la CONSIGNA es un escalar y hay
+        # que pasarla acá. Sin esto el set-point se perdía en el camino y la
+        # resistencia corría siempre a plena potencia: en una corrida real del
+        # usuario entregaba 500 W con el aire ya a 91 °C y la consigna en 60 °C
+        # (S62). El modo Constantes sí la pasaba; el transitorio no.
+        _aux_td = proyecto.auxiliar
+        T_set_td_K = (
+            _aux_td.set_point_T_K
+            if _aux_td is not None
+            and _aux_td.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+            else None
+        )
         return calcular_camara(
             camara=proyecto.camara,
             T_operacion_K=T_ent_media_K,
@@ -1736,6 +1889,7 @@ def calcular_todo_transitorio(
             P_Pa=P_proyecto_Pa,
             t_max_s=t_max_s_local,
             forzantes_aire=forzantes,
+            T_set_aux_K=T_set_td_K,
         )
 
     # ---------------- Pipeline normal (sin chimenea o con motor) ----------------
@@ -1939,6 +2093,19 @@ def calcular_todo_transitorio(
     Q_col_t = m_dot_eval * CP_AIRE * dT_col
     Q_col_t = np.clip(Q_col_t, 0.0, None)  # noche / colector sin aporte → 0
     res.energia_solar_util_MJ = float(np.trapezoid(Q_col_t, forzantes_base.t_s) / 1e6)
+
+    # --- Energía del auxiliar en RESPALDO ---
+    # En serie la aporta el solver del auxiliar (arriba, res.energia_auxiliar_MJ =
+    # aux_tr.E_aux_MJ); en respaldo no hay tal solver, porque la potencia se
+    # inyecta y se modula dentro del balance de la cámara. Es la ENTREGADA: con
+    # set-point el motor recorta, así que la nominal sobrestimaría el consumo.
+    if (
+        proyecto.auxiliar is not None
+        and proyecto.auxiliar.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+        and res.camara is not None
+    ):
+        res.energia_auxiliar_MJ = getattr(res.camara, "energia_aux_total_J", 0.0) / 1e6
+        _avisar_T_max_respaldo(proyecto, res)
 
     # --- Energía de secado ---
     res.energia_secado_MJ = res.masa_agua_evaporada_kg * LV_AGUA_MJ_KG
@@ -2246,6 +2413,27 @@ def armar_forzantes_ventana(
     T_ent = T_post_cano.copy()
     lena_kg = 0.0
     aux = proyecto.auxiliar
+    # Respaldo: el calor entra al nodo de aire de la cámara, así que `T_ent` no se
+    # toca. Acá solo se arma el TECHO de potencia hora a hora; la modulación por
+    # set-point la resuelve el motor de cada lote, que es el único que conoce
+    # `T_flujo`. El offset horario es el mismo que usa el auxiliar en serie, para
+    # que el calendario de arranque y la disponibilidad nocturna caigan en la hora
+    # local correcta.
+    Q_aux_max_arr = np.zeros(n, dtype=float)
+    if aux is not None and aux.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE:
+        try:
+            disponible = mascara_disponibilidad(
+                aux, t_s, POA, _hora_offset_local(df, proyecto.emplazamiento)
+            )
+            Q_aux_max_arr = np.where(disponible, aux.potencia_efectiva_W(), 0.0)
+            if not bool(np.any(disponible)):
+                advertencias.append(
+                    "ADV_RESPALDO_NUNCA_OPERA: el auxiliar en respaldo no llega a operar "
+                    "en ningún momento del lapso, así que su aporte es nulo."
+                )
+        except Exception as exc:  # noqa: BLE001
+            advertencias.append(f"ADVERTENCIA_AUXILIAR_RESPALDO: {exc}")
+
     if aux is not None and aux.modo_operacion == ModoOperacionAuxiliar.SERIE_POSCOLECTOR:
         try:
             hora_offset = _hora_offset_local(df, proyecto.emplazamiento)
@@ -2299,6 +2487,7 @@ def armar_forzantes_ventana(
         # fechar para contrastarlas contra muestreos de campo (mejora 38, fase 4).
         t0_utc=df.index[0] if len(df.index) else None,
         Q_rad_aire_W=Q_rad_aire,
+        Q_aux_max_W=Q_aux_max_arr,
     )
     return forzantes, lena_kg, advertencias, diagnosticos
 

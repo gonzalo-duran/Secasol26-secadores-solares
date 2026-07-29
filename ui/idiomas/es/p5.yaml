@@ -21,6 +21,8 @@ tipo_modo:
       Quemador de biomasa: η ≈ 0.60–0.75, combustible local, control más simple.
     resistencia_electrica: Resistencia eléctrica
     quemador_biomasa: Quemador de biomasa
+    solo_resistencia: >-
+      En respaldo la fuente va dentro de la cámara: solo puede ser resistencia eléctrica.
   modo:
     label: Modo de operación
     help: |
@@ -29,10 +31,13 @@ tipo_modo:
       **Respaldo independiente:** el auxiliar tiene su propio circuito de aire. Úselo para secado nocturno o días sin sol.
     serie_poscolector: Serie post-colector
     respaldo_independiente: Respaldo independiente
+    solo_respaldo: >-
+      Sin colector no hay aire precalentado que recalentar: la resistencia va dentro de la
+      cámara y calienta el aire que ya está adentro (modo respaldo).
 operacion:
   titulo: Parámetros de operación
   potencia:
-    label: Potencia nominal [kW]
+    label: Potencia nominal [W]
     help: >-
       Potencia térmica nominal entregada al aire.
       Para resistencia eléctrica: potencia eléctrica = potencia térmica.
@@ -128,6 +133,27 @@ efecto:
   set_point_activo: >-
     ℹ️ Control de set point activo: el auxiliar opera al {frac:.0%} de su
     potencia nominal para mantener {t_salida:.1f} °C a la salida.
+respaldo:
+  titulo: Ventana de operación del respaldo
+  caption: >-
+    En modo respaldo la fuente está **dentro de la cámara**: no calienta el aire de entrada,
+    así que no hay un ΔT que graficar. Esto es un estado on/off — **cuándo** el equipo tiene
+    permiso de operar—, no una temperatura ni una consigna. Cuánto entrega y cuánto sube la
+    temperatura del aire lo resuelve el balance de la cámara: se ve en la pestaña 7.
+  grafica_titulo: "Ventana de disponibilidad del respaldo ({kw:.2f} kW cuando opera)"
+  eje_estado: ¿Puede operar?
+  estado_off: "no"
+  estado_on: "sí"
+  leyenda_disponible: Potencia disponible
+  lectura: >-
+    El respaldo puede operar **{horas:.1f} h** del horizonte. Su potencia nominal es de
+    {kw:.2f} kW; entrega esa cifra como máximo y menos cuando el set point lo recorta.
+  con_set_point: >-
+    Con set point de {sp:.1f} °C la potencia se modula: entrega solo la necesaria para
+    sostener esa temperatura del aire en cámara, y nada si el sol ya la supera.
+  sin_set_point: >-
+    Sin set point el equipo entrega su potencia plena cada vez que opera. Definir un set point
+    evita gastar de más cuando el sol solo alcanza.
 tsal_aux:
   titulo: Temperatura de salida del auxiliar T_sal_aux(t)
   caption: >-

@@ -21,6 +21,8 @@ tipo_modo:
       Biomass burner: η ≈ 0.60–0.75, local fuel, simpler control.
     resistencia_electrica: Electric resistance
     quemador_biomasa: Biomass burner
+    solo_resistencia: >-
+      In backup mode the source sits inside the chamber: electric resistance only.
   modo:
     label: Operation mode
     help: |
@@ -29,10 +31,13 @@ tipo_modo:
       **Independent backup:** the auxiliary has its own air circuit. Use it for night drying or sunless days.
     serie_poscolector: Post-collector series
     respaldo_independiente: Independent backup
+    solo_respaldo: >-
+      With no collector there is no preheated air to reheat: the resistance sits inside the
+      chamber and heats the air already in it (backup mode).
 operacion:
   titulo: Operation parameters
   potencia:
-    label: Nominal power [kW]
+    label: Nominal power [W]
     help: >-
       Nominal thermal power delivered to the air.
       For electric resistance: electric power = thermal power.
@@ -128,6 +133,27 @@ efecto:
   set_point_activo: >-
     ℹ️ Set-point control active: the auxiliary runs at {frac:.0%} of its
     nominal power to keep {t_salida:.1f} °C at the outlet.
+respaldo:
+  titulo: Backup operating window
+  caption: >-
+    In backup mode the source sits **inside the chamber**: it does not heat the incoming air,
+    so there is no ΔT to plot. This is an on/off state — **when** the unit is allowed to run —
+    not a temperature nor a set point. How much it delivers and how much it raises the air
+    temperature is resolved by the chamber balance: see tab 7.
+  grafica_titulo: "Backup availability window ({kw:.2f} kW when running)"
+  eje_estado: Can it run?
+  estado_off: "no"
+  estado_on: "yes"
+  leyenda_disponible: Available power
+  lectura: >-
+    The backup heater can run for **{horas:.1f} h** of the horizon. Its rated power is
+    {kw:.2f} kW; it delivers at most that figure, and less when the set point trims it.
+  con_set_point: >-
+    With a {sp:.1f} °C set point the power is modulated: it delivers only what is needed to
+    hold that chamber air temperature, and nothing when the sun already exceeds it.
+  sin_set_point: >-
+    Without a set point the unit delivers full power whenever it runs. Setting one avoids
+    spending energy when the sun alone would do.
 tsal_aux:
   titulo: Auxiliary outlet temperature T_out_aux(t)
   caption: >-

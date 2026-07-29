@@ -263,6 +263,42 @@ def _mascara_calendario(t_s: np.ndarray, cargas: list, hora_offset_h: float) -> 
     return activo
 
 
+def mascara_disponibilidad(
+    auxiliar: "Auxiliar",
+    t_s: np.ndarray,
+    I_g_W_m2_serie: Optional[np.ndarray] = None,
+    hora_offset_h: float = 0.0,
+) -> np.ndarray:
+    """Máscara booleana de cuándo el auxiliar tiene permiso de operar.
+
+    Es la regla única de disponibilidad, en un solo lugar: la consumen tanto el
+    modo SERIE_POSCOLECTOR (vía ``calcular_auxiliar_transitorio``) como el modo
+    RESPALDO_INDEPENDIENTE, que no pasa por ese solver porque inyecta su calor
+    dentro de la cámara y necesita la máscara por separado para armar la serie
+    ``Q_aux_max_W`` de las forzantes.
+
+    Prioridad: calendario de arranque > disponibilidad nocturna > día/noche por
+    irradiancia. El calendario es **independiente del sol** (es el híbrido que
+    arranca a horario fijo, mañana y atardecer).
+
+    Args:
+        auxiliar: Configuración del sistema auxiliar.
+        t_s: Tiempos [s].
+        I_g_W_m2_serie: Irradiancia [W/m²] para decidir día/noche cuando
+            ``disponible_nocturno = False``. None → asume día siempre.
+        hora_offset_h: Hora local que corresponde a ``t_s = 0`` [h].
+
+    Returns:
+        Array booleano de longitud ``len(t_s)``.
+    """
+    n = len(t_s)
+    if auxiliar.tiene_calendario_arranque():
+        return _mascara_calendario(t_s, auxiliar.cargas_arranque, hora_offset_h)
+    if I_g_W_m2_serie is None or auxiliar.disponible_nocturno:
+        return np.full(n, True, dtype=bool)
+    return np.asarray(I_g_W_m2_serie) > _I_G_UMBRAL_DIA_W_M2
+
+
 def calcular_auxiliar_transitorio(
     auxiliar: "Auxiliar",
     *,
@@ -304,15 +340,10 @@ def calcular_auxiliar_transitorio(
 
     # Operación: si hay calendario de arranque (híbrido mañana/tarde), opera solo
     # en esas ventanas horarias (independiente de I_g). Si no, opera por "día"
-    # (I_g) salvo disponible_nocturno.
-    if auxiliar.tiene_calendario_arranque():
-        es_dia = _mascara_calendario(t_s, auxiliar.cargas_arranque, hora_offset_h)
-    else:
-        es_dia = (
-            np.full(n, True, dtype=bool)
-            if I_g_W_m2_serie is None or auxiliar.disponible_nocturno
-            else (np.asarray(I_g_W_m2_serie) > _I_G_UMBRAL_DIA_W_M2)
-        )
+    # (I_g) salvo disponible_nocturno. La regla vive en `mascara_disponibilidad`
+    # porque el modo respaldo también la necesita, y duplicarla garantizaría que
+    # los dos modos se desincronicen.
+    es_dia = mascara_disponibilidad(auxiliar, t_s, I_g_W_m2_serie, hora_offset_h)
 
     T_salida = np.empty(n, dtype=float)
     delta_T = np.empty(n, dtype=float)

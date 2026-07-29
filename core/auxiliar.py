@@ -153,6 +153,23 @@ class Auxiliar:
                 f"AUX_FRACCION_INVALIDA: fraccion_potencia_operacion="
                 f"{self.fraccion_potencia_operacion:.3f} fuera del rango [0, 1]."
             )
+        # --- Coacción: en respaldo, la fuente es resistencia eléctrica ---
+        #
+        # El modo respaldo modela una fuente DENTRO de la cámara, que entrega su
+        # calor al aire por convección/contacto. Un quemador de biomasa no puede
+        # estar adentro (gases de combustión sobre el producto), así que la
+        # combinación no describe ningún equipo real. Se coacciona en vez de
+        # rechazar para no romper snapshots viejos, y se avisa desde
+        # `advertencias_auxiliar` — un cambio silencioso del tipo de fuente sería
+        # peor que el error que corrige.
+        self.tipo_coaccionado_a_resistencia = False
+        if (
+            self.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+            and self.tipo != TipoAuxiliar.RESISTENCIA_ELECTRICA
+        ):
+            self.tipo = TipoAuxiliar.RESISTENCIA_ELECTRICA
+            self.tipo_coaccionado_a_resistencia = True
+
         if self.tipo == TipoAuxiliar.QUEMADOR_BIOMASA:
             if self.PCI_MJ_kg is None and self.consumo_biomasa_kg_h is None:
                 raise ValueError(
@@ -269,6 +286,28 @@ def advertencias_auxiliar(auxiliar: Auxiliar) -> list[Advertencia]:
                 ),
                 campo="tension_V",
                 sugerencia="Especificar tension_V (220 o 380 V) para calcular la corriente nominal.",
+                contexto={},
+            )
+        )
+
+    # El tipo de fuente se coaccionó al construir el objeto
+    if getattr(auxiliar, "tipo_coaccionado_a_resistencia", False):
+        adv.append(
+            Advertencia(
+                codigo="AUX_RESPALDO_COACCIONADO_A_RESISTENCIA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    "El auxiliar en modo RESPALDO_INDEPENDIENTE se configuró como "
+                    "resistencia eléctrica: en respaldo la fuente va dentro de la cámara "
+                    "y entrega su calor al aire por convección, algo que un quemador de "
+                    "biomasa no puede hacer sin volcar gases de combustión sobre el producto."
+                ),
+                campo="tipo",
+                sugerencia=(
+                    "Si el equipo real es un quemador de biomasa, usar modo "
+                    "SERIE_POSCOLECTOR: ahí calienta el aire antes de que entre a la cámara, "
+                    "que es como opera un secador híbrido."
+                ),
                 contexto={},
             )
         )

@@ -32,9 +32,14 @@ def resistencia_minima():
 
 @pytest.fixture
 def quemador_minimo():
+    # SERIE y no RESPALDO: desde S62 un quemador en respaldo se coacciona a
+    # resistencia eléctrica (en respaldo la fuente va dentro de la cámara, donde
+    # un quemador volcaría gases de combustión sobre el producto), y la fixture
+    # dejaría de ser un quemador. Estos tests son sobre la aritmética de la
+    # biomasa, no sobre el modo de operación.
     return Auxiliar(
         tipo=TipoAuxiliar.QUEMADOR_BIOMASA,
-        modo_operacion=ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
+        modo_operacion=ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
         potencia_nominal_W=3000.0,
         temperatura_maxima_salida_K=353.15,
         PCI_MJ_kg=15.0,

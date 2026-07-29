@@ -21,6 +21,8 @@ tipo_modo:
       Queimador de biomassa: η ≈ 0,60–0,75, combustível local, controle mais simples.
     resistencia_electrica: Resistência elétrica
     quemador_biomasa: Queimador de biomassa
+    solo_resistencia: >-
+      No modo de apoio a fonte fica dentro da câmara: apenas resistência elétrica.
   modo:
     label: Modo de operação
     help: |
@@ -29,10 +31,13 @@ tipo_modo:
       **Reserva independente:** o auxiliar tem seu próprio circuito de ar. Use para secagem noturna ou dias sem sol.
     serie_poscolector: Série pós-coletor
     respaldo_independiente: Reserva independente
+    solo_respaldo: >-
+      Sem coletor não há ar pré-aquecido para reaquecer: a resistência fica dentro da
+      câmara e aquece o ar que já está lá dentro (modo de apoio).
 operacion:
   titulo: Parâmetros de operação
   potencia:
-    label: Potência nominal [kW]
+    label: Potência nominal [W]
     help: >-
       Potência térmica nominal entregue ao ar.
       Para resistência elétrica: potência elétrica = potência térmica.
@@ -128,6 +133,27 @@ efecto:
   set_point_activo: >-
     ℹ️ Controle de set point ativo: o auxiliar opera a {frac:.0%} de sua
     potência nominal para manter {t_salida:.1f} °C na saída.
+respaldo:
+  titulo: Janela de operação do apoio
+  caption: >-
+    No modo de apoio a fonte fica **dentro da câmara**: não aquece o ar de entrada, portanto
+    não há ΔT para representar. Isto é um estado on/off — **quando** o equipamento tem
+    permissão de operar —, não uma temperatura nem uma consigna. Quanto entrega e quanto
+    eleva a temperatura do ar é o balanço da câmara que resolve: veja na aba 7.
+  grafica_titulo: "Janela de disponibilidade do apoio ({kw:.2f} kW quando opera)"
+  eje_estado: Pode operar?
+  estado_off: "não"
+  estado_on: "sim"
+  leyenda_disponible: Potência disponível
+  lectura: >-
+    O apoio pode operar **{horas:.1f} h** do horizonte. Sua potência nominal é de
+    {kw:.2f} kW; entrega no máximo esse valor, e menos quando o set point o corta.
+  con_set_point: >-
+    Com set point de {sp:.1f} °C a potência é modulada: entrega apenas o necessário para
+    sustentar essa temperatura do ar na câmara, e nada se o sol já a superar.
+  sin_set_point: >-
+    Sem set point o equipamento entrega potência plena sempre que opera. Definir um set point
+    evita gastar a mais quando o sol já basta.
 tsal_aux:
   titulo: Temperatura de saída do auxiliar T_sal_aux(t)
   caption: >-

@@ -22,13 +22,15 @@ POWER vive en el wire-up de UI/balance (consume ``clima_calc`` +
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
+import pandas as pd
 
 from calculos.camara_calc import calcular_camara, calcular_camara_cascada
 from calculos.psicrometria import HR_desde_omega
+from core.auxiliar import ModoOperacionAuxiliar
 from core.camara import ForzantesAire
 from core.operacion import PoliticaRecarga
 from core.proyecto import SubtipoGranEscala
@@ -62,6 +64,10 @@ class LoteVentana:
         masa_seca_kg: Producto seco descargado [kg]. Cero si no se completó:
             un lote a medio secar no es producción.
         completo: True si alcanzó ``X_objetivo`` dentro de la ventana.
+        E_auxiliar_MJ: Energía entregada por el auxiliar en respaldo durante
+            este lote [MJ]. Se guarda por lote —y no solo el total— para que el
+            modo anual pueda atribuirla al mes de descarga, con el mismo
+            criterio que usa para la producción.
     """
 
     indice: int
@@ -71,6 +77,7 @@ class LoteVentana:
     masa_evaporada_kg: float
     masa_seca_kg: float
     completo: bool
+    E_auxiliar_MJ: float = 0.0
 
 
 @dataclass
@@ -149,6 +156,12 @@ class ResultadoVentana:
     t0_utc: Optional[object] = None
     # Común
     lena_consumida_kg: float = 0.0
+    #: Energía ENTREGADA por el auxiliar en modo respaldo sobre el lapso [MJ].
+    #: Es la integral de lo que el motor efectivamente inyectó al aire de la
+    #: cámara, no potencia × tiempo: con set-point la potencia se modula. En
+    #: SERIE_POSCOLECTOR queda en 0 y la energía la reporta el solver propio
+    #: del auxiliar (diagnóstico `E_aux_MJ` del armado de forzantes).
+    E_auxiliar_respaldo_MJ: float = 0.0
     # Diagnósticos del caño maestro (para los exports; None sin caño).
     cano_delta_T_media_K: Optional[float] = None
     cano_delta_T_minima_K: Optional[float] = None
@@ -252,16 +265,31 @@ def _slice_forzantes(fz: ForzantesAire, t0_s: float) -> Optional[ForzantesAire]:
         return np.concatenate([[head], arr[mask]])
 
     t_abs = np.concatenate([[t0_s], t[mask]])
-    return ForzantesAire(
-        t_s=t_abs - t0_s,
-        T_ent_K=_cut(fz.T_ent_K),
-        omega_ent=_cut(fz.omega_ent),
-        m_dot_aire_seco_kg_s=_cut(fz.m_dot_aire_seco_kg_s),
-        T_amb_K=_cut(fz.T_amb_K),
-        v_viento_ms=_cut(fz.v_viento_ms),
-        I_g_W_m2=_cut(fz.I_g_W_m2),
-        I_g_POA_W_m2=_cut(fz.I_g_POA_W_m2),
-    )
+
+    # Se recortan TODOS los campos array recorriendo la dataclass, en vez de
+    # enumerarlos a mano: la lista escrita a mano dejaba afuera `Q_rad_aire_W`
+    # —la radiación que calienta el aire de una cámara translúcida— y `t0_utc`,
+    # así que cada lote del anual y de la ventana perdía en silencio un aporte
+    # energético que el modo diario sí contaba. Con este recorrido, todo campo
+    # nuevo del contrato de forzantes viaja solo (S62; es la tercera vez que
+    # aparece el patrón de "reconstrucción campo por campo").
+    cortes = {
+        f.name: _cut(getattr(fz, f.name))
+        for f in fields(fz)
+        if f.name != "t_s" and isinstance(getattr(fz, f.name), np.ndarray)
+    }
+
+    # El ancla absoluta se corre con el corte: si el lote arranca t0_s después,
+    # su t=0 es ese instante y no el del comienzo de la ventana. Sin esto las
+    # descargas del túnel quedan fechadas en el día equivocado.
+    t0_utc = getattr(fz, "t0_utc", None)
+    if t0_utc is not None:
+        try:
+            t0_utc = t0_utc + pd.Timedelta(seconds=float(t0_s))
+        except Exception:
+            t0_utc = None
+
+    return replace(fz, t_s=t_abs - t0_s, t0_utc=t0_utc, **cortes)
 
 
 def _T_HR_referencia(fz: ForzantesAire, P_Pa: float) -> tuple[float, float]:
@@ -426,7 +454,18 @@ def _simular_ventana_batch(
     masa_seca = 0.0
     masa_evap = 0.0
     n_batches = 0
+    E_aux_J = 0.0
     lotes: list[LoteVentana] = []
+
+    # Consigna del respaldo: escalar, así que no viaja en las forzantes (el techo
+    # de potencia sí). Sin esto el auxiliar corría a plena potencia ignorando el
+    # set-point, que es el mismo agujero que tenía el pipeline transitorio (S62).
+    _aux = getattr(proyecto, "auxiliar", None)
+    T_set_aux_K = (
+        _aux.set_point_T_K
+        if _aux is not None and _aux.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+        else None
+    )
     # Advertencias agregadas por código (ver el bucle): cuántos lotes las
     # dispararon y el primer mensaje de cada una como muestra.
     conteo_codigo: dict[str, int] = {}
@@ -475,7 +514,13 @@ def _simular_ventana_batch(
             P_Pa=P_Pa,
             t_max_s=float(fz.t_s[-1]),
             forzantes_aire=fz,
+            T_set_aux_K=T_set_aux_K,
         )
+        # Energía ENTREGADA por el respaldo en este lote (con set-point el motor
+        # modula, así que integrar el techo sobrestimaría). El techo horario ya
+        # viaja en `fz.Q_aux_max_W`; acá se acumula lo que efectivamente entró.
+        E_aux_lote_MJ = float(getattr(sub, "energia_aux_total_J", 0.0)) / 1e6
+        E_aux_J += E_aux_lote_MJ * 1e6
         # Agregación por CÓDIGO, no por string exacto: los mensajes llevan el
         # número de horas del lote ("... durante 5.6 h"), así que deduplicar por
         # igualdad no filtra nada — sobre un año de 52 lotes eso inundaba la
@@ -500,6 +545,7 @@ def _simular_ventana_batch(
                     masa_evaporada_kg=float(sub.masa_evaporada_total_kg),
                     masa_seca_kg=masa_seca_por_lote,
                     completo=True,
+                    E_auxiliar_MJ=E_aux_lote_MJ,
                 )
             )
             # El ciclo es secado + espera hasta la próxima hora de carga: es lo
@@ -531,6 +577,7 @@ def _simular_ventana_batch(
                     masa_evaporada_kg=float(sub.masa_evaporada_total_kg),
                     masa_seca_kg=0.0,
                     completo=False,
+                    E_auxiliar_MJ=E_aux_lote_MJ,
                 )
             )
             res.batch_en_progreso = True
@@ -551,6 +598,7 @@ def _simular_ventana_batch(
     res.lotes = lotes
     res.n_dias_salteados_pronostico = n_dias_salteados
     res.n_batches_completos = n_batches
+    res.E_auxiliar_respaldo_MJ = E_aux_J / 1e6
     res.masa_seca_producida_kg = masa_seca
     res.masa_evaporada_kg = masa_evap
     if t_secados:
@@ -597,6 +645,20 @@ def _simular_ventana_semicontinuo(
             "camara.tunel (ConfiguracionTunel) configurado."
         )
         return res
+
+    # El respaldo sí llega al encadenado de lotes (S62), pero NO al túnel: el
+    # motor de cascada no consume `Q_aux`, y repartir una fuente puntual entre N
+    # zonas a contracorriente es una decisión de modelo aparte. Además la
+    # topología no es habitual: un túnel industrial calienta el aire aguas
+    # arriba (quemador en serie), que es el camino que sí funciona acá.
+    _aux = getattr(proyecto, "auxiliar", None)
+    if _aux is not None and _aux.modo_operacion == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE:
+        res.advertencias.append(
+            "ADV_TUNEL_RESPALDO_NO_SOPORTADO: el auxiliar está en modo "
+            "RESPALDO_INDEPENDIENTE, que el túnel semicontinuo no modela: su aporte NO "
+            "entra al cálculo y el resultado es el del secador sin auxiliar. En un túnel "
+            "lo habitual es calentar el aire antes de que entre (SERIE_POSCOLECTOR)."
+        )
 
     T_ref, HR_ref = _T_HR_referencia(forzantes_base, P_Pa)
     T_amb_ref = float(np.mean(forzantes_base.T_amb_K))

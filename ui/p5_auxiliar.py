@@ -17,6 +17,7 @@ import streamlit as st
 from calculos.auxiliar_calc import (
     ResultadosAuxiliarTransitorio,
     calcular_auxiliar_transitorio,
+    mascara_disponibilidad,
 )
 from core.auxiliar import (
     Auxiliar,
@@ -408,30 +409,62 @@ def render() -> None:
     st.subheader(t("p5.tipo_modo.titulo"))
     col1, col2 = st.columns(2)
 
-    with col1:
-        tipo_opts = [TipoAuxiliar.RESISTENCIA_ELECTRICA, TipoAuxiliar.QUEMADOR_BIOMASA]
-        tipo_idx = tipo_opts.index(aux_prev.tipo) if aux_prev is not None else 0
-        tipo = st.selectbox(
-            t("p5.tipo_modo.tipo.label"),
-            options=tipo_opts,
-            index=tipo_idx,
-            format_func=lambda e: t(f"p5.tipo_modo.tipo.{e.value.lower()}"),
-            help=t("p5.tipo_modo.tipo.help"),
-        )
+    # El MODO va primero porque determina qué fuentes son posibles: en respaldo
+    # la fuente está dentro de la cámara y solo puede ser resistencia eléctrica.
+    # Streamlit evalúa las columnas en orden, así que la causa tiene que
+    # renderizarse antes que el efecto.
+    # Sin colector, SERIE_POSCOLECTOR no describe nada: no hay aire precalentado
+    # que el auxiliar pueda recalentar, y el balance lo rechaza con un error duro
+    # (PROY_AUXILIAR_SERIE_SIN_COLECTOR) que aborta la corrida entera en P7.
+    # Ofrecerlo acá sería dejar elegir algo que la app después prohíbe.
+    sin_colector = proyecto.colector is None
 
-    with col2:
-        modo_opts = [
-            ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
-            ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
-        ]
-        modo_idx = modo_opts.index(aux_prev.modo_operacion) if aux_prev is not None else 0
+    with col1:
+        if sin_colector:
+            modo_opts = [ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE]
+        else:
+            modo_opts = [
+                ModoOperacionAuxiliar.SERIE_POSCOLECTOR,
+                ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE,
+            ]
+        modo_idx = (
+            modo_opts.index(aux_prev.modo_operacion)
+            if aux_prev is not None and aux_prev.modo_operacion in modo_opts
+            else 0
+        )
         modo = st.selectbox(
             t("p5.tipo_modo.modo.label"),
             options=modo_opts,
             index=modo_idx,
             format_func=lambda e: t(f"p5.tipo_modo.modo.{e.value.lower()}"),
             help=t("p5.tipo_modo.modo.help"),
+            disabled=sin_colector,
         )
+        if sin_colector:
+            st.caption(t("p5.tipo_modo.modo.solo_respaldo"))
+
+    es_respaldo = modo == ModoOperacionAuxiliar.RESPALDO_INDEPENDIENTE
+
+    with col2:
+        if es_respaldo:
+            tipo_opts = [TipoAuxiliar.RESISTENCIA_ELECTRICA]
+        else:
+            tipo_opts = [TipoAuxiliar.RESISTENCIA_ELECTRICA, TipoAuxiliar.QUEMADOR_BIOMASA]
+        tipo_idx = (
+            tipo_opts.index(aux_prev.tipo)
+            if aux_prev is not None and aux_prev.tipo in tipo_opts
+            else 0
+        )
+        tipo = st.selectbox(
+            t("p5.tipo_modo.tipo.label"),
+            options=tipo_opts,
+            index=tipo_idx,
+            format_func=lambda e: t(f"p5.tipo_modo.tipo.{e.value.lower()}"),
+            help=t("p5.tipo_modo.tipo.help"),
+            disabled=es_respaldo,
+        )
+        if es_respaldo:
+            st.caption(t("p5.tipo_modo.tipo.solo_resistencia"))
 
     # -----------------------------------------------------------------------
     # Sección B: Parámetros comunes
@@ -439,16 +472,24 @@ def render() -> None:
     with st.expander(t("p5.operacion.titulo"), expanded=False):
         c1, c2 = st.columns(2)
         with c1:
-            potencia_kW = st.number_input(
+            # En W y NO en kW: los equipos de esta escala se piensan y se
+            # compran en watts (50, 500, 5000), el reporte los imprime en W y el
+            # snapshot los guarda en W. Con el campo en kW, escribir "5000"
+            # —queriendo decir 5 kW— daba 5000 kW, chocaba contra el tope y el
+            # valor NO se aplicaba: la corrida seguía con la potencia anterior
+            # sin que nada lo dijera en la pantalla de resultados.
+            #
+            # Sin tope superior fijo: un tope arbitrario no tiene fundamento
+            # físico y ya rompió gran escala antes (el cap de 10 m/s en P3).
+            potencia_W = st.number_input(
                 t("p5.operacion.potencia.label"),
-                min_value=0.05,
-                max_value=100.0,
-                value=(aux_prev.potencia_nominal_W / 1000.0 if aux_prev is not None else 1.0),
-                step=0.05,
-                format="%.2f",
+                min_value=1.0,
+                value=(aux_prev.potencia_nominal_W if aux_prev is not None else 1000.0),
+                step=50.0,
+                format="%.0f",
                 help=t("p5.operacion.potencia.help"),
             )
-            potencia_W = potencia_kW * 1000.0
+            potencia_kW = potencia_W / 1000.0
 
             fraccion = st.slider(
                 t("p5.operacion.fraccion.label"),
@@ -713,49 +754,84 @@ def render() -> None:
             st.success(t("p5.sin_advertencias"))
 
         # -----------------------------------------------------------------------
-        # Sección D: Entregable transitorio — T_sal_aux(t)
+        # Sección D: Entregable transitorio
         # -----------------------------------------------------------------------
-        st.subheader(t("p5.tsal_aux.titulo"))
-        st.caption(t("p5.tsal_aux.caption"))
-
-        # T_entrada_aux(t) = T_salida_colector(t) (o T_amb en CAJA) sale del
-        # forzante del horizonte que arma P4/P7. El auxiliar se evalúa hora a
-        # hora con el MISMO solver transitorio que usa P7 (calcular_auxiliar_
-        # transitorio): esta gráfica NO recomputa física, la reproduce.
-        fz_h, _meta_h, vigente_h = horizonte_vigente(proyecto, st.session_state)
-        if fz_h is None:
-            st.info(t("p5.tsal_aux.sin_horizonte"))
-        else:
-            _m_dot = getattr(fz_h, "m_dot_aire_seco_kg_s", None)
-            if _m_dot is not None and len(np.asarray(_m_dot)) > 0:
-                caudal_aux = float(np.mean(_m_dot))
-            elif proyecto.camara is not None:
-                caudal_aux = proyecto.camara.flujo.caudal_masico_kg_s
+        # En SERIE el entregable es T_sal_aux(t): el auxiliar aplica un ΔT sobre
+        # el aire ANTES de la cámara. En RESPALDO ese gráfico no significa nada
+        # —la fuente está adentro y no toca la T de entrada—, así que se muestra
+        # la ventana de operación y el efecto térmico se remite a P7, que es
+        # quien resuelve la cámara.
+        if es_respaldo:
+            st.subheader(t("p5.respaldo.titulo"))
+            st.caption(t("p5.respaldo.caption"))
+            fz_h, _meta_h, vigente_h = horizonte_vigente(proyecto, st.session_state)
+            if fz_h is None:
+                st.info(t("p5.tsal_aux.sin_horizonte"))
             else:
-                caudal_aux = 0.030
-            try:
-                aux_tr = calcular_auxiliar_transitorio(
-                    auxiliar,
-                    T_entrada_K_serie=fz_h.T_ent_K,
-                    t_s=fz_h.t_s,
-                    caudal_masico_kg_s=caudal_aux,
-                    I_g_W_m2_serie=getattr(fz_h, "I_g_W_m2", None),
-                )
-            except Exception as exc:  # noqa: BLE001
-                st.error(t("p5.tsal_aux.error", exc=exc))
-                aux_tr = None
-
-            if aux_tr is not None:
                 if not vigente_h:
                     st.caption(t("p5.tsal_aux.horizonte_stale"))
-                if proyecto.chimenea is not None and proyecto.motor is None:
-                    st.caption(t("p5.tsal_aux.caudal_chimenea"))
-                mostrar_plotly(
-                    _grafica_tsal_aux(aux_tr, set_point_K), nombre="aux_tsal_transitorio"
+                disponible = mascara_disponibilidad(
+                    auxiliar, fz_h.t_s, getattr(fz_h, "I_g_W_m2", None)
                 )
-                _lecturas_tsal_aux(aux_tr, set_point_K)
-                for msg in aux_tr.advertencias_unicas:
-                    st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, queda ES)
+                horas_disp = (
+                    float(np.trapezoid(disponible.astype(float), fz_h.t_s)) / 3600.0
+                    if len(fz_h.t_s) >= 2
+                    else 0.0
+                )
+                st.info(
+                    t(
+                        "p5.respaldo.lectura",
+                        horas=horas_disp,
+                        kw=auxiliar.potencia_efectiva_W() / 1000.0,
+                    )
+                )
+                if set_point_K is not None:
+                    st.caption(t("p5.respaldo.con_set_point", sp=set_point_K - 273.15))
+                else:
+                    st.caption(t("p5.respaldo.sin_set_point"))
+
+        else:
+            st.subheader(t("p5.tsal_aux.titulo"))
+            st.caption(t("p5.tsal_aux.caption"))
+
+            # T_entrada_aux(t) = T_salida_colector(t) (o T_amb en CAJA) sale del
+            # forzante del horizonte que arma P4/P7. El auxiliar se evalúa hora a
+            # hora con el MISMO solver transitorio que usa P7 (calcular_auxiliar_
+            # transitorio): esta gráfica NO recomputa física, la reproduce.
+            fz_h, _meta_h, vigente_h = horizonte_vigente(proyecto, st.session_state)
+            if fz_h is None:
+                st.info(t("p5.tsal_aux.sin_horizonte"))
+            else:
+                _m_dot = getattr(fz_h, "m_dot_aire_seco_kg_s", None)
+                if _m_dot is not None and len(np.asarray(_m_dot)) > 0:
+                    caudal_aux = float(np.mean(_m_dot))
+                elif proyecto.camara is not None:
+                    caudal_aux = proyecto.camara.flujo.caudal_masico_kg_s
+                else:
+                    caudal_aux = 0.030
+                try:
+                    aux_tr = calcular_auxiliar_transitorio(
+                        auxiliar,
+                        T_entrada_K_serie=fz_h.T_ent_K,
+                        t_s=fz_h.t_s,
+                        caudal_masico_kg_s=caudal_aux,
+                        I_g_W_m2_serie=getattr(fz_h, "I_g_W_m2", None),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    st.error(t("p5.tsal_aux.error", exc=exc))
+                    aux_tr = None
+
+                if aux_tr is not None:
+                    if not vigente_h:
+                        st.caption(t("p5.tsal_aux.horizonte_stale"))
+                    if proyecto.chimenea is not None and proyecto.motor is None:
+                        st.caption(t("p5.tsal_aux.caudal_chimenea"))
+                    mostrar_plotly(
+                        _grafica_tsal_aux(aux_tr, set_point_K), nombre="aux_tsal_transitorio"
+                    )
+                    _lecturas_tsal_aux(aux_tr, set_point_K)
+                    for msg in aux_tr.advertencias_unicas:
+                        st.warning(f"⚠️ {msg}")  # i18n: exento (mensaje de calculos/, queda ES)
 
         # Resumen compacto
         with st.expander(t("p5.resumen.titulo")):
