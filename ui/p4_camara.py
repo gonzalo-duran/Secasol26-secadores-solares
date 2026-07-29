@@ -928,7 +928,7 @@ def _render_bocas_aire(
     area_ent = b1.number_input(
         t("p4.bocas.entrada.label"),
         min_value=0.0005,
-        max_value=10.0,
+        max_value=max(10.0, float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05)),
         value=float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05),
         step=0.005,
         format="%.4f",
@@ -938,7 +938,7 @@ def _render_bocas_aire(
     area_sal = b2.number_input(
         t("p4.bocas.salida.label"),
         min_value=0.0005,
-        max_value=10.0,
+        max_value=max(10.0, float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05)),
         value=float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05),
         step=0.005,
         format="%.4f",
@@ -2046,7 +2046,14 @@ def render() -> None:
         masa_kg = st.number_input(
             t("p4.producto.masa"),
             min_value=0.1,
-            max_value=10000.0,
+            max_value=max(
+                10000.0,
+                float(
+                    proyecto.camara.carga_producto.masa_total_kg
+                    if proyecto.camara is not None
+                    else 10.0
+                ),
+            ),
             value=float(
                 proyecto.camara.carga_producto.masa_total_kg
                 if proyecto.camara is not None
@@ -2095,7 +2102,7 @@ def render() -> None:
         largo = c1.number_input(
             t("p4.geometria.largo"),
             min_value=0.1,
-            max_value=20.0,
+            max_value=max(20.0, float(geo_prev.largo_m)),
             value=geo_prev.largo_m,
             step=0.05,
             format="%.2f",
@@ -2103,7 +2110,7 @@ def render() -> None:
         ancho = c2.number_input(
             t("p4.geometria.ancho"),
             min_value=0.1,
-            max_value=10.0,
+            max_value=max(10.0, float(geo_prev.ancho_m)),
             value=geo_prev.ancho_m,
             step=0.05,
             format="%.2f",
@@ -2111,7 +2118,7 @@ def render() -> None:
         alto = c3.number_input(
             t("p4.geometria.alto"),
             min_value=0.1,
-            max_value=5.0,
+            max_value=max(5.0, float(geo_prev.alto_m)),
             value=geo_prev.alto_m,
             step=0.05,
             format="%.2f",
@@ -2508,7 +2515,7 @@ def render() -> None:
             n_carros = c1.number_input(
                 t("p4.bandejas.n_carros.label"),
                 min_value=1,
-                max_value=200,
+                max_value=max(200, int(carros_prev.n_carros)),
                 value=int(carros_prev.n_carros),
                 step=1,
                 key="p4_n_carros",
@@ -2517,7 +2524,7 @@ def render() -> None:
             bandejas_por_carro = c1.number_input(
                 t("p4.bandejas.band_por_carro.label"),
                 min_value=1,
-                max_value=50,
+                max_value=max(50, int(carros_prev.bandejas_por_carro)),
                 value=int(carros_prev.bandejas_por_carro),
                 step=1,
                 key="p4_band_por_carro",
@@ -2533,7 +2540,7 @@ def render() -> None:
             n_bandejas = c1.number_input(
                 t("p4.bandejas.n_bandejas"),
                 min_value=1,
-                max_value=100,
+                max_value=max(100, int(band_prev.n_bandejas)),
                 value=band_prev.n_bandejas,
                 step=1,
             )
@@ -2636,7 +2643,7 @@ def render() -> None:
                 n_zonas = t1.number_input(
                     t("p4.tunel.n_zonas.label"),
                     min_value=1,
-                    max_value=50,
+                    max_value=max(50, int(tun_prev.n_zonas)),
                     value=int(tun_prev.n_zonas),
                     step=1,
                     help=t("p4.tunel.n_zonas.help"),

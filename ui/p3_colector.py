@@ -2418,7 +2418,7 @@ def render() -> None:
             ancho_m = st.number_input(
                 t("p3.geometria.ancho.label"),
                 min_value=0.1,
-                max_value=5.0,
+                max_value=max(5.0, float(colector.unidad.ancho_m)),
                 value=float(colector.unidad.ancho_m),
                 step=0.05,
                 format="%.2f",
@@ -2514,7 +2514,7 @@ def render() -> None:
             n_serie = st.number_input(
                 t("p3.banco.n_serie.label"),
                 min_value=1,
-                max_value=20,
+                max_value=max(20, int(colector.banco.n_serie)),
                 value=colector.banco.n_serie,
                 step=1,
                 key="p3_n_serie",
@@ -2524,7 +2524,7 @@ def render() -> None:
             n_paralelo = st.number_input(
                 t("p3.banco.n_paralelo.label"),
                 min_value=1,
-                max_value=200,
+                max_value=max(200, int(colector.banco.n_paralelo)),
                 value=colector.banco.n_paralelo,
                 step=1,
                 key="p3_n_paralelo",
@@ -2578,7 +2578,7 @@ def render() -> None:
                 cm_ancho = cc2.number_input(
                     t("p3.cano.ancho.label"),
                     min_value=0.1,
-                    max_value=5.0,
+                    max_value=max(5.0, float(cm.ancho_m)),
                     value=cm.ancho_m,
                     step=0.05,
                     format="%.2f",
@@ -2588,7 +2588,7 @@ def render() -> None:
                 cm_alto = cc3.number_input(
                     t("p3.cano.alto.label"),
                     min_value=0.1,
-                    max_value=5.0,
+                    max_value=max(5.0, float(cm.alto_m)),
                     value=cm.alto_m,
                     step=0.05,
                     format="%.2f",

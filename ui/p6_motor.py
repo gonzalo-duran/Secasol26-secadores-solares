@@ -652,7 +652,7 @@ def _render_chimenea_section(proyecto) -> None:
         diam = st.number_input(
             t("p6.chimenea.diametro"),
             min_value=0.05,
-            max_value=2.0,
+            max_value=max(2.0, float(ch_ref.diametro_m)),
             value=float(ch_ref.diametro_m),
             step=0.01,
             format="%.2f",
@@ -662,7 +662,7 @@ def _render_chimenea_section(proyecto) -> None:
         alt = st.number_input(
             t("p6.chimenea.altura"),
             min_value=0.1,
-            max_value=20.0,
+            max_value=max(20.0, float(ch_ref.altura_m)),
             value=float(ch_ref.altura_m),
             step=0.1,
             format="%.1f",
@@ -710,7 +710,7 @@ def _render_chimenea_section(proyecto) -> None:
                 diam_ext_val = st.number_input(
                     t("p6.chimenea.extractor.diam.label"),
                     min_value=0.10,
-                    max_value=2.0,
+                    max_value=max(2.0, float(diam_ext_default)),
                     value=diam_ext_default,
                     step=0.05,
                     format="%.2f",
@@ -987,7 +987,7 @@ def render() -> None:
             Q_vol_ls = st.number_input(
                 t("p6.caudal.label"),
                 min_value=0.1,
-                max_value=10000.0,
+                max_value=max(10000.0, float(round(Q_vol_sugerido * 1000.0, 1))),
                 value=round(Q_vol_sugerido * 1000.0, 1),
                 step=0.5,
                 format="%.1f",
@@ -1157,7 +1157,7 @@ def render() -> None:
                 v_ducto_input = st.number_input(
                     t("p6.perdidas.singulares.v_label"),
                     min_value=1.0,
-                    max_value=20.0,
+                    max_value=max(20.0, float(v_ducto)),
                     value=v_ducto,
                     step=0.5,
                     format="%.1f",
