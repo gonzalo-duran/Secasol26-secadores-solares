@@ -7,6 +7,28 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+**Hoja de ruta** — pendientes conocidos, no trabajo entregado. Sin orden estricto:
+
+- **Acoples de sección desigual** entre colector y boca de entrada, y entre boca de salida
+  y chimenea: la contracción altera la presión dinámica y el modelo no la representa.
+- **La ventana y el año ignoran el lazo natural**: `armar_forzantes_ventana` usa el caudal
+  de diseño, así que se pueden cargar bocas y no ver ningún efecto en el modo anual. Es una
+  limitación previa —la chimenea también se ignoraba ahí— pero desde 1.3.0 es visible.
+- **Validar la convección natural contra datos medidos** de cámara y de cajón pasivo. Es el
+  pendiente más grande del work stream: ni el motor de caudal, ni el film interior de pared,
+  ni el respaldo están contrastados contra una sola medición, y los coeficientes de pérdida
+  de boca son de manual. Cada corrección de 1.4.0 movió resultados en decenas de por ciento
+  sin más árbitro que la coherencia interna del balance.
+- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
+  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
+  en P4.
+- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
+  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
+- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
+  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [1.4.0] — 2026-07-29
+
 ### Added
 
 - **El auxiliar en modo respaldo tiene física propia** (S62). Hasta ahora
@@ -129,23 +151,6 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   `camara_calc._calcular_termodinamico` con `Q_rad_aire_W` y `energia_rad_aire_total_J` al
   anexar advertencias. Ambos usan ahora `dataclasses.replace`: enumerar campos deja afuera
   en silencio todo lo que se agregue después (mismo patrón que el albedo de S36).
-
-Mejoras post-1.3 (sin orden estricto):
-
-- **Acoples de sección desigual** entre colector y boca de entrada, y entre boca de salida
-  y chimenea: la contracción altera la presión dinámica y el modelo no la representa.
-- **La ventana y el año ignoran el lazo natural**: `armar_forzantes_ventana` usa el caudal
-  de diseño, así que se pueden cargar bocas y no ver ningún efecto en el modo anual. Es una
-  limitación previa —la chimenea también se ignoraba ahí— pero desde 1.3.0 es visible.
-- **Validar la convección natural contra datos medidos** de cámara y de cajón pasivo: nada
-  de lo de 1.3.0 está contrastado con mediciones y los coeficientes de boca son de manual.
-- Historia temporal por zona en `simular_cascada` (deuda de la mejora 38, fase 4):
-  habilitaría el overlay contra termopares fijos del túnel y una vista previa de N zonas
-  en P4.
-- Modo anual para el **túnel semicontinuo**: hoy `simular_anual` lo rechaza con
-  `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
-- Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
-  de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
 ## [1.3.0] — 2026-07-27
 
