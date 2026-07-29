@@ -221,5 +221,92 @@ class TestMotorConHParedPropio:
             resolver_estado_camara(h_conv_W_m2K=8.0, h_conv_pared_W_m2K=-1.0, **KW_ESTADO)
 
 
+class TestFilmDeParedGobernadoPorElAireInterior:
+    """El film de pared lo mueve el aire DE ADENTRO, no el que entra (S62).
+
+    El wire-up le pasaba ``T_ent`` a la correlación. En tipología CAJA el aire
+    entra a la temperatura ambiente, así que ``ΔT = T_ent − T_amb = 0``
+    idénticamente: el Rayleigh se anulaba, la convección natural desaparecía y
+    sobrevivía solo el término forzado a ~0.01 m/s. Resultado, ``h ≈ 0.5``
+    en vez de ~2.4 (pared) / 3.7 (vidriado), y una envolvente **8× más aislante
+    de lo real** — con lo cual una resistencia chica sostenía cualquier consigna.
+    Lo detectó el usuario corriendo una caja con resistencia.
+    """
+
+    #: Condiciones de una caja al mediodía: el aire ENTRA a la ambiente (25 °C)
+    #: pero adentro está a 65 °C por el efecto invernadero.
+    T_AIRE_INTERIOR_K = 338.15
+    T_AMB_K = 298.15
+    V_AIRE_MS = 0.01  # convección natural: velocidad superficial ínfima
+
+    def _h(self, T_aire_K: float, R_cond: float = 1.25) -> float:
+        return coef_conveccion_pared_local(
+            self.V_AIRE_MS, T_aire_K, self.T_AMB_K, 0.01, 89250.0, 0.5, 1.0, R_cond, 17.0
+        )
+
+    def test_con_delta_T_nulo_el_film_colapsa(self):
+        """Documenta el modo de falla: si se evalúa con T_ent = T_amb, se hunde."""
+        h_colapsado = self._h(self.T_AMB_K)
+        assert h_colapsado < 1.0
+
+    def test_con_el_aire_interior_el_film_es_fisico(self):
+        """Con el ΔT real, una placa vertical de 1 m debe dar del orden de 2-4."""
+        h = self._h(self.T_AIRE_INTERIOR_K)
+        assert 1.5 < h < 6.0, h
+        assert h > 3.0 * self._h(self.T_AMB_K)
+
+    def test_el_vidriado_queda_en_el_orden_de_la_ficha_tecnica(self):
+        """Policarbonato 6 mm: U ≈ 3.8 con films ISO; con convección pura, ~2.3.
+
+        Con el film colapsado daba 0.47 — un orden de magnitud de más de
+        aislación, que es lo que volvía inocuo el tamaño de la resistencia.
+        """
+        R_cond_vidriado = 0.006 / 0.06
+        h = self._h(self.T_AIRE_INTERIOR_K, R_cond=R_cond_vidriado)
+        U = 1.0 / (1.0 / h + R_cond_vidriado + 1.0 / 17.0)
+        assert U > 1.5, U
+
+    def test_el_motor_no_deja_el_film_clavado_en_el_valor_forzado(self):
+        """End-to-end: con T_ent = T_amb el motor debe recalcularlo, no congelarlo.
+
+        Se mira ``U_pared``, que depende del film de pared: si el motor evaluara
+        el film con la T de entrada, sería el mismo con la cámara fría que con la
+        cámara caliente.
+        """
+        import numpy as np
+
+        from calculos.camara_calc import calcular_camara
+        from core.camara import ForzantesAire
+
+        from .test_conveccion_natural_cajon import _camara
+
+        camara = _camara(A_boca=0.05)
+        n = 12
+        t = np.arange(n, dtype=float) * 3600.0
+        T_amb = np.full(n, self.T_AMB_K)
+        fz = ForzantesAire(
+            t_s=t,
+            T_ent_K=T_amb.copy(),  # CAJA: entra el ambiente
+            omega_ent=np.full(n, 0.008),
+            m_dot_aire_seco_kg_s=np.full(n, 0.005),
+            T_amb_K=T_amb,
+            v_viento_ms=np.full(n, 2.0),
+            Q_aux_max_W=np.full(n, 2000.0),  # calienta la cámara muy por encima
+        )
+        res = calcular_camara(
+            camara=camara,
+            T_operacion_K=self.T_AMB_K,
+            HR_operacion=0.3,
+            T_amb_K=self.T_AMB_K,
+            P_Pa=89250.0,
+            forzantes_aire=fz,
+            t_max_s=float(t[-1]),
+        )
+        # La cámara se calentó bastante por encima del ambiente...
+        assert float(np.max(res.T_flujo_K)) > self.T_AMB_K + 15.0
+        # ...y la envolvente NO quedó con el U degenerado del film colapsado.
+        assert float(np.max(res.U_pared_W_m2K)) > 0.40, float(np.max(res.U_pared_W_m2K))
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

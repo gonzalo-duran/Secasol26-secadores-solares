@@ -1380,6 +1380,16 @@ class ForzantesAire:
             paredes/piso internos — efecto invernadero de la caja). ``None``
             → rellena con ceros (comportamiento histórico: sin este término).
             Calcúlese con ``calculos/radiacion_camara.py::series_radiacion_camara``.
+        Q_aux_max_W: Potencia térmica [W] que el auxiliar en modo
+            **RESPALDO_INDEPENDIENTE** tiene disponible para inyectar en el nodo
+            de aire de la cámara. Es un **techo**, no la potencia entregada: con
+            set-point el motor modula por debajo (y da 0 si el sol ya lo supera).
+            La serie viene **ya enmascarada** por disponibilidad —calendario de
+            arranque, nocturnidad— porque esa lógica vive en
+            ``calculos/auxiliar_calc.py`` y no debe duplicarse acá; valdrá 0 en
+            las horas en que el auxiliar no opera. ``None`` → rellena con ceros
+            (sin auxiliar, o auxiliar en SERIE_POSCOLECTOR, donde el aporte no
+            entra acá sino como ΔT sobre ``T_ent_K``).
         t0_utc: Instante absoluto (UTC) que corresponde a ``t_s[0] == 0``. El
             motor integra en tiempo relativo; este campo es el **ancla** que
             permite reanclar sus salidas a timestamps reales — necesario para
@@ -1397,6 +1407,7 @@ class ForzantesAire:
     I_g_W_m2: Optional[np.ndarray] = None
     I_g_POA_W_m2: Optional[np.ndarray] = None
     Q_rad_aire_W: Optional[np.ndarray] = None
+    Q_aux_max_W: Optional[np.ndarray] = None
     t0_utc: Optional[object] = None
 
     def __post_init__(self):
@@ -1405,6 +1416,8 @@ class ForzantesAire:
             self.I_g_W_m2 = np.zeros(n, dtype=float)
         if self.Q_rad_aire_W is None:
             self.Q_rad_aire_W = np.zeros(n, dtype=float)
+        if self.Q_aux_max_W is None:
+            self.Q_aux_max_W = np.zeros(n, dtype=float)
         # I_g_POA queda None si no se provee (señal de "no calculado");
         # el balance global decide el fallback con aviso explícito.
         _campos_validar = [
@@ -1415,6 +1428,7 @@ class ForzantesAire:
             ("v_viento_ms", self.v_viento_ms),
             ("I_g_W_m2", self.I_g_W_m2),
             ("Q_rad_aire_W", self.Q_rad_aire_W),
+            ("Q_aux_max_W", self.Q_aux_max_W),
         ]
         if self.I_g_POA_W_m2 is not None:
             _campos_validar.append(("I_g_POA_W_m2", self.I_g_POA_W_m2))

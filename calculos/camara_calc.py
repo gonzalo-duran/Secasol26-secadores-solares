@@ -512,16 +512,24 @@ def _construir_params_termodinamico(
         return h, h / (cp_hum_t * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
     def _coef_pared(
-        T_ent_local: float, T_amb_local: float, m_dot_local: float, h_w_local: float
+        T_aire_camara_K: float, T_amb_local: float, m_dot_local: float, h_w_local: float
     ) -> float:
-        """Film interior de pared/techo, separado del de producto (S61)."""
-        T_pel = 0.5 * (T_ent_local + T_amb_local)
+        """Film interior de pared/techo, separado del de producto (S61).
+
+        El primer argumento es la temperatura del aire **dentro de la cámara**
+        (``T_flujo``), no la del aire que entra: es el ΔT contra el ambiente el
+        que mueve la convección natural sobre la cara interna. Pasarle ``T_ent``
+        anulaba el empuje en tipología CAJA, donde el aire entra a la ambiente
+        (ver ``simular_secado._resolver``, S62). Como ``T_flujo`` es la incógnita
+        del solve, el motor llama a este closure dos veces por paso.
+        """
+        T_pel = 0.5 * (T_aire_camara_K + T_amb_local)
         rho = densidad_aire_humedo(T_pel, omega_ent, P_Pa)
         v_aire_t = m_dot_local / (rho * area_transversal_m2)
         return (
             coef_conveccion_pared_local(
                 v_aire_t,
-                T_ent_local,
+                T_aire_camara_K,
                 T_amb_local,
                 omega_ent,
                 P_Pa,
@@ -567,6 +575,8 @@ def _calcular_termodinamico(
     forzantes_aire: Optional["ForzantesAire"] = None,
     factor_h_conv: float = 1.0,
     factor_K_m: float = 1.0,
+    T_set_aux_K: Optional[float] = None,
+    Q_aux_max_W: float = 0.0,
 ) -> ResultadoMotorTermodinamico:
     """Wire-up de Camara → motor termodinámico transitorio.
 
@@ -614,8 +624,11 @@ def _calcular_termodinamico(
             m_dot_aire_seco_kg_s=np.full(2, camara.flujo.caudal_masico_kg_s),
             T_amb_K=np.full(2, T_amb_K),
             v_viento_ms=np.full(2, _V_VIENTO_DEFAULT_MS),
+            Q_aux_max_W=np.full(2, Q_aux_max_W),
         )
     else:
+        # Con forzantes del llamador manda la SERIE (trae la máscara horaria del
+        # auxiliar); el escalar es solo para el modo Constantes, que no la tiene.
         forzantes_uso = forzantes_aire
 
     # --- Integración termodinámica ---
@@ -641,33 +654,19 @@ def _calcular_termodinamico(
         A_rad_m2=pr.A_rad_total_m2,
         R_cond_techo_m2K_W=pr.R_cond_techo_m2K_W,
         A_techo_m2=pr.A_techo_total_m2,
+        T_set_aux_K=T_set_aux_K,
         t_max_s=t_max_s,
     )
 
-    # Anexar advertencias del wire-up a las del motor
-    return ResultadoMotorTermodinamico(
-        t_secado_s=res.t_secado_s,
-        status=res.status,
-        t_array_s=res.t_array_s,
-        T_prod_K=res.T_prod_K,
-        X_prod_kg_kg=res.X_prod_kg_kg,
-        T_flujo_K=res.T_flujo_K,
-        omega_flujo_kg_kg=res.omega_flujo_kg_kg,
-        m_dot_w_kg_s=res.m_dot_w_kg_s,
-        q_prod_W=res.q_prod_W,
-        q_pared_W=res.q_pared_W,
-        T_cam_int_K=res.T_cam_int_K,
-        T_cam_ext_K=res.T_cam_ext_K,
-        U_pared_W_m2K=res.U_pared_W_m2K,
-        HR_flujo=res.HR_flujo,
-        masa_evaporada_total_kg=res.masa_evaporada_total_kg,
-        Q_rad_W=res.Q_rad_W,
-        energia_rad_total_J=res.energia_rad_total_J,
-        horas_clipeo_nocturno_s=res.horas_clipeo_nocturno_s,
-        horas_HR_alta_s=res.horas_HR_alta_s,
-        T_max_alcanzada_K=res.T_max_alcanzada_K,
-        advertencias=advertencias + list(res.advertencias),
-    )
+    # Anexar advertencias del wire-up a las del motor.
+    #
+    # `replace` y NO una reconstrucción campo por campo: enumerar los campos deja
+    # afuera —en su default vacío— todo campo nuevo que se agregue al resultado, y
+    # es un olvido silencioso. Ya había pasado: `Q_rad_aire_W` y
+    # `energia_rad_aire_total_J` (S44) se perdían acá, así que la radiación al aire
+    # entraba al balance pero no llegaba a los diagnósticos. Mismo patrón que el
+    # albedo de S36 en la UI.
+    return replace(res, advertencias=advertencias + list(res.advertencias))
 
 
 def estimar_T_flujo_estacionario(
@@ -679,6 +678,8 @@ def estimar_T_flujo_estacionario(
     P_Pa: float = 101325.0,
     v_viento_ms: float = 2.0,
     I_g_W_m2: float = 0.0,
+    Q_aux_max_W: float = 0.0,
+    T_set_aux_K: Optional[float] = None,
 ) -> float:
     """Temperatura del aire dentro de la cámara en régimen, sin integrar [K].
 
@@ -724,7 +725,7 @@ def estimar_T_flujo_estacionario(
     # docs/notas/cubiertas translucidas en camara de secado.md).
     Q_rad_W = I_g_W_m2 * pr.tau_cubierta_solar * pr.alfa_producto_solar * pr.A_rad_total_m2
 
-    def _estado(T_prod_K: float):
+    def _estado(T_prod_K: float, h_pared_override: Optional[float] = None):
         return resolver_estado_camara(
             T_prod_K=T_prod_K,
             X_prod_kg_kg=pr.X_inicial,
@@ -743,7 +744,9 @@ def estimar_T_flujo_estacionario(
             aw_func=pr.aw_func,
             R_cond_techo_m2K_W=pr.R_cond_techo_m2K_W,
             A_techo_m2=pr.A_techo_total_m2,
-            h_conv_pared_W_m2K=h_pared,
+            h_conv_pared_W_m2K=(h_pared if h_pared_override is None else h_pared_override),
+            Q_aux_max_W=Q_aux_max_W,
+            T_set_aux_K=T_set_aux_K,
         )
 
     # Estado estacionario del producto: el mismo balance de la EDO con
@@ -770,7 +773,13 @@ def estimar_T_flujo_estacionario(
         # Sin raíz utilizable, caemos al producto recién cargado (frío): es la
         # cota conservadora, subestima el tiro.
         T_prod_eq = pr.T_prod_inicial_K
-    return float(_estado(T_prod_eq).T_flujo_K)
+    # Segunda pasada con el film de pared recalculado sobre la T de aire ya
+    # estimada: `h_pared` se computó arriba con `T_ent_K`, que en una CAJA es la
+    # ambiente y da ΔT = 0 (ver el comentario en `simular_secado._resolver`).
+    # Acá importa doblemente, porque esta función alimenta el empuje del tiro.
+    est_1 = _estado(T_prod_eq)
+    h_pared_2 = pr.coef_pared_func(est_1.T_flujo_K, T_amb_K, m_dot_as_kg_s, h_w)
+    return float(_estado(T_prod_eq, h_pared_override=h_pared_2).T_flujo_K)
 
 
 def calcular_camara(
@@ -783,6 +792,8 @@ def calcular_camara(
     forzantes_aire: Optional["ForzantesAire"] = None,
     factor_h_conv: float = 1.0,
     factor_K_m: float = 1.0,
+    T_set_aux_K: Optional[float] = None,
+    Q_aux_max_W: float = 0.0,
 ) -> ResultadoMotorTermodinamico:
     """Punto de entrada único de la cámara — motor termodinámico.
 
@@ -810,6 +821,11 @@ def calcular_camara(
         factor_K_m: Multiplicador adicional del coeficiente de transferencia de
             masa (1.0 = sin cambios). Es la perilla principal para calibrar la
             velocidad de secado; ver `calculos/validacion_camara.py`.
+        T_set_aux_K: Objetivo de control del auxiliar en modo respaldo [K].
+            ``None`` → potencia constante. El **techo** de potencia no viaja
+            acá sino como serie en ``forzantes_aire.Q_aux_max_W``, porque
+            depende de la hora (calendario de arranque, disponibilidad
+            nocturna) y esa lógica vive en ``calculos/auxiliar_calc.py``.
 
     Returns:
         ResultadoMotorTermodinamico con curvas dinámicas.
@@ -824,6 +840,8 @@ def calcular_camara(
         forzantes_aire=forzantes_aire,
         factor_h_conv=factor_h_conv,
         factor_K_m=factor_K_m,
+        T_set_aux_K=T_set_aux_K,
+        Q_aux_max_W=Q_aux_max_W,
     )
 
 

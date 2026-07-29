@@ -142,6 +142,11 @@ class EstadoCamara:
         U_pared_W_m2K: Coeficiente global de transmisión de pared resultante
             de la cascada h_conv_int + k_aisl/esp_cam + h_w [W/(m²·K)].
             Diagnóstico para verificación contra el U_muros del data model.
+        Q_aux_W: Potencia del auxiliar en respaldo efectivamente inyectada en
+            el nodo de aire [W]. Sin set-point es la disponible; con set-point
+            es la modulada, que puede ser 0 (el sol ya superó el objetivo) o el
+            techo disponible (subdimensionado). Es la que hay que integrar para
+            contabilizar consumo: la disponible es solo un techo.
     """
 
     T_flujo_K: float
@@ -152,6 +157,7 @@ class EstadoCamara:
     T_cam_int_K: float
     T_cam_ext_K: float
     U_pared_W_m2K: float
+    Q_aux_W: float = 0.0
 
 
 def resolver_estado_camara(
@@ -175,6 +181,8 @@ def resolver_estado_camara(
     A_techo_m2: float = 0.0,
     Q_rad_aire_W: float = 0.0,
     h_conv_pared_W_m2K: float | None = None,
+    Q_aux_max_W: float = 0.0,
+    T_set_aux_K: float | None = None,
 ) -> EstadoCamara:
     """Resuelve el sistema algebraico de cámara (CSTR, cuasi-estacionario).
 
@@ -247,6 +255,35 @@ def resolver_estado_camara(
             que aporta el piso conductivo ``Nu→0.68``: con el film de pared atado
             al coeficiente forzado del producto, a caudal casi nulo ``h→0`` hacía
             ``U_total→0`` y la cámara aparecía perfectamente aislada.
+        Q_aux_max_W: Potencia térmica **disponible** del auxiliar en modo
+            RESPALDO_INDEPENDIENTE [W], ya enmascarada por disponibilidad
+            horaria. Entra al balance del aire en el mismo renglón que
+            ``Q_rad_aire_W``, pero a diferencia de aquél es un aporte real y
+            controlable: la resistencia entrega por convección/contacto, no por
+            radiación transmitida. Default 0.0 → sin respaldo (back-compat).
+            **No** precalienta ``T_ent_K``: eso es el modo SERIE_POSCOLECTOR.
+
+            **Supuesto: el 100 % del aporte va al aire, sin término radiativo**
+            (decisión del usuario, S62). El razonamiento es que una resistencia
+            de secador no debe llegar al rojo, así que su emisión cae en el
+            infrarrojo y no compite con la convección desde el elemento. El
+            límite del supuesto: si alguna vez se mide un elemento trabajando
+            muy caliente —o de área grande frente a la de la cámara— parte de
+            ese calor llega al producto y a las paredes **sin pasar por el
+            aire**, y este modelo sobrestimaría ``T_flujo`` subestimando el
+            calentamiento directo del producto. Es el mismo reparto que se
+            discutió para ``Q_rad_aire_W`` en S60.
+        T_set_aux_K: Temperatura objetivo del aire de cámara [K]. ``None`` →
+            el auxiliar entrega ``Q_aux_max_W`` constante. Si se da, la potencia
+            se modula para alcanzar el objetivo::
+
+                Q_aux = clamp(T_set·denominador − numerador_base, 0, Q_aux_max)
+
+            que es exacto porque ``T_flujo`` es lineal en ``Q_aux`` a estado del
+            producto congelado. Al ser algebraico no rompe la linealidad del
+            sistema (mismo criterio que los coeficientes variables de S39): no
+            hay iteración. Da 0 si el sol ya superó el objetivo y satura en el
+            techo si el equipo está subdimensionado.
 
     Returns:
         EstadoCamara con T_flujo, ω_flujo, ṁ_w, q_prod, q_pared, T_cam_int,
@@ -331,7 +368,7 @@ def resolver_estado_camara(
     # Pérdida total al ambiente (pared opaca + techo vidriado) en el balance.
     UA_loss = UA_c + UA_techo
 
-    numerador = (
+    numerador_base = (
         m_dot_as_kg_s * cp_hum_flujo * _T_REF
         + m_dot_as_kg_s * (h_ent - omega_flujo * _LV_0)
         + UA_loss * T_amb_K
@@ -340,7 +377,20 @@ def resolver_estado_camara(
         + Q_rad_aire_W
     )
     denominador = m_dot_as_kg_s * cp_hum_flujo + UA_loss + hA_p
-    T_flujo = numerador / denominador
+
+    # --- 5b) Auxiliar en respaldo: aporte al NODO DE AIRE ---
+    # T_flujo = (numerador_base + Q_aux)/denominador es lineal en Q_aux con el
+    # producto congelado, así que el set-point se despeja de una vez en lugar de
+    # iterar: la potencia justa es la que lleva T_flujo exactamente a T_set.
+    if Q_aux_max_W <= 0.0:
+        Q_aux = 0.0
+    elif T_set_aux_K is None:
+        Q_aux = Q_aux_max_W
+    else:
+        Q_aux_necesaria = T_set_aux_K * denominador - numerador_base
+        Q_aux = max(0.0, min(Q_aux_necesaria, Q_aux_max_W))
+
+    T_flujo = (numerador_base + Q_aux) / denominador
 
     # --- Diagnósticos ---
     # q_pared = flujo por la pared OPACA (reconstruye los nodos T_cam_int/ext con
@@ -371,6 +421,7 @@ def resolver_estado_camara(
         T_cam_int_K=T_cam_int,
         T_cam_ext_K=T_cam_ext,
         U_pared_W_m2K=U_total,
+        Q_aux_W=Q_aux,
     )
 
 
@@ -429,6 +480,12 @@ class ResultadoMotorTermodinamico:
             translúcidas adicionales al techo — ver
             ``calculos/radiacion_camara.py``).
         energia_rad_aire_total_J: ∫ Q_rad_aire dt sobre toda la simulación [J].
+        Q_aux_W: Serie temporal de potencia **entregada** por el auxiliar en
+            modo respaldo al nodo de aire [W]. Con set-point es la modulada, no
+            la disponible. Cero por defecto (sin auxiliar, o en serie con el
+            colector, donde el aporte va como ΔT sobre la entrada).
+        energia_aux_total_J: ∫ Q_aux dt sobre toda la simulación [J]. Es la
+            energía que hay que facturar: la disponible es solo un techo.
         horas_clipeo_nocturno_s: Tiempo acumulado [s] en que la política B
             anti-rehumectación clipeó dX/dt a 0 porque la fuerza motriz se
             invirtió (ω_sup < ω_ent → tendencia a condensación).
@@ -457,6 +514,8 @@ class ResultadoMotorTermodinamico:
     energia_rad_total_J: float = 0.0
     Q_rad_aire_W: np.ndarray = field(default_factory=lambda: np.array([]))
     energia_rad_aire_total_J: float = 0.0
+    Q_aux_W: np.ndarray = field(default_factory=lambda: np.array([]))
+    energia_aux_total_J: float = 0.0
     horas_clipeo_nocturno_s: float = 0.0
     horas_HR_alta_s: float = 0.0
     T_max_alcanzada_K: float = 0.0
@@ -505,6 +564,10 @@ def simular_secado(
     # opaco (su cara ya está contada en A_cuerpo_m2 como pared opaca).
     R_cond_techo_m2K_W: float = 0.0,
     A_techo_m2: float = 0.0,
+    # Auxiliar en RESPALDO_INDEPENDIENTE: el techo de potencia viaja como serie
+    # en `forzantes.Q_aux_max_W` (ya enmascarado); acá solo el objetivo de
+    # control. None → potencia constante, sin modular.
+    T_set_aux_K: float | None = None,
     # Límite térmico del producto (None → sin evento de daño)
     T_max_admisible_K: float | None = None,
     # Solver
@@ -583,6 +646,7 @@ def simular_secado(
     v_viento_fz = np.asarray(forzantes.v_viento_ms, dtype=float)
     I_g_fz = np.asarray(forzantes.I_g_W_m2, dtype=float)
     Q_rad_aire_fz = np.asarray(forzantes.Q_rad_aire_W, dtype=float)
+    Q_aux_max_fz = np.asarray(forzantes.Q_aux_max_W, dtype=float)
 
     # Factor radiativo precalculado: Q_rad(t) = factor · I_g(t).
     # Si τ=0 o A_rad=0, el factor es 0 y el término desaparece sin coste.
@@ -612,6 +676,15 @@ def simular_secado(
     def _Q_rad_aire_t(t: float) -> float:
         """Potencia radiativa que calienta el aire vía superficies internas [W]."""
         return _interp(Q_rad_aire_fz, t)
+
+    def _Q_aux_max_t(t: float) -> float:
+        """Potencia disponible del auxiliar en respaldo [W] (techo, no entregada).
+
+        La serie ya viene enmascarada por disponibilidad horaria; interpolar
+        linealmente entre horas suaviza el borde del encendido, que es lo mismo
+        que hace el resto de las forzantes.
+        """
+        return max(0.0, _interp(Q_aux_max_fz, t))
 
     # --- Caso degenerado: producto ya está seco ---
     if X_prod_inicial_kg_kg <= X_prod_objetivo_kg_kg:
@@ -653,31 +726,50 @@ def simular_secado(
             h_conv_local, K_m_base = coef_transporte_func(T_ent, T_prod, omega_ent, m_dot)
         else:
             h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
-        h_pared_local = (
-            coef_pared_func(T_ent, T_amb, m_dot, h_w) if coef_pared_func is not None else None
-        )
         K_m_usado = K_m_override if K_m_override is not None else K_m_base
-        return resolver_estado_camara(
-            T_prod_K=T_prod,
-            X_prod_kg_kg=X_safe,
-            T_ent_K=T_ent,
-            omega_ent_kg_kg=omega_ent,
-            A_prod_m2=A_prod_m2,
-            A_cuerpo_m2=A_cuerpo_m2,
-            m_dot_as_kg_s=m_dot,
-            h_conv_W_m2K=h_conv_local,
-            K_m_kg_m2s=K_m_usado,
-            h_w_W_m2K=h_w,
-            k_aisl_W_mK=k_aisl_W_mK,
-            esp_cam_m=esp_cam_m,
-            T_amb_K=T_amb,
-            P_Pa=P_Pa,
-            aw_func=aw_func,
-            R_cond_techo_m2K_W=R_cond_techo_m2K_W,
-            A_techo_m2=A_techo_m2,
-            Q_rad_aire_W=_Q_rad_aire_t(t),
-            h_conv_pared_W_m2K=h_pared_local,
-        )
+
+        def _solve(h_pared_local):
+            return resolver_estado_camara(
+                T_prod_K=T_prod,
+                X_prod_kg_kg=X_safe,
+                T_ent_K=T_ent,
+                omega_ent_kg_kg=omega_ent,
+                A_prod_m2=A_prod_m2,
+                A_cuerpo_m2=A_cuerpo_m2,
+                m_dot_as_kg_s=m_dot,
+                h_conv_W_m2K=h_conv_local,
+                K_m_kg_m2s=K_m_usado,
+                h_w_W_m2K=h_w,
+                k_aisl_W_mK=k_aisl_W_mK,
+                esp_cam_m=esp_cam_m,
+                T_amb_K=T_amb,
+                P_Pa=P_Pa,
+                aw_func=aw_func,
+                R_cond_techo_m2K_W=R_cond_techo_m2K_W,
+                A_techo_m2=A_techo_m2,
+                Q_rad_aire_W=_Q_rad_aire_t(t),
+                h_conv_pared_W_m2K=h_pared_local,
+                Q_aux_max_W=_Q_aux_max_t(t),
+                T_set_aux_K=T_set_aux_K,
+            )
+
+        if coef_pared_func is None:
+            return _solve(None)
+
+        # El film interior de pared lo gobierna el aire QUE ESTÁ ADENTRO contra el
+        # ambiente, no el que entra. Hasta S62 se evaluaba con `T_ent`, y en una
+        # CAJA `T_ent = T_amb` ⇒ ΔT = 0 idéntico ⇒ el Rayleigh se anulaba, la
+        # convección natural desaparecía y quedaba solo el término forzado a
+        # ~0.01 m/s: h ≈ 0.5 W/(m²·K) en vez de ~2.4 (pared) / 3.7 (vidriado). La
+        # envolvente resultaba 8× más aislante de lo real y una resistencia chica
+        # sostenía cualquier consigna. Detectado sobre una corrida del usuario.
+        #
+        # `T_flujo` es justamente la incógnita, así que se resuelve dos veces: la
+        # primera da una estimación, la segunda usa el film ya corregido. El solve
+        # es analítico (O(1)) y la envolvente pesa poco en el denominador, así que
+        # una sola refinación alcanza — no hace falta iterar a convergencia.
+        est = _solve(coef_pared_func(T_ent, T_amb, m_dot, h_w))
+        return _solve(coef_pared_func(est.T_flujo_K, T_amb, m_dot, h_w))
 
     # --- Estado mutable para diagnóstico de política B y HR alta ---
     diag = {
@@ -843,6 +935,7 @@ def simular_secado(
     HR_flujo_arr = np.zeros(n)
     Q_rad_arr = np.zeros(n)
     Q_rad_aire_arr = np.zeros(n)
+    Q_aux_arr = np.zeros(n)
     for i in range(n):
         t_i = float(sol.t[i])
         est, _ = _resolver_con_politica_B(sol.y[0, i], sol.y[1, i], t_i)
@@ -856,6 +949,9 @@ def simular_secado(
         U_pared_arr[i] = est.U_pared_W_m2K
         Q_rad_arr[i] = _Q_rad_t(t_i)
         Q_rad_aire_arr[i] = _Q_rad_aire_t(t_i)
+        # La ENTREGADA, no la disponible: con set-point el motor modula, así que
+        # integrar el techo sobrestimaría el consumo.
+        Q_aux_arr[i] = est.Q_aux_W
         try:
             HR_flujo_arr[i] = HR_desde_omega(est.omega_flujo_kg_kg, est.T_flujo_K, P_Pa)
         except (ZeroDivisionError, ValueError):
@@ -870,10 +966,12 @@ def simular_secado(
         masa_evap = float(np.trapezoid(m_dot_pos, sol.t))
         energia_rad = float(np.trapezoid(Q_rad_arr, sol.t))
         energia_rad_aire = float(np.trapezoid(Q_rad_aire_arr, sol.t))
+        energia_aux = float(np.trapezoid(Q_aux_arr, sol.t))
     else:
         masa_evap = 0.0
         energia_rad = 0.0
         energia_rad_aire = 0.0
+        energia_aux = 0.0
 
     # Diagnósticos
     horas_clipeo = float(diag["horas_clipeo_s"])
@@ -911,6 +1009,8 @@ def simular_secado(
         energia_rad_total_J=energia_rad,
         Q_rad_aire_W=Q_rad_aire_arr,
         energia_rad_aire_total_J=energia_rad_aire,
+        Q_aux_W=Q_aux_arr,
+        energia_aux_total_J=energia_aux,
         horas_clipeo_nocturno_s=horas_clipeo,
         horas_HR_alta_s=horas_hr_alta,
         T_max_alcanzada_K=float(np.max(sol.y[0])) if n > 0 else float(T_prod_inicial_K),
@@ -1155,31 +1255,37 @@ def simular_cascada(
             h_conv_local, K_m_base = coef_transporte_func(T_ent_zona, T_prod, omega_ent_zona, m_dot)
         else:
             h_conv_local, K_m_base = h_conv_W_m2K, K_m_kg_m2s
-        h_pared_local = (
-            coef_pared_func(T_ent_zona, T_amb, m_dot, h_w) if coef_pared_func is not None else None
-        )
         K_m_usado = K_m_override if K_m_override is not None else K_m_base
-        return resolver_estado_camara(
-            T_prod_K=T_prod,
-            X_prod_kg_kg=X_safe,
-            T_ent_K=T_ent_zona,
-            omega_ent_kg_kg=omega_ent_zona,
-            A_prod_m2=A_prod_por_zona_m2,
-            A_cuerpo_m2=A_cuerpo_por_zona_m2,
-            m_dot_as_kg_s=m_dot,
-            h_conv_W_m2K=h_conv_local,
-            K_m_kg_m2s=K_m_usado,
-            h_w_W_m2K=h_w,
-            k_aisl_W_mK=k_aisl_W_mK,
-            esp_cam_m=esp_cam_m,
-            T_amb_K=T_amb,
-            P_Pa=P_Pa,
-            aw_func=aw_func,
-            R_cond_techo_m2K_W=R_cond_techo_m2K_W,
-            A_techo_m2=A_techo_por_zona_m2,
-            Q_rad_aire_W=Q_rad_aire_zona_W,
-            h_conv_pared_W_m2K=h_pared_local,
-        )
+
+        def _solve(h_pared_local):
+            return resolver_estado_camara(
+                T_prod_K=T_prod,
+                X_prod_kg_kg=X_safe,
+                T_ent_K=T_ent_zona,
+                omega_ent_kg_kg=omega_ent_zona,
+                A_prod_m2=A_prod_por_zona_m2,
+                A_cuerpo_m2=A_cuerpo_por_zona_m2,
+                m_dot_as_kg_s=m_dot,
+                h_conv_W_m2K=h_conv_local,
+                K_m_kg_m2s=K_m_usado,
+                h_w_W_m2K=h_w,
+                k_aisl_W_mK=k_aisl_W_mK,
+                esp_cam_m=esp_cam_m,
+                T_amb_K=T_amb,
+                P_Pa=P_Pa,
+                aw_func=aw_func,
+                R_cond_techo_m2K_W=R_cond_techo_m2K_W,
+                A_techo_m2=A_techo_por_zona_m2,
+                Q_rad_aire_W=Q_rad_aire_zona_W,
+                h_conv_pared_W_m2K=h_pared_local,
+            )
+
+        if coef_pared_func is None:
+            return _solve(None)
+        # Igual que en `simular_secado`: el film de pared lo gobierna el aire de
+        # la zona, no el que entra a ella. Ver el comentario largo allá.
+        est = _solve(coef_pared_func(T_ent_zona, T_amb, m_dot, h_w))
+        return _solve(coef_pared_func(est.T_flujo_K, T_amb, m_dot, h_w))
 
     def _march_aire(y: np.ndarray, t: float, aplicar_politica_B: bool) -> list[EstadoCamara]:
         """Marcha el aire de la zona N−1 → 0 y devuelve el EstadoCamara de cada
