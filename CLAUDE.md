@@ -31,6 +31,28 @@ El entorno virtual está en `.venv/`. Siempre prefijá los comandos de Python co
 
 **Control de versiones:** se trabaja en el repo local (working tree) por defecto, sin commits ni push, salvo que el usuario indique explícitamente que quiere commitear o subir a GitHub. Los cambios quedan visibles vía `git diff` y pueden descartarse con `git restore` si hace falta. Solo cuando el usuario lo pida explícitamente se arman commits (y solo cuando lo pida explícitamente se hace `git push`).
 
+**Dos ramas locales (desde S65):**
+
+| rama | qué es |
+|---|---|
+| `main` | **espejo de producción.** Idéntica a `origin/main`. **Nunca se le commitea directo.** Solo avanza por `merge --ff-only` desde `testing`, y solo cuando el usuario validó el resultado en Streamlit. |
+| `testing` | **todo el trabajo.** Commits locales, tan frecuentes como haga falta. Romperla es gratis. |
+
+Reglas duras:
+
+- **Todo el desarrollo ocurre en `testing`.** Al empezar a trabajar, verificar con `git branch`
+  que se está ahí; si no, `git switch testing`.
+- **`git push` = deploy a producción en HF Spaces** (el workflow escucha solo `main`). Un
+  proyecto grande puede pasar varias sesiones "con las tripas abiertas" en local sin liberar
+  nada: **no se pushea hasta que el avance está estable y probado**. Deshacer un deploy roto en
+  HF es peor que esperar.
+- **Los mensajes de commit NO llevan trailer de coautoría** — ni `Co-Authored-By`, ni menciones
+  a Claude/Anthropic, ni `noreply@anthropic.com`. Se redactan en `.commit_msgs/` (carpeta
+  gitignoreada, dentro del repo para que sea clicable desde VSCode) y se commitea con
+  `git commit -F`.
+- Los releases están **tageados localmente** (`v1.0.0`…`v1.4.0`): son los puntos de retorno.
+  `git diff v1.4.0..testing` dice qué entró desde la última versión liberada.
+
 ## Deploy (desde S33)
 
 El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada y sin ver el código.
