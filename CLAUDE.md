@@ -53,6 +53,9 @@ Reglas duras:
 - Los releases están **tageados localmente** (`v1.0.0`…`v1.4.0`): son los puntos de retorno.
   `git diff v1.4.0..testing` dice qué entró desde la última versión liberada.
 
+El detalle operativo completo —ciclo de trabajo, ciclo de liberación, qué no puede tocar
+producción, vuelta atrás— está en `docs/flujo_de_trabajo.md` (ADR-008).
+
 ## Deploy (desde S33)
 
 El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada y sin ver el código.

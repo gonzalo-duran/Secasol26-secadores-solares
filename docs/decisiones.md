@@ -138,7 +138,28 @@ contexto, opciones, decisión y consecuencias. Para la arquitectura general ver
   - Nada de esto está validado contra datos medidos de un cajón pasivo, y los coeficientes
     de pérdida de boca son de manual (contracción de canto vivo / descarga de chorro).
 
+## ADR-008 — Dos ramas locales: `main` como espejo de producción (S65)
+
+- **Contexto:** `git push` a `main` **es** el deploy a producción — el workflow de HF escucha
+  solo esa rama y no hay paso intermedio. Hasta S64 se trabajaba directo sobre `main` local,
+  con el working tree como única zona de trabajo. Eso obligaba a elegir entre dos males: o
+  commitear trabajo a medio hacer en la rama que despliega, o no commitear nada durante
+  sesiones enteras. S63 y S64 acumularon 61 archivos sin un solo punto de retorno. Además,
+  volver atrás en el salto de S59 a S61 fue trabajoso porque las versiones liberadas no
+  estaban tageadas.
+- **Decisión:** dos ramas **locales**. `testing` recibe todo el trabajo, con commits tan
+  frecuentes como haga falta. `main` pasa a ser el **espejo de producción**: nunca se le
+  commitea directo y solo avanza por `merge --ff-only` desde `testing`, ya validado corriendo
+  la app. Los releases 1.0.0 a 1.4.0 se tagearon retroactivamente como puntos de retorno.
+- **Corolario:** el `--ff-only` es deliberado. Si falla es porque `main` divergió, o sea porque
+  se violó la regla; que el comando falle es la señal, no un obstáculo.
+- **Lo que NO resuelve:** el problema de fondo de S63 fue de **interpretación física** —se
+  construyó sobre un valor de catálogo 4× errado sin verificarlo—, y ninguna política de ramas
+  lo habría evitado. Esto abarata deshacer el error; no lo hace menos probable.
+- **Detalle operativo:** [[docs/flujo_de_trabajo]].
+
 ## Ver también
 
 - [[docs/arquitectura]]
+- [[docs/flujo_de_trabajo]]
 - [[CLAUDE]]
