@@ -33,6 +33,34 @@ _COLOR_PROC = "#e05c2a"
 _COLOR_ISENT = "rgba(76,175,80,0.8)"
 
 
+def _rotulo_instante(res: Any, proyecto: Any, t_repr_s: Optional[float]) -> str:
+    """Texto del instante representativo: fecha y hora locales si se pueden datar.
+
+    El tramo de cámara es el estado del aire en **un** instante, no un promedio,
+    y hasta S63 la carta no decía cuál. Con el ancla temporal del horizonte
+    (``t0_utc``) y la zona horaria del sitio se muestra la fecha local; sin
+    ancla, la hora transcurrida del horizonte.
+    """
+    if t_repr_s is None:
+        return ""
+    horas = float(t_repr_s) / 3600.0
+    t0 = getattr(res, "t0_utc", None)
+    tz = getattr(getattr(proyecto, "emplazamiento", None), "zona_horaria", None)
+    if t0 is not None and tz:
+        try:
+            import pandas as pd
+
+            marca = pd.Timestamp(t0) + pd.Timedelta(seconds=float(t_repr_s))
+            if marca.tzinfo is None:
+                marca = marca.tz_localize("UTC")
+            return t(
+                "graficas.carta.instante_fecha", fecha=marca.tz_convert(tz).strftime("%d/%m %H:%M")
+            )
+        except Exception:
+            pass
+    return t("graficas.carta.instante_hora", h=horas)
+
+
 def fig_carta_psicrometrica(
     res: Any,
     proyecto: Any,
@@ -155,12 +183,16 @@ def fig_carta_psicrometrica(
     nota_camara = (
         t("graficas.carta.nota_directa") if camara_directa else t("graficas.carta.nota_indirecta")
     )
+    nota = t("graficas.carta.nota", p=P_Pa / 1000, camara=nota_camara)
+    rotulo_instante = _rotulo_instante(res, proyecto, datos.get("t_repr_s"))
+    if rotulo_instante:
+        nota = f"{nota}<br>{rotulo_instante}"
     fig.add_annotation(
         xref="paper",
         yref="paper",
         x=0.01,
         y=0.99,
-        text=t("graficas.carta.nota", p=P_Pa / 1000, camara=nota_camara),
+        text=nota,
         showarrow=False,
         align="left",
         font=dict(size=10, color="#555"),

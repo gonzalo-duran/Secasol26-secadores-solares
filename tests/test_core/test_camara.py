@@ -106,14 +106,36 @@ class TestConfiguracionBandejas:
             ConfiguracionBandejas(espesor_capa_m=0.0)
 
     def test_separacion_insuficiente(self):
-        # sep=0.025 m < espesor=0.02 m + 0.01 m = 0.03 m
-        with pytest.raises(ValueError, match="BAND_SEPARACION_INSUFICIENTE"):
-            ConfiguracionBandejas(espesor_capa_m=0.02, separacion_entre_bandejas_m=0.025)
+        """Solo se rechaza lo imposible: que la capa no entre (S64).
 
-    def test_separacion_exactamente_suficiente(self):
-        # sep = espesor + 0.01 = 0.03 m — exactamente en el límite, debe pasar
-        b = ConfiguracionBandejas(espesor_capa_m=0.02, separacion_entre_bandejas_m=0.030)
-        assert b.separacion_entre_bandejas_m == pytest.approx(0.030)
+        Hasta S63 se exigía además 1 cm de aire libre y eso bloqueaba diseños
+        apretados pero construibles; ese margen pasó a la advertencia
+        CAM_CANAL_MUY_ESTRECHO.
+        """
+        with pytest.raises(ValueError, match="BAND_SEPARACION_INSUFICIENTE"):
+            ConfiguracionBandejas(espesor_capa_m=0.03, separacion_entre_bandejas_m=0.03)
+
+    def test_separacion_justa_se_permite_pero_avisa(self):
+        # 5 mm de aire libre: construible, pero el canal queda muy angosto.
+        b = ConfiguracionBandejas(
+            n_bandejas=1,
+            area_bandeja_m2=0.5,
+            espesor_capa_m=0.02,
+            separacion_entre_bandejas_m=0.025,
+        )
+        assert b.separacion_entre_bandejas_m == pytest.approx(0.025)
+        # La carga es la que fija el espesor: 2 cm = m/(ρ·(1−ε)·A·n) con manzana.
+        camara = Camara(
+            bandejas=b,
+            carga_producto=CargaProducto(
+                producto_id="manzana",
+                masa_total_kg=0.02 * 840.0 * 0.55 * 0.5,
+                humedad_inicial_X=4.6,
+                humedad_objetivo_X=0.15,
+            ),
+        )
+        assert camara.bandejas.espesor_capa_m == pytest.approx(0.02)
+        assert "CAM_CANAL_MUY_ESTRECHO" in [a.codigo for a in advertencias_camara(camara)]
 
     def test_area_no_positiva(self):
         with pytest.raises(ValueError, match="BAND_AREA_NO_POSITIVA"):
@@ -341,7 +363,9 @@ class TestAdvertenciasCamara:
                 n_bandejas=1,
                 area_bandeja_m2=0.5,
                 espesor_capa_m=0.02,
-                separacion_entre_bandejas_m=0.03,
+                # La carga por defecto da ~4.3 cm de capa (S64): la separación
+                # tiene que alcanzar, o el proyecto no se puede construir.
+                separacion_entre_bandejas_m=0.06,
             ),
         )
         adv = advertencias_camara(camara)
@@ -349,12 +373,27 @@ class TestAdvertenciasCamara:
         assert "GEO_ALTO_INUSUAL" in codigos
 
     def test_advertencia_espesor_capa_grande(self):
+        """El espesor se deriva de la carga (S64), así que hay que provocarlo
+        con una carga alta de un producto poco denso.
+
+        Interacción a tener presente: con el tope de 20 kg/m² de
+        COHE_CARGA_EXCEDE_CAPACIDAD_GEOMETRICA, el espesor máximo alcanzable es
+        ``20/(ρ·(1−ε))``. Para manzana (840 kg/m³) son 4.3 cm y esta advertencia
+        **nunca** puede dispararse; para una hoja aromática (380 kg/m³) son
+        9.6 cm y sí.
+        """
         camara = Camara(
             bandejas=ConfiguracionBandejas(
                 n_bandejas=3,
                 area_bandeja_m2=0.5,
-                espesor_capa_m=0.08,  # > 0.05 m
-                separacion_entre_bandejas_m=0.10,
+                espesor_capa_m=0.08,  # se recalcula desde la carga
+                separacion_entre_bandejas_m=0.12,
+            ),
+            carga_producto=CargaProducto(
+                producto_id="oregano",
+                masa_total_kg=28.0,  # 18.7 kg/m², bajo el tope de 20
+                humedad_inicial_X=2.3,
+                humedad_objetivo_X=0.1,
             ),
         )
         adv = advertencias_camara(camara)

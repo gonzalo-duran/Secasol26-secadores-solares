@@ -310,3 +310,44 @@ class TestFilmDeParedGobernadoPorElAireInterior:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestSeccionDeFlujo:
+    """La sección de paso de la cámara alimenta al film de PARED.
+
+    Hasta S63 esta sección dependía de ``direccion_flujo``. Con cross-flow único
+    (S64) el aire recorre el largo de la cámara y la sección es siempre
+    ``ancho × alto``; la que ve el producto es la del canal entre bandejas
+    (``area_canal_entre_bandejas_m2``), que es otra y más chica.
+    """
+
+    def _camara(self):
+        from .test_conveccion_natural_cajon import _camara as _fixture
+
+        return _fixture(A_boca=0.05)
+
+    def test_seccion_de_camara_es_ancho_por_alto(self):
+        from calculos.camara_calc import area_transversal_flujo_m2
+
+        cam = self._camara()
+        g = cam.geometria
+        assert area_transversal_flujo_m2(cam) == pytest.approx(g.ancho_m * g.alto_m)
+
+    def test_una_camara_migrada_da_la_misma_seccion(self):
+        """Un snapshot con flujo vertical se coacciona: misma sección."""
+        from calculos.camara_calc import area_transversal_flujo_m2
+        from core.camara import DireccionFlujo
+
+        cam = self._camara()
+        cam.flujo.direccion_flujo = DireccionFlujo.VERTICAL_ASCENDENTE
+        g = cam.geometria
+        assert area_transversal_flujo_m2(cam) == pytest.approx(g.ancho_m * g.alto_m)
+
+    def test_el_producto_ve_una_seccion_distinta_de_la_pared(self):
+        from calculos.camara_calc import (
+            area_canal_entre_bandejas_m2,
+            area_transversal_flujo_m2,
+        )
+
+        cam = self._camara()
+        assert area_canal_entre_bandejas_m2(cam) != pytest.approx(area_transversal_flujo_m2(cam))

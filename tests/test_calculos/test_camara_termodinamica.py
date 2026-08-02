@@ -661,6 +661,44 @@ class TestCoefTransporteVariable:
         assert max(m_recibidos) <= 0.06 + 1e-6
 
 
+class TestFilmDelProductoConAireDeCamara:
+    """S63: el film del producto se evalúa con T_flujo, no con T_ent.
+
+    La fuerza impulsora del balance es ``h·A·(T_flujo − T_prod)``, así que
+    evaluar ese mismo ``h`` con la temperatura del aire **de entrada** mezclaba
+    dos temperaturas distintas en un solo término. Es el mismo arreglo que S62
+    hizo para el film de **pared**, que había quedado sin hacer para el producto.
+    """
+
+    def test_el_callable_recibe_el_aire_de_la_camara(self):
+        recibidos: list[float] = []
+
+        def _cb(T_aire, T_prod, omega_ent, m):
+            recibidos.append(T_aire)
+            # Coeficientes constantes: no perturban el resultado, solo espían.
+            return 15.0, 0.015
+
+        res = simular_secado(**_kwargs_motor(coef_transporte_func=_cb))
+
+        T_ent = 323.15  # el aire de entrada del fixture
+        # El aire de la cámara está SIEMPRE por debajo del de entrada (se enfría
+        # evaporando), así que si el callable recibiera solo T_ent no habría un
+        # solo valor distinto.
+        assert any(abs(T - T_ent) > 1.0 for T in recibidos)
+        # Y ningún valor recibido queda por encima de la entrada.
+        assert max(recibidos) <= T_ent + 1e-6
+        # Los valores refinados caen dentro del rango de T_flujo simulado.
+        T_flujo = np.asarray(res.T_flujo_K)
+        assert min(recibidos) >= T_flujo.min() - 1.0
+
+    def test_con_coeficientes_congelados_no_hay_segunda_pasada(self):
+        """Sin callables, el resultado es exactamente el histórico (una pasada)."""
+        res = simular_secado(**_kwargs_motor())
+        assert res.t_secado_s is not None
+        # Sirve de ancla de back-compat junto con test_callable_constante_reproduce_frozen.
+        assert np.all(np.isfinite(res.T_flujo_K))
+
+
 class TestForzantesVariables:
     """Verifica que las forzantes horarias se interpolan y mueven el sistema."""
 

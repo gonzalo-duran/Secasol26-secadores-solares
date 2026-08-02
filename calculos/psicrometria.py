@@ -68,6 +68,9 @@ _B_DP: float = 243.04  # [°C]
 
 _TOL_TWB: float = 1e-4  # [K] tolerancia de convergencia de T_wb
 _MAX_ITER_TWB: int = 100  # iteraciones máximas para T_wb
+# Margen bajo la ebullición local para acotar el bracket de T_wb con aire
+# sobrecalentado: pegado a la ebullición, ω_sat → ∞ y el residuo se hace rígido.
+_MARGEN_EBULLICION_K: float = 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +379,37 @@ def densidad_aire_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -> fl
 # ---------------------------------------------------------------------------
 
 
+def temperatura_ebullicion(P_Pa: float) -> float:
+    """Temperatura de ebullición del agua a la presión dada [K].
+
+    Invierte numéricamente ``presion_vapor_saturacion`` (Buck), que es monótona
+    creciente. A 101.325 kPa da ~100 °C; a 73 kPa (≈2650 m), ~91 °C.
+
+    Args:
+        P_Pa: Presión total [Pa].
+
+    Returns:
+        T de ebullición [K].
+
+    Raises:
+        ValueError: Si P_Pa no es positiva o cae fuera del rango invertible.
+    """
+    if P_Pa <= 0.0:
+        raise ValueError(f"PSICRO_P_NO_POSITIVA: P={P_Pa:.1f} Pa ≤ 0.")
+    T_lo, T_hi = _T_REF + 0.01, _T_REF + 250.0
+    if presion_vapor_saturacion(T_lo) >= P_Pa:
+        return T_lo
+    if presion_vapor_saturacion(T_hi) <= P_Pa:
+        raise ValueError(f"PSICRO_EBULLICION_FUERA_DE_RANGO: P={P_Pa:.0f} Pa demasiado alta.")
+    return brentq(
+        lambda T: presion_vapor_saturacion(T) - P_Pa,
+        T_lo,
+        T_hi,
+        xtol=_TOL_TWB,
+        maxiter=_MAX_ITER_TWB,
+    )
+
+
 def temperatura_bulbo_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -> float:
     """Temperatura de bulbo húmedo (saturación adiabática) [K].
 
@@ -387,22 +421,37 @@ def temperatura_bulbo_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -
 
     Si ω ≥ ω_sat(T, P) el aire ya está saturado: T_wb = T.
 
+    **Aire por encima de la ebullición local** (S63): a presión reducida el agua
+    hierve por debajo de 100 °C (a 73 kPa, ~2650 m, hierve a 91 °C) y ``ω_sat``
+    deja de estar definida en el bulbo seco — ``P_sat(T) ≥ P``. Ese aire **no
+    puede** estar saturado (hervir es otra cosa) y **sí** tiene saturación
+    adiabática: enfriándose corta la curva de saturación bien por debajo. En ese
+    caso el bracket superior se acota a la ebullición en vez de fallar. Aparece
+    de verdad: un colector bien dimensionado en altura llega a esas temperaturas
+    al mediodía, y el caso lo reportó un usuario con un armario a 2650 m.
+
     Args:
         T_K: Temperatura de bulbo seco [K].
         omega: Humedad absoluta [kg_agua / kg_aire_seco].
         P_Pa: Presión total [Pa].
 
     Returns:
-        T_wb [K]. Cumple T_dp ≤ T_wb ≤ T.
+        T_wb [K]. Cumple T_dp ≤ T_wb ≤ min(T, T_ebullición).
 
     Raises:
         ValueError: Si la iteración no converge (poco probable, indica entrada
             patológica o bug).
     """
-    omega_sat_T = omega_saturacion(T_K, P_Pa)
-    if omega >= omega_sat_T:
-        # Aire saturado: T_wb = T_db (no hay potencial de evaporación)
-        return T_K
+    T_hi_max = T_K
+    if presion_vapor_saturacion(T_K) < P_Pa:
+        omega_sat_T = omega_saturacion(T_K, P_Pa)
+        if omega >= omega_sat_T:
+            # Aire saturado: T_wb = T_db (no hay potencial de evaporación)
+            return T_K
+    else:
+        # Sobrecalentado respecto de la ebullición local: el bracket superior no
+        # puede llegar al bulbo seco porque ω_sat no existe ahí.
+        T_hi_max = temperatura_ebullicion(P_Pa) - _MARGEN_EBULLICION_K
 
     cp_hum = cp_aire_humedo(omega)
 
@@ -427,7 +476,9 @@ def temperatura_bulbo_humedo(T_K: float, omega: float, P_Pa: float = 101325.0) -
 
     # Garantizar bracket válido (por si Alduchov subestima T_dp)
     T_lo = max(_T_REF + 0.01, T_dp - 0.5)
-    T_hi = T_K
+    # Tope: el bulbo seco, salvo aire sobrecalentado respecto de la ebullición
+    # local, donde ω_sat no está definida hasta ahí.
+    T_hi = T_hi_max
     f_lo = _residuo(T_lo)
     f_hi = _residuo(T_hi)
     if f_lo * f_hi > 0.0:

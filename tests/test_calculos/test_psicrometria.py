@@ -501,6 +501,66 @@ class TestTemperaturaBulboHumedo:
         assert T_wb == pytest.approx(T, abs=0.01)
 
 
+class TestTemperaturaEbullicion:
+    """Inversión de Buck: a qué T hierve el agua a cada presión (S63)."""
+
+    def test_nivel_del_mar_da_100C(self):
+        from calculos.psicrometria import temperatura_ebullicion
+
+        assert temperatura_ebullicion(101325.0) - 273.15 == pytest.approx(100.0, abs=0.2)
+
+    def test_altura_baja_el_punto_de_ebullicion(self):
+        from calculos.psicrometria import temperatura_ebullicion
+
+        # 73.2 kPa ≈ 2650 m: el sitio del reporte del usuario (S57).
+        assert temperatura_ebullicion(73216.1) - 273.15 == pytest.approx(91.1, abs=0.5)
+        assert temperatura_ebullicion(73216.1) < temperatura_ebullicion(101325.0)
+
+    def test_presion_no_positiva_rechazada(self):
+        from calculos.psicrometria import temperatura_ebullicion
+
+        with pytest.raises(ValueError, match="PSICRO_P_NO_POSITIVA"):
+            temperatura_ebullicion(0.0)
+
+
+class TestBulboHumedoSobreEbullicion:
+    """S63: aire más caliente que la ebullición local sigue teniendo T_wb.
+
+    Ese aire **no puede** estar saturado —hervir es otra cosa— pero enfriándose
+    adiabáticamente corta la curva de saturación bien por debajo. Antes se caía
+    con ``PSICRO_PV_EXCEDE_P`` porque el chequeo de saturación se hacía en el
+    bulbo seco.
+    """
+
+    def test_no_lanza_y_da_T_wb_muy_por_debajo(self):
+        from calculos.psicrometria import temperatura_bulbo_humedo, temperatura_ebullicion
+
+        P = 73216.1  # 2650 m
+        T = 366.0  # 92.8 °C, por encima de los 91.1 °C de ebullición local
+        T_wb = temperatura_bulbo_humedo(T, 0.008, P)
+        assert T_wb < temperatura_ebullicion(P)
+        assert (T_wb - 273.15) == pytest.approx(28.5, abs=2.0)
+
+    def test_la_capacidad_queda_definida(self):
+        """Es el punto: se puede calcular cuánta agua carga ese aire."""
+        from calculos.psicrometria import temperatura_bulbo_humedo
+
+        P = 73216.1
+        w = 0.008
+        T_wb = temperatura_bulbo_humedo(366.0, w, P)
+        capacidad = omega_saturacion(T_wb, P) - w
+        assert capacidad > 0.0
+        assert capacidad == pytest.approx(0.027, abs=0.005)
+
+    def test_bajo_la_ebullicion_no_cambia_nada(self):
+        """Back-compat: el camino normal queda idéntico."""
+        from calculos.psicrometria import temperatura_bulbo_humedo
+
+        T = 323.15
+        omega = humedad_absoluta(0.20, T)
+        assert (temperatura_bulbo_humedo(T, omega) - 273.15) == pytest.approx(28.0, abs=1.0)
+
+
 # ---------------------------------------------------------------------------
 # actividad_agua_desde_X_GAB
 # ---------------------------------------------------------------------------

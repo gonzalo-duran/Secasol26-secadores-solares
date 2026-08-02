@@ -34,6 +34,7 @@ para mantenerse testeable y reusable desde cualquier capa.
 
 from __future__ import annotations
 
+import math
 from math import pi
 from typing import Optional
 
@@ -50,6 +51,7 @@ from calculos.motor_calc import (
     viscosidad_aire,
 )
 from calculos.perfil_viento import Z0_DEFAULT_M, Z_CONTRATO_M, velocidad_a_altura
+from calculos.transiciones_seccion import delta_P_transicion_Pa
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -395,6 +397,9 @@ def caudal_natural_kgs(
     A_boca_salida_m2: Optional[float] = None,
     K_boca_entrada: float = _K_BOCA_ENTRADA,
     K_boca_salida: float = _K_BOCA_SALIDA,
+    A_salida_colector_m2: Optional[float] = None,
+    longitud_transicion_entrada_m: float = 0.0,
+    longitud_transicion_salida_m: float = 0.0,
 ) -> dict:
     """Caudal másico de equilibrio del lazo movido por flotabilidad [kg/s].
 
@@ -523,8 +528,12 @@ def caudal_natural_kgs(
         else K_singular_chim
     )
 
+    # Sección de la base de la chimenea: es la contigua a la boca de salida, así
+    # que sale de la propia geometría del ducto y no hace falta pasarla.
+    A_base_chim_m2 = math.pi * diametro_chim_m**2 / 4.0 if hay_ducto else None
+
     def _dP_bocas(m: float) -> float:
-        return delta_P_bocas_Pa(
+        dP = delta_P_bocas_Pa(
             m,
             A_boca_entrada_m2,
             A_boca_salida_m2,
@@ -533,6 +542,21 @@ def caudal_natural_kgs(
             K_in=K_boca_entrada,
             K_out=K_boca_salida,
         )
+        # Cambios de sección en los empalmes: colector → boca de entrada y boca
+        # de salida → base de chimenea. Con secciones iguales el término es cero;
+        # aparece justamente cuando el acople está mal dimensionado, que es lo
+        # que el modelo no representaba hasta S62. Entra al lado RESISTIVO del
+        # equilibrio, así que estrangular un empalme baja el caudal de tiro.
+        rho = densidad_aire(T_chim_K, P_amb_Pa)
+        if A_salida_colector_m2 and A_boca_entrada_m2:
+            dP += delta_P_transicion_Pa(
+                m, A_salida_colector_m2, A_boca_entrada_m2, rho, longitud_transicion_entrada_m
+            )
+        if A_base_chim_m2 and A_boca_salida_m2:
+            dP += delta_P_transicion_Pa(
+                m, A_boca_salida_m2, A_base_chim_m2, rho, longitud_transicion_salida_m
+            )
+        return dP
 
     def residuo(m: float) -> float:
         dPC = delta_P_chimenea_Pa(

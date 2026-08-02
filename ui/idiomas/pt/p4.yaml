@@ -156,8 +156,12 @@ bandejas:
   n_bandejas: Número de bandejas
   area_bandeja: Área por bandeja [m²]
   espesor_capa:
-    label: Espessura da camada de produto [m]
-    help: Modelos de camada fina válidos para espessura ≤ 5 cm.
+    label: Espessura da camada (derivada)
+    help: >-
+      Não se carrega: sai da carga uniforme, espessura = massa / (ρ·(1−ε)·área da bandeja
+      · n° de bandejas). Para mudá-la, mude a carga, a área ou a quantidade de bandejas.
+      Atenção acima de ~5 cm: o modelo não representa a difusão interna do leito e o tempo
+      de secagem que dá fica cada vez mais otimista.
   separacion:
     label: Separação entre bandejas [m]
     help: Distância livre entre superfícies de bandejas consecutivas.
@@ -180,8 +184,6 @@ bandejas:
     • C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
     • Cresce com β e diverge quando o gap se bloqueia (β→1).
 
-    Em VERTICAL_ASCENDENTE este termo não se aplica: a equação de Ergun
-    já captura a resistência do leito atravessado via Φ_s e d_p.
   forzar_k: Forçar C_obstrução (override do padrão automático)
   c_obstruccion:
     label: C_obstrução [adim]
@@ -253,15 +255,22 @@ flujo:
       ℹ️ A vazão real é resolvida pela tiragem (ver bocas, mais abaixo). Este
       número é apenas a referência de escalonamento.
   direccion:
-    label: Direção do fluxo
-    horizontal: HORIZONTAL
-    vertical_ascendente: VERTICAL_ASCENDENTE
+    fija: >-
+      Fluxo **cross-flow**: o ar varre as bandejas em paralelo ao leito. É a única
+      topologia do modelo — a posição das bocas fixa a escala do fluxo e a das bandejas,
+      a direção local sobre o produto.
+  migracion_vertical: >-
+    Este projeto foi salvo com fluxo VERTICAL_ASCENDENTE (o ar atravessando o leito),
+    topologia retirada do modelo. Foi migrado para cross-flow sobre bandejas. Os tempos de
+    secagem vão diferir dos do relatório original.
   usar_hr:
     label: Especificar UR de entrada
     help: Se não for especificado, o cálculo usa o fallback escalar do catálogo.
   hr_entrada: UR do ar na entrada da câmara [%]
   velocidad: "Velocidade superficial estimada: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
 bocas:
+  transicion_angulo: "Ângulo do empalme: {theta:.0f}°. Acima de 45° o difusor descola e se comporta como degrau."
+  transicion_help: "Comprimento do tronco de cone que une as duas seções. Em 0 o empalme é um degrau abrupto, o caso conservador e o habitual num equipamento de oficina. Alongá-lo fecha o ângulo e recupera pressão."
   titulo: "**Bocas de ar (convecção natural)**"
   usar:
     label: O secador tem bocas de entrada e saída
@@ -288,9 +297,19 @@ bocas:
     Se não tiverem, o acoplamento acrescenta uma contração que este modelo ainda
     não representa.
   entrada:
+    transicion: "Comprimento da transição de entrada [m]"
+    heredada: "Herda {area:.4f} m² da saída do coletor."
+    sin_colector: "Sem coletor não há seção contígua para herdar: informe a área da boca."
+    hereda_help: "Se a boca de entrada tem a mesma seção que a saída do banco de coletores, não há contração nem expansão nesse empalme e não se perde carga ali."
+    hereda: "Igual à saída do coletor"
     label: Área da boca de entrada [m²]
     help: Área livre total por onde entra o ar ambiente (soma de todas as aberturas).
   salida:
+    transicion: "Comprimento da transição de saída [m]"
+    heredada: "Herda {area:.4f} m² da base da chaminé."
+    sin_chimenea: "Sem chaminé a descarga é para a atmosfera: informe a área da boca."
+    hereda_help: "Se a boca de saída tem a mesma seção que a base da chaminé, esse empalme não perde carga."
+    hereda: "Igual à base da chaminé"
     label: Área da boca de saída [m²]
     help: >-
       Área livre total de saída. Pesa mais do que a de entrada: o ar que sai
@@ -547,8 +566,47 @@ calcular:
     fonte de verdade.
   label: ⚙️ Calcular câmara
   help_bloqueo: Tipologia CAIXA requer ao menos uma face translúcida para poder calcular.
+transferencia:
+  titulo: 🔗 Acoplamento ar ↔ produto (NTU)
+  topologia_sobre: >-
+    O ar passa **entre** bandejas e toca as duas faces do leito: a superior inteira e a
+    inferior na fração que a malha deixa aberta, com um coeficiente menor. O h vem de placa
+    plana sobre a bandeja, com a velocidade do canal.
+  ntu:
+    label: NTU
+    help: >-
+      Unidades de transferência, K_m·A/ṁ. Mede quanto caminho rumo ao equilíbrio com o
+      produto o ar consegue percorrer em uma passagem. É o número que diz se o secador
+      está bem carregado.
+  acercamiento:
+    label: Aproximação ao equilíbrio
+    help: >-
+      Fração do caminho ao equilíbrio que o ar percorre, NTU/(1+NTU). A 100 % sairia
+      saturado na temperatura de bulbo úmido do produto.
+  area:
+    label: Superfície de troca
+    help: Superfície de produto que o ar enxerga, conforme a topologia do fluxo.
+  h:
+    label: h ar↔produto
+    help: Coeficiente convectivo interior no ponto de projeto.
+  regimen: "**Regime:** {regimen}"
+  regimen_transferencia: >-
+    limitado por **transferência** — o ar sai quase como entrou e leva pouca água. Mais
+    superfície (camada mais fina, produto menor) ou menos vazão melhoram a secagem.
+  regimen_intermedio: >-
+    intermediário — o ar aproveita boa parte da sua capacidade. É a zona onde a vazão e a
+    carga se compensam.
+  regimen_energia: >-
+    limitado por **energia** — o ar sai quase saturado e a secagem é fixada pela energia
+    disponível, não pela transferência. É onde convém estar; para acelerar é preciso somar
+    energia (mais coletor) ou vazão.
+
 resultados_td:
   titulo: Resultados do motor termodinâmico
+  aviso_sin_auxiliar: >-
+    ℹ️ Estes números são **sem o auxiliar**: esta vista resolve a câmara com o ar tal
+    como chega antes de P5. O aporte do aquecimento auxiliar é aplicado no balanço da
+    aba 7, portanto o tempo de secagem real será menor.
   t_secado: Tempo de secagem
   no_alcanzado: não alcançado
   status: Status
@@ -619,7 +677,6 @@ resumen:
   bandejas: "**Bandejas:** {n} × {area:.2f} m²"
   espesor_capa: "**Espessura camada:** {v:.1f} cm"
   caudal: "**Vazão:** {v:.4f} kg/s"
-  direccion: "**Direção:** {v}"
   t_amb: "**T_amb (cálculo):** {v:.1f} °C"
 guardar:
   txt: Salvar configuração da câmara (.txt)

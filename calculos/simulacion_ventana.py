@@ -162,6 +162,12 @@ class ResultadoVentana:
     #: SERIE_POSCOLECTOR queda en 0 y la energía la reporta el solver propio
     #: del auxiliar (diagnóstico `E_aux_MJ` del armado de forzantes).
     E_auxiliar_respaldo_MJ: float = 0.0
+    #: Radiación solar que la cámara CAPTURÓ durante los lotes [MJ]: la que
+    #: intercepta el producto más la que calienta las superficies internas. Es el
+    #: análogo de ``Q_util`` del colector para un secador directo, y la magnitud
+    #: con la que se compara contra el auxiliar (útil contra útil). Cero en
+    #: cámaras opacas.
+    E_solar_camara_MJ: float = 0.0
     # Diagnósticos del caño maestro (para los exports; None sin caño).
     cano_delta_T_media_K: Optional[float] = None
     cano_delta_T_minima_K: Optional[float] = None
@@ -437,7 +443,15 @@ def _simular_ventana_batch(
     Cada lote arranca cuando la :class:`PoliticaRecarga` lo permite: por defecto
     a la hora de carga del día siguiente a la descarga, no en el instante exacto
     en que el anterior terminó. Con ``politica.activa = False`` se recupera el
-    encadenado inmediato, que es una cota superior de producción.
+    encadenado inmediato.
+
+    **El encadenado inmediato NO es una cota superior de producción** (S64).
+    Lo fue mientras el lote entraba holgado en un día; con lotes que duran del
+    orden de 100 h la alineación con el sol pasa a mandar, y un lote que arranca
+    de madrugada se pasa la noche sin secar y puede no cerrar dentro de la
+    ventana. Medido: en una ventana de 6 días, con espera 24 kg secos contra
+    12 kg sin espera, con la misma agua evaporada. La política de recarga dejó
+    de ser solo una restricción operativa: es una decisión de diseño.
     """
     camara = proyecto.camara
     p = camara.carga_producto
@@ -455,6 +469,7 @@ def _simular_ventana_batch(
     masa_evap = 0.0
     n_batches = 0
     E_aux_J = 0.0
+    E_solar_cam_J = 0.0
     lotes: list[LoteVentana] = []
 
     # Consigna del respaldo: escalar, así que no viaja en las forzantes (el techo
@@ -521,6 +536,14 @@ def _simular_ventana_batch(
         # viaja en `fz.Q_aux_max_W`; acá se acumula lo que efectivamente entró.
         E_aux_lote_MJ = float(getattr(sub, "energia_aux_total_J", 0.0)) / 1e6
         E_aux_J += E_aux_lote_MJ * 1e6
+        # Radiación que entró por el vidriado durante el lote: al producto y a
+        # las superficies internas. Es el análogo de Q_util del colector — la
+        # parte del sol que el secador efectivamente capturó— y solo existe
+        # mientras hay un lote adentro, a diferencia del sol INCIDENTE, que cae
+        # sobre la cámara todo el año aunque esté vacía.
+        E_solar_cam_J += float(getattr(sub, "energia_rad_total_J", 0.0)) + float(
+            getattr(sub, "energia_rad_aire_total_J", 0.0)
+        )
         # Agregación por CÓDIGO, no por string exacto: los mensajes llevan el
         # número de horas del lote ("... durante 5.6 h"), así que deduplicar por
         # igualdad no filtra nada — sobre un año de 52 lotes eso inundaba la
@@ -599,6 +622,7 @@ def _simular_ventana_batch(
     res.n_dias_salteados_pronostico = n_dias_salteados
     res.n_batches_completos = n_batches
     res.E_auxiliar_respaldo_MJ = E_aux_J / 1e6
+    res.E_solar_camara_MJ = E_solar_cam_J / 1e6
     res.masa_seca_producida_kg = masa_seca
     res.masa_evaporada_kg = masa_evap
     if t_secados:

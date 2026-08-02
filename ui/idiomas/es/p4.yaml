@@ -157,8 +157,12 @@ bandejas:
   n_bandejas: Número de bandejas
   area_bandeja: Área por bandeja [m²]
   espesor_capa:
-    label: Espesor de capa de producto [m]
-    help: Modelos de capa fina válidos para espesor ≤ 5 cm.
+    label: Espesor de capa (derivado)
+    help: >-
+      No se carga: sale de la carga uniforme, espesor = masa / (ρ·(1−ε)·área de bandeja
+      · n° de bandejas). Si querés otro espesor, cambiá la carga, el área o la cantidad de
+      bandejas. Ojo por encima de ~5 cm: el modelo no representa la difusión interna del
+      lecho y el tiempo de secado que da queda cada vez más optimista.
   separacion:
     label: Separación entre bandejas [m]
     help: Distancia libre entre superficies de bandejas consecutivas.
@@ -181,8 +185,6 @@ bandejas:
     • C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
     • Crece con β y diverge cuando el gap se bloquea (β→1).
 
-    En VERTICAL_ASCENDENTE este término no aplica: la ecuación de Ergun
-    ya captura la resistencia del lecho atravesado vía Φ_s y d_p.
   forzar_k: Forzar C_obstrucción (override del default automático)
   c_obstruccion:
     label: C_obstrucción [adim]
@@ -253,15 +255,22 @@ flujo:
       ℹ️ El caudal real lo resuelve el tiro (ver bocas, más abajo). Este número
       es solo la referencia de escalado.
   direccion:
-    label: Dirección del flujo
-    horizontal: HORIZONTAL
-    vertical_ascendente: VERTICAL_ASCENDENTE
+    fija: >-
+      Flujo **cross-flow**: el aire barre las bandejas en paralelo al lecho. Es la única
+      topología del modelo — la posición de las bocas fija la escala del flujo y la de las
+      bandejas, la dirección local sobre el producto.
+  migracion_vertical: >-
+    Este proyecto fue guardado con flujo VERTICAL_ASCENDENTE (el aire atravesando el lecho),
+    topología retirada del modelo. Se migró a cross-flow sobre bandejas. Los tiempos de
+    secado van a diferir de los del reporte original.
   usar_hr:
     label: Especificar HR de entrada
     help: Si no se especifica, el cálculo usa el fallback escalar del catálogo.
   hr_entrada: HR del aire en entrada a la cámara [%]
   velocidad: "Velocidad superficial estimada: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
 bocas:
+  transicion_angulo: "Ángulo del empalme: {theta:.0f}°. Por encima de 45° el difusor desprende y se comporta como escalón."
+  transicion_help: "Largo del tronco de cono que une las dos secciones. En 0 el empalme es un escalón brusco, que es el caso conservador y el habitual en un equipo de taller. Alargarlo abre menos el ángulo y recupera presión."
   titulo: "**Bocas de aire (convección natural)**"
   usar:
     label: El secador tiene bocas de entrada y salida
@@ -288,9 +297,19 @@ bocas:
     sección**. Si no la tienen, el acople agrega una contracción que este modelo
     todavía no representa.
   entrada:
+    transicion: "Largo de la transición de entrada [m]"
+    heredada: "Hereda {area:.4f} m² de la salida del colector."
+    sin_colector: "Sin colector no hay sección contigua de la que heredar: cargá el área de la boca."
+    hereda_help: "Si la boca de entrada tiene la misma sección que la salida del banco de colectores, no hay contracción ni expansión en ese empalme y no se pierde carga ahí."
+    hereda: "Igual a la salida del colector"
     label: Área de boca de entrada [m²]
     help: Área libre total por donde entra el aire ambiente (suma de todas las aberturas).
   salida:
+    transicion: "Largo de la transición de salida [m]"
+    heredada: "Hereda {area:.4f} m² de la base de la chimenea."
+    sin_chimenea: "Sin chimenea la descarga es a la atmósfera: cargá el área de la boca."
+    hereda_help: "Si la boca de salida tiene la misma sección que la base de la chimenea, ese empalme no pierde carga."
+    hereda: "Igual a la base de la chimenea"
     label: Área de boca de salida [m²]
     help: >-
       Área libre total de salida. Pesa más que la de entrada: el aire que sale
@@ -546,8 +565,47 @@ calcular:
     Resultados**, que es la fuente de verdad.
   label: ⚙️ Calcular cámara
   help_bloqueo: Tipología CAJA requiere al menos una cara translúcida para poder calcular.
+transferencia:
+  titulo: 🔗 Acoplamiento aire ↔ producto (NTU)
+  topologia_sobre: >-
+    El aire pasa **entre** bandejas y toca las dos caras del lecho: la superior completa y
+    la inferior en la fracción que deja abierta la malla, con un coeficiente menor. El h
+    sale de placa plana sobre la bandeja, con la velocidad del canal.
+  ntu:
+    label: NTU
+    help: >-
+      Unidades de transferencia, K_m·A/ṁ. Mide cuánto camino hacia el equilibrio con el
+      producto puede recorrer el aire en una pasada. Es el número que dice si el secador
+      está bien cargado.
+  acercamiento:
+    label: Acercamiento al equilibrio
+    help: >-
+      Fracción del camino al equilibrio que recorre el aire, NTU/(1+NTU). Al 100 % saldría
+      saturado a la temperatura de bulbo húmedo del producto.
+  area:
+    label: Superficie de intercambio
+    help: Superficie de producto que ve el aire, según la topología de flujo.
+  h:
+    label: h aire↔producto
+    help: Coeficiente convectivo interior en el punto de diseño.
+  regimen: "**Régimen:** {regimen}"
+  regimen_transferencia: >-
+    limitado por **transferencia** — el aire sale casi como entró y se lleva poca agua.
+    Más superficie (capa más fina, producto más chico) o menos caudal mejoran el secado.
+  regimen_intermedio: >-
+    intermedio — el aire aprovecha buena parte de su capacidad. Es la zona donde el caudal
+    y la carga se compensan.
+  regimen_energia: >-
+    limitado por **energía** — el aire sale casi saturado y el secado lo fija la energía
+    disponible, no la transferencia. Es donde conviene estar; para acelerar hay que sumar
+    energía (más colector) o caudal.
+
 resultados_td:
   titulo: Resultados del motor termodinámico
+  aviso_sin_auxiliar: >-
+    ℹ️ Estos números son **sin el auxiliar**: esta vista resuelve la cámara con el aire
+    tal como llega antes de P5. El aporte del calentamiento auxiliar se aplica en el
+    balance de la pestaña 7, así que el tiempo de secado real va a ser menor.
   t_secado: Tiempo de secado
   no_alcanzado: no alcanzado
   status: Status
@@ -618,7 +676,6 @@ resumen:
   bandejas: "**Bandejas:** {n} × {area:.2f} m²"
   espesor_capa: "**Espesor capa:** {v:.1f} cm"
   caudal: "**Caudal:** {v:.4f} kg/s"
-  direccion: "**Dirección:** {v}"
   t_amb: "**T_amb (cálculo):** {v:.1f} °C"
 guardar:
   txt: Guardar configuración de la cámara (.txt)

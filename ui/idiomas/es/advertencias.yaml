@@ -142,8 +142,20 @@ BAND_N_BANDEJAS_ELEVADO:
   mensaje: "{n_bandejas} bandejas. Verificar uniformidad de flujo entre bandejas."
   sugerencia: Con muchas bandejas en serie, la última recibe aire más húmedo.
 BAND_MALLA_SIN_ESPECIFICAR:
-  mensaje: Tipo de malla de bandeja no especificado. Afecta la caída de presión.
-  sugerencia: Especificar tipo de malla para estimación de pérdida de carga en motor.
+  mensaje: >-
+    Tipo de malla de bandeja no especificado. Afecta la caída de presión y también el área
+    de transferencia: la malla decide cuánto de la cara inferior del lecho alcanza el aire.
+  sugerencia: >-
+    Especificar tipo de malla para estimar la pérdida de carga y la fracción de la cara
+    inferior que transfiere.
+CAM_CANAL_MUY_ESTRECHO:
+  mensaje: >-
+    Entre la capa de producto ({espesor_cm:.1f} cm) y la bandeja de arriba quedan
+    {libre_mm:.0f} mm de aire libre. El canal es muy angosto: la velocidad del aire y la
+    pérdida de carga se disparan.
+  sugerencia: >-
+    Separar las bandejas al menos 1 cm por encima del espesor de capa, o bajar la carga
+    por bandeja.
 FLUJO_VELOCIDAD_SUPERFICIAL_BAJA:
   mensaje: >-
     Velocidad superficial de aire {v_sup_m_s:.2f} m/s por debajo del mínimo recomendado.

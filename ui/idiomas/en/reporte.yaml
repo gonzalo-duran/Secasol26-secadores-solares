@@ -144,6 +144,10 @@ camara:
   hr_ent: Inlet RH
   res_titulo: Simulation results
   res_pendiente: "Chamber calculation not run in this session. Go back to P4 and press 'Compute chamber'."
+  res_sin_auxiliar: >-
+    ⚠️ These results are for the chamber <b>without the auxiliary heater</b>: this section solves
+    the air as it arrives before P5. The auxiliary contribution is applied in the global balance
+    (P7), where the drying time is shorter. The two figures are not comparable with each other.
   status: Status
   t_sim: Simulation time
   t_secado: Drying time

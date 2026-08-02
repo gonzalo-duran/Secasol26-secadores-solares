@@ -28,9 +28,10 @@ def test_ids_unicos():
     assert len(ids) == len(set(ids)), "Hay ids duplicados en el catálogo de parámetros."
 
 
-def test_catalogo_tiene_18_parametros():
-    """15 + pendiente_techo_camara + acimut_camara (S47) + area_bandeja (S55)."""
-    assert len(CATALOGO_PARAMETROS) == 18
+def test_catalogo_tiene_19_parametros():
+    """15 + pendiente_techo_camara + acimut_camara (S47) + area_bandeja (S55)
+    + separacion_bandejas (S64)."""
+    assert len(CATALOGO_PARAMETROS) == 19
 
 
 def test_modos_soportados_validos():

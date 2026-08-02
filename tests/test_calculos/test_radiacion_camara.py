@@ -105,7 +105,9 @@ class TestFactoresIntercepcion:
     def test_pared_a_mano_con_bandejas_conocidas(self):
         cam = _camara(n_bandejas=4, espesor_capa_m=0.03)  # alto_m=1.2
         f = factores_intercepcion(cam)
-        esperado = min(1.0, 4 * 0.03 / 1.2)
+        # El espesor de capa se deriva de la carga desde S64: lo que se testea
+        # es la fórmula del factor, no el valor que declaró la fixture.
+        esperado = min(1.0, 4 * cam.bandejas.espesor_capa_m / 1.2)
         assert f["frente"] == pytest.approx(esperado)
         assert f["atras"] == pytest.approx(esperado)
         assert f["lateral_izq"] == pytest.approx(esperado)

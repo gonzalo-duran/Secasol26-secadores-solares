@@ -23,6 +23,8 @@ carta:
   nota_directa: "câmara direta (não adiabática: o teto translúcido aporta calor)"
   nota_indirecta: "câmara indireta (≈ adiabática: o ponto de saída cai sobre a isentálpica)"
   nota: "P = {p:.1f} kPa (pressão do local) · {camara}"
+  instante_fecha: "instante representativo: {fecha} (máxima evaporação)"
+  instante_hora: "instante representativo: h {h:.1f} do horizonte (máxima evaporação)"
   titulo: Carta psicrométrica do processo de secagem
   eje_t: Temperatura de bulbo seco [°C]
   eje_omega: Umidade absoluta ω [g/kg ar seco]

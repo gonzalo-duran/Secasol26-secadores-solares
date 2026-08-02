@@ -261,6 +261,15 @@ class TestAireSobreEbullicion:
     (≈2650 m, ebullición a 91.1 °C) con el aire de entrada llegando a 92.8 °C.
     `omega_saturacion` lanza `PSICRO_PV_EXCEDE_P` ahí, y eso tiraba abajo la
     simulación completa del año desde una métrica derivada.
+
+    **S63 cambió el mecanismo, no el caso.** El denominador pasó a ser la
+    capacidad **adiabática** (``ω_sat(T_wb) − ω_ent``), que está definida también
+    para aire sobrecalentado respecto de la ebullición local: ese aire no puede
+    estar saturado, pero enfriándose corta la curva de saturación bien por
+    debajo. Así que en vez de **excluir** esas horas, ahora se evalúan: a 73.2 kPa
+    y 92.8 °C, T_wb = 28.5 °C y la capacidad es 27 g/kg. El invariante que
+    protege esta clase —que el año no se caiga por una métrica derivada— sigue
+    igual; lo que cambia es que ya no se pierde información.
     """
 
     def _forzantes(self, T_max_K: float):
@@ -280,25 +289,39 @@ class TestAireSobreEbullicion:
         from calculos.simulacion_anual import _agua_maxima_captable_kg
 
         # 73216.1 Pa y 92.8 °C son los valores exactos del reporte.
-        agua, n_sobre = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 73216.1)
+        agua, n_omitidas = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 73216.1)
         assert agua > 0.0
-        assert n_sobre >= 1
+        # S63: con la capacidad adiabática ninguna hora queda sin evaluar.
+        assert n_omitidas == 0
 
     def test_a_nivel_del_mar_ninguna_hora_queda_fuera(self):
         from calculos.simulacion_anual import _agua_maxima_captable_kg
 
-        _agua, n_sobre = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 101325.0)
-        assert n_sobre == 0
+        _agua, n_omitidas = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 101325.0)
+        assert n_omitidas == 0
 
-    def test_excluye_solo_las_horas_afectadas(self):
-        """El agua captable debe seguir contando las horas por debajo de la
-        ebullición, no anularse entera."""
+    def test_el_aire_caliente_capta_mas_que_el_frio(self):
+        """Aire más caliente tiene más capacidad adiabática, también en altura."""
         from calculos.simulacion_anual import _agua_maxima_captable_kg
 
-        agua_alt, n_alt = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 73216.1)
-        agua_frio, n_frio = _agua_maxima_captable_kg(self._forzantes(320.0), 24 * 3600.0, 73216.1)
-        assert n_frio == 0
+        agua_alt, _ = _agua_maxima_captable_kg(self._forzantes(366.0), 24 * 3600.0, 73216.1)
+        agua_frio, _ = _agua_maxima_captable_kg(self._forzantes(320.0), 24 * 3600.0, 73216.1)
         assert agua_alt > agua_frio > 0.0
+
+    def test_la_capacidad_adiabatica_es_muy_menor_que_la_isotermica(self):
+        """El punto de S63: el techo isotérmico no es alcanzable.
+
+        A 51 °C y 5.8 g/kg la saturación isotérmica pide 110 g/kg y la
+        adiabática 12.8. Usar la primera hacía que todo secador se reportara
+        catastrófico.
+        """
+        from calculos.psicrometria import omega_saturacion, temperatura_bulbo_humedo
+
+        T, w, P = 324.6, 0.00573, 89202.0
+        cap_isoterma = omega_saturacion(T, P) - w
+        cap_adiabatica = omega_saturacion(temperatura_bulbo_humedo(T, w, P), P) - w
+        assert cap_adiabatica < cap_isoterma / 5.0
+        assert cap_adiabatica == pytest.approx(0.0128, abs=0.002)
 
 
 class TestAuxiliarEnElAnual:

@@ -34,7 +34,8 @@ from calculos.conversiones_angulo import (
     acimut_duffie_a_ui360,
     acimut_ui360_a_duffie,
 )
-from calculos.motor_calc import _D_P_DEFAULT_M, _C_obstruccion_bloqueo
+from calculos.lecho_producto import D_P_DEFAULT_M as _D_P_DEFAULT_M
+from calculos.motor_calc import _C_obstruccion_bloqueo
 from calculos.psicrometria import humedad_absoluta
 from calculos.simulacion_anual import ResultadosAnual, simular_anual
 from core import catalogo
@@ -55,6 +56,7 @@ from core.camara import (
     _modelos_disponibles,
     advertencias_camara,
 )
+from core.lecho import espesor_capa_derivado_m, geometria_lecho
 from core.operacion import PoliticaRecarga
 from core.proyecto import ModoAnalisis
 from ui.componentes.advertencias_widget import render_advertencias
@@ -878,6 +880,46 @@ def _caption_caudal_natural(
             )
 
 
+#: Lo que devuelve el bloque de bocas cuando el usuario no las declara: el
+#: contrato es el mismo dict, con las áreas en None para que `ConfiguracionFlujo`
+#: quede como antes de S61 (sin bocas ⇒ sin lazo de flotabilidad).
+_BOCAS_SIN_DEFINIR: dict = {
+    "area_entrada_aire_m2": None,
+    "area_salida_aire_m2": None,
+    "boca_entrada_hereda_seccion": False,
+    "boca_salida_hereda_seccion": False,
+    "longitud_transicion_entrada_m": 0.0,
+    "longitud_transicion_salida_m": 0.0,
+}
+
+
+def _widget_transicion(cual: str, area_contigua, area_boca: float, flujo_prev, key: str) -> float:
+    """Largo de la transición del empalme [m]; solo aparece si hay salto de sección.
+
+    Con las dos secciones iguales no hay nada que desarrollar, así que el widget
+    se oculta en vez de ofrecer un campo que no cambia nada. Devuelve 0.0, que es
+    el escalón brusco: el caso conservador y el habitual en un equipo de taller.
+    """
+    if not area_contigua or abs(float(area_contigua) - float(area_boca)) < 1e-9:
+        return 0.0
+    from calculos.transiciones_seccion import angulo_transicion_deg
+
+    previo = float(getattr(flujo_prev, f"longitud_transicion_{cual}_m", 0.0) or 0.0)
+    L = st.number_input(
+        t(f"p4.bocas.{cual}.transicion"),
+        min_value=0.0,
+        max_value=max(2.0, previo),
+        value=previo,
+        step=0.05,
+        format="%.2f",
+        key=key,
+        help=t("p4.bocas.transicion_help"),
+    )
+    theta = angulo_transicion_deg(float(area_contigua), float(area_boca), float(L))
+    st.caption(t("p4.bocas.transicion_angulo", theta=theta))
+    return float(L)
+
+
 def _render_bocas_aire(
     proyecto,
     flujo_prev,
@@ -908,7 +950,7 @@ def _render_bocas_aire(
     desde el widget de geometría por la misma razón.
     """
     if proyecto is None:
-        return (None, None)
+        return _BOCAS_SIN_DEFINIR
 
     st.markdown("---")
     st.markdown(t("p4.bocas.titulo"))
@@ -922,29 +964,81 @@ def _render_bocas_aire(
     if not usar:
         clave = "p4.bocas.sin_bocas_forzado" if proyecto.motor is not None else "p4.bocas.sin_bocas"
         st.caption(t(clave, caudal=caudal_kg_s))
-        return (None, None)
+        return _BOCAS_SIN_DEFINIR
+
+    # Cada boca puede HEREDAR la sección del elemento contiguo (salida del
+    # colector / base de la chimenea) o declararse aparte. Cuando difieren, el
+    # empalme agrega una contracción o una expansión que el modelo cobra —hasta
+    # S62 se suponían de igual sección y la pérdida no existía—. La herencia solo
+    # se ofrece si hay de dónde heredar: sin chimenea la salida descarga a la
+    # atmósfera y no hay sección contigua.
+    from calculos.balance_global import area_base_chimenea_m2, area_salida_colector_m2
+
+    A_col = area_salida_colector_m2(proyecto)
+    A_chim = area_base_chimenea_m2(proyecto)
 
     b1, b2 = st.columns(2)
-    area_ent = b1.number_input(
-        t("p4.bocas.entrada.label"),
-        min_value=0.0005,
-        max_value=max(10.0, float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05)),
-        value=float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05),
-        step=0.005,
-        format="%.4f",
-        key="p4_flujo_area_entrada",
-        help=t("p4.bocas.entrada.help"),
-    )
-    area_sal = b2.number_input(
-        t("p4.bocas.salida.label"),
-        min_value=0.0005,
-        max_value=max(10.0, float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05)),
-        value=float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05),
-        step=0.005,
-        format="%.4f",
-        key="p4_flujo_area_salida",
-        help=t("p4.bocas.salida.help"),
-    )
+    with b1:
+        hereda_ent = st.checkbox(
+            t("p4.bocas.entrada.hereda"),
+            value=bool(getattr(flujo_prev, "boca_entrada_hereda_seccion", False)) and A_col,
+            key="p4_flujo_hereda_entrada",
+            disabled=A_col is None,
+            help=t("p4.bocas.entrada.hereda_help"),
+        )
+        if A_col is None:
+            st.caption(t("p4.bocas.entrada.sin_colector"))
+        if hereda_ent and A_col:
+            area_ent = float(A_col)
+            st.caption(t("p4.bocas.entrada.heredada", area=area_ent))
+        else:
+            hereda_ent = False
+            area_ent = st.number_input(
+                t("p4.bocas.entrada.label"),
+                min_value=0.0005,
+                max_value=max(
+                    10.0, float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05)
+                ),
+                value=float(getattr(flujo_prev, "area_entrada_aire_m2", None) or 0.05),
+                step=0.005,
+                format="%.4f",
+                key="p4_flujo_area_entrada",
+                help=t("p4.bocas.entrada.help"),
+            )
+        L_ent = _widget_transicion(
+            "entrada", A_col, area_ent, flujo_prev, "p4_flujo_L_transicion_entrada"
+        )
+
+    with b2:
+        hereda_sal = st.checkbox(
+            t("p4.bocas.salida.hereda"),
+            value=bool(getattr(flujo_prev, "boca_salida_hereda_seccion", False)) and A_chim,
+            key="p4_flujo_hereda_salida",
+            disabled=A_chim is None,
+            help=t("p4.bocas.salida.hereda_help"),
+        )
+        if A_chim is None:
+            st.caption(t("p4.bocas.salida.sin_chimenea"))
+        if hereda_sal and A_chim:
+            area_sal = float(A_chim)
+            st.caption(t("p4.bocas.salida.heredada", area=area_sal))
+        else:
+            hereda_sal = False
+            area_sal = st.number_input(
+                t("p4.bocas.salida.label"),
+                min_value=0.0005,
+                max_value=max(
+                    10.0, float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05)
+                ),
+                value=float(getattr(flujo_prev, "area_salida_aire_m2", None) or 0.05),
+                step=0.005,
+                format="%.4f",
+                key="p4_flujo_area_salida",
+                help=t("p4.bocas.salida.help"),
+            )
+        L_sal = _widget_transicion(
+            "salida", A_chim, area_sal, flujo_prev, "p4_flujo_L_transicion_salida"
+        )
     if proyecto.motor is not None:
         st.caption(t("p4.bocas.con_motor"))
     else:
@@ -961,7 +1055,14 @@ def _render_bocas_aire(
         )
     if proyecto.colector is not None:
         st.caption(t("p4.bocas.acople_colector"))
-    return (float(area_ent), float(area_sal))
+    return {
+        "area_entrada_aire_m2": float(area_ent),
+        "area_salida_aire_m2": float(area_sal),
+        "boca_entrada_hereda_seccion": bool(hereda_ent),
+        "boca_salida_hereda_seccion": bool(hereda_sal),
+        "longitud_transicion_entrada_m": float(L_ent),
+        "longitud_transicion_salida_m": float(L_sal),
+    }
 
 
 def _disponibilidad_forzantes_reales(p3_eval, proyecto) -> tuple[bool, str]:
@@ -1448,6 +1549,13 @@ def _from_json_camara(data: dict) -> "Camara":
         ),
     )
 
+    # Migración de topología (S64): los snapshots con VERTICAL_ASCENDENTE se
+    # coaccionan a HORIZONTAL en ConfiguracionFlujo.__post_init__, que ya no ve
+    # el valor original. El aviso tiene que salir acá, que es la última capa que
+    # lo tiene a la vista.
+    if f_d.get("direccion_flujo") == DireccionFlujo.VERTICAL_ASCENDENTE.value:
+        st.warning(t("p4.flujo.migracion_vertical"))
+
     flujo = ConfiguracionFlujo(
         caudal_masico_kg_s=float(f_d["caudal_masico_kg_s"]),
         fraccion_recirculacion=float(f_d.get("fraccion_recirculacion", 0.0)),
@@ -1472,6 +1580,13 @@ def _from_json_camara(data: dict) -> "Camara":
             if f_d.get("area_salida_aire_m2") is not None
             else None
         ),
+        # Herencia de sección y transiciones (S62). Ausentes en snapshots previos
+        # → False/0.0, que es el comportamiento de esas corridas: áreas
+        # explícitas y empalmes sin pérdida por cambio de sección.
+        boca_entrada_hereda_seccion=bool(f_d.get("boca_entrada_hereda_seccion", False)),
+        boca_salida_hereda_seccion=bool(f_d.get("boca_salida_hereda_seccion", False)),
+        longitud_transicion_entrada_m=float(f_d.get("longitud_transicion_entrada_m", 0.0) or 0.0),
+        longitud_transicion_salida_m=float(f_d.get("longitud_transicion_salida_m", 0.0) or 0.0),
     )
 
     # Túnel semicontinuo (opcional; back-compat: ausente → None).
@@ -1609,6 +1724,10 @@ def _json_config_camara(cam: "Camara", session_state=None) -> dict:
             "seguir_caudal_colector": f.seguir_caudal_colector,
             "area_entrada_aire_m2": f.area_entrada_aire_m2,
             "area_salida_aire_m2": f.area_salida_aire_m2,
+            "boca_entrada_hereda_seccion": f.boca_entrada_hereda_seccion,
+            "boca_salida_hereda_seccion": f.boca_salida_hereda_seccion,
+            "longitud_transicion_entrada_m": f.longitud_transicion_entrada_m,
+            "longitud_transicion_salida_m": f.longitud_transicion_salida_m,
         },
         "tunel": (
             {
@@ -1787,6 +1906,59 @@ def _render_politica_recarga(proyecto) -> bool:
         st.error(t("p4.anual.error", exc=exc))
         return False
     return True
+
+
+def _render_diagnostico_transferencia(camara, T_op_K, HR_op, T_amb_K, P_Pa) -> None:
+    """Acoplamiento aire↔producto en el punto de diseño (S63).
+
+    El NTU es el número que dice si el secador está bien cargado, y hasta S63 no
+    aparecía en ninguna vista: se podía diseñar una cámara que transfería 200
+    veces menos de lo que debía sin que nada lo insinuara.
+    """
+    from calculos.camara_calc import diagnostico_transferencia
+
+    try:
+        d = diagnostico_transferencia(
+            camara,
+            T_operacion_K=T_op_K,
+            HR_operacion=HR_op,
+            T_amb_K=T_amb_K,
+            P_Pa=P_Pa,
+        )
+    except Exception:
+        return  # diagnóstico opcional: nunca debe romper la vista de resultados
+
+    if d.NTU < 0.5:
+        regimen = t("p4.transferencia.regimen_transferencia")
+    elif d.NTU < 3.0:
+        regimen = t("p4.transferencia.regimen_intermedio")
+    else:
+        regimen = t("p4.transferencia.regimen_energia")
+
+    with st.expander(t("p4.transferencia.titulo"), expanded=False):
+        st.caption(t("p4.transferencia.topologia_sobre"))
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric(
+            t("p4.transferencia.ntu.label"),
+            f"{d.NTU:.2f}",
+            help=t("p4.transferencia.ntu.help"),
+        )
+        c2.metric(
+            t("p4.transferencia.acercamiento.label"),
+            f"{d.acercamiento_equilibrio * 100:.0f} %",
+            help=t("p4.transferencia.acercamiento.help"),
+        )
+        c3.metric(
+            t("p4.transferencia.area.label"),
+            f"{d.A_prod_m2:.1f} m²",
+            help=t("p4.transferencia.area.help"),
+        )
+        c4.metric(
+            t("p4.transferencia.h.label"),
+            f"{d.h_conv_W_m2K:.1f} W/m²K",
+            help=t("p4.transferencia.h.help"),
+        )
+        st.markdown(t("p4.transferencia.regimen", regimen=regimen))
 
 
 def _render_operacion_anual(proyecto, camara_builder) -> None:
@@ -2562,13 +2734,29 @@ def render() -> None:
             ),
         )
         c3, c4 = st.columns(2)
-        espesor_capa = c3.number_input(
+        # Espesor de capa DERIVADO (S64). Con carga uniforme, masa, área,
+        # n_bandejas y espesor están ligados por una sola ecuación; el espesor es
+        # el que menos puede responder con confianza un usuario de prediseño, así
+        # que sale calculado. La fuente de verdad es Camara.__post_init__ (que lo
+        # recalcula también cuando el barrido paramétrico muta la masa); acá se
+        # reproduce con los valores de los widgets para que la vista no quede una
+        # rerun atrás. Sin densidad en el catálogo se respeta el valor previo.
+        _rho_prod = float(
+            ((catalogo.PRODUCTOS.get(prod_id) or {}).get("propiedades_basicas") or {}).get(
+                "densidad_aparente"
+            )
+            or 0.0
+        )
+        _, _eps_lecho, _ = geometria_lecho(band_prev, prod_id)
+        espesor_capa = (
+            espesor_capa_derivado_m(
+                float(masa_kg), float(area_bandeja), int(n_bandejas), _rho_prod, _eps_lecho
+            )
+            or band_prev.espesor_capa_m
+        )
+        c3.metric(
             t("p4.bandejas.espesor_capa.label"),
-            min_value=0.002,
-            max_value=0.2,
-            value=band_prev.espesor_capa_m,
-            step=0.005,
-            format="%.3f",
+            f"{espesor_capa * 100:.2f} cm",
             help=t("p4.bandejas.espesor_capa.help"),
         )
         sep_bandejas = c4.number_input(
@@ -2798,19 +2986,10 @@ def render() -> None:
             # que la incoherencia se descubra recién en la advertencia final.
             c1.caption(t("p4.flujo.seguir_colector.desacoplado"))
 
-        _dir_keys = ["horizontal", "vertical_ascendente"]
-        _dir_enum = {
-            "horizontal": DireccionFlujo.HORIZONTAL,
-            "vertical_ascendente": DireccionFlujo.VERTICAL_ASCENDENTE,
-        }
-        _dir_prev = flujo_prev.direccion_flujo.value.lower()
-        dir_key = c2.selectbox(
-            t("p4.flujo.direccion.label"),
-            options=_dir_keys,
-            index=_dir_keys.index(_dir_prev) if _dir_prev in _dir_keys else 0,
-            format_func=lambda k: t(f"p4.flujo.direccion.{k}"),
-        )
-        direccion = _dir_enum[dir_key]
+        # Topología única desde S64: el aire barre las bandejas en cross-flow.
+        # Dejó de ser una elección del usuario — ver DireccionFlujo.
+        direccion = DireccionFlujo.HORIZONTAL
+        c2.caption(t("p4.flujo.direccion.fija"))
 
         usar_HR = st.checkbox(
             t("p4.flujo.usar_hr.label"),
@@ -2836,9 +3015,7 @@ def render() -> None:
 
         # --- Bocas de aire (motor de convección natural, S61) ---
         # Solo tienen efecto sin ventilador: con motor el caudal lo impone él.
-        area_ent_m2, area_sal_m2 = _render_bocas_aire(
-            proyecto, flujo_prev, caudal, alto, largo * ancho * alto
-        )
+        bocas_cfg = _render_bocas_aire(proyecto, flujo_prev, caudal, alto, largo * ancho * alto)
 
     # -----------------------------------------------------------------------
     # Sección E: Condiciones de operación
@@ -3114,8 +3291,7 @@ def render() -> None:
             direccion_flujo=direccion,
             HR_entrada_fraccion=HR_entrada_frac,
             seguir_caudal_colector=seguir_colector,
-            area_entrada_aire_m2=area_ent_m2,
-            area_salida_aire_m2=area_sal_m2,
+            **bocas_cfg,
         )
         carga = CargaProducto(
             producto_id=prod_id,
@@ -3207,8 +3383,7 @@ def render() -> None:
                 direccion_flujo=direccion,
                 HR_entrada_fraccion=HR_entrada_frac,
                 seguir_caudal_colector=seguir_colector,
-                area_entrada_aire_m2=area_ent_m2,
-                area_salida_aire_m2=area_sal_m2,
+                **bocas_cfg,
             )
             carga = CargaProducto(
                 producto_id=prod_id,
@@ -3386,6 +3561,12 @@ def render() -> None:
             # donde más fácil sería tomarlos por los del túnel.
             if es_semicontinuo:
                 st.warning(t("p4.calcular.aviso_previa_nodo_unico"))
+            # Esta previa resuelve la cámara con el aire ANTES del auxiliar: P5 se
+            # aplica recién en el pipeline de P7. Con un auxiliar configurado los
+            # dos números difieren mucho —en una corrida real, 34.6 h acá contra
+            # 16.8 h en P7— y ambos se rotulaban "tiempo de secado" sin más (S62).
+            if proyecto.auxiliar is not None:
+                st.info(t("p4.resultados_td.aviso_sin_auxiliar"))
             col_r1, col_r2, col_r3, col_r4 = st.columns(4)
             if res.t_secado_s is not None:
                 col_r1.metric(
@@ -3444,6 +3625,8 @@ def render() -> None:
                     )
                 )
 
+            _render_diagnostico_transferencia(camara, T_op_K, HR_op, T_amb_calc_K, P_proyecto_Pa)
+
             fig = _grafica_secado_termodinamico(res, X_obj, prod_id)
             mostrar_plotly(fig, nombre="camara_secado_td")
 
@@ -3500,7 +3683,6 @@ def render() -> None:
                 st.write(t("p4.resumen.bandejas", n=n_bandejas, area=area_bandeja))
                 st.write(t("p4.resumen.espesor_capa", v=espesor_capa * 100))
                 st.write(t("p4.resumen.caudal", v=caudal))
-                st.write(t("p4.resumen.direccion", v=t(f"p4.flujo.direccion.{dir_key}")))
                 st.write(t("p4.resumen.t_amb", v=T_amb_calc_K - 273.15))
 
     # --- Guardar configuración ---

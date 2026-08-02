@@ -4,6 +4,30 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S64, 2026-08-01): **la cámara tiene una sola topología de transferencia,
+> cross-flow.** Se retiró el through-flow de S63 —[[docs/notas/plan_crossflow_unico_camara]]
+> COMPLETO, resultado en [[docs/notas/resultado_crossflow_unico_camara]]— porque el par
+> `(d_p, Φ_s)` del catálogo estaba 4× mal y con ese número el modelo declaraba **imposible** un
+> armario ascendente pasivo, que el usuario sabe que funciona. Ahora el área cuenta **las dos
+> caras** de la bandeja y el **espesor de capa es un resultado**, derivado de la carga uniforme:
+> sobre los siete snapshots del repo da 0.61–0.87 cm donde todos declaraban ~2 cm. Suite
+> **1978 + 2 skips**. **Cambian TODOS los proyectos, no solo los verticales: corresponde bump
+> de versión antes de liberar.** Hallazgo colateral: el encadenado inmediato de lotes **dejó de
+> ser cota superior de producción** (12 kg contra 24 kg en 6 días, con la misma agua evaporada).
+
+> Estado general (S63, 2026-07-30): **la cámara transfiere calor y masa según la topología del
+> flujo** — el problema físico mayor que sospechaba el usuario y que la carta psicrométrica
+> hacía visible. [[docs/notas/plan_transferencia_camara]] **COMPLETO** (etapas 0 a 4).
+> **Los resultados de todo proyecto de flujo vertical cambian 11×**: corresponde bump de
+> versión antes de liberar. Sigue abierto, como límite del modelo, que no hay resistencia
+> interna a la difusión — el tiempo de secado es ahora una cota **inferior**.
+
+> Estado general (S62, 2026-07-29): **v1.4.0 en producción** · `origin/main`=`080eec7` ·
+> suite **1850 (+1 skip)** · ruff y black limpios. Liberada porque los resultados cambian:
+> el film convectivo interior de pared subió 31 % el consumo del auxiliar y recuperar la
+> radiación al aire en el encadenado de lotes subió 78 % la producción anual de una cámara
+> translúcida. **Criterio adoptado: si cambian los resultados, cambia la versión.**
+
 > Estado general (S57): **v1.1.0 en producción y verificada en el Space** · suite
 > pytest **1525 (+1 skip)** · `origin/main`=`b047dd5` · ruff y black limpios. **Mejora
 > 38 CERRADA** (fases 1a, 1b, 2, 2b, 3 y 4); la 1.1.0 (`b8a6464`) sumó los **exports
@@ -13,6 +37,24 @@ decisiones de diseño en [[docs/decisiones]].
 > **corridas paramétricas quedaron cerradas** al verificarse e2e en local y en HF.
 
 ## En progreso
+
+### Transferencia en la cámara (S63) — plan COMPLETO (etapas 0 a 4)
+
+Plan completo, con el diagnóstico y los números medidos, en
+[[docs/notas/plan_transferencia_camara]]. **Hechas:** la carta psicrométrica dejó de comparar
+dos instantes distintos (etapa 0); la transferencia pasó a seguir la topología del flujo
+—lecho atravesado en vertical, placa sobre bandeja en horizontal— con una sola fuente de
+verdad para la geometría del lecho, `calculos/lecho_producto.py` (etapa 1); los dos films
+interiores se evalúan con el aire **de la cámara** y no con el de entrada (etapa 2); y las
+métricas dejaron de medirse contra techos inalcanzables, con el **NTU expuesto en P4** como
+diagnóstico de diseño (etapa 3); y el aire dejó de resolverse como un tanque agitado para
+resolverse como **cadena de sub-etapas en serie**, que es lo que corresponde a un camino de
+flujo (etapa 4). Queda **fuera del plan**, como límite del modelo:
+
+- **Resistencia interna a la difusión — ahora es la limitación dominante.** Con la resistencia
+  externa corregida, el modelo seca el lote en una sola mañana (cota inferior limitada por
+  energía; antes daba una cota superior errada 10×). La verdad está en el medio y solo la fija
+  una medición o un modelo de difusión interna. Ver §2.2 del plan.
 
 ### Convección natural (S61) — dos huecos cerrados, tres pendientes
 
@@ -58,6 +100,51 @@ Queda, en orden:
   TD con forzantes sintéticas). Los otros 5 scripts de `validacion/` corren OK.
   **Ojo:** todos necesitan `PYTHONPATH=.` (`PYTHONPATH=. .venv/bin/python
   validacion/<script>.py`), lo que el docstring de varios no dice.
+
+### Salidos de las corridas reales de S62 — sin registrar hasta ahora
+
+Aparecieron probando el modelo contra prediseños del usuario y vivían solo en la
+conversación. Se anotan acá porque lo que no se escribe se pierde.
+
+- ~~**En tipología CAJA el sol no entra al balance energético.**~~ — ✅ **CERRADO en S62.**
+  `energia_solar_camara_MJ` suma la radiación que entra por el vidriado (al producto y a las
+  superficies internas) al aporte del colector, en Constantes y Transitorio. En la corrida de
+  referencia el secador pasa de reportarse 100 % eléctrico a 60 % solar y el COP de 1.27 a
+  0.51. **El modo anual también**: el sol de la cámara entra ahora en las dos magnitudes que
+  ese modo distingue — el **incidente** (`I_eq × A_translúcida`, integrado por mes calendario
+  como el del colector) y el **útil** (`Q_rad + Q_rad_aire` por lote, atribuido al mes de
+  descarga). Se eligió `A_translúcida` y no `A_rad` para el incidente, con el mismo criterio
+  que el colector: toda la radiación sobre la superficie captadora, antes de cualquier
+  eficiencia. Un armario translúcido pasa de tener **todas** las métricas en `None` a
+  η_drying 7.9 % y energía específica 30.1 MJ/kg. **Consecuencia a tener presente:** el
+  incidente se acumula todo el año, también con la cámara vacía, así que el η_drying de un
+  secador directo da estructuralmente más bajo que el de uno con colector — es el dato, no un
+  artefacto, y hace visible el costo de tener el secador parado. Descripción original abajo:
+
+- ~~**La previa de P4 ignora el auxiliar y no lo dice.**~~ — ✅ **CERRADO en S62.** Tanto la
+  vista de P4 como la sección de cámara del PDF avisan que esos números son sin el auxiliar y
+  remiten a P7, cuando hay uno configurado. La división en sí no cambia: sigue siendo
+  deliberada.
+
+- ~~**Falta el aviso de set point inalcanzable en respaldo.**~~ — ✅ **CERRADO en S62.**
+  `AUX_RESPALDO_SET_POINT_NO_ALCANZABLE` informa horas saturadas, potencia y temperatura
+  máxima lograda. Filtra la rampa de encendido de las forzantes interpoladas, que hacía que
+  un equipo holgado de 5 kW se reportara saturado "a 594 W".
+
+- **El film interior de pared es solo convectivo.** La ISO 6946 usa `h_i = 8 W/(m²·K)`
+  porque **incluye la radiación** entre el aire/superficies internas y la cara interna del
+  cerramiento; con convección pura da ~3.5. Con paredes a 40–60 °C ese intercambio no es
+  despreciable. Decisión física pendiente del usuario: agregarlo como término separado o
+  dejar el film solo convectivo y tratarlo como conservador.
+
+- **Respaldo en el túnel semicontinuo.** Queda fuera por decisión explícita (S62): el motor
+  de cascada no consume `Q_aux`, repartir una fuente puntual entre N zonas a contracorriente
+  es otra decisión de modelo, y no es la topología de un túnel real. El código lo avisa con
+  `ADV_TUNEL_RESPALDO_NO_SOPORTADO`.
+
+- **Pronóstico de persistencia** como alternativa al perfecto del modo anual, para
+  cuantificar cuánto del resultado viene de la idealización. Anotado en la bitácora de S58 y
+  nunca llegó a ninguna lista.
 
 ## Completado (hitos recientes)
 

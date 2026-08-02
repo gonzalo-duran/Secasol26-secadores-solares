@@ -843,7 +843,11 @@ def _seccion_colector(
 
 
 def _seccion_camara(
-    styles, tr: Tr, snap_cam: dict | None, figuras: list[tuple[str, bytes]]
+    styles,
+    tr: Tr,
+    snap_cam: dict | None,
+    figuras: list[tuple[str, bytes]],
+    hay_auxiliar: bool = False,
 ) -> list:
     elems: list = [Paragraph(tr("camara.titulo"), styles["h1"])]
     if snap_cam is None:
@@ -982,6 +986,16 @@ def _seccion_camara(
                     ]
                 )
             )
+
+    # Con auxiliar configurado, estos resultados son de la cámara SIN él: P4
+    # resuelve el aire tal como llega antes de P5, y el aporte del auxiliar entra
+    # recién en el balance de P7. Los dos tiempos de secado conviven en el mismo
+    # PDF —en una corrida real, 34.6 h acá y 16.8 h allá— y hasta S62 nada
+    # aclaraba la diferencia, así que el lector solo veía dos números que no
+    # cerraban entre sí.
+    if hay_auxiliar and (snap_cam.get("resultados") or {}).get("ejecutado"):
+        elems.append(Spacer(1, 4))
+        elems.append(Paragraph(tr("camara.res_sin_auxiliar"), styles["pendiente"]))
 
     elems += _bloque_advertencias(styles, tr, snap_cam.get("advertencias_diseno"))
 
@@ -2078,7 +2092,7 @@ def generar_reporte_pdf(
 
     # 4. Cámara
     story.append(PageBreak())
-    story += _seccion_camara(styles, tr, snap_cam, figs_p4)
+    story += _seccion_camara(styles, tr, snap_cam, figs_p4, hay_auxiliar=snap_aux is not None)
 
     # 5. Auxiliar
     story.append(PageBreak())

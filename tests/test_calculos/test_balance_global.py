@@ -626,7 +626,11 @@ class TestChimeneaIntegrada:
         )
         ch = res.chimenea
         assert ch["convergio"] is True
-        assert ch["iteraciones"] == 1
+        # "Trivial" es que cierre en un par de pasadas, no exactamente en una.
+        # Al retirarse el ΔP de lecho (S64) la cámara ofrece mucha menos
+        # resistencia, el caudal de equilibrio se corre y hace falta una
+        # segunda pasada para que T_chim deje de moverse.
+        assert ch["iteraciones"] <= 3
 
     def test_picard_restaura_v_diseno_colector(self):
         """La mutación temporal de velocidad_diseno_ms del colector debe

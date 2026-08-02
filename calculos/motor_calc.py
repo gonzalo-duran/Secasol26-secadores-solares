@@ -14,7 +14,7 @@ Modelos:
         En banco serie: ΔP_rama = ΔP_unidad × n_serie
         En paralelo:   ΔP banco = ΔP rama
 
-    Cámara — flujo HORIZONTAL (cross-flow, canales EN PARALELO):
+    Cámara — cross-flow, canales EN PARALELO (única topología desde S64):
         Los n_canales = n_bandejas−1 espacios entre bandejas están en paralelo:
         el ΔP del sistema es el de UN canal (no la suma). v_canal reparte el
         caudal: v_canal = Q_vol / (ancho · espacio_libre · n_canales).
@@ -23,15 +23,10 @@ Modelos:
                       obstrucción por bloqueo C_obs(β), β = espesor_capa/separacion.
         (Modelo combinado, mejora 29; reemplaza el Blasius + tabla heurística.)
 
-    Cámara — flujo VERTICAL_ASCENDENTE:
-        Por bandeja: ΔP = ΔP_malla + ΔP_lecho
-        ΔP_malla = K_malla × (ρ · v₀²/2)
-        ΔP_lecho = Ergun(v₀, ε, Φ_s, d_p, L)   [si d_p está definido]
-        v₀ = Q_vol / area_bandeja
-
-    Ergun (lecho empacado):
-        ΔP/L = 150·μ·v₀·(1-ε)² / [(Φ_s·d_p)²·ε³]
-             + 1.75·ρ·v₀²·(1-ε) / [(Φ_s·d_p)·ε³]
+        La rama de lecho atravesado (Ergun sobre v₀ = Q_vol/area_bandeja) se
+        retiró en S64 junto con ``DireccionFlujo.VERTICAL_ASCENDENTE``: pedía
+        ~31 Pa donde un secador pasivo dispone de ~1.3 Pa de tiro. Ver
+        ``docs/notas/plan_crossflow_unico_camara.md``.
 
 Propiedades del aire:
     ρ(T,P) = P / (R_aire · T)          [gas ideal, R_aire = 287.058 J/(kg·K)]
@@ -43,10 +38,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+from calculos.lecho_producto import geometria_lecho
 from core import catalogo
 
 if TYPE_CHECKING:
-    from core.camara import Camara, ConfiguracionBandejas
+    from core.camara import Camara
     from core.colector import Colector
 
 # ---------------------------------------------------------------------------
@@ -87,12 +83,10 @@ def _K_malla_efectivo(tipo_malla: Optional[str]) -> float:
     return TIPOS_MALLA.get(tipo_malla, K_MALLA)
 
 
-# Defaults conservadores para geometría de lecho cuando ni el usuario ni el
-# catálogo del producto proveen valores. Valor genérico de "trozo de comida
-# tamaño medio sobre bandeja" (~8 mm, lecho con huecos medios, no esférico).
-_D_P_DEFAULT_M: float = 0.008
-_EPSILON_DEFAULT: float = 0.45
-_PHI_S_DEFAULT: float = 0.6
+# Los defaults de geometría de lecho (D_P_DEFAULT_M, EPSILON_DEFAULT,
+# PHI_S_DEFAULT) viven en ``calculos/lecho_producto.py``: los comparte con el
+# modelo de transferencia de la cámara desde S63. Quien los necesite, que los
+# importe de ahí — acá no se re-exportan para no volver a tener dos fuentes.
 
 # Rugosidad por defecto del canal del colector si la placa absorbedora no
 # trae ``rugosidad_m`` en el catálogo. Valor representativo para chapa
@@ -138,46 +132,12 @@ def _factor_friccion_haaland(Re: float, eps_rel: float) -> float:
     return f_turb
 
 
-def _geometria_lecho(
-    bandejas: "ConfiguracionBandejas", producto_id: Optional[str] = None
-) -> tuple[float, float, float]:
-    """Resuelve (d_p, ε, Φ_s) del lecho con la cadena de prioridad:
-
-    1. Si ``bandejas`` tiene el valor seteado explícitamente, usarlo.
-    2. Si el producto tiene ``forma_geometrica`` en el catálogo, leerlo.
-    3. Defaults conservadores (8 mm, 0.45, 0.6).
-
-    Args:
-        bandejas: ``ConfiguracionBandejas`` del usuario.
-        producto_id: Identificador del producto para lookup en catálogo.
-            ``None`` salta el paso 2.
-
-    Returns:
-        (d_p [m], ε [adim], Φ_s [adim]).
-    """
-    forma = {}
-    if producto_id is not None:
-        prod = catalogo.PRODUCTOS.get(producto_id) or {}
-        forma = prod.get("forma_geometrica") or {}
-
-    d_p = (
-        bandejas.diametro_eq_particula_m
-        if bandejas.diametro_eq_particula_m is not None
-        else float(forma.get("diametro_eq_m", _D_P_DEFAULT_M))
-    )
-    # ε y Φ_s tienen defaults en ConfiguracionBandejas (0.45 y 0.6). Si el
-    # usuario los dejó en default y el catálogo del producto trae otros,
-    # priorizamos el catálogo (más informativo). Para que esto funcione,
-    # comparamos con los defaults conocidos de la dataclass.
-    if forma.get("porosidad_lecho") is not None and bandejas.porosidad_lecho == 0.45:
-        eps = float(forma["porosidad_lecho"])
-    else:
-        eps = bandejas.porosidad_lecho
-    if forma.get("esfericidad") is not None and bandejas.esfericidad == 0.60:
-        phi_s = float(forma["esfericidad"])
-    else:
-        phi_s = bandejas.esfericidad
-    return d_p, eps, phi_s
+#: Resolución de (d_p, ε, Φ_s) del lecho. Vive en ``calculos/lecho_producto.py``
+#: desde S63, cuando la transferencia de calor y masa de la cámara pasó a
+#: describir el mismo lecho que esta pérdida de carga: una sola fuente de verdad
+#: para la geometría del producto sobre la bandeja. Se mantiene el nombre
+#: privado histórico como alias.
+_geometria_lecho = geometria_lecho
 
 
 # ---------------------------------------------------------------------------
@@ -381,66 +341,8 @@ def estimar_delta_P_colector(
 
 
 # ---------------------------------------------------------------------------
-# Ergun — lecho empacado (uso interno)
+# Pérdida de forma por obstrucción del producto en el canal
 # ---------------------------------------------------------------------------
-
-
-def _delta_P_lecho_por_bandeja(
-    bandejas: "ConfiguracionBandejas",
-    v0: float,
-    rho: float,
-    mu: float,
-    producto_id: Optional[str] = None,
-) -> float:
-    """ΔP a través de la capa de producto en una bandeja via ecuación de Ergun [Pa].
-
-    Solo aplica a flujo VERTICAL_ASCENDENTE (el aire ATRAVIESA el lecho). En
-    cross-flow (HORIZONTAL) el aire pasa paralelo sobre la bandeja y se usa el
-    modelo combinado ``_delta_P_producto_crossflow``, no Ergun.
-
-    Rango de validez (mejora 29): Ergun es el estándar para lechos empacados de
-    partículas razonablemente uniformes. Para rodajas/trozos de alimento (no
-    esféricos, polidispersos) es una aproximación a través de la esfericidad Φ_s
-    y el diámetro equivalente d_p del catálogo del producto; los parámetros del
-    lecho (ε, Φ_s, d_p) gobiernan fuertemente el resultado.
-
-    Geometría del lecho (d_p, ε, Φ_s) resuelta por ``_geometria_lecho``:
-    bandejas explícito → catálogo del producto → defaults conservadores.
-
-    Args:
-        bandejas: Configuración de bandejas (contiene ε, Φ_s, d_p, L).
-        v0: Velocidad superficial del aire sobre la bandeja [m/s].
-        rho: Densidad del aire [kg/m³].
-        mu: Viscosidad dinámica del aire [Pa·s].
-        producto_id: Identificador del producto para lookup en catálogo si
-            ``bandejas`` no tiene valores explícitos. ``None`` usa defaults.
-
-    Returns:
-        ΔP_lecho por bandeja [Pa].
-    """
-    d_p, eps, phi_s = _geometria_lecho(bandejas, producto_id)
-    L = bandejas.espesor_capa_m
-
-    phi_dp = phi_s * d_p
-    eps3 = eps**3
-    one_minus_eps = 1.0 - eps
-
-    grad_viscoso = 150.0 * mu * v0 * one_minus_eps**2 / (phi_dp**2 * eps3)
-    grad_inercial = 1.75 * rho * v0**2 * one_minus_eps / (phi_dp * eps3)
-
-    return (grad_viscoso + grad_inercial) * L
-
-
-# ---------------------------------------------------------------------------
-# Pérdida de forma por rugosidad del producto y por transición de lecho
-# ---------------------------------------------------------------------------
-
-# Pérdida de transición entrada/salida del lecho en flujo VERTICAL_ASCENDENTE:
-# contracción brusca al entrar al lecho desde el espacio libre superior
-# (K ≈ 0.5) + expansión brusca al salir al espacio libre inferior
-# (K ≈ 1.0 Borda-Carnot). Aplicado una vez por bandeja, sobre ρ·v₀²/2.
-# Independiente del producto.
-K_TRANSICION_LECHO: float = 1.5
 
 
 def _C_obstruccion_bloqueo(beta: float) -> float:
@@ -551,17 +453,7 @@ def estimar_delta_P_camara(
 ) -> float:
     """Estima la pérdida de carga en la cámara de secado.
 
-    Flujo VERTICAL_ASCENDENTE (aire atraviesa cada bandeja):
-        ΔP = (ΔP_malla + ΔP_lecho + ΔP_transicion) × n_bandejas
-        ΔP_malla       = K_malla × (ρ·v₀²/2),   v₀ = Q_vol / area_bandeja
-        ΔP_lecho       = Ergun(v₀, ε, Φ_s, d_p, L)  con d_p del catálogo del
-                         producto si no está explícito en ``bandejas``.
-        ΔP_transicion  = K_TRANSICION_LECHO × (ρ·v₀²/2)  (contracción al
-                         entrar al lecho + expansión a la salida, ~1.5)
-        En VERTICAL no se aplica K_rugosidad explícito porque Ergun ya
-        captura la rugosidad del producto vía Φ_s y d_p.
-
-    Flujo HORIZONTAL (cross-flow: el aire pasa entre bandejas en PARALELO):
+    Cross-flow: el aire pasa entre bandejas, en canales EN PARALELO.
         Los n_canales = n_bandejas−1 espacios entre bandejas están en paralelo,
         así que el ΔP del sistema es el de UN canal (no la suma):
             v_canal = Q_vol / [ancho · espacio_libre · (n_bandejas − 1)]
@@ -585,8 +477,6 @@ def estimar_delta_P_camara(
         ΔP estimada en la cámara de secado [Pa]. NO incluye pérdidas
         singulares de entrada/salida (esas se acumulan en `estimar_delta_P_singulares`).
     """
-    from core.camara import DireccionFlujo
-
     g = camara.geometria
     f = camara.flujo
     b = camara.bandejas
@@ -599,14 +489,7 @@ def estimar_delta_P_camara(
 
     K_malla_eff = _K_malla_efectivo(b.tipo_malla)
 
-    if f.direccion_flujo == DireccionFlujo.VERTICAL_ASCENDENTE:
-        v0 = Q_vol / b.area_bandeja_m2 if b.area_bandeja_m2 > 0 else 0.0
-        dP_malla = K_malla_eff * (rho * v0**2 / 2.0)
-        dP_lecho = _delta_P_lecho_por_bandeja(b, v0, rho, mu, producto_id=producto_id)
-        dP_transicion = K_TRANSICION_LECHO * (rho * v0**2 / 2.0)
-        return (dP_malla + dP_lecho + dP_transicion) * b.n_bandejas
-
-    # --- HORIZONTAL: cross-flow entre bandejas (paralelo + serie) ---
+    # --- Cross-flow entre bandejas (paralelo + serie) ---
     # Topología (mejora 29):
     #  - Dentro de un grupo de bandejas apiladas el aire se reparte entre los
     #    canales EN PARALELO → todos con el mismo ΔP, así que el ΔP del grupo es

@@ -461,6 +461,110 @@ class TestCorteDeForzantesPreservaTodo:
             assert len(np.asarray(getattr(sl, nombre))) == n, nombre
 
 
+class TestAvisoSetPointInalcanzable:
+    """Avisar cuando el equipo satura sin llegar a la consigna (S62).
+
+    En `SERIE_POSCOLECTOR` el diagnóstico existe desde siempre
+    (`AUX_SET_POINT_NO_ALCANZABLE`); en respaldo no había ninguno, así que una
+    resistencia demasiado chica corría a fondo durante horas y el reporte lo
+    mostraba como operación normal. Lo detectó el usuario: 50 W saturando 13 h
+    sin acercarse a los 65 °C pedidos.
+    """
+
+    def _correr(self, P_W: float, T_set_C: float, horas: int = 48):
+        import numpy as np
+
+        from calculos.balance_global import calcular_todo_transitorio
+        from calculos.psicrometria import humedad_absoluta
+        from core.camara import ForzantesAire
+
+        from .test_conveccion_natural_cajon import _proyecto
+
+        proyecto = _proyecto(A_boca=0.05)
+        proyecto.auxiliar = _respaldo(
+            potencia_nominal_W=P_W,
+            set_point_T_K=273.15 + T_set_C,
+            temperatura_maxima_salida_K=273.15 + max(T_set_C, 70.0),
+        )
+        t = np.arange(horas, dtype=float) * 3600.0
+        hora = np.arange(horas) % 24
+        T_amb = np.full(horas, 288.15)
+        I_g = np.where((hora >= 8) & (hora <= 18), 700.0, 0.0)
+        fz = ForzantesAire(
+            t_s=t,
+            T_ent_K=T_amb.copy(),
+            omega_ent=np.full(horas, humedad_absoluta(0.5, 288.15)),
+            m_dot_aire_seco_kg_s=np.full(horas, 0.02),
+            T_amb_K=T_amb,
+            v_viento_ms=np.full(horas, 2.0),
+            I_g_W_m2=I_g,
+            I_g_POA_W_m2=I_g,
+        )
+        return calcular_todo_transitorio(proyecto, forzantes_base=fz)
+
+    def _aviso(self, res):
+        return [a for a in res.advertencias if "AUX_RESPALDO_SET_POINT_NO_ALCANZABLE" in a]
+
+    def test_avisa_con_un_equipo_chico(self):
+        res = self._correr(P_W=50.0, T_set_C=65.0)
+        assert self._aviso(res), res.advertencias
+
+    def test_el_aviso_dice_horas_y_temperatura_lograda(self):
+        """Un aviso sin números no permite dimensionar."""
+        import re
+
+        aviso = self._aviso(self._correr(P_W=50.0, T_set_C=65.0))[0]
+        assert re.search(r"durante \d+\.\d h", aviso), aviso
+        assert "65.0 °C" in aviso, aviso
+        assert re.search(r"fueron \d+\.\d °C", aviso), aviso
+
+    def test_no_avisa_con_un_equipo_holgado(self):
+        res = self._correr(P_W=8000.0, T_set_C=30.0)
+        assert not self._aviso(res), self._aviso(res)
+
+    def test_no_avisa_sin_set_point(self):
+        """Sin consigna no hay nada que alcanzar: el equipo entrega y punto."""
+        res = self._correr(P_W=50.0, T_set_C=65.0)
+        assert self._aviso(res)  # control: con consigna sí avisa
+        import numpy as np
+
+        from calculos.balance_global import calcular_todo_transitorio
+        from calculos.psicrometria import humedad_absoluta
+        from core.camara import ForzantesAire
+
+        from .test_conveccion_natural_cajon import _proyecto
+
+        proyecto = _proyecto(A_boca=0.05)
+        proyecto.auxiliar = _respaldo(potencia_nominal_W=50.0)  # sin set_point
+        n = 48
+        t = np.arange(n, dtype=float) * 3600.0
+        T_amb = np.full(n, 288.15)
+        fz = ForzantesAire(
+            t_s=t,
+            T_ent_K=T_amb.copy(),
+            omega_ent=np.full(n, humedad_absoluta(0.5, 288.15)),
+            m_dot_aire_seco_kg_s=np.full(n, 0.02),
+            T_amb_K=T_amb,
+            v_viento_ms=np.full(n, 2.0),
+            I_g_W_m2=np.full(n, 700.0),
+            I_g_POA_W_m2=np.full(n, 700.0),
+        )
+        sin_sp = calcular_todo_transitorio(proyecto, forzantes_base=fz)
+        assert not self._aviso(sin_sp)
+
+    def test_no_confunde_la_rampa_de_encendido_con_saturacion(self):
+        """Las forzantes se interpolan entre horas: en el borde de encendido el
+        techo sube desde cero y el motor lo alcanza trivialmente. Un equipo
+        holgado no debe reportar esos instantes como subdimensionado — pasaba,
+        y el aviso citaba "594 W" en una máquina de 5 kW.
+        """
+        res = self._correr(P_W=5000.0, T_set_C=40.0)
+        avisos = self._aviso(res)
+        if avisos:
+            # Si avisa, que sea por la potencia real y no por un punto de rampa.
+            assert "5000 W" in avisos[0], avisos[0]
+
+
 class TestBackCompat:
     def test_sin_auxiliar_no_cambia_nada(self):
         """Un proyecto sin auxiliar debe dar idéntico a antes del respaldo."""

@@ -144,6 +144,10 @@ camara:
   hr_ent: UR de entrada
   res_titulo: Resultados da simulação
   res_pendiente: "Cálculo da câmara não executado nesta sessão. Volte a P4 e pressione 'Calcular câmara'."
+  res_sin_auxiliar: >-
+    ⚠️ Estes resultados são da câmara <b>sem o auxiliar</b>: esta seção resolve o ar tal como
+    chega antes de P5. O aporte do aquecimento auxiliar é aplicado no balanço global (P7), onde
+    o tempo de secagem é menor. Os dois números não são comparáveis entre si.
   status: Status
   t_sim: Tempo de simulação
   t_secado: Tempo de secagem

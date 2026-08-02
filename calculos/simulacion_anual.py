@@ -72,8 +72,11 @@ class PuntoMensualAnual:
         masa_evaporada_kg: Agua evaporada por los lotes atribuidos al mes [kg].
         duracion_media_h: Duración media de los lotes completos del mes [h].
             None si no se completó ninguno.
-        E_solar_MJ: Energía solar sobre el plano del colector durante las horas
-            del mes [MJ]. Se integra por mes calendario, no por lote.
+        E_solar_MJ: Energía solar incidente sobre el secador durante las horas
+            del mes [MJ] — colector y vidriado de la cámara. Se integra por mes
+            calendario y no por lote: el sol cae sobre el secador aunque esté
+            vacío, y eso es justamente lo que hace visible el costo de tenerlo
+            parado.
         E_auxiliar_MJ: Energía que el auxiliar entregó al aire durante las horas
             del mes [MJ]. Mismo criterio de integración que la solar: es un
             flujo. Cero sin auxiliar.
@@ -117,14 +120,17 @@ class ResultadosAnual:
         duracion_media_h / duracion_p50_h / duracion_p90_h: Duración de los
             lotes completos [h]. La dispersión (p50 vs p90) es lo que el día
             típico borraba: con un día promedio todos los lotes duran igual.
-        E_solar_anual_MJ: Energía solar **incidente** sobre el plano del
-            colector en el año [MJ].
+        E_solar_anual_MJ: Energía solar **incidente** sobre el secador en el año
+            [MJ]: sobre el plano del colector más sobre el vidriado de la cámara
+            (área de las caras translúcidas activas). En un secador directo el
+            primer término es cero y todo el sol entra por el segundo.
         Q_util_colector_MJ: Energía que el colector efectivamente entregó al
             aire [MJ]. Es la magnitud comparable con la del auxiliar.
         E_auxiliar_MJ: Energía que el auxiliar entregó al aire [MJ].
-        fraccion_solar: ``Q_util_colector / (Q_util_colector + E_aux)``. Compara
-            energías **útiles**, no la irradiancia incidente contra el auxiliar
-            —que serían magnitudes distintas—. None sin energía entregada.
+        fraccion_solar: ``(Q_util_colector + Q_util_camara) / (ídem + E_aux)``.
+            Compara energías **útiles**, no la irradiancia incidente contra el
+            auxiliar —que serían magnitudes distintas—. None sin energía
+            entregada.
         eta_drying_anual: Fracción de la radiación incidente del año convertida
             en evaporación (Augustus Leon). None si no hubo sol.
         eta_total_anual: Igual pero contra la energía primaria total
@@ -132,18 +138,27 @@ class ResultadosAnual:
             ``eta_drying_anual``; con auxiliar activo se separan.
         aprovechamiento_aire: Fracción de la capacidad de carga de humedad del
             aire que efectivamente se usó:
-            ``m_evap / (ṁ·∫(ω_sat(T_ent) − ω_ent) dt)`` sobre las horas de
-            operación.
+            ``m_evap / (ṁ·∫(ω_sat(T_wb) − ω_ent) dt)`` sobre las horas de
+            operación, con ``T_wb`` la temperatura de **saturación adiabática**
+            del aire de entrada.
+
+            El denominador es el techo termodinámico real: el aire no se satura
+            a temperatura constante sino enfriándose sobre la adiabática, porque
+            cada gramo evaporado sale de su propia entalpía. Hasta S63 se usaba
+            ``ω_sat(T_ent)`` —la saturación **isotérmica**—, que a 51 °C y
+            89 kPa da 110 g/kg contra los 12.8 g/kg alcanzables: el indicador
+            salía ~8 veces peor de lo posible y **todo** secador se reportaba
+            catastrófico, incluso uno entregando aire casi saturado.
 
             **No es el η_pickup de Augustus Leon y no debe compararse con los
             valores de esa literatura** (típicamente 5-30 %). Aquel está
             definido por lote y en condiciones de secado activo; este integra el
             déficit de saturación sobre *todas* las horas de operación,
             incluidas las noches y el tramo final del lote, cuando el aire sigue
-            circulando y el producto ya casi no entrega agua. Por eso da valores
-            mucho más bajos. Lo que mide es útil —cuánto se desaprovecha el aire
-            que se hace circular— pero es otra cosa, y se nombra distinto a
-            propósito (S57).
+            circulando y el producto ya casi no entrega agua. Por eso sigue
+            dando valores más bajos. Lo que mide es útil —cuánto se desaprovecha
+            el aire que se hace circular— pero es otra cosa, y se nombra
+            distinto a propósito (S57).
         energia_especifica_MJ_kg: Energía solar incidente por kg de agua
             evaporada [MJ/kg]. Métrica de comparación estándar entre secadores.
         dias_operables: Días del año con irradiación diaria sobre el umbral.
@@ -171,7 +186,15 @@ class ResultadosAnual:
     duracion_p50_h: Optional[float] = None
     duracion_p90_h: Optional[float] = None
     E_solar_anual_MJ: float = 0.0
+    #: Parte de ``E_solar_anual_MJ`` que incide sobre el vidriado de la cámara
+    #: [MJ] (el resto da sobre el colector). Desglose, no un sumando aparte.
+    E_solar_camara_MJ: float = 0.0
     Q_util_colector_MJ: float = 0.0
+    #: Radiación que la cámara capturó durante los lotes [MJ]: la que intercepta
+    #: el producto más la que calienta las superficies internas. Es el análogo de
+    #: ``Q_util_colector_MJ`` para un secador directo, y entra junto con él al
+    #: numerador de ``fraccion_solar``.
+    Q_util_camara_MJ: float = 0.0
     E_auxiliar_MJ: float = 0.0
     fraccion_solar: Optional[float] = None
     eta_drying_anual: Optional[float] = None
@@ -258,6 +281,26 @@ def _area_colector_m2(proyecto: "Proyecto") -> float:
     return float(u.largo_m * u.ancho_m * b.n_serie * b.n_paralelo)
 
 
+def _area_translucida_m2(proyecto: "Proyecto") -> float:
+    """Área de las caras translúcidas activas de la cámara [m²]. 0 si es opaca.
+
+    Es el análogo de ``_area_colector_m2`` para un secador directo: la superficie
+    por la que entra el sol. Se usa para el término **incidente** del balance,
+    con el mismo criterio que el colector —toda la radiación que da sobre la
+    superficie captadora, antes de cualquier eficiencia—, y no ``A_rad``, que es
+    solo la huella que intercepta el producto: usar aquella inflaría el
+    rendimiento escondiendo la parte del vidriado que no da sobre bandeja.
+    """
+    cam = getattr(proyecto, "camara", None)
+    if cam is None or cam.construccion.cubierta_translucida_id is None:
+        return 0.0
+    activas = cam.construccion.caras_translucidas_activas()
+    if not activas:
+        return 0.0
+    caras = cam.geometria.caras()
+    return float(sum(caras[nombre].area_m2 for nombre in activas))
+
+
 def _meses_del_indice(indice, tz_local: str) -> np.ndarray:
     """Mes calendario (1..12) de cada hora del índice, en hora local del sitio.
 
@@ -309,22 +352,32 @@ def _dias_operables_por_mes(
 def _agua_maxima_captable_kg(forzantes, t_fin_operacion_s: float, P_Pa: float) -> tuple[float, int]:
     """Agua que el aire podría haber cargado hasta saturarse [kg].
 
-    ``ṁ · ∫ (ω_sat(T_ent) − ω_ent) dt`` sobre las horas en que el secador operó.
+    ``ṁ · ∫ (ω_sat(T_wb) − ω_ent) dt`` sobre las horas en que el secador operó,
+    con ``T_wb`` la temperatura de **saturación adiabática** del aire de entrada.
     Es el denominador de ``aprovechamiento_aire``: cuánta agua *podía* llevarse
     el aire que efectivamente pasó por la cámara.
 
-    **Horas por encima de la ebullición local.** A presión reducida el agua
-    hierve por debajo de 100 °C (a 2650 m, ~73 kPa, hierve a 91 °C), y ahí la
-    humedad de saturación deja de estar definida: ``P_sat(T) ≥ P`` y el aire
-    puede cargar agua sin límite termodinámico. Un colector bien dimensionado en
-    altura alcanza esas temperaturas al mediodía. Esas horas se **excluyen** del
-    denominador —incluirlas con capacidad infinita no significa nada— y se
-    cuentan para que el llamador pueda avisar.
+    **Por qué la adiabática y no ω_sat(T_ent)** (S63): el aire no puede saturarse
+    a temperatura constante. Cada gramo que evapora sale de su propia entalpía,
+    así que se enfría mientras se humedece y el estado recorre la adiabática
+    hasta cortar la curva de saturación en ``T_wb``. El techo termodinámico de
+    una cámara adiabática es ese, no la saturación isotérmica.
+
+    La diferencia no es de matiz: aire a 51 °C y 5.8 g/kg a 89 kPa tiene
+    ``ω_sat(T_ent) − ω_ent`` = **110 g/kg**, contra ``ω_sat(T_wb) − ω_ent`` =
+    **12.8 g/kg**. Con el denominador isotérmico el indicador daba ~8 veces peor
+    que lo alcanzable y **todo** secador se reportaba catastrófico, incluso uno
+    entregando aire casi saturado sobre la adiabática.
+
+    Con el criterio adiabático desaparece además el caso de la ebullición local:
+    ``T_wb`` está siempre muy por debajo del bulbo seco, así que ``ω_sat(T_wb)``
+    está siempre definida. El contador se conserva en la firma por compatibilidad
+    y cuenta las horas que ni siquiera así se pudieron evaluar.
 
     Returns:
-        ``(agua_captable_kg, n_horas_sobre_ebullicion)``.
+        ``(agua_captable_kg, n_horas_no_evaluables)``.
     """
-    from calculos.psicrometria import presion_vapor_saturacion
+    from calculos.psicrometria import omega_saturacion, temperatura_bulbo_humedo
 
     t_s = np.asarray(forzantes.t_s, dtype=float)
     if t_s.size < 2:
@@ -338,17 +391,16 @@ def _agua_maxima_captable_kg(forzantes, t_fin_operacion_s: float, P_Pa: float) -
     m_dot = np.asarray(forzantes.m_dot_aire_seco_kg_s, dtype=float)[sel]
 
     total = 0.0
-    n_sobre_ebullicion = 0
+    n_no_evaluables = 0
     for T, w, m in zip(T_ent, omega_ent, m_dot):
-        P_sat = presion_vapor_saturacion(float(T))
-        if P_sat >= P_Pa:
-            n_sobre_ebullicion += 1
+        try:
+            T_wb = temperatura_bulbo_humedo(float(T), float(w), P_Pa)
+            omega_sat_wb = omega_saturacion(T_wb, P_Pa)
+        except ValueError:
+            n_no_evaluables += 1
             continue
-        # ω_sat = 0.622·P_sat/(P − P_sat), sin pasar por humedad_absoluta para
-        # no repetir la validación que ya se hizo arriba.
-        omega_sat = 0.622 * P_sat / (P_Pa - P_sat)
-        total += float(m) * max(0.0, omega_sat - float(w))
-    return total * dt, n_sobre_ebullicion
+        total += float(m) * max(0.0, omega_sat_wb - float(w))
+    return total * dt, n_no_evaluables
 
 
 def _hora_local_de_t0(t0_utc, tz_local: str) -> float:
@@ -517,15 +569,28 @@ def simular_anual(
     Q_aux_arr = np.asarray(diag.get("Q_aux_W_serie", []), dtype=float)
     if Q_aux_arr.size != n_horas:
         Q_aux_arr = np.zeros(n_horas, dtype=float)
+    # Sol INCIDENTE sobre el vidriado de la cámara: irradiancia equivalente por
+    # orientación de las caras activas (la misma que el motor usa para Q_rad) por
+    # el área translúcida. Se acumula TODO el año, también con la cámara vacía
+    # entre lotes: es un flujo que cae sobre el secador exista o no producto
+    # adentro, igual que el que da sobre el colector.
+    A_trans = _area_translucida_m2(proyecto)
+    I_cam_arr = np.asarray(getattr(forzantes, "I_g_W_m2", None), dtype=float)
+    if I_cam_arr.size != n_horas or A_trans <= 0.0:
+        I_cam_arr = np.zeros(n_horas, dtype=float)
 
+    E_solar_cam_incidente = 0.0
     E_solar_mes = {m: 0.0 for m in _MESES}
     E_aux_mes = {m: 0.0 for m in _MESES}
     horas_mes = {m: 0 for m in _MESES}
     for m in _MESES:
         sel = meses_hora == m
         horas_mes[m] = int(sel.sum())
-        E_solar_mes[m] = float(POA_arr[sel].sum() * A_col * _SEGUNDOS_POR_HORA / 1e6)
+        E_solar_mes[m] = float(
+            (POA_arr[sel].sum() * A_col + I_cam_arr[sel].sum() * A_trans) * _SEGUNDOS_POR_HORA / 1e6
+        )
         E_aux_mes[m] = float(Q_aux_arr[sel].sum() * _SEGUNDOS_POR_HORA / 1e6)
+        E_solar_cam_incidente += float(I_cam_arr[sel].sum() * A_trans * _SEGUNDOS_POR_HORA / 1e6)
 
     # El total anual del auxiliar se recompone de los meses en vez de tomar el
     # escalar del solver: aquel integra con regla trapezoidal sobre el horizonte
@@ -606,7 +671,12 @@ def simular_anual(
     E_solar_anual = float(sum(E_solar_mes.values()))
     m_evap = float(res_v.masa_evaporada_kg)
     E_primaria = E_solar_anual + E_aux_MJ
-    E_util = Q_util_col_MJ + E_aux_MJ
+    # Lado ÚTIL: lo que el colector entrega al aire más lo que la cámara captura
+    # por el vidriado. Sin este segundo término un secador directo se reportaba
+    # con fracción solar nula aunque el sol hiciera todo el trabajo (S62).
+    Q_util_cam_MJ = float(getattr(res_v, "E_solar_camara_MJ", 0.0))
+    Q_util_solar_MJ = Q_util_col_MJ + Q_util_cam_MJ
+    E_util = Q_util_solar_MJ + E_aux_MJ
 
     # Aprovechamiento del aire: agua evaporada sobre la que el aire podía cargar
     # en las horas que el secador operó (hasta la descarga del último lote).
@@ -614,20 +684,15 @@ def simular_anual(
     # año entero — si falla, se reporta como no disponible y el resto queda.
     t_fin_operacion = max((lote.t_fin_s for lote in lotes), default=0.0)
     try:
-        agua_captable, n_sobre_ebullicion = _agua_maxima_captable_kg(
-            forzantes, t_fin_operacion, P_Pa
-        )
+        agua_captable, n_no_evaluables = _agua_maxima_captable_kg(forzantes, t_fin_operacion, P_Pa)
     except Exception as exc:
         advertencias.append(f"ANUAL_APROVECHAMIENTO_NO_CALCULADO: {exc}")
-        agua_captable, n_sobre_ebullicion = 0.0, 0
-    if n_sobre_ebullicion:
+        agua_captable, n_no_evaluables = 0.0, 0
+    if n_no_evaluables:
         advertencias.append(
-            f"ANUAL_AIRE_SOBRE_EBULLICION: en {n_sobre_ebullicion} h el aire de entrada "
-            f"superó la temperatura de ebullición del agua a la presión del sitio "
-            f"({P_Pa / 1000:.1f} kPa). Esas horas quedan fuera del aprovechamiento del "
-            "aire (la saturación no está definida por encima de la ebullición). "
-            "Revisá si el colector está sobredimensionado para el caudal: temperaturas "
-            "de entrada tan altas también dañan el producto."
+            f"ANUAL_APROVECHAMIENTO_HORAS_OMITIDAS: en {n_no_evaluables} h no se pudo "
+            "resolver la saturación adiabática del aire de entrada; esas horas quedan "
+            "fuera del aprovechamiento del aire."
         )
 
     return ResultadosAnual(
@@ -641,8 +706,10 @@ def simular_anual(
         duracion_p90_h=(float(np.percentile(dur_completos, 90)) if dur_completos else None),
         E_solar_anual_MJ=E_solar_anual,
         Q_util_colector_MJ=Q_util_col_MJ,
+        Q_util_camara_MJ=Q_util_cam_MJ,
+        E_solar_camara_MJ=E_solar_cam_incidente,
         E_auxiliar_MJ=E_aux_MJ,
-        fraccion_solar=(Q_util_col_MJ / E_util if E_util > 0 else None),
+        fraccion_solar=(Q_util_solar_MJ / E_util if E_util > 0 else None),
         eta_drying_anual=(m_evap * h_fg_MJ_kg / E_solar_anual if E_solar_anual > 0 else None),
         eta_total_anual=(m_evap * h_fg_MJ_kg / E_primaria if E_primaria > 0 else None),
         aprovechamiento_aire=(m_evap / agua_captable if agua_captable > 0 else None),

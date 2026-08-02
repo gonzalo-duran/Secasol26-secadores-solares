@@ -60,15 +60,33 @@ class TestAnclajeExtractor76W:
     del extractor real (76 W). Tolerancia generosa porque las eficiencias
     típicas varían bastante."""
 
-    def test_camara_armario_50kg_da_dP_sobre_30_pa(self):
-        """Lo crítico: ΔP cámara con Ergun activo por catálogo debe estar
-        por encima de 30 Pa para manzana 50 kg, no los ~5 Pa del modelo
-        previo (que asumía Ergun=0 sin d_p explícito)."""
+    def test_el_anclaje_lo_sostienen_los_ductos_no_la_camara(self):
+        """Dónde vive la resistencia que justifica los 76 W del extractor.
+
+        Hasta S63 este test exigía **> 30 Pa de la cámara sola**, apoyado en
+        Ergun sobre el lecho atravesado. Con cross-flow único (S64) el aire
+        barre las bandejas a ~0.5 m/s y la cámara aporta décimas de Pa: la
+        resistencia del lazo está en los ductos, los codos y el colector, que
+        es lo que sostiene el anclaje de campo (ver
+        ``test_potencia_electrica_en_rango_realista``, que sigue dando en el
+        rango del Gatti 150).
+
+        ATENCIÓN al leer esto: si el armario real de 50 kg es de **lecho
+        atravesado** —50 kg sobre 5 bandejas de 0.8 m² son ~2.7 cm de capa, que
+        es un lecho, no una monocapa— entonces la cámara sí aporta ΔP y el
+        modelo lo está subestimando a propósito. Es el riesgo asumido en
+        ``docs/notas/plan_crossflow_unico_camara.md`` §7.1.
+        """
         cam = _camara_armario_50kg_manzana(Q_vol_m3_s=0.25)
         dP_cam = estimar_delta_P_camara(cam)
-        assert dP_cam > 30.0, (
-            f"ΔP cámara armario 50 kg manzana = {dP_cam:.1f} Pa, "
-            "esperaba > 30 Pa con Ergun activo por catálogo (manzana d_p=6 mm)."
+        sing = estimar_delta_P_singulares(Q_vol_m3_s=0.25, v_ducto_m_s=6.0, n_paralelo=1, n_codos=2)
+        assert dP_cam < 5.0, (
+            f"ΔP cámara en cross-flow = {dP_cam:.2f} Pa. Si subió a decenas de "
+            "Pa, alguien reintrodujo una resistencia de lecho."
+        )
+        assert sing["total"] > 10.0 * dP_cam, (
+            "El anclaje de 76 W tiene que apoyarse en ductos y singulares: "
+            f"singulares {sing['total']:.1f} Pa vs cámara {dP_cam:.2f} Pa."
         )
 
     def test_singulares_no_despreciables_a_v_ducto_realista(self):
@@ -146,12 +164,15 @@ class TestAnclajeExtractor76W:
 
 class TestGeometriaLechoCatalogo:
     """El motor lee d_p del catálogo cuando ConfiguracionBandejas no lo
-    sobreescribe — esto habilita Ergun no-cero por default y es la clave
-    del fix de la subestimación."""
+    sobreescribe.
 
-    def test_manzana_ergun_no_cero_sin_d_p_explicito(self):
-        """Para manzana, sin setear d_p en ConfiguracionBandejas, el motor
-        debe usar el d_p del catálogo (6 mm) y dar ΔP > 0 por Ergun."""
+    Desde S64 el uso vivo de ``d_p`` es la **altura de rugosidad** de la pared
+    del canal en cross-flow (``ε_eff = max(ε_chapa, d_p)``), no el diámetro de
+    partícula de Ergun. La cadena de resolución catálogo → default es la misma.
+    """
+
+    def test_manzana_usa_el_d_p_del_catalogo_sin_valor_explicito(self):
+        """Sin d_p en ConfiguracionBandejas, la rugosidad sale del catálogo."""
         rho = densidad_aire(323.15, 101325.0)
         cam = Camara(
             geometria=GeometriaCamara(largo_m=1.0, ancho_m=1.0, alto_m=1.0),
@@ -174,23 +195,23 @@ class TestGeometriaLechoCatalogo:
                 modelo_capa_fina="logaritmico",
             ),
         )
-        # Solo malla daría algo pequeño; con Ergun activo (d_p del catálogo
-        # = 6 mm) debe ser significativamente mayor.
-        Q_vol = cam.flujo.caudal_masico_kg_s / rho
-        v0 = Q_vol / cam.bandejas.area_bandeja_m2
-        dP_malla_sola = 2.0 * (rho * v0**2 / 2.0) * cam.bandejas.n_bandejas
-        dP_total = estimar_delta_P_camara(cam)
-        assert dP_total > 2.0 * dP_malla_sola, (
-            f"ΔP_total = {dP_total:.2f} Pa apenas supera ΔP_malla_sola = "
-            f"{dP_malla_sola:.2f} Pa — Ergun no se está activando con d_p "
-            "del catálogo."
-        )
+        from calculos.lecho_producto import D_P_DEFAULT_M, geometria_lecho
+
+        d_p, _eps, _phi = geometria_lecho(cam.bandejas, "manzana")
+        assert d_p == pytest.approx(0.006), "esperaba el d_p de manzana del catálogo"
+        assert d_p != pytest.approx(D_P_DEFAULT_M)
+        assert estimar_delta_P_camara(cam) > 0.0
 
     def test_producto_inexistente_usa_default(self):
-        """Si producto_id no está en el catálogo, motor_calc cae a defaults
+        """Si producto_id no está en el catálogo se cae a los defaults
         conservadores (8 mm, 0.45, 0.6) sin romper. Test directo del helper
         para evitar la validación de CargaProducto."""
-        from calculos.motor_calc import _delta_P_lecho_por_bandeja
+        from calculos.lecho_producto import (
+            D_P_DEFAULT_M,
+            EPSILON_DEFAULT,
+            PHI_S_DEFAULT,
+            geometria_lecho,
+        )
         from core.camara import ConfiguracionBandejas
 
         b = ConfiguracionBandejas(
@@ -200,12 +221,5 @@ class TestGeometriaLechoCatalogo:
             separacion_entre_bandejas_m=0.15,
             diametro_eq_particula_m=None,
         )
-        # producto inexistente → defaults (8 mm) → Ergun no-cero
-        dP = _delta_P_lecho_por_bandeja(
-            b,
-            v0=0.2,
-            rho=1.09,
-            mu=1.96e-5,
-            producto_id="producto_que_no_existe",
-        )
-        assert dP > 0, f"Esperaba ΔP_Ergun > 0 con defaults (8 mm). Obtuve {dP:.3f} Pa."
+        d_p, eps, phi = geometria_lecho(b, producto_id="producto_que_no_existe")
+        assert (d_p, eps, phi) == (D_P_DEFAULT_M, EPSILON_DEFAULT, PHI_S_DEFAULT)

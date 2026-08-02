@@ -34,6 +34,28 @@ A velocidades de convección forzada (≳0.5 m/s) el resultado queda dentro del
 ~4 % del modelo viejo; la diferencia aparece cuando el flujo se apaga. Ver
 ``docs/notas/estado_conveccion_natural_secasol.md``.
 
+Topología de transferencia — cross-flow único (S64)
+--------------------------------------------------
+El aire pasa **entre** bandejas y toca las dos caras libres del lecho: área de
+bandeja y placa plana, con la velocidad **del canal** (``motor_calc`` usa esa
+misma sección para su pérdida de carga).
+
+La posición de las bocas —entrada abajo en una cara, salida arriba en la
+opuesta— hace que el flujo **global** de una CAJA o un ARMARIO sea diagonal
+ascendente, pero **local sobre la bandeja** es cross-flow: la disposición de las
+aberturas fija la escala del flujo y la de las bandejas fija la dirección local
+sobre el producto. Son dos problemas separados.
+
+S63 había agregado una segunda topología (``VERTICAL_ASCENDENTE`` → through-flow,
+el aire atravesando el lecho, con área de partícula y Ranz-Marshall). Se retiró
+en S64: en un secador pasivo el lecho pide ~31 Pa contra ~1.3 Pa de tiro térmico
+disponible, o sea que el aire **no puede** tomar ese camino, y la dirección local
+del flujo no es un dato que un usuario de prediseño pueda responder con
+confianza. Ver ``docs/notas/plan_crossflow_unico_camara.md``.
+
+El área cuenta las **dos caras** de la bandeja (la inferior descontada por el
+área abierta de la malla y por transferir peor); ver ``_FACTOR_CARA_INFERIOR``.
+
 Referencias:
     - Mujumdar AS (2007). Handbook of Industrial Drying, 3ª ed. CRC Press.
     - Anderson RB (1946); Guggenheim EA (1966); De Boer JH (1953) — modelo GAB.
@@ -51,7 +73,7 @@ from scipy.optimize import brentq
 from calculos.camara_termodinamica import (
     ResultadoCascada,
     ResultadoMotorTermodinamico,
-    resolver_estado_camara,
+    resolver_cadena_camara,
     simular_cascada,
     simular_secado,
 )
@@ -62,6 +84,7 @@ from calculos.correlaciones_nusselt import (
     nusselt_placa_horizontal,
     nusselt_placa_vertical,
 )
+from calculos.lecho_producto import area_abierta_malla_efectiva
 from calculos.propiedades_aire import propiedades_aire
 from calculos.psicrometria import (
     actividad_agua_desde_X_GAB,
@@ -80,9 +103,10 @@ if TYPE_CHECKING:
 # Wire-up con el motor termodinámico
 # ============================================================================
 #
-# El wire-up calcula h_conv (correlación de placa plana), K_m (Chilton-Colburn
-# directo), cp efectivo del producto a X media, áreas y boundary del aire, y
-# delega en simular_secado.
+# El wire-up calcula h_conv y el área de transferencia (según la topología de
+# flujo, ver más abajo), K_m (Chilton-Colburn directo), cp efectivo del producto
+# a X media, el resto de las áreas y el boundary del aire, y delega en
+# simular_secado.
 # ============================================================================
 
 _LE_AGUA_AIRE: float = 1.0  # número de Lewis para aire-agua
@@ -90,6 +114,41 @@ _CP_AGUA_LIQ_J_KGK: float = 4186.0  # cp del agua líquida (cp efectivo del prod
 _RE_CRITICO_PLACA: float = 5.0e5  # transición laminar→turbulento
 _ESPESOR_CUBIERTA_DEFAULT_M: float = 0.006  # 6 mm — default del techo translúcido
 _G_MS2: float = 9.81  # aceleración de la gravedad
+# Penalización de la cara INFERIOR de la bandeja frente a la superior (S64).
+#
+# El aire circula por encima y por debajo de la bandeja, así que la cota superior
+# del área de transferencia es 2× la cara superior. Pero la cara de abajo
+# transfiere peor: es el análogo de la placa caliente mirando hacia abajo, con
+# estratificación estable en vez de desprendimiento de pluma. El factor sale del
+# cociente entre la rama débil y la fuerte de ``nusselt_placa_horizontal`` en el
+# rango de Ra de una bandeja (L = A_s/P ≈ 0.1 m, ΔT 10–30 K ⇒ Ra ~1e5–1e7):
+#
+#     Ra      Nu fuerte   Nu débil   débil/fuerte
+#     1e4        5.40       3.28        0.61
+#     1e5        9.60       5.20        0.54
+#     1e6       17.08       8.24        0.48
+#     1e7       32.32      13.06        0.40
+#
+# LÍMITE DECLARADO: el signo real del empuje en la cara inferior lo decide la
+# competencia entre el término térmico y el solutal —el aire húmedo es más
+# liviano que el seco (M_agua 18 vs M_aire 29)—, y se invierte. Con el producto
+# por debajo del aire (armario indirecto, producto en bulbo húmedo) la película
+# de abajo se enfría más de lo que se humedece, queda más pesada y drena: rama
+# fuerte. Con el producto por encima (CAJA con producto insolado) los dos
+# términos la alivianan y queda atrapada: rama débil. El cruce está en |ΔT| ≈ 2 K.
+# Resolverlo exige el empuje solutal (Incropera Ec. 9.65), que ``_rayleigh``
+# declara pendiente; mientras tanto se adopta el factor fijo.
+_FACTOR_CARA_INFERIOR: float = 0.5
+# Sub-etapas con que se discretiza el camino del aire en over-flow (S63). El
+# canal entre bandejas es un intercambiador CONTINUO a lo largo de la bandeja,
+# no un tanque mezclado: hay que partirlo para que tienda a flujo pistón.
+#
+# Con 8 el acercamiento queda ~1 % por debajo del límite de pistón en el régimen
+# típico de over-flow (NTU ≲ 0.5) y ~4 % a NTU ≈ 2. Quedar un poco corto es
+# deliberado y no solo barato: el pistón perfecto también es una idealización
+# —una cámara real tiene mezcla axial— así que la verdad está entre el CSTR y el
+# pistón, no en el pistón.
+_N_ETAPAS_OVERFLOW: int = 8
 
 
 def _h_conv_camara_placa_plana(
@@ -184,6 +243,78 @@ def _L_caracteristica_bandeja(area_bandeja_m2: float, largo_m: float, ancho_m: f
     c = (area_bandeja_m2 / r) ** 0.5
     perimetro = 2.0 * (a + c)
     return area_bandeja_m2 / perimetro if perimetro > 0.0 else 0.0
+
+
+def area_transversal_flujo_m2(camara: "Camara") -> float:
+    """Sección de paso del aire por la cámara [m²].
+
+    Es la cara **perpendicular** al recorrido del aire. Con cross-flow único
+    (S64) el aire recorre el largo de la cámara, así que la sección es
+    ``ancho × alto``.
+
+    Es la sección de la **cámara**, no la del canal entre bandejas: la usa el
+    film de pared, que ve el aire de todo el recinto. La velocidad que ve el
+    producto sale de ``area_canal_entre_bandejas_m2``.
+
+    Args:
+        camara: Cámara con geometría.
+
+    Returns:
+        Área de la sección transversal al flujo [m²].
+    """
+    g = camara.geometria
+    return float(g.ancho_m * g.alto_m)
+
+
+def area_canal_entre_bandejas_m2(camara: "Camara") -> float:
+    """Sección de paso **entre** bandejas [m²] — la que ve el producto.
+
+    En cross-flow el aire no atraviesa la sección completa de la cámara: pasa
+    por los ``n_bandejas − 1`` canales que quedan entre bandejas, en paralelo,
+    con altura libre ``separacion − espesor_capa``. Es exactamente la sección
+    con la que ``motor_calc`` calcula la pérdida de carga del mismo tramo, y
+    desde S63 también la que fija la velocidad de transferencia: hasta entonces
+    la transferencia usaba la cara entera (``ancho × alto``) y la pérdida de
+    carga el canal, o sea dos velocidades distintas para el mismo aire (en el
+    armario de referencia, 0.55 m² contra 0.225 m²).
+
+    Args:
+        camara: Cámara con geometría y bandejas.
+
+    Returns:
+        Sección de los canales [m²]. Cae a la sección de la cámara si la
+        geometría no define canales (una sola bandeja, o capa que llena la
+        separación).
+    """
+    g, b = camara.geometria, camara.bandejas
+    espacio_libre = max(0.0, b.separacion_entre_bandejas_m - b.espesor_capa_m)
+    n_canales = max(0, b.n_bandejas - 1)
+    area = g.ancho_m * espacio_libre * n_canales
+    if area <= 0.0:
+        return area_transversal_flujo_m2(camara)
+    return float(area)
+
+
+def area_transferencia_producto_m2(camara: "Camara") -> float:
+    """Superficie de producto expuesta al aire [m²] — las dos caras (S64).
+
+    El aire circula por encima **y por debajo** de la bandeja, así que la cota
+    superior es 2× la cara superior. La cara inferior se descuenta dos veces:
+
+    - por el **área abierta de la malla**, que es la fracción de la cara de
+      abajo que el aire realmente alcanza (``area_abierta_malla_efectiva``);
+    - por transferir peor que la de arriba (``_FACTOR_CARA_INFERIOR``, ver la
+      constante para el anclaje y su límite de validez).
+
+    Args:
+        camara: Cámara con bandejas.
+
+    Returns:
+        Área de transferencia aire↔producto [m²].
+    """
+    b = camara.bandejas
+    f_abierta = area_abierta_malla_efectiva(b.tipo_malla)
+    return float(b.n_bandejas * b.area_bandeja_m2 * (1.0 + f_abierta * _FACTOR_CARA_INFERIOR))
 
 
 def coef_conveccion_producto_local(
@@ -320,6 +451,7 @@ class _ParamsCamaraTD:
     X_objetivo: float
     aw_func: Callable[[float], float]
     A_prod_total_m2: float
+    n_etapas_aire: int
     A_cuerpo_total_m2: float
     h_conv_W_m2K: float
     K_m_kg_m2s: float
@@ -348,7 +480,8 @@ def _construir_params_termodinamico(
 
     Lógica compartida por el batch (``_calcular_termodinamico``) y el túnel
     semicontinuo (``calcular_camara_cascada``). Lee el catálogo del producto
-    (cp seco, GAB), calcula h_conv (placa plana) y K_m (Chilton-Colburn),
+    (cp seco, GAB), calcula h_conv y el área de transferencia según la
+    topología de flujo (lecho atravesado o placa) y K_m (Chilton-Colburn),
     el closure de coeficientes variables en t, y la decomposición de pared.
 
     Args:
@@ -456,7 +589,18 @@ def _construir_params_termodinamico(
             return max(0.0, min(1.0, X / X0)) if X0 > 0 else 0.0
 
     # --- Geometría total ---
-    A_prod = b.n_bandejas * b.area_bandeja_m2
+    # TOPOLOGÍA DE TRANSFERENCIA (S64): cross-flow único. El aire pasa entre
+    # bandejas y toca las DOS caras libres del lecho; la de abajo, gateada por
+    # el área abierta de la malla y penalizada por transferir peor.
+    A_prod = area_transferencia_producto_m2(camara)
+
+    # Sub-etapas en serie del camino del aire (S63, etapa 4). El aire no está
+    # perfectamente mezclado: recorre el canal humedeciéndose, o sea flujo
+    # pistón, y un CSTR no puede saturar por construcción. Los canales entre
+    # bandejas están en PARALELO —cada uno recibe aire de entrada— pero cada
+    # canal es un intercambiador continuo a lo largo de la bandeja, así que lo
+    # que se discretiza es su largo.
+    n_etapas_aire = _N_ETAPAS_OVERFLOW
     # A_cuerpo_total_m2 incluye piso + techo (a un agua) + 4 paredes; con
     # pendiente_techo_deg=0 es idéntica a la fórmula histórica de caja
     # rectangular: 2·(largo·alto + ancho·alto + largo·ancho).
@@ -475,39 +619,53 @@ def _construir_params_termodinamico(
     k_aisl = esp_cam_total / R_cond_pared
 
     # --- h_conv y K_m congelados (referencia / fallback) ---
-    T_pelicula = 0.5 * (T_operacion_K + T_prod_inicial)
-    rho_pelicula = densidad_aire_humedo(T_pelicula, omega_ent, P_Pa)
-    area_transversal_m2 = g.ancho_m * g.alto_m
-    v_aire = f.caudal_masico_kg_s / (rho_pelicula * area_transversal_m2)
+    # Sección de la CÁMARA: la que ve el film de pared (aire de todo el recinto).
+    area_transversal_m2 = area_transversal_flujo_m2(camara)
+    # Sección que ve el PRODUCTO: los canales entre bandejas, la misma con la
+    # que motor_calc calcula la pérdida de carga del tramo.
+    area_paso_producto_m2 = area_canal_entre_bandejas_m2(camara)
     L_bandeja = _L_caracteristica_bandeja(b.area_bandeja_m2, g.largo_m, g.ancho_m)
-    h_conv = (
-        coef_conveccion_producto_local(
-            v_aire, T_operacion_K, T_prod_inicial, omega_ent, P_Pa, g.largo_m, L_bandeja
-        )
-        * factor_h_conv
-    )
-    cp_hum = 1006.0 + omega_ent * 1805.0
-    K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
-    # --- Coeficientes interiores variables en t (closure) ---
-    def _coef_transporte(
-        T_ent_local: float, T_prod_local: float, omega_ent_local: float, m_dot_local: float
-    ) -> tuple[float, float]:
-        T_pel = 0.5 * (T_ent_local + T_prod_local)
-        rho = densidad_aire_humedo(T_pel, omega_ent_local, P_Pa)
-        v_aire_t = m_dot_local / (rho * area_transversal_m2)
-        h = (
+    def _h_producto(
+        T_aire_camara_K: float, T_prod_local: float, omega_local: float, m_dot_local: float
+    ) -> float:
+        """h aire↔producto en cross-flow, con la velocidad del canal.
+
+        El primer argumento es la temperatura del aire **dentro** de la cámara
+        (``T_flujo``), la misma que aparece en la fuerza impulsora
+        ``h·A·(T_flujo − T_prod)``. Hasta S63 llegaba ``T_ent``, que mezclaba dos
+        temperaturas del aire en un mismo término (ver ``simular_secado``).
+
+        El coeficiente es el de la cara **superior**; la penalización de la cara
+        inferior está del lado del área (``area_transferencia_producto_m2``).
+        """
+        T_pel = 0.5 * (T_aire_camara_K + T_prod_local)
+        rho = densidad_aire_humedo(T_pel, omega_local, P_Pa)
+        v_aire_t = (
+            m_dot_local / (rho * area_paso_producto_m2) if area_paso_producto_m2 > 0.0 else 0.0
+        )
+        return (
             coef_conveccion_producto_local(
                 v_aire_t,
-                T_ent_local,
+                T_aire_camara_K,
                 T_prod_local,
-                omega_ent_local,
+                omega_local,
                 P_Pa,
                 g.largo_m,
                 L_bandeja,
             )
             * factor_h_conv
         )
+
+    h_conv = _h_producto(T_operacion_K, T_prod_inicial, omega_ent, f.caudal_masico_kg_s)
+    cp_hum = 1006.0 + omega_ent * 1805.0
+    K_m = h_conv / (cp_hum * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
+
+    # --- Coeficientes interiores variables en t (closure) ---
+    def _coef_transporte(
+        T_aire_camara_K: float, T_prod_local: float, omega_ent_local: float, m_dot_local: float
+    ) -> tuple[float, float]:
+        h = _h_producto(T_aire_camara_K, T_prod_local, omega_ent_local, m_dot_local)
         cp_hum_t = 1006.0 + omega_ent_local * 1805.0
         return h, h / (cp_hum_t * _LE_AGUA_AIRE ** (2.0 / 3.0)) * factor_K_m
 
@@ -549,6 +707,7 @@ def _construir_params_termodinamico(
         X_objetivo=p.humedad_objetivo_X,
         aw_func=_aw_func,
         A_prod_total_m2=A_prod,
+        n_etapas_aire=n_etapas_aire,
         A_cuerpo_total_m2=A_cuerpo_opaco,
         h_conv_W_m2K=h_conv,
         K_m_kg_m2s=K_m,
@@ -586,10 +745,13 @@ def _calcular_termodinamico(
           lineal aw = clip(X/X_inicial, 0, 1) como fallback con advertencia.
 
     Calcula:
-        - A_prod = n_bandejas · area_bandeja.
+        - A_prod y h_conv según la **topología de flujo** (S63): atravesado
+          (vertical) → área de partícula ``a_v·V_lecho`` + Ranz-Marshall;
+          over-flow (horizontal) → área de bandeja + placa plana con la
+          velocidad del canal entre bandejas.
         - A_cuerpo = 2·(largo·alto + ancho·alto + largo·ancho).
-        - v_aire = ṁ_as/(ρ·ancho·alto), h_conv por placa plana, K_m por
-          Chilton-Colburn directo: K_m = h_conv/(cp_hum·Le^(2/3)).
+        - K_m por Chilton-Colburn directo desde h_conv, en las dos topologías:
+          K_m = h_conv/(cp_hum·Le^(2/3)).
         - Pared 3-nodos: deriva k_aisl desde U_muros del data model en
           condiciones de diseño (h_w McAdams a v_viento default).
 
@@ -655,6 +817,7 @@ def _calcular_termodinamico(
         R_cond_techo_m2K_W=pr.R_cond_techo_m2K_W,
         A_techo_m2=pr.A_techo_total_m2,
         T_set_aux_K=T_set_aux_K,
+        n_etapas_aire=pr.n_etapas_aire,
         t_max_s=t_max_s,
     )
 
@@ -667,6 +830,79 @@ def _calcular_termodinamico(
     # entraba al balance pero no llegaba a los diagnósticos. Mismo patrón que el
     # albedo de S36 en la UI.
     return replace(res, advertencias=advertencias + list(res.advertencias))
+
+
+@dataclass(frozen=True)
+class DiagnosticoTransferencia:
+    """Cuán bien acoplados están el aire y el producto, en el punto de diseño.
+
+    Atributos:
+        A_prod_m2: Superficie de transferencia efectiva [m²] — las dos caras de
+            la bandeja, con la inferior gateada por la malla.
+        h_conv_W_m2K: Coeficiente convectivo aire↔producto [W/(m²·K)].
+        K_m_kg_m2s: Conductancia másica [kg/(m²·s)].
+        NTU: ``K_m·A_prod/ṁ_as`` — número de unidades de transferencia. Es **el**
+            número que dice si el secador está bien cargado: mide cuánto camino
+            hacia el equilibrio con el producto puede recorrer el aire en su
+            pasada. Con NTU ≪ 1 el aire sale casi como entró y el secador está
+            limitado por transferencia; con NTU ≳ 3 sale prácticamente saturado
+            y pasa a estar limitado por energía, que es donde conviene estar.
+        acercamiento_equilibrio: Fracción del camino al equilibrio que recorre
+            el aire. Se evalúa con la **misma cadena de N etapas** que integra el
+            motor, ``1 − (1 + NTU/N)^(−N)``, y no con el ``NTU/(1+NTU)`` del CSTR:
+            el diagnóstico tiene que describir el modelo que después simula. A
+            NTU = 2 son 83 % contra 67 %.
+    """
+
+    A_prod_m2: float
+    h_conv_W_m2K: float
+    K_m_kg_m2s: float
+    NTU: float
+    acercamiento_equilibrio: float
+
+
+def diagnostico_transferencia(
+    camara: "Camara",
+    *,
+    T_operacion_K: float,
+    HR_operacion: float,
+    T_amb_K: float,
+    P_Pa: float = 101325.0,
+) -> DiagnosticoTransferencia:
+    """Diagnóstico de transferencia de la cámara en el punto de diseño (S63).
+
+    No integra el secado: arma los mismos parámetros que usaría el motor y
+    devuelve el NTU resultante. Sirve para que la UI muestre, mientras se diseña
+    la cámara, si el aire y el producto están acoplados o no — que hasta S63 no
+    se veía en ninguna vista, y era justo lo que estaba mal.
+
+    Args:
+        camara: Cámara configurada.
+        T_operacion_K: Temperatura del aire de referencia [K].
+        HR_operacion: Humedad relativa del aire de referencia [fracción 0–1].
+        T_amb_K: Temperatura ambiente [K].
+        P_Pa: Presión total [Pa].
+
+    Returns:
+        ``DiagnosticoTransferencia``.
+    """
+    pr = _construir_params_termodinamico(
+        camara,
+        T_operacion_K=T_operacion_K,
+        HR_operacion=HR_operacion,
+        T_amb_K=T_amb_K,
+        P_Pa=P_Pa,
+    )
+    m_dot = camara.flujo.caudal_masico_kg_s
+    NTU = pr.K_m_kg_m2s * pr.A_prod_total_m2 / m_dot if m_dot > 0.0 else 0.0
+    N = max(1, pr.n_etapas_aire)
+    return DiagnosticoTransferencia(
+        A_prod_m2=pr.A_prod_total_m2,
+        h_conv_W_m2K=pr.h_conv_W_m2K,
+        K_m_kg_m2s=pr.K_m_kg_m2s,
+        NTU=NTU,
+        acercamiento_equilibrio=(1.0 - (1.0 + NTU / N) ** (-N) if NTU > 0.0 else 0.0),
+    )
 
 
 def estimar_T_flujo_estacionario(
@@ -726,7 +962,11 @@ def estimar_T_flujo_estacionario(
     Q_rad_W = I_g_W_m2 * pr.tau_cubierta_solar * pr.alfa_producto_solar * pr.A_rad_total_m2
 
     def _estado(T_prod_K: float, h_pared_override: Optional[float] = None):
-        return resolver_estado_camara(
+        # Misma cadena de sub-etapas que el motor (S63): esta estimación
+        # alimenta el empuje del tiro térmico, y con un CSTR único daba una
+        # T_flujo distinta de la que después calcula la simulación.
+        return resolver_cadena_camara(
+            n_etapas=pr.n_etapas_aire,
             T_prod_K=T_prod_K,
             X_prod_kg_kg=pr.X_inicial,
             T_ent_K=T_ent_K,

@@ -7,6 +7,255 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Cross-flow como única topología de la cámara** (S64). Se retira el through-flow
+  (`DireccionFlujo.VERTICAL_ASCENDENTE`) que había introducido S63. Tres razones encadenadas:
+
+  1. El par `(d_p, Φ_s)` del catálogo es inconsistente. En Ergun y en el área específica solo
+     entra el producto `Φ_s·d_p` —el diámetro de Sauter—, y el catálogo lo pone en 3.6 mm
+     (espesor × 0.6) cuando la geometría de la rodaja da 14.5 mm: la corrección de forma se
+     aplicaba dos veces. El área salía **4× alta** y el término viscoso de Ergun **16×**.
+  2. Con ese número, un armario ascendente **pasivo** es imposible: el lecho pide ~31 Pa
+     contra ~1.3 Pa de tiro térmico disponible. Como esos secadores existen y funcionan, el
+     modelo se autorefutaba.
+  3. A NTU 32 el resultado había dejado de depender del modelo del lecho —dividir NTU por 16
+     todavía satura el aire—, así que el motor no podía discriminar diseños.
+
+  La posición de las bocas fija la **escala** del flujo (diagonal ascendente, *cross
+  ventilation con displacement flow*); la disposición de las bandejas fija la **dirección
+  local** sobre el producto. Son dos problemas separados. Los snapshots con
+  `VERTICAL_ASCENDENTE` **migran solos** con aviso en P4.
+
+  **Riesgo asumido:** un secador de lecho atravesado **forzado** es una máquina real que la
+  herramienta ya no representa; con ventilador esos 31 Pa se pagan sin problema. Ver
+  `docs/notas/plan_crossflow_unico_camara.md` §7.1.
+
+- **El área de transferencia cuenta las dos caras de la bandeja** (S64). El aire circula por
+  encima y por debajo: `A = n·área_bandeja·(1 + f_abierta_malla · 0.5)`. La cara inferior se
+  descuenta por el área abierta de la malla —`tipo_malla` deja de gobernar solo el ΔP— y por
+  transferir peor, con un factor anclado en el cociente rama débil/fuerte de
+  `nusselt_placa_horizontal` en el Ra de una bandeja (0.61 a Ra 1e4, 0.48 a 1e6).
+
+- **El espesor de capa pasa a ser un resultado, no un input** (S64). Con carga uniforme,
+  `m = ρ_material·(1−ε)·A_bandeja·n_bandejas·espesor` liga cuatro variables con una ecuación,
+  y el espesor es el que un usuario de prediseño menos puede responder con confianza. Se
+  deriva en `Camara.__post_init__` —no en la UI, porque el barrido paramétrico muta masa y
+  área vía `dataclasses.replace`— y el widget de P4 pasa a métrica de solo lectura. Antes
+  nada impedía una configuración imposible: el proyecto de referencia declaraba 2 cm de capa
+  sobre una carga que da 0.82 cm.
+
+- **`BAND_SEPARACION_INSUFICIENTE` deja de bloquear diseños apretados pero legítimos** (S64).
+  Ahora solo rechaza lo imposible —que la capa no entre entre bandejas—; el margen de 1 cm de
+  aire libre pasó a la advertencia `CAM_CANAL_MUY_ESTRECHO`. Con el espesor derivado, la regla
+  vieja volvía **inconstruible** un industrial de 120 bandejas con 4 cm de separación. Mismo
+  criterio que S62 con los topes de los widgets.
+
+### Fixed
+
+- **El encadenado inmediato de lotes ya no se documenta como cota superior de producción**
+  (S64). Lo era mientras el lote entraba holgado en un día; con lotes largos la alineación con
+  el sol pasa a mandar y un lote que arranca de madrugada puede no cerrar dentro de la
+  ventana. Medido en 6 días: **12 kg secos sin espera contra 24 kg con espera**, con la misma
+  agua evaporada. La política de recarga dejó de ser una restricción operativa y pasó a ser
+  una decisión de diseño.
+
+- **El diagnóstico de NTU describía el CSTR y el motor integra una cadena de N etapas** (S64).
+  `acercamiento_equilibrio` usaba `NTU/(1+NTU)` desde antes de que S63 introdujera
+  `resolver_cadena_camara`; ahora usa `1 − (1+NTU/N)^(−N)`. A NTU = 2 son 83 % contra 67 %.
+
+### Added
+
+- **Barrido del espaciado entre bandejas** (S64). Con cross-flow único el espaciado entra
+  directo en la velocidad sobre el producto, y en un secador **pasivo** entra dos veces con
+  signos opuestos: menos separación sube `h` pero también el ΔP, que baja el caudal de tiro.
+  Medido en un cajón real: 2 cm dan `h` = 4.25 W/m²K con ΔP = 0.40 Pa; 6 cm dan 2.64 con
+  0.009 Pa. El óptimo existe y ahora el barrido puede encontrarlo.
+
+### Added
+
+- **Aviso cuando el respaldo no puede alcanzar su set point** (S62). En
+  `SERIE_POSCOLECTOR` el diagnóstico existe desde siempre; en respaldo no había ninguno, así
+  que una resistencia chica corría a plena potencia durante horas sin acercarse a la consigna
+  y el reporte lo mostraba como operación normal. `AUX_RESPALDO_SET_POINT_NO_ALCANZABLE`
+  informa cuántas horas saturó, con qué potencia y **qué temperatura llegó a lograr**, que es
+  lo que permite decidir si conviene subir potencia, bajar el caudal o aislar mejor. Detectado
+  sobre una corrida real: 50 W saturando 13 h contra una consigna de 65 °C.
+
+  El aviso exige que el techo esté en su valor pleno y que la falla dure más de media hora:
+  las forzantes se interpolan entre horas, de modo que en el borde de encendido el techo sube
+  en rampa desde cero y el motor lo satura trivialmente. Sin ese filtro un equipo holgado de
+  5 kW reportaba saturación "a 594 W" —un punto de la rampa, no su potencia—.
+
+### Changed
+
+- **La cámara transfiere calor y masa según la topología del flujo** (S63). Para la **pérdida
+  de carga**, el proyecto sabía desde siempre que el producto es un lecho empacado: usa Ergun
+  con porosidad, esfericidad y diámetro de partícula, y distingue el flujo vertical —que
+  atraviesa el lecho— del horizontal —que pasa entre bandejas—. Para **calor y masa** trataba
+  al mismo producto como una placa plana lisa del tamaño de la bandeja, siempre, ignorando
+  `direccion_flujo`, el espesor de capa y los tres campos del lecho, que estaban en el data
+  model y en el catálogo sin que nadie los leyera para transferir.
+
+  La consecuencia no era un coeficiente mal ajustado sino una topología faltante. En un
+  armario de flujo vertical con 9.5 kg de manzana en 10 bandejas: área de transferencia
+  2.5 m² (la huella) contra **45.8 m²** de superficie de partícula, y h de 2.5 contra
+  **25 W/(m²·K)** — un factor **182 en h·A**, NTU de 0.19 en vez de 32. El aire salía a
+  **11 % de HR** habiendo cargado 1.8 g/kg de los 12.8 que puede cargar una cámara adiabática,
+  y el lote tardaba **154 h** en vez de **13.7 h**. Toda la cadena de resultados —producción
+  anual, fracción solar, COP, η_drying, energía específica— salía sesgada en el mismo sentido.
+
+  Ahora `VERTICAL_ASCENDENTE` usa el área de partícula `a_v·V_lecho` con
+  `a_v = 6(1−ε)/(Φ_s·d_p)` y **Ranz-Marshall** (`Nu_p = 2 + 0.6·Re_p^{1/2}·Pr^{1/3}`), cuyo
+  piso `Nu_p → 2` es conducción a partícula aislada: a caudal nulo el coeficiente no se va a
+  cero, que es justo lo que hace falta en un secador pasivo. `HORIZONTAL` mantiene el área de
+  bandeja y la placa plana, pero con la velocidad **del canal entre bandejas** — hasta ahora la
+  transferencia usaba la cara entera de la cámara y la pérdida de carga el canal, o sea dos
+  velocidades distintas para el mismo aire (0.55 m² contra 0.225 m² en el mismo armario).
+
+  La geometría del lecho pasa a tener **una sola fuente de verdad**, `calculos/lecho_producto.py`,
+  que consumen los dos modelos. Chilton-Colburn sigue derivando `K_m` de `h` en ambas
+  topologías, así que el producto se sigue parando en el bulbo húmedo: medido, 21.4 °C contra
+  un bulbo húmedo de 21.1 °C, con el aire saliendo a **92.8 % de HR** sobre la adiabática.
+
+  **Los resultados de todo proyecto de flujo vertical cambian**, y mucho. Cuatro advertencias
+  nuevas cubren los supuestos: `CAM_LECHO_BYPASS` (bandejas que no cubren la huella: parte del
+  aire esquiva el lecho y el modelo sobrestima), `CAM_LECHO_D_P_DEFAULT` (el área va como
+  `1/d_p` y el diámetro no está declarado), `CAM_LECHO_CARGA_INCOHERENTE` (la capa declarada no
+  es la que ocupa la carga real) y `CAM_LECHO_DEGENERADO`.
+
+  **Límite conocido:** el modelo sigue sin resistencia interna a la difusión —`a_w` depende de
+  `X` solo por GAB—, y esa aproximación pesa **más** ahora, porque antes quedaba enmascarada
+  por una resistencia externa artificialmente grande. El tiempo de secado que da es la **cota
+  inferior** (limitada por energía); antes daba una cota superior errada por un factor 10.
+
+- **El aire de la cámara se resuelve como cadena de sub-etapas en serie, no como un tanque
+  agitado** (S63). El motor trataba la cámara como un CSTR —un nodo de aire perfectamente
+  mezclado—, y un CSTR **no puede saturar por construcción**: su acercamiento al equilibrio es
+  `NTU/(1+NTU)`, que nunca llega a 1. Pero el aire de un secador no está perfectamente
+  mezclado: recorre un camino humedeciéndose a lo largo de él, que es un intercambiador de
+  **flujo pistón**, con acercamiento `1 − exp(−NTU)`.
+
+  La diferencia no importa en los extremos —a NTU = 0.2 son 16.7 % contra 18.1 %; a NTU = 32,
+  97 % contra 100 %— pero sí en el medio, que es donde cae un secador mal cargado: a **NTU = 2,
+  67 % contra 86 %**. El CSTR subestimaba la evaporación 20 puntos justo en el rango donde se
+  toman las decisiones de diseño.
+
+  `resolver_cadena_camara` parte el camino del aire en N sub-etapas, cada una el mismo solve
+  algebraico exacto con 1/N de las áreas y el aire de la anterior como entrada. **Con N = 1
+  reproduce el CSTR exactamente** (back-compat literal, verificada en test). Cuántas etapas
+  corresponden lo decide la topología, con el mismo criterio que la pérdida de carga: en flujo
+  **vertical** las bandejas están físicamente en serie —el aire cruza una tras otra, y por eso
+  ΔP las multiplica por `n_bandejas`—, así que hay una etapa por bandeja; en **horizontal** los
+  canales están en paralelo —cada uno recibe aire de entrada— pero cada canal es un
+  intercambiador continuo a lo largo de la bandeja, que se discretiza en 8 tramos.
+
+  De yapa, la pérdida de pared queda mejor calculada: cada tramo pierde con **su** temperatura
+  en vez de con una sola para toda la cámara. Costo: el transitorio de 7 días del armario de
+  referencia pasa de 0.1 s a 0.4 s.
+
+  Con **set point** del auxiliar la potencia es **una sola perilla sobre el aire de la cámara**:
+  se despeja por inversión afín sobre la cadena entera. Dejar que cada etapa modulara por su
+  cuenta daba un controlador por tramo, y el primero —que ve el aire frío de entrada— encendía
+  siempre aunque el sol ya hubiera superado la consigna aguas abajo.
+
+- **P4 muestra el acoplamiento aire↔producto (NTU)** (S63). `calculos/camara_calc.py::
+  diagnostico_transferencia` devuelve la superficie de intercambio, el coeficiente, el
+  **NTU** (`K_m·A/ṁ`) y el acercamiento al equilibrio, y P4 lo rinde junto a los resultados
+  del motor con el régimen en palabras: limitado por transferencia, intermedio, o limitado por
+  energía. Es el número que dice si el secador está bien cargado y **no aparecía en ninguna
+  vista**: se podía diseñar una cámara que transfería 200 veces menos de lo que debía sin que
+  nada lo insinuara. En el armario de referencia: 32.6 en flujo vertical (97 % de acercamiento)
+  contra 0.19 en horizontal (16 %).
+
+### Fixed
+
+- **`aprovechamiento_aire` se medía contra un techo inalcanzable** (S63). El denominador era
+  la saturación **isotérmica** del aire de entrada, `ω_sat(T_ent) − ω_ent`, pero el aire no se
+  satura a temperatura constante: cada gramo que evapora sale de su propia entalpía, así que
+  se enfría mientras se humedece y recorre la adiabática hasta cortar la curva de saturación
+  en `T_wb`. A 51 °C y 89 kPa el techo isotérmico son 110 g/kg contra los **12.8 g/kg**
+  alcanzables — el indicador daba ~8 veces peor de lo posible y **todo** secador se reportaba
+  catastrófico, incluso uno entregando aire casi saturado sobre la adiabática. Ahora el
+  denominador es `ω_sat(T_wb) − ω_ent`.
+
+- **La temperatura de bulbo húmedo fallaba con aire por encima de la ebullición local** (S63).
+  `temperatura_bulbo_humedo` chequeaba saturación en el **bulbo seco**, y a presión reducida
+  —a 73 kPa (≈2650 m) el agua hierve a 91 °C— eso lanzaba `PSICRO_PV_EXCEDE_P`. Pero ese aire
+  no puede estar saturado (hervir es otra cosa) y **sí** tiene saturación adiabática:
+  enfriándose corta la curva bien por debajo. Ahora el bracket se acota a la ebullición local
+  en vez de fallar, y el caso reportado por el usuario en S57 (armario a 2650 m, aire a
+  92.8 °C) pasa de quedar **excluido** del indicador a evaluarse: T_wb = 28.5 °C, capacidad
+  27 g/kg. Se suma `temperatura_ebullicion(P_Pa)`, inversión numérica de Buck.
+
+- **El film convectivo del producto se evaluaba con el aire de entrada** (S63). La fuerza
+  impulsora del balance es `h·A·(T_flujo − T_prod)`, pero ese mismo `h` se calculaba con la
+  película `(T_ent + T_prod)/2` y —en over-flow— con el empuje de `T_ent − T_prod`: dos
+  temperaturas del aire distintas en un solo término. Es exactamente el arreglo que S62 hizo
+  para el film de **pared** y que había quedado sin hacer para el **producto**.
+
+  Pesa donde manda la convección natural, que es el secador pasivo: a 0.02 m/s el coeficiente
+  salía **1.9× sobrestimado**, a 0.1 m/s 1.4×, y a 1 m/s la diferencia desaparece. En el
+  armario forzado de referencia el efecto es de tercer orden (13.72 → 13.73 h de secado).
+
+  `T_flujo` es la incógnita del sistema algebraico, así que se resuelve dos veces por paso —la
+  primera con `T_ent` como estimación, la segunda con los films ya corregidos—, el mismo patrón
+  que ya usaba la pared. Los coeficientes siguen congelados dentro de cada solve, así que no se
+  rompe la linealidad. Aplica también al motor de cascada del túnel semicontinuo, que tenía el
+  mismo patrón. Con coeficientes congelados (sin closures) se hace una sola pasada: back-compat
+  exacta.
+
+- **La HR de referencia del motor de cámara se calculaba a presión de nivel del mar** (S63).
+  `balance_global._correr_motor_TD` llamaba a `HR_desde_omega(ω, T)` sin `P_Pa`, así que usaba
+  101 325 Pa donde el proyecto tiene la presión del sitio: a 1187 m (89.2 kPa) la HR de
+  operación salía ~12 % baja. Solo alimenta coeficientes de referencia, pero es la misma clase
+  de descuido que el resto de esta tanda.
+
+- **La carta psicrométrica comparaba dos instantes distintos** (S63). El estado de entrada se
+  tomaba en la hora de POA máxima de **todo el horizonte** y el de salida en el punto más
+  cercano de la trayectoria de cámara, que **termina cuando el producto alcanza X_obj**. En
+  cuanto el horizonte sobrevivía al lote —toda ventana multidía— los dos extremos del tramo de
+  cámara salían de momentos distintos: en una corrida real, entrada de la hora 157 contra
+  salida de la hora 154. El dibujo mostraba al aire **perdiendo** 0.6 g/kg al atravesar el
+  secador (imposible sin condensación) y un Δh de −20.2 kJ/kg que no era del proceso sino del
+  desfasaje, con la salida muy lejos de la adiabática.
+
+  Ahora hay **una sola base temporal**: el instante lo fija la cámara —el de **máxima
+  evaporación**, la misma regla que ya usaba el modo Constantes, que por construcción nunca
+  cae en la cola con el producto ya seco— y las forzantes se **interpolan** ahí. El mismo caso
+  pasa a Δω = +1.9 g/kg y Δh = −1.2 kJ/kg, que es lo que corresponde: pérdida de pared más
+  inercia térmica del producto. La carta además **rotula el instante elegido** (fecha y hora
+  locales), que hasta ahora no se decía en ningún lado.
+
+  No cambia ningún resultado del balance: es la lectura del resultado la que estaba mal, no el
+  cálculo. El balance de energía del aire cierra con residuo de 5×10⁻¹² W.
+
+- **La previa de P4 no avisaba que sus números no incluyen el auxiliar** (S62). P4 resuelve la
+  cámara con el aire tal como llega **antes** de P5 y el aporte del calentamiento auxiliar
+  entra recién en el balance de P7. Es una división deliberada —así está declarada en el
+  registro de vigencia, donde el horizonte no depende del auxiliar—, pero los dos resultados se
+  rotulaban igual, "tiempo de secado", y conviven en el mismo PDF: en una corrida real, 34.6 h
+  en la sección de cámara y 16.8 h en la de resultados globales, sin nada que explicara la
+  diferencia. Ahora ambas vistas lo dicen cuando hay un auxiliar configurado.
+
+- **En tipología CAJA el sol no entraba al balance energético** (S62). `energia_solar_util_MJ`
+  se calculaba **solo** como `ṁ·cp·(T_salida_colector − T_amb)`, que sin colector da cero por
+  construcción. Una caja translúcida —donde la radiación transmitida es la única fuente de
+  energía del producto— se reportaba con **fracción solar 0 %**, y el `COP_secado` quedaba en
+  1.27: mayor que 1 teniendo a la resistencia eléctrica como única entrada contabilizada, que
+  no significa nada físicamente. No era un refinamiento sino un número incorrecto en el
+  reporte de todo secador de caja.
+
+  La energía ya estaba calculada por el motor —`Q_rad` al producto y `Q_rad_aire` a las
+  superficies internas, ambas integradas sobre el ciclo—; lo que faltaba era sumarla. El
+  nuevo `energia_solar_camara_MJ` la aporta en los modos Constantes y Transitorio. No hay
+  doble conteo: el término del colector mide el calor que el aire trae de afuera y este la
+  radiación que entra por el vidriado, así que en un armario con colector **y** caras
+  translúcidas los dos son reales y se suman.
+
+  En la corrida de referencia el secador pasa de reportarse 100 % eléctrico a **60 % solar**,
+  y el COP de 1.27 a 0.51.
+
 **Hoja de ruta** — pendientes conocidos, no trabajo entregado. Sin orden estricto:
 
 - **Acoples de sección desigual** entre colector y boca de entrada, y entre boca de salida

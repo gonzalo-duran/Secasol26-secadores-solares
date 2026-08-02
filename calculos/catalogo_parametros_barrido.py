@@ -280,6 +280,29 @@ CATALOGO_PARAMETROS: tuple[ParametroBarrido, ...] = (
         descripcion_corta="Masa total de producto fresco a secar en la tanda.",
     ),
     ParametroBarrido(
+        id="separacion_bandejas",
+        label="Separación entre bandejas",
+        path="camara.bandejas.separacion_entre_bandejas_m",
+        unidad_ui="cm",
+        unidad_si="m",
+        si_a_ui=lambda v: v * 100.0,
+        ui_a_si=lambda v: v / 100.0,
+        valor_min_si=0.02,
+        valor_max_si=0.50,
+        paso_sugerido_si=0.01,
+        transform_pre_set=None,
+        tipologias=_TODAS_TIPOLOGIAS,
+        modos_soportados=_TODOS_MODOS,
+        descripcion_corta=(
+            "Altura libre del canal entre bandejas. Con cross-flow único (S64) entra "
+            "directo en la velocidad del aire sobre el producto, v = ṁ/(ρ·ancho·libre·"
+            "(n−1)), y con ella en h. En un secador **pasivo** entra DOS veces y con "
+            "signos opuestos: menos separación sube la velocidad y el h, pero también "
+            "la pérdida de carga, que baja el caudal de tiro térmico. Existe un óptimo "
+            "y este barrido es la forma de encontrarlo."
+        ),
+    ),
+    ParametroBarrido(
         id="area_bandeja",
         label="Área de bandeja (área efectiva de intercambio)",
         path="camara.bandejas.area_bandeja_m2",

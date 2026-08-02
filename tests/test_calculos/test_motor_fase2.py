@@ -12,7 +12,6 @@ import pytest
 
 from calculos.motor_calc import (
     K_MALLA,
-    K_TRANSICION_LECHO,
     TIPOS_MALLA,
     _C_obstruccion_bloqueo,
     _delta_P_producto_crossflow,
@@ -105,8 +104,6 @@ class TestKMallaConfigurable:
 
     def test_dP_camara_responde_al_tipo_malla(self):
         """Misma cámara, distinto tipo_malla → distinto ΔP."""
-        from calculos.motor_calc import densidad_aire
-
         rho = densidad_aire(323.15, 101325.0)
 
         def _cam(tipo_m):
@@ -121,7 +118,7 @@ class TestKMallaConfigurable:
                 ),
                 flujo=ConfiguracionFlujo(
                     caudal_masico_kg_s=rho * 0.1,
-                    direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
+                    direccion_flujo=DireccionFlujo.HORIZONTAL,
                 ),
                 carga_producto=CargaProducto(
                     producto_id="manzana",
@@ -273,31 +270,6 @@ def _cam_horizontal(K_rug=None, espesor_capa=0.02, sep=0.10):
     )
 
 
-def _cam_vertical(caudal_kg_s=0.1):
-    rho_est = 1.1
-    return Camara(
-        geometria=GeometriaCamara(largo_m=1.0, ancho_m=1.0, alto_m=1.0),
-        bandejas=ConfiguracionBandejas(
-            n_bandejas=5,
-            area_bandeja_m2=0.5,
-            espesor_capa_m=0.02,
-            separacion_entre_bandejas_m=0.15,
-            tipo_malla="alambre_grueso",
-        ),
-        flujo=ConfiguracionFlujo(
-            caudal_masico_kg_s=rho_est * caudal_kg_s,
-            direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
-        ),
-        carga_producto=CargaProducto(
-            producto_id="manzana",
-            masa_total_kg=10.0,
-            humedad_inicial_X=4.6,
-            humedad_objetivo_X=0.15,
-            modelo_capa_fina="logaritmico",
-        ),
-    )
-
-
 class TestCObstruccionBloqueo:
     """Coeficiente de obstrucción por bloqueo C_obs(β) (mejora 29)."""
 
@@ -385,21 +357,6 @@ class TestKRugosidadEnCamara:
         dP_auto = estimar_delta_P_camara(_cam_horizontal(K_rug=None))
         dP_force = estimar_delta_P_camara(_cam_horizontal(K_rug=5.0))
         assert dP_force > dP_auto
-
-    def test_vertical_incluye_termino_transicion(self):
-        """En VERTICAL, ΔP debe incluir K_TRANSICION · ρ·v₀²/2 · n_bandejas
-        además de malla + Ergun. Verificamos comparando con un cálculo manual
-        del término de transición a partir de la velocidad superficial."""
-        cam = _cam_vertical(caudal_kg_s=0.1)
-        dP = estimar_delta_P_camara(cam)
-        # El término de transición es estrictamente positivo
-        rho = densidad_aire(323.15, 101325.0)
-        Q_vol = cam.flujo.caudal_masico_kg_s / rho
-        v0 = Q_vol / cam.bandejas.area_bandeja_m2
-        dP_transicion = K_TRANSICION_LECHO * (rho * v0**2 / 2.0) * cam.bandejas.n_bandejas
-        # El ΔP total debe ser estrictamente mayor que el término de transición
-        # (porque también incluye malla + Ergun).
-        assert dP > dP_transicion > 0.0
 
     def test_validacion_K_negativo_lanza_error(self):
         with pytest.raises(ValueError, match="BAND_K_RUGOSIDAD_INVALIDO"):

@@ -5,8 +5,9 @@
 Ver §7 al final para lo que quedó igual y lo que cambió respecto de esta propuesta. Las
 **etapas 2 (RESPALDO) y 3 (resto de UI) siguen pendientes**.
 
-**Autor de la física de fondo:** decisiones tomadas con el usuario (Dr. en secado solar) en
-la discusión de S61. Referencia física: `docs/notas/balance de calor y masa en camara
+**Autor de la física de fondo:** decisiones tomadas con Gonzalo Durán —Licenciado en Física,
+Doctor en Ciencias especialidad Energías Renovables, Investigador Adjunto del CONICET en el
+INENCO (CONICET–UNSa)— en la discusión de S61. Referencia física: `docs/notas/balance de calor y masa en camara
 ampliado.md` (§7 circuito de aire) y `docs/notas/cubiertas translucidas en camara de
 secado.md`.
 

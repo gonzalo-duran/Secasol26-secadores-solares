@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from calculos.motor_calc import (
-    K_MALLA,
     caudal_masico_a_volumetrico,
     densidad_aire,
     estimar_delta_P_camara,
@@ -473,11 +472,19 @@ class TestDeltaPColectorDensidadVariable:
 # ---------------------------------------------------------------------------
 
 
-class TestDeltaPCamaraVerticalErgun:
+class TestDeltaPCamaraRugosidadDelLecho:
+    """``d_p`` entra al ΔP como altura de RUGOSIDAD de la pared del canal.
+
+    Antes de S64 entraba a Ergun como diámetro de partícula del lecho
+    atravesado, y el signo era el contrario: partícula más chica ⇒ más
+    superficie ⇒ más ΔP. En cross-flow el lecho es la pared rugosa del canal
+    (``ε_eff = max(ε_chapa, d_p)``), así que grano más **grande** ⇒ más ΔP.
+    Las cámaras declaradas VERTICAL_ASCENDENTE se coaccionan a cross-flow.
+    """
 
     @pytest.fixture
     def camara_vertical_con_particulas(self):
-        """Cámara VERTICAL_ASCENDENTE con d_p definido → aplica Ergun."""
+        """Snapshot declarado VERTICAL con d_p explícito de 10 mm."""
         from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
 
         return Camara(
@@ -516,36 +523,45 @@ class TestDeltaPCamaraVerticalErgun:
             ),
         )
 
-    def test_vertical_d_p_pequeno_mayor_que_grande(
-        self, camara_vertical_con_particulas, camara_vertical_sin_d_p_explicito
-    ):
-        """A menor d_p, ΔP_Ergun es mayor (mayor superficie/volumen).
-        El default sin d_p explícito (8 mm) es menor que 10 mm de la fixture."""
-        dP_10mm = estimar_delta_P_camara(camara_vertical_con_particulas)
-        dP_default = estimar_delta_P_camara(camara_vertical_sin_d_p_explicito)
-        # default = 8 mm → más Ergun que 10 mm
-        assert dP_default > dP_10mm
+    def test_d_p_grande_da_mas_dP_que_chico(self):
+        """Rugosidad mayor ⇒ más fricción. Signo OPUESTO al de Ergun.
 
-    def test_vertical_sin_d_p_usa_default_ergun(self, camara_vertical_sin_d_p_explicito):
-        """Sin d_p explícito ni producto, motor_calc usa defaults (d_p=8 mm,
-        ε=0.45, Φ=0.6) → Ergun activo, ΔP > solo malla."""
+        Hay que evaluarlo en régimen **turbulento**: en laminar ``f = 64/Re``
+        no depende de la rugosidad y los dos casos dan idéntico, que es lo que
+        pasa con el caudal chico de las fixtures de esta clase.
+        """
+        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo
+
+        def _cam(d_p):
+            return Camara(
+                bandejas=ConfiguracionBandejas(
+                    n_bandejas=5,
+                    area_bandeja_m2=0.50,
+                    espesor_capa_m=0.020,
+                    separacion_entre_bandejas_m=0.15,
+                    porosidad_lecho=0.40,
+                    diametro_eq_particula_m=d_p,
+                    esfericidad=0.60,
+                ),
+                flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.30),
+            )
+
+        assert estimar_delta_P_camara(_cam(0.010)) > estimar_delta_P_camara(_cam(0.002))
+
+    def test_sin_d_p_explicito_usa_el_default(self, camara_vertical_sin_d_p_explicito):
+        """Sin d_p ni producto se usan los defaults (8 mm, 0.45, 0.6)."""
+        from calculos.lecho_producto import D_P_DEFAULT_M, geometria_lecho
 
         cam = camara_vertical_sin_d_p_explicito
-        f = cam.flujo
-        b = cam.bandejas
-        rho = densidad_aire(323.15, 101325.0)
-        Q_vol = f.caudal_masico_kg_s / rho
-        v0 = Q_vol / b.area_bandeja_m2
-        dP_malla_sola = K_MALLA * (rho * v0**2 / 2.0) * b.n_bandejas
-        dP_calc = estimar_delta_P_camara(cam)
-        # Con Ergun activo por default, debe ser estrictamente mayor que sólo malla.
-        assert dP_calc > dP_malla_sola
+        d_p, _eps, _phi = geometria_lecho(cam.bandejas, None)
+        assert d_p == pytest.approx(D_P_DEFAULT_M)
+        assert estimar_delta_P_camara(cam) > 0.0
 
-    def test_vertical_positivo(self, camara_vertical_con_particulas):
+    def test_dP_positivo(self, camara_vertical_con_particulas):
         assert estimar_delta_P_camara(camara_vertical_con_particulas) > 0
 
-    def test_ergun_crece_con_caudal(self):
-        """Mayor caudal → mayor v₀ → mayor ΔP Ergun."""
+    def test_dP_crece_con_caudal(self):
+        """Mayor caudal → mayor velocidad de canal → mayor ΔP."""
         from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
 
         def make_cam(q):
@@ -566,27 +582,43 @@ class TestDeltaPCamaraVerticalErgun:
 
         assert estimar_delta_P_camara(make_cam(0.10)) > estimar_delta_P_camara(make_cam(0.03))
 
-    def test_ergun_crece_con_espesor_capa(self):
-        """Mayor L → mayor ΔP_lecho (ΔP/L × L)."""
-        from core.camara import Camara, ConfiguracionBandejas, ConfiguracionFlujo, DireccionFlujo
+    def test_mas_carga_estrecha_el_canal_y_sube_el_dP(self):
+        """Más carga → capa más gruesa → canal más angosto → más ΔP.
 
-        def make_cam(L):
+        Es la cadena causal después de S64: el espesor de capa ya no es un
+        input, sale de la carga uniforme, así que lo que hay que variar para
+        engrosar el lecho es la masa. Con la separación fija, engrosar la capa
+        sube el bloqueo β = espesor/separación y la velocidad del canal.
+        """
+        from core.camara import (
+            Camara,
+            CargaProducto,
+            ConfiguracionBandejas,
+            ConfiguracionFlujo,
+        )
+
+        def make_cam(masa_kg):
             return Camara(
                 bandejas=ConfiguracionBandejas(
                     n_bandejas=3,
                     area_bandeja_m2=0.5,
-                    espesor_capa_m=L,
-                    separacion_entre_bandejas_m=max(0.10, L + 0.015),
+                    espesor_capa_m=0.02,  # se recalcula desde la carga
+                    separacion_entre_bandejas_m=0.10,
                     diametro_eq_particula_m=0.008,
                     esfericidad=0.60,
                 ),
-                flujo=ConfiguracionFlujo(
-                    caudal_masico_kg_s=0.03,
-                    direccion_flujo=DireccionFlujo.VERTICAL_ASCENDENTE,
+                flujo=ConfiguracionFlujo(caudal_masico_kg_s=0.03),
+                carga_producto=CargaProducto(
+                    producto_id="manzana",
+                    masa_total_kg=masa_kg,
+                    humedad_inicial_X=4.6,
+                    humedad_objetivo_X=0.15,
                 ),
             )
 
-        assert estimar_delta_P_camara(make_cam(0.04)) > estimar_delta_P_camara(make_cam(0.02))
+        poca, mucha = make_cam(13.9), make_cam(27.7)  # ≈ 2 cm y 4 cm de capa
+        assert mucha.bandejas.espesor_capa_m > poca.bandejas.espesor_capa_m
+        assert estimar_delta_P_camara(mucha) > estimar_delta_P_camara(poca)
 
 
 # ---------------------------------------------------------------------------

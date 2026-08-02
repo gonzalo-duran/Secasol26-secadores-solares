@@ -155,8 +155,12 @@ bandejas:
   n_bandejas: Number of trays
   area_bandeja: Area per tray [m²]
   espesor_capa:
-    label: Product layer thickness [m]
-    help: Thin-layer models valid for thickness ≤ 5 cm.
+    label: Layer thickness (derived)
+    help: >-
+      Not an input: it follows from the uniform load, thickness = mass / (ρ·(1−ε)·tray area
+      · number of trays). To change it, change the load, the tray area or the number of
+      trays. Careful above ~5 cm: the model does not represent internal diffusion in the
+      bed and the drying time it reports becomes increasingly optimistic.
   separacion:
     label: Spacing between trays [m]
     help: Clear distance between the surfaces of consecutive trays.
@@ -179,8 +183,6 @@ bandejas:
     • C_obs(β) = 0.5·[β/(1−β)] + [β/(1−β)]²
     • Grows with β and diverges when the gap blocks (β→1).
 
-    In VERTICAL_ASCENDING this term does not apply: the Ergun equation
-    already captures the through-bed resistance via Φ_s and d_p.
   forzar_k: Force C_obstruction (override the automatic default)
   c_obstruccion:
     label: C_obstruction [dimensionless]
@@ -251,15 +253,22 @@ flujo:
       ℹ️ The actual flow rate is solved by the draft (see openings below). This
       number is only the scaling reference.
   direccion:
-    label: Flow direction
-    horizontal: HORIZONTAL
-    vertical_ascendente: VERTICAL_ASCENDING
+    fija: >-
+      **Cross-flow**: the air sweeps the trays parallel to the bed. It is the model's only
+      topology — the port layout sets the scale of the flow and the tray layout sets the
+      local direction over the product.
+  migracion_vertical: >-
+    This project was saved with VERTICAL_ASCENDING flow (air through the bed), a topology
+    that has been removed from the model. It was migrated to cross-flow over trays. Drying
+    times will differ from those in the original report.
   usar_hr:
     label: Specify inlet RH
     help: If not specified, the calculation uses the scalar fallback from the catalogue.
   hr_entrada: RH of the air at the chamber inlet [%]
   velocidad: "Estimated superficial velocity: {v:.2f} m/s  |  Q_vol ≈ {q:.1f} L/s"
 bocas:
+  transicion_angulo: "Junction angle: {theta:.0f}°. Above 45° the diffuser stalls and behaves as a step."
+  transicion_help: "Length of the cone joining the two sections. At 0 the junction is an abrupt step, the conservative case and the usual one in workshop-built equipment. Making it longer narrows the angle and recovers pressure."
   titulo: "**Air openings (natural convection)**"
   usar:
     label: The dryer has inlet and outlet openings
@@ -287,9 +296,19 @@ bocas:
     cross-section**. If they do not, the coupling adds a contraction that this
     model does not represent yet.
   entrada:
+    transicion: "Inlet transition length [m]"
+    heredada: "Inherits {area:.4f} m² from the collector outlet."
+    sin_colector: "With no collector there is no adjacent section to inherit: enter the opening area."
+    hereda_help: "If the inlet opening has the same cross-section as the collector bank outlet, there is no contraction or expansion at that junction and no pressure is lost there."
+    hereda: "Same as collector outlet"
     label: Inlet opening area [m²]
     help: Total free area through which ambient air enters (sum of all openings).
   salida:
+    transicion: "Outlet transition length [m]"
+    heredada: "Inherits {area:.4f} m² from the chimney base."
+    sin_chimenea: "With no chimney the discharge is to the atmosphere: enter the opening area."
+    hereda_help: "If the outlet opening has the same cross-section as the chimney base, that junction loses no pressure."
+    hereda: "Same as chimney base"
     label: Outlet opening area [m²]
     help: >-
       Total free outlet area. It weighs more than the inlet: the leaving air
@@ -543,8 +562,47 @@ calcular:
     which is the source of truth.
   label: ⚙️ Compute chamber
   help_bloqueo: BOX typology requires at least one translucent face to be able to compute.
+transferencia:
+  titulo: 🔗 Air ↔ product coupling (NTU)
+  topologia_sobre: >-
+    The air passes **between** trays and touches both faces of the bed: the top one in full
+    and the bottom one over the fraction the mesh leaves open, with a lower coefficient.
+    The h comes from a flat plate over the tray, at the channel velocity.
+  ntu:
+    label: NTU
+    help: >-
+      Transfer units, K_m·A/ṁ. Measures how far towards equilibrium with the product the
+      air can travel in a single pass. It is the number that tells whether the dryer is
+      properly loaded.
+  acercamiento:
+    label: Approach to equilibrium
+    help: >-
+      Fraction of the way to equilibrium the air travels, NTU/(1+NTU). At 100 % it would
+      leave saturated at the product's wet-bulb temperature.
+  area:
+    label: Exchange surface
+    help: Product surface seen by the air, according to the flow topology.
+  h:
+    label: h air↔product
+    help: Interior convective coefficient at the design point.
+  regimen: "**Regime:** {regimen}"
+  regimen_transferencia: >-
+    **transfer** limited — the air leaves almost as it entered and carries little water.
+    More surface (thinner layer, smaller pieces) or less airflow improve drying.
+  regimen_intermedio: >-
+    intermediate — the air uses a good share of its capacity. This is where airflow and
+    load balance each other.
+  regimen_energia: >-
+    **energy** limited — the air leaves nearly saturated and drying is set by the available
+    energy, not by transfer. This is where you want to be; to go faster you need more
+    energy (more collector) or more airflow.
+
 resultados_td:
   titulo: Thermodynamic-engine results
+  aviso_sin_auxiliar: >-
+    ℹ️ These figures are **without the auxiliary heater**: this view solves the chamber
+    with the air as it arrives before P5. The auxiliary contribution is applied in the
+    tab 7 balance, so the actual drying time will be shorter.
   t_secado: Drying time
   no_alcanzado: not reached
   status: Status
@@ -615,7 +673,6 @@ resumen:
   bandejas: "**Trays:** {n} × {area:.2f} m²"
   espesor_capa: "**Layer thickness:** {v:.1f} cm"
   caudal: "**Flow:** {v:.4f} kg/s"
-  direccion: "**Direction:** {v}"
   t_amb: "**T_amb (calc):** {v:.1f} °C"
 guardar:
   txt: Save chamber configuration (.txt)

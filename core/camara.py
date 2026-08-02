@@ -34,6 +34,7 @@ import numpy as np
 
 from core import catalogo
 from core.advertencias import Advertencia, Severidad
+from core.lecho import espesor_capa_derivado_m, geometria_lecho
 
 # Modos válidos de cálculo de cámara
 _MODOS_CALCULO_VALIDOS: tuple[str, ...] = ("capa_fina", "termodinamico")
@@ -46,6 +47,9 @@ _T_PROD_INICIAL_MAX_K: float = 343.15  # +70 °C
 # ---------------------------------------------------------------------------
 
 _VOL_MIN_M3: float = 0.01  # 10 litros — mínimo para secador funcional
+#: Aire libre mínimo entre la capa de producto y la bandeja de arriba [m]. Lo
+#: exige ConfiguracionBandejas y lo reusa la derivación del espesor de capa.
+_MARGEN_LIBRE_BANDEJA_M: float = 0.01
 _ALTO_MIN_TIPICO_M: float = 0.3  # límite inferior de rango típico [m]
 _ALTO_MAX_TIPICO_M: float = 3.0  # límite superior de rango típico [m]
 _RATIO_LARGO_ANCHO_MAX: float = 10.0
@@ -65,6 +69,23 @@ _U_MUROS_ALTO_W_M2K: float = 2.0  # umbral de conductancia lateral alta
 
 
 class DireccionFlujo(Enum):
+    """Dirección del flujo de aire sobre el producto.
+
+    Desde S64 la única topología soportada es ``HORIZONTAL`` (cross-flow: el
+    aire barre paralelo a la superficie del lecho, pasando **entre** bandejas).
+
+    ``VERTICAL_ASCENDENTE`` es **vestigial**: se conserva para que los snapshots
+    ``.json`` anteriores deserialicen, pero ``ConfiguracionFlujo.__post_init__``
+    lo coacciona a ``HORIZONTAL``. Representaba through-flow (el aire
+    atravesando el lecho) y se retiró porque en un secador pasivo la pérdida de
+    carga del lecho supera en un orden de magnitud el tiro térmico disponible
+    —o sea, el aire no puede tomar ese camino— y porque la dirección local del
+    flujo no es algo que un usuario de prediseño pueda responder con confianza.
+    Ver ``docs/notas/plan_crossflow_unico_camara.md``.
+
+    Mismo patrón que ``Camara.modo_calculo="capa_fina"`` desde S38.
+    """
+
     HORIZONTAL = "HORIZONTAL"
     VERTICAL_ASCENDENTE = "VERTICAL_ASCENDENTE"
 
@@ -549,12 +570,17 @@ class ConfiguracionBandejas:
                 f"BAND_SEPARACION_NO_POSITIVA: separacion_entre_bandejas_m="
                 f"{self.separacion_entre_bandejas_m:.4f} m ≤ 0."
             )
-        margen_min = self.espesor_capa_m + 0.01
-        if self.separacion_entre_bandejas_m < margen_min:
+        # Solo se rechaza lo IMPOSIBLE: que la capa no entre entre bandejas.
+        # Hasta S64 se exigía además 1 cm de aire libre, lo que bloqueaba
+        # diseños apretados pero legítimos —un industrial de 120 bandejas con
+        # 4 cm de separación y 3.5 cm de capa ni siquiera se podía construir—.
+        # Ese margen pasó a ser la advertencia CAM_CANAL_MUY_ESTRECHO. Es el
+        # mismo criterio de S62 con los topes de los widgets.
+        if self.separacion_entre_bandejas_m <= self.espesor_capa_m:
             raise ValueError(
                 f"BAND_SEPARACION_INSUFICIENTE: separación {self.separacion_entre_bandejas_m:.3f} m "
-                f"< espesor_capa {self.espesor_capa_m:.3f} m + margen 0.01 m "
-                f"= {margen_min:.3f} m mínimo."
+                f"≤ espesor_capa {self.espesor_capa_m:.3f} m. La capa de producto no entra "
+                "entre bandejas: no queda paso para el aire."
             )
         if not (0.0 < self.porosidad_lecho < 1.0):
             raise ValueError(
@@ -605,6 +631,20 @@ class ConfiguracionFlujo:
             queda en el valor de diseño constante, que es lo que hacía toda
             versión anterior.
         area_salida_aire_m2: Ídem para la(s) boca(s) de **salida** [m²].
+        boca_entrada_hereda_seccion: Si True, la boca de entrada tiene la misma
+            sección que la salida del colector y ``area_entrada_aire_m2`` se
+            ignora. Default False para que los proyectos guardados antes de S62
+            —donde ``None`` significaba "sin bocas"— se sigan comportando igual.
+        boca_salida_hereda_seccion: Ídem contra la base de la chimenea. Sin
+            chimenea no hay sección contigua que heredar (la descarga es a la
+            atmósfera) y el área debe declararse.
+        longitud_transicion_entrada_m: Largo del tronco de cono que une la salida
+            del colector con la boca de entrada [m]. ``0`` = escalón brusco, que
+            es el caso conservador y el habitual en un equipo de taller. Solo
+            interviene cuando las dos secciones difieren; ver
+            ``calculos/transiciones_seccion.py``.
+        longitud_transicion_salida_m: Ídem entre la boca de salida y la base de
+            la chimenea.
     """
 
     caudal_masico_kg_s: float = 0.030
@@ -614,6 +654,10 @@ class ConfiguracionFlujo:
     seguir_caudal_colector: bool = True
     area_entrada_aire_m2: Optional[float] = None
     area_salida_aire_m2: Optional[float] = None
+    boca_entrada_hereda_seccion: bool = False
+    boca_salida_hereda_seccion: bool = False
+    longitud_transicion_entrada_m: float = 0.0
+    longitud_transicion_salida_m: float = 0.0
 
     @property
     def bocas_definidas(self) -> bool:
@@ -642,13 +686,16 @@ class ConfiguracionFlujo:
                 "La recirculación de aire no está implementada en v0. "
                 "Usar fraccion_recirculacion=0."
             )
-        if self.direccion_flujo not in (
-            DireccionFlujo.HORIZONTAL,
-            DireccionFlujo.VERTICAL_ASCENDENTE,
-        ):
+        # Coacción de topología (S64): la única soportada es cross-flow. Los
+        # snapshots viejos con VERTICAL_ASCENDENTE se migran en silencio acá; el
+        # aviso al usuario lo da la capa de carga de la UI, que es la única que
+        # todavía ve el valor original. Ver DireccionFlujo.
+        if self.direccion_flujo == DireccionFlujo.VERTICAL_ASCENDENTE:
+            self.direccion_flujo = DireccionFlujo.HORIZONTAL
+        elif self.direccion_flujo != DireccionFlujo.HORIZONTAL:
             raise NotImplementedError(
-                f"FLUJO_DIRECCION_NO_SOPORTADA: '{self.direccion_flujo}' no soportada en v0. "
-                "Opciones: HORIZONTAL, VERTICAL_ASCENDENTE."
+                f"FLUJO_DIRECCION_NO_SOPORTADA: '{self.direccion_flujo}' no soportada. "
+                "Única opción: HORIZONTAL (cross-flow sobre bandejas)."
             )
         if self.HR_entrada_fraccion is not None and not (0.0 <= self.HR_entrada_fraccion <= 1.0):
             raise ValueError(
@@ -880,6 +927,60 @@ class Camara:
                 )
         self._validar_producto()
         self._validar_coherencia()
+        # Después de la coherencia: una sobrecarga grosera la diagnostica mejor
+        # COHE_CARGA_EXCEDE_CAPACIDAD_GEOMETRICA que el espesor que resultaría.
+        self._derivar_espesor_capa()
+
+    def _derivar_espesor_capa(self) -> None:
+        """Deriva ``bandejas.espesor_capa_m`` de la carga uniforme (S64).
+
+        Con carga uniforme y espesor único, masa, área de bandeja, cantidad de
+        bandejas y espesor **no son cuatro variables libres**: están ligadas por
+
+            ``m = ρ_material · (1−ε) · A_bandeja · n_bandejas · espesor``
+
+        El espesor es el que un usuario de prediseño menos puede responder con
+        confianza, así que es el que se deriva. Hasta S63 los cuatro se cargaban
+        sueltos y nada impedía una configuración imposible: el proyecto de
+        referencia declaraba 2 cm de capa sobre una carga que da 0.8 cm.
+
+        **Vive acá y no en la UI** porque ``barrido_parametrico`` puede variar la
+        masa y el área de bandeja mutando por ``dataclasses.replace``, que
+        re-dispara este ``__post_init__``; derivarlo solo en P4 dejaría al
+        barrido corriendo con un espesor viejo.
+
+        Si el producto no declara densidad, se respeta el espesor cargado a mano.
+
+        Raises:
+            ValueError: ``CAM_CAPA_DERIVADA_NO_ENTRA`` si la capa que resulta de
+                la carga no deja el margen libre que exige ``ConfiguracionBandejas``
+                entre bandejas. Es la carga la que no entra, no el espesor.
+        """
+        p, b = self.carga_producto, self.bandejas
+        props = (catalogo.PRODUCTOS.get(p.producto_id) or {}).get("propiedades_basicas") or {}
+        rho_material = float(props.get("densidad_aparente") or 0.0)
+        if rho_material <= 0.0:
+            return  # sin densidad no hay nada que derivar: queda el valor cargado
+
+        _d_p, eps, _phi = geometria_lecho(b, p.producto_id)
+        espesor = espesor_capa_derivado_m(
+            p.masa_total_kg, b.area_bandeja_m2, b.n_bandejas, rho_material, eps
+        )
+        if espesor <= 0.0:
+            return
+
+        # Solo se rechaza lo imposible: que la capa no entre. Que entre justa
+        # —menos de _MARGEN_LIBRE_BANDEJA_M de aire— es un diseño malo pero
+        # construible, y lo avisa CAM_CANAL_MUY_ESTRECHO.
+        if espesor >= b.separacion_entre_bandejas_m:
+            raise ValueError(
+                f"CAM_CAPA_DERIVADA_NO_ENTRA: {p.masa_total_kg:.1f} kg sobre "
+                f"{b.n_bandejas} bandejas de {b.area_bandeja_m2:.2f} m² dan una capa de "
+                f"{espesor * 100:.1f} cm, que no entra en la separación de "
+                f"{b.separacion_entre_bandejas_m * 100:.1f} cm. Bajá la carga, sumá "
+                "bandejas o separalas más."
+            )
+        b.espesor_capa_m = espesor
 
     def _validar_producto(self) -> None:
         """Valida que el producto y sus modelos existan en el catálogo.
@@ -1219,10 +1320,44 @@ def advertencias_camara(camara: Camara, latitud_deg: Optional[float] = None) -> 
             Advertencia(
                 codigo="BAND_MALLA_SIN_ESPECIFICAR",
                 severidad=Severidad.INFO,
-                mensaje="Tipo de malla de bandeja no especificado. Afecta la caída de presión.",
+                mensaje=(
+                    "Tipo de malla de bandeja no especificado. Afecta la caída de presión y, "
+                    "desde S64, también el área de transferencia: la malla decide cuánto de la "
+                    "cara inferior del lecho alcanza el aire."
+                ),
                 campo="bandejas.tipo_malla",
-                sugerencia="Especificar tipo de malla para estimación de pérdida de carga en motor.",
+                sugerencia=(
+                    "Especificar tipo de malla para estimar la pérdida de carga y la fracción "
+                    "de la cara inferior que transfiere."
+                ),
                 contexto={},
+            )
+        )
+
+    # --- BAND: canal muy estrecho (S64) ---
+    # La capa entra, pero deja poco aire. No es imposible —hasta S64 era un
+    # error duro que impedía construir un industrial apretado pero legítimo—,
+    # aunque dispara la velocidad del canal y con ella el ΔP.
+    _libre = b.separacion_entre_bandejas_m - b.espesor_capa_m
+    if 0.0 < _libre < _MARGEN_LIBRE_BANDEJA_M:
+        adv.append(
+            Advertencia(
+                codigo="CAM_CANAL_MUY_ESTRECHO",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"Entre la capa de producto ({b.espesor_capa_m * 100:.1f} cm) y la bandeja "
+                    f"de arriba quedan {_libre * 1000:.0f} mm de aire libre. El canal es muy "
+                    "angosto: la velocidad del aire y la pérdida de carga se disparan."
+                ),
+                campo="bandejas.separacion_entre_bandejas_m",
+                sugerencia=(
+                    f"Separar las bandejas al menos {_MARGEN_LIBRE_BANDEJA_M * 100:.0f} cm por "
+                    "encima del espesor de capa, o bajar la carga por bandeja."
+                ),
+                contexto={
+                    "libre_mm": round(_libre * 1000, 1),
+                    "espesor_cm": round(b.espesor_capa_m * 100, 2),
+                },
             )
         )
 

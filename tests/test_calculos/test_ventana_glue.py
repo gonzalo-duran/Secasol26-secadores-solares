@@ -369,8 +369,25 @@ class TestPoliticaRecargaEnVentana:
         proy.configuracion = _replace(proy.configuracion, politica_recarga=politica)
         return proy
 
-    def test_desactivar_la_espera_no_baja_la_produccion(self):
-        """Sin espera de recarga el encadenado es inmediato: es la cota superior."""
+    def test_el_encadenado_inmediato_ya_no_es_cota_superior(self):
+        """Desactivar la espera **puede producir menos**, no más (S64).
+
+        Hasta S63 el encadenado inmediato era la cota superior de producción:
+        arrancar el lote siguiente apenas termina el anterior nunca podía ser
+        peor que esperar a la hora de carga. Eso valía porque el lote entraba
+        holgado en un día. Con cross-flow el lote dura del orden de 100 h y la
+        **alineación con el sol** pasa a mandar: un lote que arranca a las 3 de
+        la mañana se pasa la noche sin secar y no llega a terminar dentro de la
+        ventana, mientras que el mismo lote arrancado a las 8:00 sí.
+
+        Medido en esta ventana de 6 días: con espera 24 kg secos, sin espera
+        12 kg —un lote contra dos—, con **la misma agua evaporada** (~56 kg).
+        La diferencia no es cuánto se seca sino cuántos lotes cierran.
+
+        Corolario práctico: la política de recarga dejó de ser solo una
+        restricción operativa y pasó a ser una decisión de diseño que puede
+        mejorar la producción.
+        """
         from core.operacion import PoliticaRecarga
 
         df = _clima_sintetico(dias=6)
@@ -381,7 +398,10 @@ class TestPoliticaRecargaEnVentana:
             self._con_politica(PoliticaRecarga(activa=False)), df, P_Pa=88000.0
         )
         assert con_espera.status != "error" and sin_espera.status != "error"
-        assert sin_espera.masa_seca_producida_kg >= con_espera.masa_seca_producida_kg
+        # El agua evaporada es prácticamente la misma: el secado ocurre igual.
+        assert sin_espera.masa_evaporada_kg == pytest.approx(con_espera.masa_evaporada_kg, rel=0.05)
+        # Lo que cambia es cuántos lotes cierran dentro de la ventana.
+        assert sin_espera.masa_seca_producida_kg < con_espera.masa_seca_producida_kg
 
     def test_la_hora_de_carga_llega_al_motor(self):
         """Cambiar solo la hora de carga tiene que cambiar el resultado."""

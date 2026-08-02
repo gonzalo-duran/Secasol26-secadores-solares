@@ -43,6 +43,29 @@ _HR_LINEAS: tuple[float, ...] = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
 # sin auxiliar el calentamiento sensible no agrega un punto nuevo).
 _TOL_T_C: float = 0.3
 _TOL_OMEGA: float = 1e-4
+# Holgura al comparar tiempos de dos bases temporales distintas [s].
+_TOL_T_S: float = 1.0
+
+
+def _serie(obj: Any, campo: str) -> np.ndarray:
+    """Serie 1-D de floats de ``obj.campo``, o array vacío si no es utilizable.
+
+    ``np.asarray(None, dtype=float)`` devuelve un array 0-d de tamaño 1 (``nan``)
+    en vez de fallar, así que un atributo ausente pasaría los chequeos de tamaño
+    y reventaría recién al indexar. Acá se normaliza a "vacío".
+    """
+    if obj is None:
+        return np.empty(0, dtype=float)
+    valor = getattr(obj, campo, None)
+    if valor is None:
+        return np.empty(0, dtype=float)
+    try:
+        arr = np.asarray(valor, dtype=float)
+    except (TypeError, ValueError):
+        return np.empty(0, dtype=float)
+    if arr.ndim != 1:
+        return np.empty(0, dtype=float)
+    return arr
 
 
 @dataclass(frozen=True)
@@ -171,16 +194,49 @@ def _colapsar(estados: list[EstadoPsicro]) -> list[EstadoPsicro]:
     return out
 
 
-def _idx_repr_forzantes(forzantes) -> int:
-    """Índice representativo en las forzantes: hora de POA máxima (≈ mediodía
-    solar / pico de operación). Fallback: máxima T_ent; luego el punto medio."""
-    poa = getattr(forzantes, "I_g_POA_W_m2", None)
-    if poa is not None and len(poa) > 0 and np.any(np.isfinite(poa)):
-        return int(np.nanargmax(poa))
-    T_ent = getattr(forzantes, "T_ent_K", None)
-    if T_ent is not None and len(T_ent) > 0:
-        return int(np.nanargmax(T_ent))
-    return 0
+def _instante_representativo(camara, forzantes) -> float:
+    """Instante representativo del proceso [s], **sobre la base temporal de la cámara**.
+
+    Criterio: **máxima evaporación**, el mismo que ya usaba el modo Constantes.
+    Es el instante en que el tramo entrada→salida de cámara dice más sobre el
+    proceso, y por construcción nunca cae fuera del secado.
+
+    Hasta S63 el transitorio elegía ``argmax(POA)`` sobre **todo el horizonte** y
+    después buscaba el punto de cámara más cercano. Como la trayectoria de cámara
+    termina cuando el producto alcanza ``X_obj``, en cuanto el horizonte
+    sobrevivía al lote (toda ventana multidía) los dos estados salían de
+    instantes distintos: en una corrida real, entrada de la hora 157 contra
+    salida de la hora 154. El dibujo mostraba al aire **perdiendo** 0.6 g/kg al
+    atravesar el secador —imposible sin condensación— y un Δh de −20 kJ/kg que
+    no era del proceso sino del desfasaje. Con los instantes alineados, el mismo
+    caso da Δω = +1.8 g/kg y Δh = −1.2 kJ/kg, que es la pérdida de pared más la
+    inercia del producto.
+
+    Args:
+        camara: ``ResultadoMotorTermodinamico`` (o equivalente con ``t_array_s``).
+        forzantes: ``ForzantesAire`` del horizonte (solo para el fallback).
+
+    Returns:
+        Instante [s] en la base temporal de la cámara. 0.0 si no hay trayectoria.
+    """
+    t_arr = _serie(camara, "t_array_s")
+    if t_arr.size == 0:
+        return 0.0
+
+    m_dot_w = _serie(camara, "m_dot_w_kg_s")
+    if m_dot_w.size == t_arr.size and np.any(np.isfinite(m_dot_w)) and np.nanmax(m_dot_w) > 0.0:
+        return float(t_arr[int(np.nanargmax(m_dot_w))])
+
+    # Fallback: POA máxima, pero SOLO entre las horas que la cámara simuló.
+    # Restringir el rango es lo que evita el desfasaje aunque no haya ṁ_w.
+    poa = _serie(forzantes, "I_g_POA_W_m2")
+    t_fz = _serie(forzantes, "t_s")
+    if poa.size > 0 and poa.size == t_fz.size and np.any(np.isfinite(poa)):
+        dentro = t_fz <= t_arr[-1] + _TOL_T_S
+        if np.any(dentro):
+            return float(t_fz[int(np.nanargmax(np.where(dentro, poa, -np.inf)))])
+
+    return float(t_arr[t_arr.size // 2])
 
 
 def _idx_camara_en_tiempo(camara, t_repr_s: float) -> int:
@@ -193,6 +249,21 @@ def _idx_camara_en_tiempo(camara, t_repr_s: float) -> int:
     if t_arr is None or len(t_arr) == 0:
         return 0
     return int(np.argmin(np.abs(np.asarray(t_arr, dtype=float) - t_repr_s)))
+
+
+def _forzante_en_tiempo(forzantes, campo: str, t_repr_s: float, default: float) -> float:
+    """Valor de una forzante en ``t_repr_s``, **interpolado** en su propia base.
+
+    Las forzantes son horarias y la cámara integra con paso propio, así que el
+    instante representativo no cae sobre un nodo de las forzantes. Interpolar
+    (en vez de indexar el nodo más cercano) es lo que mantiene a los dos estados
+    del tramo de cámara sobre el mismo instante físico.
+    """
+    arr = _serie(forzantes, campo)
+    t_fz = _serie(forzantes, "t_s")
+    if arr.size == 0 or arr.size != t_fz.size:
+        return default
+    return float(np.interp(t_repr_s, t_fz, arr))
 
 
 def _camara_es_directa(camara) -> bool:
@@ -270,6 +341,9 @@ def _estados_ventana(res: Any, P_Pa: float) -> Optional[dict[str, Any]]:
         "estados": estados,
         "camara_directa": bool(getattr(res, "camara_directa", False)),
         "idx_inlet": _idx_inlet(estados),
+        # La ventana ya trae los estados capturados por la simulación (no hay
+        # trayectoria que indexar acá), así que no hay instante que rotular.
+        "t_repr_s": None,
     }
 
 
@@ -283,7 +357,9 @@ def estados_proceso(
 
     Soporta los tres modos:
         - **Constantes** (``ResultadosCompletos``): T's escalares + ω del llamador.
-        - **Transitorio** (``ResultadosCompletosTransitorio``): índice de POA máx.
+        - **Transitorio** (``ResultadosCompletosTransitorio``): instante de
+          **máxima evaporación** sobre la base temporal de la cámara, con las
+          forzantes interpoladas ahí (ver ``_instante_representativo``).
         - **Ventana** (``ResultadoVentana``, gran escala): BATCH = 3 estados;
           SEMICONTINUO = entrada + path del aire por las zonas del túnel.
 
@@ -294,9 +370,11 @@ def estados_proceso(
             modo Constantes (donde no hay forzantes con ω).
 
     Returns:
-        dict con ``estados`` (list[EstadoPsicro]), ``camara_directa`` (bool) e
-        ``idx_inlet`` (índice del estado de entrada a la cámara/túnel), o
-        ``None`` si el resultado no permite construir el proceso.
+        dict con ``estados`` (list[EstadoPsicro]), ``camara_directa`` (bool),
+        ``idx_inlet`` (índice del estado de entrada a la cámara/túnel) y
+        ``t_repr_s`` (instante representativo [s] desde el inicio del horizonte,
+        ``None`` en Ventana), o ``None`` si el resultado no permite construir el
+        proceso.
     """
     # --- Ventana (gran escala): se detecta por el atributo ``subtipo``. ---
     if getattr(res, "subtipo", None) is not None:
@@ -311,15 +389,20 @@ def estados_proceso(
     fa = getattr(res, "forzantes_aplicadas", None)
     fb = getattr(res, "forzantes_base", None)
     if fa is not None:
-        idx = _idx_repr_forzantes(fa)
-        omega = float(fa.omega_ent[idx])
-        T_amb_K = float(fa.T_amb_K[idx])
-        T_col_K = float(fb.T_ent_K[idx]) if fb is not None else T_amb_K
-        T_cam_in_K = float(fa.T_ent_K[idx])
-        t_repr_s = float(fa.t_s[idx])
+        # UNA sola base temporal: el instante lo fija la cámara y las forzantes
+        # se interpolan ahí. Indexar cada serie por su cuenta desalineaba los
+        # extremos del tramo de cámara (ver ``_instante_representativo``).
+        t_repr_s = _instante_representativo(camara, fa)
         idx_c = _idx_camara_en_tiempo(camara, t_repr_s)
         T_cam_out_K = float(np.asarray(camara.T_flujo_K)[idx_c])
         omega_out = float(np.asarray(camara.omega_flujo_kg_kg)[idx_c])
+
+        T_amb_K = _forzante_en_tiempo(fa, "T_amb_K", t_repr_s, T_cam_out_K)
+        omega = _forzante_en_tiempo(fa, "omega_ent", t_repr_s, omega_out)
+        T_cam_in_K = _forzante_en_tiempo(fa, "T_ent_K", t_repr_s, T_amb_K)
+        T_col_K = (
+            _forzante_en_tiempo(fb, "T_ent_K", t_repr_s, T_amb_K) if fb is not None else T_amb_K
+        )
 
         estados = _colapsar(
             [
@@ -333,6 +416,7 @@ def estados_proceso(
             "estados": estados,
             "camara_directa": _camara_es_directa(camara),
             "idx_inlet": _idx_inlet(estados),
+            "t_repr_s": t_repr_s,
         }
 
     # --- Constantes: T's escalares desde el resultado; ω de entrada del llamador ---
@@ -355,12 +439,16 @@ def estados_proceso(
         T_amb_K = T_cam_in_K
         T_col_K = T_cam_in_K
 
-    # Salida de cámara: representativa = instante de máxima evaporación.
-    m_dot_w = np.asarray(getattr(camara, "m_dot_w_kg_s", []), dtype=float)
-    if m_dot_w.size > 0 and np.any(np.isfinite(m_dot_w)):
-        idx_c = int(np.nanargmax(m_dot_w))
+    # Salida de cámara: representativa = instante de máxima evaporación (la
+    # misma regla que el transitorio; acá no hay forzantes que alinear).
+    t_repr_s = _instante_representativo(camara, None)
+    t_arr = _serie(camara, "t_array_s")
+    if t_arr.size > 0:
+        idx_c = _idx_camara_en_tiempo(camara, t_repr_s)
     else:
-        idx_c = -1
+        m_dot_w = _serie(camara, "m_dot_w_kg_s")
+        idx_c = int(np.nanargmax(m_dot_w)) if m_dot_w.size > 0 else -1
+        t_repr_s = None
     T_cam_out_K = float(np.asarray(camara.T_flujo_K)[idx_c])
     omega_out = float(np.asarray(camara.omega_flujo_kg_kg)[idx_c])
 
@@ -376,4 +464,5 @@ def estados_proceso(
         "estados": estados,
         "camara_directa": _camara_es_directa(camara),
         "idx_inlet": _idx_inlet(estados),
+        "t_repr_s": t_repr_s,
     }

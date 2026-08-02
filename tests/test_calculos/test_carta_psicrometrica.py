@@ -111,6 +111,85 @@ def test_idx_representativo_es_pico_poa():
     assert salida_col.T_C == pytest.approx(293.15 + 15 - 273.15, abs=0.01)
 
 
+def _res_lote_termina_antes(*, poa_pico_tarde=True):
+    """Horizonte de 3 días cuyo lote termina en el día 2 (S63).
+
+    Reproduce la configuración que rompía la carta: la trayectoria de cámara
+    termina al alcanzar X_obj (hora 36) mientras el horizonte sigue hasta la
+    hora 71, con el pico de POA del horizonte en el **día 3**.
+
+    El aire de entrada se **humedece** a lo largo del horizonte (como en la
+    corrida real que lo destapó: 3.29 g/kg en la hora 154 contra 4.06 en la
+    157) y esa subida supera lo que la cámara le agrega. Por eso tomar la
+    entrada en un instante posterior al de la salida hace aparecer un
+    ω_salida < ω_entrada: el aire saldría del secador más seco de lo que entró.
+    """
+    n = 72
+    t_s = np.arange(n) * 3600.0
+    dia = np.array(
+        [0, 0, 0, 0, 0, 0, 0, 100, 300, 600, 800, 950, 900, 700, 400, 150, 0, 0, 0, 0, 0, 0, 0, 0]
+    )
+    # El día 3 es el más soleado del horizonte (y el lote ya terminó ahí).
+    poa = np.concatenate([dia, dia, dia])[:n].astype(float)
+    if poa_pico_tarde:
+        poa[48:] *= 1.3
+    T_amb = np.full(n, 293.15)
+    # ω de entrada creciente: el aire del día 3 es MÁS húmedo que el del día 2.
+    omega = np.linspace(0.004, humedad_absoluta(0.6, 293.15, _P_SALTA), n)
+    fb = NS(t_s=t_s, T_ent_K=T_amb + 15, omega_ent=omega, T_amb_K=T_amb, I_g_POA_W_m2=poa)
+    fa = NS(t_s=t_s, T_ent_K=T_amb + 25, omega_ent=omega, T_amb_K=T_amb, I_g_POA_W_m2=poa)
+
+    # La cámara integra solo hasta la hora 36 (X_obj alcanzado).
+    m = 300
+    tc = np.linspace(0.0, 36 * 3600.0, m)
+    omega_ent_cam = np.interp(tc, t_s, omega)
+    cam = NS(
+        t_array_s=tc,
+        T_flujo_K=np.full(m, 313.15),
+        # La cámara SIEMPRE agrega humedad al aire que le entra en ese instante,
+        # pero menos de lo que ω_ent sube entre la hora 36 y el pico del día 3.
+        omega_flujo_kg_kg=omega_ent_cam + 0.0008,
+        m_dot_w_kg_s=np.full(m, 1e-4) * np.interp(tc, t_s, poa) / 950.0,
+        Q_rad_W=np.zeros(m),
+    )
+    return NS(camara=cam, forzantes_aplicadas=fa, forzantes_base=fb)
+
+
+def test_lote_que_termina_antes_del_horizonte_no_desalinea_los_estados():
+    """S63: entrada y salida de cámara deben salir del MISMO instante.
+
+    Antes, la entrada se tomaba en el pico de POA del horizonte (día 3) y la
+    salida quedaba clampeada al último punto de la cámara (hora 36): el aire
+    aparecía perdiendo humedad al atravesar el secador.
+    """
+    d = estados_proceso(_res_lote_termina_antes(), P_Pa=_P_SALTA)
+    assert d is not None
+    entrada = next(e for e in d["estados"] if e.nombre == "Entrada cámara")
+    salida = next(e for e in d["estados"] if e.nombre == "Salida cámara")
+    # Un secador no puede secar el aire: ω tiene que subir en la cámara.
+    assert salida.omega_kg_kg > entrada.omega_kg_kg
+    # Y el instante representativo cae dentro del lote, no en el horizonte muerto.
+    assert d["t_repr_s"] <= 36 * 3600.0 + 1.0
+
+
+def test_instante_representativo_es_el_de_maxima_evaporacion():
+    res = _res_lote_termina_antes()
+    d = estados_proceso(res, P_Pa=_P_SALTA)
+    idx = int(np.nanargmax(res.camara.m_dot_w_kg_s))
+    assert d["t_repr_s"] == pytest.approx(float(res.camara.t_array_s[idx]))
+
+
+def test_sin_evaporacion_cae_a_poa_dentro_de_la_trayectoria():
+    """Sin ṁ_w utilizable, el fallback de POA se restringe a lo que la cámara simuló."""
+    res = _res_lote_termina_antes()
+    res.camara.m_dot_w_kg_s = np.zeros_like(res.camara.t_array_s)
+    d = estados_proceso(res, P_Pa=_P_SALTA)
+    assert d["t_repr_s"] <= 36 * 3600.0 + 1.0
+    entrada = next(e for e in d["estados"] if e.nombre == "Entrada cámara")
+    salida = next(e for e in d["estados"] if e.nombre == "Salida cámara")
+    assert salida.omega_kg_kg > entrada.omega_kg_kg
+
+
 def test_camara_directa_detectada_por_q_rad():
     assert estados_proceso(_res_transitorio(q_rad=False), P_Pa=_P_SALTA)["camara_directa"] is False
     assert estados_proceso(_res_transitorio(q_rad=True), P_Pa=_P_SALTA)["camara_directa"] is True

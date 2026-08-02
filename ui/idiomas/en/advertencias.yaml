@@ -136,8 +136,19 @@ BAND_N_BANDEJAS_ELEVADO:
   mensaje: "{n_bandejas} trays. Check flow uniformity between trays."
   sugerencia: With many trays in series, the last one receives more humid air.
 BAND_MALLA_SIN_ESPECIFICAR:
-  mensaje: Tray mesh type not specified. It affects the pressure drop.
-  sugerencia: Specify the mesh type to estimate the fan pressure drop.
+  mensaje: >-
+    Tray mesh type not specified. It affects the pressure drop and also the transfer area:
+    the mesh decides how much of the bottom face of the bed the air reaches.
+  sugerencia: >-
+    Specify the mesh type to estimate the pressure drop and the fraction of the bottom face
+    that transfers.
+CAM_CANAL_MUY_ESTRECHO:
+  mensaje: >-
+    Between the product layer ({espesor_cm:.1f} cm) and the tray above there are only
+    {libre_mm:.0f} mm of free air. The channel is very narrow: the air velocity and the
+    pressure drop shoot up.
+  sugerencia: >-
+    Space the trays at least 1 cm above the layer thickness, or reduce the load per tray.
 FLUJO_VELOCIDAD_SUPERFICIAL_BAJA:
   mensaje: >-
     Superficial air velocity {v_sup_m_s:.2f} m/s below the recommended minimum. The external

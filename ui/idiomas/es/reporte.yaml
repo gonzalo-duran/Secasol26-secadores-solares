@@ -145,6 +145,10 @@ camara:
   hr_ent: HR entrada
   res_titulo: Resultados de simulación
   res_pendiente: "Cálculo de la cámara no ejecutado en esta sesión. Volver a P4 y presionar 'Calcular cámara'."
+  res_sin_auxiliar: >-
+    ⚠️ Estos resultados son de la cámara <b>sin el auxiliar</b>: esta sección resuelve el aire
+    tal como llega antes de P5. El aporte del calentamiento auxiliar se aplica en el balance
+    global (P7), donde el tiempo de secado es menor. Los dos números no son comparables entre sí.
   status: Status
   t_sim: Tiempo simulación
   t_secado: Tiempo de secado

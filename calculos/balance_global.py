@@ -20,6 +20,7 @@ Hipótesis de v0:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -44,6 +45,7 @@ from calculos.colector_tipos234_calc import (
     calcular_colector_tipo3,
     calcular_colector_tipo4,
 )
+from calculos.transiciones_seccion import delta_P_transicion_Pa
 from core.auxiliar import ModoOperacionAuxiliar
 from core.camara import ForzantesAire
 from core.resultados import LV_AGUA_MJ_KG
@@ -69,7 +71,10 @@ class ResultadosCompletos:
         camara: Salida del solver de cámara (None si no hay cámara).
         T_entrada_camara_K: Temperatura del aire que llega a la cámara [K].
             T_salida_auxiliar si hay auxiliar, T_salida_colector si no.
-        energia_solar_util_MJ: Energía útil del colector × t_secado [MJ].
+        energia_solar_util_MJ: Energía solar que entró al secador durante el
+            ciclo [MJ]: la útil del colector (× t_secado) más la que ingresa por
+            las caras translúcidas de la cámara. En tipología CAJA el primer
+            término es cero y todo el aporte viene del segundo.
         energia_auxiliar_MJ: Energía del auxiliar × t_secado [MJ].
         energia_motor_MJ: Energía eléctrica del motor × t_secado [MJ].
         energia_secado_MJ: masa_agua × Lv [MJ].
@@ -378,6 +383,33 @@ def _T_salida_camara(solver_cam, T_op_K_fallback: float) -> float:
     return float(T_op_K_fallback)
 
 
+def energia_solar_camara_MJ(res_camara) -> float:
+    """Energía solar que entró **directamente a la cámara** [MJ].
+
+    Es la radiación transmitida por las caras translúcidas: la que intercepta el
+    producto (``Q_rad``) más la que calienta las superficies internas y de ahí el
+    aire (``Q_rad_aire``). El motor ya las integra sobre el ciclo; acá solo se
+    suman y se pasan a MJ.
+
+    Existe porque ``energia_solar_util_MJ`` se calculaba **solo** como
+    ``ṁ·cp·(T_salida_colector − T_amb)``, que sin colector da cero por
+    construcción. Una caja translúcida —que puede ser solar en dos tercios— se
+    reportaba con **fracción solar 0 %** y un ``COP_secado`` mayor que 1 con la
+    resistencia eléctrica como única entrada contabilizada, que no significa nada
+    físicamente (S62).
+
+    No hay doble conteo con el término del colector: aquel mide el calor que el
+    aire trae de afuera, y este la radiación que entra por el vidriado de la
+    cámara. En un armario con colector **y** caras translúcidas los dos aportes
+    son reales y se suman.
+    """
+    if res_camara is None:
+        return 0.0
+    rad_producto_J = float(getattr(res_camara, "energia_rad_total_J", 0.0) or 0.0)
+    rad_aire_J = float(getattr(res_camara, "energia_rad_aire_total_J", 0.0) or 0.0)
+    return (rad_producto_J + rad_aire_J) / 1e6
+
+
 def _irradiancia_para_mascara(forzantes) -> Optional[np.ndarray]:
     """Serie de irradiancia con la que decidir si el auxiliar está "de día".
 
@@ -677,16 +709,101 @@ def _z0_terreno(proyecto) -> float:
     return float(getattr(empl, "z0_terreno_m", Z0_DEFAULT_M))
 
 
-def _areas_bocas(proyecto) -> tuple[Optional[float], Optional[float]]:
-    """Áreas de las bocas de la cámara, o ``(None, None)`` si no están definidas.
+def area_salida_colector_m2(proyecto) -> Optional[float]:
+    """Sección de salida del banco de colectores [m²]. None si no hay colector.
 
-    Las bocas son la resistencia del lazo en un secador pasivo **sin** chimenea.
-    Se exige tener las dos: con una sola el equilibrio quedaría indeterminado.
+    Es la sección del canal de un módulo por la cantidad de ramas en paralelo:
+    todas descargan al mismo plenum, así que el aire llega a la cámara por la
+    suma de las secciones y no por una sola.
     """
-    if proyecto.camara is None or not proyecto.camara.flujo.bocas_definidas:
+    col = getattr(proyecto, "colector", None)
+    if col is None:
+        return None
+    u, b = col.unidad, col.banco
+    area = float(u.espaciado_m * u.ancho_m * max(1, int(b.n_paralelo)))
+    return area if area > 0.0 else None
+
+
+def area_base_chimenea_m2(proyecto) -> Optional[float]:
+    """Sección de la base de la chimenea [m²]. None si no hay chimenea."""
+    chim = getattr(proyecto, "chimenea", None)
+    if chim is None:
+        return None
+    area = math.pi * float(chim.diametro_m) ** 2 / 4.0
+    return area if area > 0.0 else None
+
+
+def _areas_bocas(proyecto) -> tuple[Optional[float], Optional[float]]:
+    """Áreas **efectivas** de las bocas de la cámara, o ``(None, None)``.
+
+    Una boca puede tener el área declarada por el usuario o **heredarla** del
+    elemento contiguo (la salida del colector para la entrada, la base de la
+    chimenea para la salida). Se exige resolver las dos: con una sola el
+    equilibrio del lazo natural quedaría indeterminado.
+
+    La herencia solo se aplica si el elemento contiguo existe; si el usuario pide
+    heredar y no hay de dónde —salida a la atmósfera sin chimenea—, la boca queda
+    sin resolver, que es lo mismo que no haberla declarado.
+    """
+    if proyecto.camara is None:
         return (None, None)
     f = proyecto.camara.flujo
-    return (float(f.area_entrada_aire_m2), float(f.area_salida_aire_m2))
+
+    def _resolver(explicita, hereda: bool, area_contigua: Optional[float]) -> Optional[float]:
+        if hereda:
+            return area_contigua
+        return float(explicita) if explicita is not None and explicita > 0 else None
+
+    A_in = _resolver(
+        f.area_entrada_aire_m2,
+        getattr(f, "boca_entrada_hereda_seccion", False),
+        area_salida_colector_m2(proyecto),
+    )
+    A_out = _resolver(
+        f.area_salida_aire_m2,
+        getattr(f, "boca_salida_hereda_seccion", False),
+        area_base_chimenea_m2(proyecto),
+    )
+    if A_in is None or A_out is None:
+        return (None, None)
+    return (A_in, A_out)
+
+
+def _L_transicion(proyecto, cual: str) -> float:
+    """Largo declarado de la transición de un empalme [m]; 0 = escalón brusco."""
+    if proyecto.camara is None:
+        return 0.0
+    campo = f"longitud_transicion_{cual}_m"
+    return float(getattr(proyecto.camara.flujo, campo, 0.0) or 0.0)
+
+
+def delta_P_transiciones_Pa(proyecto, m_dot_kg_s: float, rho_kg_m3: float) -> float:
+    """Pérdida por cambio de sección en los dos empalmes de la cámara [Pa].
+
+    Colector → boca de entrada, y boca de salida → base de chimenea. Cuando las
+    secciones coinciden —porque la boca las hereda, o porque el usuario cargó el
+    mismo valor— el término es cero y no cambia nada; el aporte aparece
+    justamente cuando el acople está mal dimensionado, que es lo que el modelo no
+    representaba hasta S62.
+    """
+    if proyecto.camara is None or m_dot_kg_s <= 0.0:
+        return 0.0
+    A_in, A_out = _areas_bocas(proyecto)
+    if A_in is None or A_out is None:
+        return 0.0
+    f = proyecto.camara.flujo
+    total = 0.0
+    A_col = area_salida_colector_m2(proyecto)
+    if A_col is not None:
+        total += delta_P_transicion_Pa(
+            m_dot_kg_s, A_col, A_in, rho_kg_m3, getattr(f, "longitud_transicion_entrada_m", 0.0)
+        )
+    A_chim = area_base_chimenea_m2(proyecto)
+    if A_chim is not None:
+        total += delta_P_transicion_Pa(
+            m_dot_kg_s, A_out, A_chim, rho_kg_m3, getattr(f, "longitud_transicion_salida_m", 0.0)
+        )
+    return total
 
 
 def conveccion_natural_activa(proyecto) -> bool:
@@ -791,6 +908,9 @@ def _caudal_natural_loop(
         A_boca_salida_m2=bocas[1],
         K_boca_entrada=K_bocas[0],
         K_boca_salida=K_bocas[1],
+        A_salida_colector_m2=area_salida_colector_m2(proyecto),
+        longitud_transicion_entrada_m=_L_transicion(proyecto, "entrada"),
+        longitud_transicion_salida_m=_L_transicion(proyecto, "salida"),
     )
 
 
@@ -976,6 +1096,9 @@ def _caudal_natural_horizonte(
                 A_boca_salida_m2=bocas[1],
                 K_boca_entrada=K_bocas[0],
                 K_boca_salida=K_bocas[1],
+                A_salida_colector_m2=area_salida_colector_m2(proyecto),
+                longitud_transicion_entrada_m=_L_transicion(proyecto, "entrada"),
+                longitud_transicion_salida_m=_L_transicion(proyecto, "salida"),
             )
         except Exception:
             # Brentq fuera del bracket: marcamos hora como sin tiro.
@@ -1626,7 +1749,12 @@ def calcular_todo(
             )
         else:
             # Energías [MJ]
+            # Solar = lo que trae el aire del colector + lo que entra por el
+            # vidriado de la cámara. El segundo término es TODO el aporte solar
+            # en tipología CAJA, donde no hay colector (ver
+            # `energia_solar_camara_MJ`).
             E_sol = (res.colector.Q_util_W * t_s / 1e6) if res.colector else 0.0
+            E_sol += energia_solar_camara_MJ(res.camara)
             # En SERIE el auxiliar es un ΔT aguas arriba y su energía sale del
             # solver propio (potencia × t_secado); en RESPALDO ya quedó calculada
             # arriba como integral del motor, así que se respeta.
@@ -1688,7 +1816,10 @@ class ResultadosCompletosTransitorio:
         horizonte_s: Duración total del horizonte simulado [s].
         n_dias: Días simulados (informativo, replicado de P4).
 
-        energia_solar_util_MJ: ∫ ṁ·cp·(T_sal_col − T_amb) dt sobre el horizonte.
+        energia_solar_util_MJ: Energía solar que entró al secador [MJ]:
+            ∫ ṁ·cp·(T_sal_col − T_amb) dt sobre el horizonte, más la radiación
+            que ingresa por las caras translúcidas de la cámara. En tipología
+            CAJA el primer término es cero por construcción.
         energia_auxiliar_MJ: E_aux del solver transitorio del auxiliar.
         energia_motor_MJ: P_elec · horizonte_s / 1e6 (escalar × tiempo).
         energia_secado_MJ: masa_agua_evaporada × LV_AGUA [MJ].
@@ -1863,7 +1994,12 @@ def calcular_todo_transitorio(
         try:
             from calculos.psicrometria import HR_desde_omega
 
-            HR_op = max(0.05, min(0.95, HR_desde_omega(omega_ent_media, T_ent_media_K)))
+            # Con P_Pa: sin la presión del proyecto se asumían 101 325 Pa y a
+            # 1187 m (89.2 kPa) la HR de referencia salía ~12 % baja (S63).
+            HR_op = max(
+                0.05,
+                min(0.95, HR_desde_omega(omega_ent_media, T_ent_media_K, P_proyecto_Pa)),
+            )
         except Exception:
             HR_op = HR_camara_fallback
         T_amb_media_K = float(np.mean(forzantes.T_amb_K))
@@ -2092,7 +2228,11 @@ def calcular_todo_transitorio(
     dT_col = T_sal_col_eval - forzantes_base.T_amb_K
     Q_col_t = m_dot_eval * CP_AIRE * dT_col
     Q_col_t = np.clip(Q_col_t, 0.0, None)  # noche / colector sin aporte → 0
-    res.energia_solar_util_MJ = float(np.trapezoid(Q_col_t, forzantes_base.t_s) / 1e6)
+    # Al aporte del colector se le suma el que entra por el vidriado de la cámara,
+    # que en tipología CAJA es el único que hay (ver `energia_solar_camara_MJ`).
+    res.energia_solar_util_MJ = float(
+        np.trapezoid(Q_col_t, forzantes_base.t_s) / 1e6
+    ) + energia_solar_camara_MJ(res.camara)
 
     # --- Energía del auxiliar en RESPALDO ---
     # En serie la aporta el solver del auxiliar (arriba, res.energia_auxiliar_MJ =
