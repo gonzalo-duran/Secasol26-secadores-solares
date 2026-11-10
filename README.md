@@ -21,93 +21,76 @@ dimensiones, áreas, caudales, potencias auxiliares y estimación de tiempo de s
 
 ---
 
-## Instalación (entorno de desarrollo local)
+## Instalación local
 
-### Requisitos previos
+Secasol también corre en la nube, sin instalar nada:
+<https://huggingface.co/spaces/gonzalojduran/Secasol26>. Para tenerlo en la propia
+computadora alcanza con dos scripts, uno para instalar y otro para abrir la aplicación.
+Instalan **las mismas versiones de librerías que la versión en producción**
+(`requirements.txt`, fijadas con `==`), dentro de un entorno virtual `.venv` en la carpeta del
+proyecto: no tocan el Python del sistema ni dejan nada fuera de esa carpeta.
 
-- Python 3.11 o superior
-- Git
+### Requisitos
 
-> **Windows:** instalar [Git for Windows](https://git-scm.com/) (incluye Git Bash) y
-> [Python 3.12](https://www.python.org/) marcando **"Add Python to PATH"** durante la instalación.
-> Todos los comandos de esta sección se ejecutan desde **Git Bash**, no desde cmd ni PowerShell.
+- **Python 3.11 o superior.** Se recomienda **3.13**, la versión que usa producción; con otra
+  la aplicación funciona igual, pero algún resultado puede diferir en los últimos decimales.
+- Conexión a internet: la primera instalación descarga unos 300 MB, y la aplicación consulta
+  NASA POWER para el clima.
 
-Verificar versiones:
+### 1. Descargar el proyecto
+
+Con Git:
 
 ```bash
-python3 --version
-git --version
+git clone https://github.com/gonzalo-duran/Secasol26-secadores-solares.git
+cd Secasol26-secadores-solares
 ```
+
+O sin Git: botón **Code → Download ZIP** en GitHub, y descomprimir.
+
+### 2. Instalar y abrir
+
+**Windows 10 / 11**
+
+1. Instalar Python 3.13 desde <https://www.python.org/downloads/> marcando
+   **"Add python.exe to PATH"**.
+2. Doble clic en **`instalar_secasol.bat`** (una sola vez).
+3. Doble clic en **`iniciar_secasol.bat`** cada vez que se quiera usar Secasol. Se abre en el
+   navegador; para cerrarlo, cerrar la ventana negra.
+
+**Linux / macOS**
+
+```bash
+bash instalar_secasol.sh      # una sola vez
+bash iniciar_secasol.sh       # cada vez que se quiera usar Secasol (Ctrl+C para cerrar)
+```
+
+En Ubuntu/Debian puede hacer falta antes `sudo apt install python3-venv`.
+
+**Opciones del instalador** (iguales en `.sh` y `.bat`):
+
+| opción | qué hace |
+|---|---|
+| `--iniciar` | instala y abre la aplicación al terminar |
+| `--limpio` | borra el `.venv` y lo crea de nuevo (útil si algo quedó a medias) |
+| `--dev` | agrega las herramientas de desarrollo: `pytest`, `black`, `ruff` |
+
+Para actualizar después de un `git pull`, volver a correr el instalador: reutiliza el `.venv` y
+solo ajusta las versiones que cambiaron.
 
 ---
 
-### 1. Clonar el repositorio
+## Entorno de desarrollo
 
-```bash
-git clone https://github.com/TU_USUARIO/secador_solar.git
-cd secador_solar
-```
+Para modificar el código:
 
----
-
-### 2. Crear y activar el entorno virtual
-
-**Linux / Fedora:**
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-**Windows (Git Bash):**
-```bash
-python -m venv .venv
-source .venv/Scripts/activate
-```
-
-El prompt cambia a `(.venv)` cuando el entorno está activo. Para desactivarlo: `deactivate`.
-
----
-
-### 3. Instalar dependencias
-
-Para desarrollo (incluye testing y linters):
-```bash
-pip install -r requirements-dev.txt
-```
-
-Para uso solamente (sin herramientas de desarrollo):
-```bash
-pip install -r requirements.txt
-```
-
----
-
-### 4. Ejecutar la aplicación
-
-```bash
-streamlit run Secasol.py
-```
-
-La aplicación se abre automáticamente en el navegador en `http://localhost:8501`.
-
----
-
-### Setup automatizado (script)
-
-El repositorio incluye `setup_secador_solar.sh`, que automatiza los pasos 2–4 más la
-instalación de plugins de VS Code. Soporta Fedora, Windows 10/11 (Git Bash) y otras
-distribuciones Linux.
-
-**Linux / Fedora:**
-```bash
-chmod +x setup_secador_solar.sh
-./setup_secador_solar.sh
-```
-
-**Windows (Git Bash):**
 ```bash
 bash setup_secador_solar.sh
 ```
+
+Instala con `--dev` y además configura VS Code (plugins recomendados, intérprete del `.venv`,
+configuraciones de depuración para Streamlit y pytest). En Windows se corre desde Git Bash.
+Sin VS Code alcanza con `instalar_secasol.sh --dev` / `instalar_secasol.bat --dev`.
 
 ---
 
@@ -136,7 +119,9 @@ secador_solar/
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── pyproject.toml
-├── setup_secador_solar.sh        # Script de setup multiplataforma
+├── instalar_secasol.sh / .bat    # Instalación local (Linux-macOS / Windows)
+├── iniciar_secasol.sh / .bat     # Abre la aplicación en el navegador
+├── setup_secador_solar.sh        # Entorno de desarrollo (instala --dev + VS Code)
 ├── core/                         # Modelo de datos (dataclasses, validaciones)
 ├── calculos/                     # Motores numéricos (independientes de UI)
 │   ├── clima_calc.py
