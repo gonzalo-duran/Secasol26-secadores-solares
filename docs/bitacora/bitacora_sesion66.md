@@ -59,6 +59,30 @@ va por encima de 1.4.1 y el `CHANGELOG` suma la entrada `[1.4.1]`.
    sidebar "🔧 Entorno" debe decir 1.4.1, y P7 no debe mostrar la carta.
 3. Reconciliación de ramas al próximo release (§3).
 
+## 6. Instaladores locales (pedido para abrir el repo al público)
+
+`instalar_secasol.sh` / `.bat` + `iniciar_secasol.sh` / `.bat` en la raíz, en **las dos ramas**
+(hotfix y testing: `requirements*.txt`, `README.md` y `setup_secador_solar.sh` eran idénticos
+entre ambas, así que los archivos son los mismos). Decisiones:
+
+- **Entorno en `.venv` del proyecto con `requirements.txt` pinneado** = el stack de producción.
+  Python preferido 3.13 (el del Space); acepta ≥ 3.11 con aviso, porque el pin fija las
+  librerías pero no el intérprete (gotcha de S46). Las dependencias **transitivas** no están
+  pinneadas, igual que en el Space.
+- **`.venv` sin pip o roto se rehace solo**: es exactamente lo que dejó `uv` hoy.
+- **`--server.showEmailPrompt false`** en el arranque: sin eso, la primera vez Streamlit se
+  queda esperando un email en la consola y un usuario nuevo ve una ventana colgada.
+- Los `.bat` son **ASCII puro y CRLF** (`.gitattributes`): cmd no muestra UTF-8 por defecto y
+  con LF puede leer mal las etiquetas `goto`.
+- `setup_secador_solar.sh` queda para el **entorno de desarrollo** y delega en `--dev`.
+
+**Verificado:** instalador Linux en un clon limpio (54 s, Python 3.12 con aviso, "Secasol
+1.4.1 listo"); arranque con `HOME` vacío sin prompt (health 200 a los 2 s); `--dev` y opción
+inválida; suite completa sobre ese `.venv` recién instalado (ver abajo). `.bat` bajo `wine`:
+argumentos y los cuatro caminos de error correctos. **No verificado: el `.bat` con un Python
+de Windows real** —el instalador MSI no se completa bajo wine—; **probarlo en una PC con
+Windows antes de anunciar el repo.**
+
 ## Incidente menor
 
 El `.venv` apareció vacío (Python 3.12, sin paquetes): lo había recreado `uv` desde el proyecto

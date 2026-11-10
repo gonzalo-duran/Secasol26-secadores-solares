@@ -12,6 +12,18 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 > erróneos. Este `testing` todavía no la contiene (ADR-009). Al liberar: absorber el hotfix,
 > copiar acá su entrada `[1.4.1]` y numerar la versión nueva por encima.
 
+### Added
+
+- **Instaladores locales para el público** (S66): `instalar_secasol.sh` / `.bat` y
+  `iniciar_secasol.sh` / `.bat`, pensados para abrir el repositorio. Crean `.venv` en la
+  carpeta del proyecto con las versiones pinneadas de producción (`requirements.txt`),
+  prefieren Python 3.13 (el del Space) y avisan si es otro, rehacen un `.venv` roto, verifican
+  importando el motor y la UI, y abren Streamlit sin el prompt de email de la primera vez.
+  Opciones `--iniciar`, `--limpio`, `--dev`. `setup_secador_solar.sh` queda solo para el
+  entorno de desarrollo (delega en `--dev` y configura VS Code); se le quitaron la ruta fija
+  `~/proyectos/…`, el zip de esqueleto y la suite de 12 min al final. `.gitattributes` fuerza
+  CRLF en `.bat`. **No cambia la aplicación ni su versión.**
+
 ### Changed
 
 - **Cross-flow como única topología de la cámara** (S64). Se retira el through-flow
