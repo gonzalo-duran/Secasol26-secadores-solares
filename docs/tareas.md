@@ -4,6 +4,11 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S66, 2026-11-09): **hotfix 1.4.1 en producción — carta psicrométrica
+> desactivada** en el Space antes de presentar Secasol en ASADES 2026 (11/11). Los resultados
+> de la carta eran muy raros, en algunos casos erróneos. `main` local y `testing` la
+> conservan (ADR-009). Pendiente nuevo, abajo en "En progreso": **revisar la carta**.
+
 > Estado general (S64, 2026-08-01): **la cámara tiene una sola topología de transferencia,
 > cross-flow.** Se retiró el through-flow de S63 —[[docs/notas/plan_crossflow_unico_camara]]
 > COMPLETO, resultado en [[docs/notas/resultado_crossflow_unico_camara]]— porque el par
@@ -37,6 +42,17 @@ decisiones de diseño en [[docs/decisiones]].
 > **corridas paramétricas quedaron cerradas** al verificarse e2e en local y en HF.
 
 ## En progreso
+
+### Carta psicrométrica — DESACTIVADA en producción (S66, hotfix 1.4.1)
+
+El usuario vio resultados muy raros, en algunos casos erróneos, en la carta del proceso
+(P7 y PDF). Se apagó en producción con `CARTA_HABILITADA = False` (ADR-009); en `testing`
+sigue visible para poder diagnosticarla. Falta: reproducir el caso del usuario, encontrar el
+error (`calculos/carta_psicrometrica.py::estados_proceso` y la extracción de estados de
+cada modo) y decidir si vuelve en el próximo release. Antecedente: la etapa 0 de S63 ya había
+corregido que la carta comparaba dos instantes distintos — **ese arreglo no está en 1.4.0**.
+**Si al liberar `testing` no está corregida, apagarla también ahí.**
+
 
 ### Transferencia en la cámara (S63) — plan COMPLETO (etapas 0 a 4)
 

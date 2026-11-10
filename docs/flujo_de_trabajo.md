@@ -124,6 +124,31 @@ necesite en runtime, hay que sumarla ahí** o la app va a fallar en el Space y n
   `push --force`** — dejaría el repo y el Space en estados distintos, que es exactamente el
   problema que se quiere evitar.
 
+### 6.1 Hotfix de producción sin pasar por `testing` (desde S66, ADR-009)
+
+Cuando producción necesita un arreglo **ya** y `testing` tiene trabajo que no se puede liberar,
+el hotfix se arma sobre el **tag** de la versión en producción, en un worktree aparte para no
+tocar `testing`:
+
+```bash
+git worktree add ../secador_solar_hotfix -b hotfix-X.Y.Z vX.Y.(Z-1)
+# editar en ../secador_solar_hotfix, bump en core/version.py + CHANGELOG, suite completa
+git -C ../secador_solar_hotfix add -A
+git -C ../secador_solar_hotfix commit -F .commit_msgs/<mensaje>.txt
+git tag vX.Y.Z hotfix-X.Y.Z
+git push origin hotfix-X.Y.Z:main     # ← deploy (fast-forward sobre origin/main)
+```
+
+Después, `main` local se pone al día con `git switch main && git merge --ff-only
+hotfix-X.Y.Z` **salvo que se decida lo contrario** (caso 1.4.1: el usuario quiso que el `main`
+local conserve la funcionalidad retirada). Al próximo release, `testing` absorbe el hotfix con
+`git merge hotfix-X.Y.Z` (si el arreglo vale para `testing`) o `git merge -s ours
+hotfix-X.Y.Z` (si solo valía para producción), y la versión nueva tiene que ser mayor que la
+del hotfix.
+
+**Primer uso — 1.4.1 (2026-11-09):** carta psicrométrica desactivada en producción antes de
+ASADES 2026. Ver ADR-009 en [[docs/decisiones]].
+
 ---
 
 ## 7. Lo que esta política NO resuelve
@@ -157,6 +182,17 @@ barato de deshacer; no lo hace menos probable.
 ---
 
 ## 9. Estado al momento de escribir esto
+
+**Actualización S66 (2026-11-09) — hotfix 1.4.1:**
+
+```
+origin/main  <hotfix>  ← v1.4.1 en producción: 1.4.0 sin carta psicrométrica
+hotfix-1.4.1 <hotfix>  ← rama del hotfix (worktree ../secador_solar_hotfix)
+main         080eec7   ← v1.4.0, CON carta; un commit detrás de origin/main (ADR-009)
+testing      51bf9c7+  ← S62 post-1.4.0 + S63 + S64, CON carta, sin pushear
+```
+
+Estado original (S65):
 
 ```
 main     080eec7  [origin/main]   ← v1.4.0, en producción, intacto

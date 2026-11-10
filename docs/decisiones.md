@@ -158,6 +158,30 @@ contexto, opciones, decisión y consecuencias. Para la arquitectura general ver
   lo habría evitado. Esto abarata deshacer el error; no lo hace menos probable.
 - **Detalle operativo:** [[docs/flujo_de_trabajo]].
 
+## ADR-009 — Hotfix de producción por fuera de `testing`: carta psicrométrica desactivada en 1.4.1 (S66)
+
+- **Contexto:** el 2026-11-09, dos días antes de presentar Secasol en ASADES 2026 (Salto,
+  11/11), el usuario detectó que la **carta psicrométrica** del proceso daba resultados muy
+  raros, en algunos casos erróneos. En la presentación la app del Space se usa en vivo. Liberar
+  `testing` no era opción: S63/S64 cambian los resultados de todos los proyectos y no están
+  probados en Streamlit, y el trabajo presentado describe la 1.4.0.
+- **Decisión:** **hotfix 1.4.1** construido sobre `v1.4.0` en una rama propia,
+  `hotfix-1.4.1` (worktree en `../secador_solar_hotfix`), y pusheado a producción con
+  `git push origin hotfix-1.4.1:main`. Un interruptor `CARTA_HABILITADA = False` en
+  `ui/componentes/carta_psicrometrica.py` hace que la figura devuelva `None`, que P7 y el PDF
+  ya tratan como "no aplica". El cálculo y sus tests no se tocan; el manual avisa.
+- **Excepción explícita a ADR-008, pedida por el usuario:** el `main` **local** y `testing`
+  **conservan la carta**. Mientras dure, `main` local (`080eec7`, v1.4.0) queda **un commit
+  detrás** de `origin/main` (1.4.1): deja de ser espejo exacto de producción. Es deliberado y
+  transitorio.
+- **Reconciliación (al próximo release):** `testing` tiene que contener el commit del hotfix
+  para que el `--ff-only` funcione. Se incorpora sin traer el cambio con
+  `git merge -s ours hotfix-1.4.1` (registra la historia y deja la carta como esté en
+  `testing`). La versión siguiente debe ser **> 1.4.1** y el `CHANGELOG` de `testing` tiene
+  que sumar la entrada `[1.4.1]`. Si para entonces la carta no está corregida, poner
+  `CARTA_HABILITADA = False` también en `testing` antes de liberar.
+- **Detalle operativo:** [[docs/flujo_de_trabajo]] §6.1.
+
 ## Ver también
 
 - [[docs/arquitectura]]

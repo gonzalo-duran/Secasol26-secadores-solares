@@ -7,6 +7,11 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+> **Producción corre 1.4.1** (hotfix sobre 1.4.0, 2026-11-09, rama `hotfix-1.4.1`): la carta
+> psicrométrica del proceso está **desactivada** en P7 y en el PDF por dar resultados
+> erróneos. Este `testing` todavía no la contiene (ADR-009). Al liberar: absorber el hotfix,
+> copiar acá su entrada `[1.4.1]` y numerar la versión nueva por encima.
+
 ### Changed
 
 - **Cross-flow como única topología de la cámara** (S64). Se retira el through-flow
