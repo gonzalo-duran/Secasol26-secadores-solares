@@ -61,6 +61,8 @@ entalpia do ar se conservaria (o calor sensível que perde ≈ o latente que gan
 
 ## A carta psicrométrica {#carta}
 
+> **Desativada temporariamente (versão 1.4.1).** A carta psicrométrica do processo foi retirada da aba 7 e do relatório PDF enquanto seus resultados são revisados. Voltará numa versão posterior. O restante do cálculo não muda.
+
 A carta é o plano **temperatura de bulbo seco (eixo X) vs umidade absoluta $\omega$
 (eixo Y)**, com duas famílias de curvas de fundo:
 

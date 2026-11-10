@@ -48,6 +48,8 @@ acumuladas de todos los subsistemas se listan juntas: son parte del resultado.
 
 ## La carta psicrométrica del proceso {#carta}
 
+> **Desactivada temporalmente (versión 1.4.1).** La carta psicrométrica del proceso se retiró de la pestaña 7 y del reporte PDF mientras se revisan sus resultados. Volverá en una versión posterior. El resto del cálculo no cambia.
+
 La carta traza el **camino real del aire** sobre el diagrama psicrométrico
 corregido por altitud: ambiente → colector (calentamiento sensible) → auxiliar
 (si hay) → cámara (secado) → salida. Es la radiografía termodinámica del

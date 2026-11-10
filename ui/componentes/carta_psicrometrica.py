@@ -32,6 +32,14 @@ _COLOR_HR = "rgba(120,120,120,0.45)"
 _COLOR_PROC = "#e05c2a"
 _COLOR_ISENT = "rgba(76,175,80,0.8)"
 
+# Interruptor de la carta (hotfix 1.4.1, 2026-11-09). La carta del proceso estaba dando
+# resultados erróneos y se retira de producción antes de la presentación pública de
+# Secasol en ASADES 2026. Con False, ``fig_carta_psicrometrica`` devuelve ``None`` y
+# todos sus consumidores (P7 en los tres modos, figuras del PDF) la omiten sin aviso,
+# porque ya tratan ``None`` como "no aplica". El cálculo (``calculos/carta_psicrometrica``)
+# y sus tests no se tocan. Rehabilitar = poner True, una vez corregida la carta.
+CARTA_HABILITADA = False
+
 
 def fig_carta_psicrometrica(
     res: Any,
@@ -47,8 +55,11 @@ def fig_carta_psicrometrica(
         omega_amb: ω ambiente/entrada [kg/kg], requerida en modo Constantes.
 
     Returns:
-        ``go.Figure`` o ``None`` (modo Ventana / datos insuficientes).
+        ``go.Figure`` o ``None`` (carta deshabilitada / modo Ventana / datos
+        insuficientes).
     """
+    if not CARTA_HABILITADA:
+        return None
     try:
         P_Pa, _origen = presion_representativa_proyecto(proyecto)
     except Exception:

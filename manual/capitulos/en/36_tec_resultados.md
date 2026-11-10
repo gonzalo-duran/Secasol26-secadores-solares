@@ -84,6 +84,8 @@ accumulated warnings/errors. The dashboard shows metrics, a simplified energy
 
 ## 5. Process psychrometric chart {#carta}
 
+> **Temporarily disabled (version 1.4.1).** The process psychrometric chart has been removed from tab 7 and from the PDF report while its results are reviewed. It will return in a later version. The rest of the calculation is unchanged.
+
 The **altitude-corrected psychrometric chart** traces the real air process (own
 implementation, without an external library):
 

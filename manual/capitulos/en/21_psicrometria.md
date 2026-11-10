@@ -65,6 +65,8 @@ it loses ≈ the latent it gains).
 
 ## The psychrometric chart {#carta}
 
+> **Temporarily disabled (version 1.4.1).** The process psychrometric chart has been removed from tab 7 and from the PDF report while its results are reviewed. It will return in a later version. The rest of the calculation is unchanged.
+
 The chart is the plane **dry-bulb temperature (X axis) vs absolute humidity
 $\omega$ (Y axis)**, with two families of background curves:
 

@@ -27,6 +27,25 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
 
+## [1.4.1] — 2026-11-09
+
+Hotfix de producción, armado sobre `v1.4.0` (rama `hotfix-1.4.1`), **sin** el trabajo de
+`testing` (S63/S64). Motivo: la presentación pública de Secasol en ASADES 2026 (Salto,
+11/11/2026), donde la app del Space se usa en vivo.
+
+### Removed
+
+- **Carta psicrométrica del proceso desactivada temporalmente.** El usuario detectó que la
+  carta daba resultados muy raros, en algunos casos erróneos. Se retira de la vista hasta
+  revisarla: el interruptor `CARTA_HABILITADA = False` en
+  `ui/componentes/carta_psicrometrica.py` hace que `fig_carta_psicrometrica` devuelva `None`,
+  y sus consumidores (P7 en los modos Constantes, Transitorio y Ventana, y las figuras del
+  reporte PDF) ya tratan `None` como "no aplica" y omiten la sección. El cálculo
+  (`calculos/carta_psicrometrica.py`) y sus tests quedan intactos. Los capítulos 16, 21 y 36
+  del manual (ES/EN/PT) avisan que está desactivada.
+
+**Ningún otro resultado cambia**: el resto del balance es idéntico al de 1.4.0.
+
 ## [1.4.0] — 2026-07-29
 
 ### Added

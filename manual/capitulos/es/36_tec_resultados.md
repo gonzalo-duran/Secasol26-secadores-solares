@@ -87,6 +87,8 @@ métricas, un **Sankey** simplificado de energía y, según el modo:
 
 ## 5. Carta psicrométrica del proceso {#carta}
 
+> **Desactivada temporalmente (versión 1.4.1).** La carta psicrométrica del proceso se retiró de la pestaña 7 y del reporte PDF mientras se revisan sus resultados. Volverá en una versión posterior. El resto del cálculo no cambia.
+
 La **carta psicrométrica corregida por altitud** traza el proceso real del
 aire (implementación propia, sin librería externa):
 

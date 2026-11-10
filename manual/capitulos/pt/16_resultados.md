@@ -46,6 +46,8 @@ juntos: são parte do resultado.
 
 ## A carta psicrométrica do processo {#carta}
 
+> **Desativada temporariamente (versão 1.4.1).** A carta psicrométrica do processo foi retirada da aba 7 e do relatório PDF enquanto seus resultados são revisados. Voltará numa versão posterior. O restante do cálculo não muda.
+
 A carta traça o **caminho real do ar** sobre o diagrama psicrométrico corrigido por
 altitude: ambiente → coletor (aquecimento sensível) → auxiliar (se houver) → câmara
 (secagem) → saída. É a radiografia termodinâmica do projeto: de relance vê-se quanto o

@@ -49,6 +49,8 @@ listed together: they are part of the result.
 
 ## The process psychrometric chart {#carta}
 
+> **Temporarily disabled (version 1.4.1).** The process psychrometric chart has been removed from tab 7 and from the PDF report while its results are reviewed. It will return in a later version. The rest of the calculation is unchanged.
+
 The chart traces the **real path of the air** on the altitude-corrected
 psychrometric diagram: ambient → collector (sensible heating) → auxiliary (if
 any) → chamber (drying) → outlet. It is the thermodynamic X-ray of the design: at

@@ -65,6 +65,8 @@ sensible que pierde ≈ el latente que gana).
 
 ## La carta psicrométrica {#carta}
 
+> **Desactivada temporalmente (versión 1.4.1).** La carta psicrométrica del proceso se retiró de la pestaña 7 y del reporte PDF mientras se revisan sus resultados. Volverá en una versión posterior. El resto del cálculo no cambia.
+
 La carta es el plano **temperatura de bulbo seco (eje X) vs humedad absoluta
 $\omega$ (eje Y)**, con dos familias de curvas de fondo:
 
