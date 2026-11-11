@@ -2,7 +2,7 @@
 
 Software de prediseño de secadores solares de alimentos, desarrollado por el Grupo de Eficiencia Energética y Desarrollo Socio-Productivo (GEEDSP) — INENCO UNSa CONICET.
 
-**Licencia:** GPLv3 &nbsp;|&nbsp; **Idioma:** Español &nbsp;|&nbsp; **Stack:** Python 3.11+ · Streamlit · NumPy · SciPy · pvlib
+**Licencia:** GPLv3 &nbsp;|&nbsp; **Idiomas:** español, inglés y portugués &nbsp;|&nbsp; **Stack:** Python 3.11+ · Streamlit · NumPy · SciPy · pvlib
 
 ---
 
@@ -166,15 +166,6 @@ secador_solar/
 
 ---
 
-## Deploy en Streamlit Community Cloud
-
-1. Hacer push del repo a GitHub (repositorio público).
-2. Ingresar a [share.streamlit.io](https://share.streamlit.io).
-3. Conectar el repositorio y seleccionar `Secasol.py` como entry point.
-4. Streamlit Cloud instala automáticamente las dependencias de `requirements.txt`.
-
----
-
 ## Créditos
 
 Desarrollado por Gonzalo Durán. GEEDSP INENCO — Instituto de Investigación en Energías No Convencionales,
@@ -196,8 +187,8 @@ PROPÓSITO PARTICULAR. Véase la Licencia Pública General de GNU para más deta
 
 El texto completo de la licencia está en el archivo [LICENSE](LICENSE).
 
-## Ver también (Obsidian)
+## Ver también
 
-- [[CLAUDE]] — instrucciones para Claude Code y convenciones.
-- [[docs/arquitectura]] — arquitectura del sistema y mapa de módulos.
-- [[CHANGELOG]] — historial de cambios.
+- [CLAUDE.md](CLAUDE.md) — instrucciones para Claude Code y convenciones.
+- [docs/arquitectura.md](docs/arquitectura.md) — arquitectura del sistema y mapa de módulos.
+- [CHANGELOG.md](CHANGELOG.md) — historial de cambios.
