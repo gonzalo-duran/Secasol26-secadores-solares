@@ -33,7 +33,7 @@ El entorno virtual está en `.venv/`. Siempre prefijá los comandos de Python co
 
 ## Deploy (desde S33)
 
-El repo de GitHub es **privado** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada y sin ver el código.
+El repo de GitHub es **público** (`gonzalo-duran/Secasol26-secadores-solares`). La app se despliega en **Hugging Face Spaces** (`gonzalojduran/Secasol26`) vía Docker + template Streamlit. Cada `git push` a `main` dispara `.github/workflows/deploy_hf.yml`, que sincroniza el código al Space y rebuildea automáticamente la imagen. Compañeros acceden por URL pública (`https://huggingface.co/spaces/gonzalojduran/Secasol26`) sin instalar nada.
 
 El workflow copia una **whitelist** de carpetas (`Secasol.py`, `ui/`, `calculos/`, `core/`, `assets/`, `catalogo/`, `manual/`) — al agregar una carpeta top-level nueva que la app necesite en runtime, hay que sumarla al `deploy_hf.yml` (así se agregó `manual/` para el manual de usuario; `docs/` NO se deploya).
 
