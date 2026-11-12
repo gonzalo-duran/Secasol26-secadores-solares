@@ -31,12 +31,16 @@ El entorno virtual está en `.venv/`. Siempre prefijá los comandos de Python co
 
 **Control de versiones:** se trabaja en el repo local (working tree) por defecto, sin commits ni push, salvo que el usuario indique explícitamente que quiere commitear o subir a GitHub. Los cambios quedan visibles vía `git diff` y pueden descartarse con `git restore` si hace falta. Solo cuando el usuario lo pida explícitamente se arman commits (y solo cuando lo pida explícitamente se hace `git push`).
 
-**Dos ramas locales (desde S65):**
+**Tres niveles (dos ramas locales desde S65; `main` local como nivel intermedio desde S67, ADR-010):**
 
-| rama | qué es |
+| nivel | qué es |
 |---|---|
-| `main` | **espejo de producción.** Idéntica a `origin/main`. **Nunca se le commitea directo.** Solo avanza por `merge --ff-only` desde `testing`, y solo cuando el usuario validó el resultado en Streamlit. |
 | `testing` | **todo el trabajo.** Commits locales, tan frecuentes como haga falta. Romperla es gratis. |
+| `main` local | **lo acordado.** Lo que el usuario y Claude ya revisaron. **Nunca se le commitea directo.** Solo avanza por `merge --ff-only` desde `testing`, cuando el usuario lo pide. **No es un deploy** y puede ir por delante de `origin/main`. |
+| remoto (`origin/main`: GitHub + HF) | **la versión estable.** Solo recibe un push después de analizar bien lo que hay en `main` local, con bump de versión. |
+
+**"Llevar a `main` local" ≠ "pushear".** Lo primero es `git switch main && git merge --ff-only
+testing && git switch testing`, sin `git push`. Lo segundo es el deploy y lo hace el usuario.
 
 Reglas duras:
 
@@ -54,13 +58,14 @@ Reglas duras:
   `git diff v1.4.0..testing` dice qué entró desde la última versión liberada.
 - **Hotfix 1.4.1 en producción (S66, ADR-009):** el Space corre la 1.4.0 **sin carta
   psicrométrica** (`CARTA_HABILITADA = False`, rama `hotfix-1.4.1`, worktree
-  `../secador_solar_hotfix`). **Excepción deliberada:** `main` local y `testing` conservan la
-  carta, así que `main` local queda un commit detrás de `origin/main`. Al próximo release:
+  `../secador_solar_hotfix`). `main` local y `testing` conservan la carta (corregida en
+  S67) y **no contienen el commit del hotfix**, así que un push desde `main` es rechazado por
+  no ser fast-forward — **no forzarlo**. Al próximo release:
   `git merge -s ours hotfix-1.4.1` en `testing`, versión > 1.4.1 y entrada `[1.4.1]` en el
   CHANGELOG. Procedimiento de hotfix en `docs/flujo_de_trabajo.md` §6.1.
 
 El detalle operativo completo —ciclo de trabajo, ciclo de liberación, qué no puede tocar
-producción, vuelta atrás— está en `docs/flujo_de_trabajo.md` (ADR-008).
+producción, vuelta atrás— está en `docs/flujo_de_trabajo.md` (ADR-008 y ADR-010).
 
 ## Deploy (desde S33)
 

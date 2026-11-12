@@ -1,7 +1,8 @@
-# Flujo de trabajo — dos ramas locales
+# Flujo de trabajo — tres niveles
 
-**Desde S65 (2026-08-02).** La decisión está registrada como ADR-008 en
-[[docs/decisiones]]; acá está el detalle operativo. Las reglas mínimas que Claude necesita en
+**Desde S65 (2026-08-02), ampliado en S67 (2026-11-12).** Las decisiones están registradas
+como ADR-008 (dos ramas) y ADR-010 (tres niveles) en [[docs/decisiones]]; acá está el detalle
+operativo. Las reglas mínimas que Claude necesita en
 cada sesión están en [[CLAUDE]] §Convenciones de trabajo.
 
 ---
@@ -33,14 +34,19 @@ buscarlas al log a mano.
 
 ## 2. La estructura
 
-| rama | qué es |
+| nivel | qué es |
 |---|---|
-| **`main`** | **Espejo de producción.** Idéntica a `origin/main`. **Nunca se le commitea directo.** Solo avanza por `merge --ff-only` desde `testing`, y solo cuando el resultado se validó corriendo la app. |
-| **`testing`** | **Todo el trabajo.** Commits locales, tan frecuentes como haga falta. Romperla es gratis: `main` sigue intacto y `v1.4.0` está a un `git switch` de distancia. |
+| **`testing`** | **Todo el trabajo.** Commits locales, tan frecuentes como haga falta. Romperla es gratis: `main` sigue intacto y los tags están a un `git switch` de distancia. |
+| **`main` local** | **Lo acordado.** Lo que el usuario y Claude ya revisaron y dieron por bueno. **Nunca se le commitea directo.** Solo avanza por `merge --ff-only` desde `testing`, cuando el usuario lo pide. **No es un deploy.** |
+| **remoto** (`origin/main`: GitHub + Space de HF) | **La versión estable.** Solo recibe un push después de analizar bien lo que hay en `main` local, con bump de versión. |
 
-El cambio conceptual: **`main` deja de ser donde se trabaja y pasa a ser una afirmación** —
-*"esto es lo que está o va a estar en producción"*. Mientras `main` local sea igual a
-`origin/main`, un push accidental no puede hacer nada.
+El cambio conceptual de S65: **`main` deja de ser donde se trabaja y pasa a ser una
+afirmación**. Desde S67 esa afirmación es *"esto está acordado"*, no *"esto está en
+producción"*: `main` local **puede ir por delante de `origin/main`** el tiempo que haga falta.
+
+**Consecuencia a tener presente:** ya no vale que "un push accidental no puede hacer nada".
+Lo que protege producción es que **llevar algo a `main` local y pushear son dos actos
+separados** — y el push lo hace solo el usuario.
 
 **Tags como puntos de retorno** (locales): `v0.7.0`, `v1.0.0`, `v1.1.0`, `v1.2.0`, `v1.3.0`,
 `v1.4.0`. `git diff v1.4.0..testing` dice exactamente qué entró desde la última versión
@@ -75,17 +81,37 @@ git tag s65-validado
 
 ---
 
-## 4. El ciclo de liberación
+## 4. De `testing` a `main` local, y de ahí a producción
 
-Solo cuando el avance está **estable y probado en Streamlit**:
+### 4.1 Llevar lo acordado a `main` local
+
+Cuando una etapa quedó revisada y el usuario la da por buena:
 
 ```bash
 git switch main
-git merge --ff-only testing      # main se vuelve el prefijo validado de testing
+git merge --ff-only testing      # main local = lo acordado hasta acá
+git switch testing
+```
+
+**Sin `git push`.** No hace falta bump de versión ni entrada cerrada en el `CHANGELOG`: eso es
+del paso siguiente.
+
+### 4.2 Liberar a producción
+
+Solo después de analizar bien lo que hay en `main` local, con el avance **estable y probado en
+Streamlit**:
+
+```bash
+git switch main
+git merge --ff-only testing      # por si testing siguió avanzando con cosas ya acordadas
 git push origin main             # ← el ÚNICO comando que toca producción
 git push origin --tags           # los tags no viajan solos
 git switch testing
 ```
+
+Si `origin/main` tiene commits que `main` local no tiene (un hotfix, §6.1), el push es
+rechazado. **No se fuerza:** primero `testing` absorbe el hotfix y `main` local se adelanta de
+nuevo.
 
 **Por qué `--ff-only`:** si falla, es porque `main` divergió — o sea, porque alguien commiteó
 ahí directo. Que el comando falle es la señal de que se violó la regla, no un obstáculo.
@@ -183,6 +209,19 @@ barato de deshacer; no lo hace menos probable.
 
 ## 9. Estado al momento de escribir esto
 
+**Actualización S67 (2026-11-12) — tres niveles (ADR-010):**
+
+```
+origin/main  a143fcf   ← v1.4.1 estable en GitHub y HF: 1.4.0 sin carta psicrométrica
+hotfix-1.4.1 a143fcf   ← rama del hotfix (worktree ../secador_solar_hotfix)
+main         0c0855c   ← lo acordado: S63 + S64 + instaladores + carta corregida (S67). Sin pushear
+testing      0c0855c+  ← el trabajo en curso
+```
+
+`main` local está **por delante** de `origin/main` y **no contiene** el commit del hotfix.
+Antes de liberar: `git merge -s ours hotfix-1.4.1` en `testing`, bump de versión por encima de
+1.4.1 y entrada `[1.4.1]` en el `CHANGELOG`.
+
 **Actualización S66 (2026-11-09) — hotfix 1.4.1:**
 
 ```
@@ -207,7 +246,7 @@ capa como métrica derivada, sin selector de dirección de flujo). Ver
 ## Ver también
 
 - [[CLAUDE]] — las reglas mínimas, en el archivo que se carga en cada sesión.
-- [[docs/decisiones]] — ADR-008, la decisión.
+- [[docs/decisiones]] — ADR-008 (dos ramas), ADR-009 (hotfix) y ADR-010 (tres niveles).
 - [[docs/tareas]] — backlog y estado.
 - `docs/SETUP_GIT.md` — creación original del repo. **Desactualizado** (dice repo público y
   otro nombre); se conserva como registro histórico.

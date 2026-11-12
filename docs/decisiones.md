@@ -182,6 +182,34 @@ contexto, opciones, decisión y consecuencias. Para la arquitectura general ver
   `CARTA_HABILITADA = False` también en `testing` antes de liberar.
 - **Detalle operativo:** [[docs/flujo_de_trabajo]] §6.1.
 
+## ADR-010 — Tres niveles: `testing` → `main` local → remoto estable (S67)
+
+- **Contexto:** ADR-008 definió `main` local como **espejo exacto** de producción, que solo
+  avanzaba en el momento de liberar. En la práctica faltaba un escalón: un lugar para lo que ya
+  se trabajó y se **acordó**, pero todavía no se analizó lo suficiente como para ir a
+  producción. Sin él, lo acordado y lo que está a medio hacer convivían en `testing` sin
+  distinguirse. El caso que lo hizo evidente fue S67: la carta psicrométrica corregida quedó
+  acordada, mientras que el modelo de transferencia de la cámara sigue abierto a la espera de
+  mediciones.
+- **Decisión:** tres niveles.
+  1. **`testing`** — todo el trabajo, commits frecuentes. Sin cambios.
+  2. **`main` local** — lo **acordado** entre el usuario y Claude. Avanza por
+     `merge --ff-only` desde `testing` cuando el usuario lo pide. **No implica deploy.**
+  3. **Remoto (`origin/main` = GitHub + Space de HF)** — la versión **estable**. Solo recibe
+     un push después de analizar bien lo que hay en `main` local, con bump de versión.
+- **Qué cambia respecto de ADR-008:** `main` local **deja de ser espejo de producción** y puede
+  ir por delante de `origin/main` por tiempo indefinido. Se pierde la salvaguarda de "un push
+  accidental no hace nada"; la reemplaza que **llevar algo a `main` local y pushear son dos
+  actos separados**, y el segundo sigue siendo exclusivo del usuario.
+- **Qué NO cambia:** nunca se commitea directo a `main`; el `--ff-only` sigue siendo la señal
+  de que no divergió; `git push` = deploy; los criterios para liberar (suite, linters, i18n,
+  CHANGELOG, bump de versión).
+- **Interacción con ADR-009:** mientras `origin/main` tenga el commit del hotfix 1.4.1 y
+  `main` local no, un push desde `main` es rechazado por no ser fast-forward. **No se fuerza**:
+  antes de liberar, `testing` absorbe el hotfix (`git merge -s ours hotfix-1.4.1`) y `main`
+  local se adelanta de nuevo.
+- **Detalle operativo:** [[docs/flujo_de_trabajo]].
+
 ## Ver también
 
 - [[docs/arquitectura]]
