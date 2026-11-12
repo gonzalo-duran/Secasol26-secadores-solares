@@ -277,11 +277,14 @@ condiciones:
     help: Global irradiance on the collector plane (POA).
   viento: Wind speed [m/s]
   hr:
-    label: Inlet air RH [%]
+    label: Ambient air RH [%]
     help: >-
-      RH of the air entering the chamber, in the **Representative
-      constants** mode. It fixes the inlet ω. In Transient mode the inlet
-      RH comes from the forcing and this value is not used.
+      RH of the **ambient** air (at ambient temperature), in the
+      **Representative constants** mode. It fixes the absolute humidity ω of
+      the process, which is conserved while the air is heated in the collector
+      and the auxiliary heater: the RH reaching the chamber is much lower. In
+      Transient mode the humidity comes from the forcing and this value is
+      not used.
   boton: ▶ Compute full pre-design
   spinner: Computing...
   prompt: ℹ️ Configure the conditions and press **Compute** to see the results.

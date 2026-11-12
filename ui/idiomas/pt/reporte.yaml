@@ -247,7 +247,7 @@ global:
   t_amb: T ambiente
   irr_poa: Irradiância POA
   vel_viento: Velocidade do vento
-  hr_cam: UR câmara
+  hr_cam: UR ambiente
   balance_titulo: Balanço energético
   e_total: Energia total
   solar_util: Solar útil

@@ -274,10 +274,12 @@ condiciones:
     help: Irradiância global sobre o plano do coletor (POA).
   viento: Velocidade do vento [m/s]
   hr:
-    label: UR do ar de entrada [%]
+    label: UR do ar ambiente [%]
     help: >-
-      UR do ar que entra na câmara, no modo **Constantes representativas**.
-      Fixa a ω de entrada. No modo Transitório a UR de entrada vem das
+      UR do ar **ambiente** (à temperatura ambiente), no modo **Constantes
+      representativas**. Fixa a umidade absoluta ω do processo, que se
+      conserva ao aquecer o ar no coletor e no auxiliar: a UR com que chega à
+      câmara resulta muito menor. No modo Transitório a umidade vem das
       forçantes e este valor não é usado.
   boton: ▶ Calcular pré-dimensionamento completo
   spinner: Calculando...

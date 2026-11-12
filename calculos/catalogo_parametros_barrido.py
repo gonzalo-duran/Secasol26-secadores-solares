@@ -405,7 +405,7 @@ CATALOGO_PARAMETROS: tuple[ParametroBarrido, ...] = (
     ),
     ParametroBarrido(
         id="HR_camara",
-        label="Humedad relativa de cámara",
+        label="Humedad relativa ambiente",
         path="forzante:HR_camara",
         unidad_ui="%",
         unidad_si="fracción",
@@ -417,7 +417,7 @@ CATALOGO_PARAMETROS: tuple[ParametroBarrido, ...] = (
         transform_pre_set=None,
         tipologias=_TODAS_TIPOLOGIAS,
         modos_soportados=_SOLO_CONSTANTES,
-        descripcion_corta="HR de operación de la cámara (solo modo Constantes).",
+        descripcion_corta="HR del aire ambiente (solo modo Constantes).",
     ),
     ParametroBarrido(
         id="T_amb",

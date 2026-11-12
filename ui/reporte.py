@@ -334,27 +334,13 @@ def _figuras_p7(
     # Carta psicrométrica del proceso (mejora 27).
     if proyecto is not None:
         try:
-            from calculos.balance_global import presion_representativa_proyecto
-            from calculos.psicrometria import humedad_absoluta
             from ui.componentes.carta_psicrometrica import fig_carta_psicrometrica
 
-            omega_amb = None
-            # Modo Constantes (sin forzantes): ω desde HR_cam + T_ent + P.
-            T_in = getattr(res, "T_entrada_camara_K", None)
-            if (
-                T_in is not None
-                and HR_cam_pct is not None
-                and getattr(res, "forzantes_aplicadas", None) is None
-            ):
-                try:
-                    P_Pa, _ = presion_representativa_proyecto(proyecto)
-                except Exception:
-                    P_Pa = 101325.0
-                try:
-                    omega_amb = humedad_absoluta(HR_cam_pct / 100.0, float(T_in), P_Pa)
-                except ValueError:
-                    omega_amb = None
-            carta = fig_carta_psicrometrica(res, proyecto, omega_amb=omega_amb)
+            # En modo Constantes la ω del proceso viaja en el propio resultado
+            # (``omega_entrada_kg_kg``) y la carta la lee sola. ``HR_cam_pct`` ya
+            # no interviene: recalcularla acá fue lo que dejaba al PDF y a la
+            # pantalla con criterios distintos.
+            carta = fig_carta_psicrometrica(res, proyecto)
             png = _fig_a_png(carta)
             if png:
                 out.append((tr("global.fig.carta"), png))

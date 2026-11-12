@@ -21,7 +21,8 @@ carta:
   isentalpica: Isenthalp (adiabatic reference)
   proceso: Dryer process
   nota_directa: "direct chamber (non-adiabatic: the translucent roof adds heat)"
-  nota_indirecta: "indirect chamber (≈ adiabatic: the outlet point falls on the isenthalp)"
+  nota_indirecta: "indirect chamber (the departure from the isenthalp is the wall loss)"
+  delta_h: "Air Δh across the chamber: {dh:+.2f} kJ/kg (0 = isenthalpic)"
   nota: "P = {p:.1f} kPa (site pressure) · {camara}"
   instante_fecha: "representative instant: {fecha} (peak evaporation)"
   instante_hora: "representative instant: h {h:.1f} of the horizon (peak evaporation)"

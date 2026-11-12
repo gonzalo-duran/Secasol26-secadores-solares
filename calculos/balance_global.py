@@ -45,6 +45,7 @@ from calculos.colector_tipos234_calc import (
     calcular_colector_tipo3,
     calcular_colector_tipo4,
 )
+from calculos.psicrometria import HR_desde_omega, humedad_absoluta
 from calculos.transiciones_seccion import delta_P_transicion_Pa
 from core.auxiliar import ModoOperacionAuxiliar
 from core.camara import ForzantesAire
@@ -71,6 +72,11 @@ class ResultadosCompletos:
         camara: Salida del solver de cámara (None si no hay cámara).
         T_entrada_camara_K: Temperatura del aire que llega a la cámara [K].
             T_salida_auxiliar si hay auxiliar, T_salida_colector si no.
+        omega_entrada_kg_kg: Humedad absoluta del aire del proceso [kg/kg as].
+            Es la del aire ambiente y se conserva en el calentamiento sensible
+            (colector y auxiliar), así que es también la de entrada a la cámara.
+            La consume la carta psicrométrica: guardarla acá evita que cada
+            consumidor la recalcule con su propio criterio.
         energia_solar_util_MJ: Energía solar que entró al secador durante el
             ciclo [MJ]: la útil del colector (× t_secado) más la que ingresa por
             las caras translúcidas de la cámara. En tipología CAJA el primer
@@ -93,6 +99,7 @@ class ResultadosCompletos:
     chimenea: Optional[dict] = None  # dict de `caudal_natural_kgs` si aplica
 
     T_entrada_camara_K: Optional[float] = None
+    omega_entrada_kg_kg: Optional[float] = None
 
     energia_solar_util_MJ: Optional[float] = None
     energia_auxiliar_MJ: Optional[float] = None
@@ -471,6 +478,33 @@ def _avisar_T_max_respaldo(proyecto, res) -> None:
         )
 
 
+def _HR_a_temperatura(omega_kg_kg: float, T_K: float, P_Pa: float) -> float:
+    """HR [0–1] de un aire de humedad absoluta ``omega`` llevado a ``T_K``.
+
+    Es el calentamiento sensible visto desde la HR: ω se conserva y la HR baja.
+    Se acota a 1.0 por si la temperatura de destino quedara por debajo del
+    punto de rocío (no debería pasar aguas abajo de un colector).
+    """
+    return float(min(1.0, max(0.0, HR_desde_omega(omega_kg_kg, T_K, P_Pa))))
+
+
+def _omega_del_proceso(
+    omega_proceso: Optional[float], HR_camara: float, T_ent_camara_K: float, P_Pa: float
+) -> Optional[float]:
+    """ω del proceso [kg/kg as] para dejar registrada en el resultado.
+
+    Con la HR referida al ambiente ya viene resuelta. En el modo de
+    compatibilidad es la que implica ``HR_camara`` a la temperatura de entrada
+    a la cámara — la misma cuenta que hace ``calcular_camara`` por dentro.
+    """
+    if omega_proceso is not None:
+        return omega_proceso
+    try:
+        return humedad_absoluta(HR_camara, T_ent_camara_K, P_Pa)
+    except ValueError:
+        return None
+
+
 def _resolver_aux_cam_const(
     proyecto,
     T_sal_colector_K: float,
@@ -478,8 +512,13 @@ def _resolver_aux_cam_const(
     HR_camara: float,
     T_amb_K: float,
     P_Pa: float = _P_REF_NIVEL_MAR_PA,
+    omega_ent: Optional[float] = None,
 ) -> tuple:
     """Corre auxiliar + cámara en modo constantes con un caudal dado.
+
+    Si se pasa ``omega_ent`` (humedad absoluta del aire ambiente), la HR con que
+    se alimenta la cámara se deriva de ella a la temperatura de entrada real
+    (``_HR_a_temperatura``) y ``HR_camara`` se ignora.
 
     No mutea ``proyecto.camara.flujo.caudal_masico_kg_s``: el llamador
     decide si quiere persistir el caudal (lo hace antes de llamar) o
@@ -530,10 +569,13 @@ def _resolver_aux_cam_const(
     T_sal_cam_K = T_sal_aux_K
     if proyecto.camara is not None:
         try:
+            HR_operacion = (
+                HR_camara if omega_ent is None else _HR_a_temperatura(omega_ent, T_sal_aux_K, P_Pa)
+            )
             solver_cam = calcular_camara(
                 camara=proyecto.camara,
                 T_operacion_K=T_sal_aux_K,
-                HR_operacion=HR_camara,
+                HR_operacion=HR_operacion,
                 T_amb_K=T_amb_K,
                 P_Pa=P_Pa,
                 Q_aux_max_W=Q_aux_max_W,
@@ -1452,6 +1494,8 @@ def calcular_todo(
     v_viento_ms: float,
     T_entrada_K: float,
     HR_camara: float,
+    *,
+    HR_referida_a_ambiente: bool = False,
 ) -> ResultadosCompletos:
     """Ejecuta todos los solvers encadenados y calcula el balance global.
 
@@ -1462,7 +1506,16 @@ def calcular_todo(
         v_viento_ms: Velocidad del viento representativa [m/s].
         T_entrada_K: Temperatura del aire a la entrada del colector [K].
             En la práctica ≈ T_amb para un sistema abierto.
-        HR_camara: Humedad relativa en la cámara para cálculo de X_eq [0,1].
+        HR_camara: Humedad relativa del aire del proceso [0,1]. A qué
+            temperatura está referida lo decide ``HR_referida_a_ambiente``.
+        HR_referida_a_ambiente: Si es ``True``, ``HR_camara`` es la HR del aire
+            **ambiente** (a ``T_amb_K``): fija la humedad absoluta ω del
+            proceso, que se conserva en el calentamiento sensible, y la HR a la
+            entrada de la cámara resulta de llevar esa ω a la temperatura de
+            entrada. Es lo que usa P7. Si es ``False`` (default, compatibilidad),
+            ``HR_camara`` es la HR ya evaluada a la temperatura de entrada a la
+            cámara; ojo que entonces la ω implícita crece con la temperatura del
+            colector y puede superar la de saturación del ambiente.
 
     Returns:
         ResultadosCompletos con todos los resultados y advertencias.
@@ -1483,6 +1536,18 @@ def calcular_todo(
     # Se computa UNA vez y se propaga a colector, cámara y auxiliar.
     P_proyecto_Pa, _P_origen = presion_representativa_proyecto(proyecto)
     res.advertencias.append(f"ADV_PRESION_PROYECTO: {_P_origen}.")
+
+    # --- Humedad absoluta del proceso ---
+    # Con la HR referida al ambiente, ω queda fijada acá y viaja sin cambios
+    # hasta la entrada de la cámara. En el modo de compatibilidad se conoce
+    # recién con la temperatura de entrada a la cámara (más abajo).
+    omega_proceso: Optional[float] = None
+    if HR_referida_a_ambiente:
+        try:
+            omega_proceso = humedad_absoluta(HR_camara, T_amb_K, P_proyecto_Pa)
+        except ValueError as exc:
+            res.errores.append(f"ERROR_HR_AMBIENTE: {exc}")
+            return res
 
     # --- Solver colector (pase inicial; puede re-correrse abajo si
     # el lazo natural por chimenea cambia el caudal y, por tanto, la
@@ -1530,11 +1595,15 @@ def calcular_todo(
                     HR_camara=HR_camara,
                     T_amb_K=T_amb_K,
                     P_Pa=P_proyecto_Pa,
+                    omega_ent=omega_proceso,
                 )
             )
             res.auxiliar = solver_aux
             res.camara = solver_cam
             res.T_entrada_camara_K = T_salida_aux_K
+            res.omega_entrada_kg_kg = _omega_del_proceso(
+                omega_proceso, HR_camara, T_salida_aux_K, P_proyecto_Pa
+            )
             res.advertencias.extend(advs)
             if errs:
                 res.errores.extend(errs)
@@ -1579,7 +1648,11 @@ def calcular_todo(
                     T_flujo = estimar_T_flujo_estacionario(
                         proyecto.camara,
                         T_ent_K=T_sal_col_K,
-                        HR_ent=HR_camara,
+                        HR_ent=(
+                            HR_camara
+                            if omega_proceso is None
+                            else _HR_a_temperatura(omega_proceso, T_sal_col_K, P_proyecto_Pa)
+                        ),
                         m_dot_as_kg_s=m_dot_kgs,
                         T_amb_K=T_amb_K,
                         P_Pa=P_proyecto_Pa,
@@ -1676,6 +1749,7 @@ def calcular_todo(
                     HR_camara=HR_camara,
                     T_amb_K=T_amb_K,
                     P_Pa=P_proyecto_Pa,
+                    omega_ent=omega_proceso,
                 )
             )
             if errs:
@@ -1684,6 +1758,9 @@ def calcular_todo(
             res.auxiliar = solver_aux
             res.camara = solver_cam
             res.T_entrada_camara_K = T_sal_aux_K
+            res.omega_entrada_kg_kg = _omega_del_proceso(
+                omega_proceso, HR_camara, T_sal_aux_K, P_proyecto_Pa
+            )
 
             # Advertencias del último pase (no duplicamos las de iter intermedias).
             if res.colector is not None:

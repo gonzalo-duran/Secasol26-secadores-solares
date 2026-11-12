@@ -247,7 +247,7 @@ global:
   t_amb: Ambient T
   irr_poa: POA irradiance
   vel_viento: Wind speed
-  hr_cam: Chamber RH
+  hr_cam: Ambient RH
   balance_titulo: Energy balance
   e_total: Total energy
   solar_util: Useful solar

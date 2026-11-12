@@ -21,7 +21,8 @@ carta:
   isentalpica: Isentálpica (referencia adiabática)
   proceso: Proceso del secador
   nota_directa: "cámara directa (no adiabática: el techo translúcido aporta calor)"
-  nota_indirecta: "cámara indirecta (≈ adiabática: el punto de salida cae sobre la isentálpica)"
+  nota_indirecta: "cámara indirecta (el apartamiento de la isentálpica es la pérdida por paredes)"
+  delta_h: "Δh del aire en la cámara: {dh:+.2f} kJ/kg (0 = isentálpico)"
   nota: "P = {p:.1f} kPa (presión del sitio) · {camara}"
   instante_fecha: "instante representativo: {fecha} (máxima evaporación)"
   instante_hora: "instante representativo: h {h:.1f} del horizonte (máxima evaporación)"

@@ -61,6 +61,29 @@ def _rotulo_instante(res: Any, proyecto: Any, t_repr_s: Optional[float]) -> str:
     return t("graficas.carta.instante_hora", h=horas)
 
 
+def _rango_omega_g_kg(omegas_proceso: list[float], omega_isentalpica: Any) -> tuple[float, float]:
+    """Rango del eje de humedad [g/kg] ajustado al proceso, no a la saturación.
+
+    Dejar que Plotly autoescale mete en el eje toda la curva de saturación hasta
+    la temperatura máxima del gráfico (250 g/kg a 65 °C) cuando el proceso se
+    mueve en un par de g/kg: colector y cámara quedaban aplastados en una misma
+    línea horizontal y la isentálpica parecía no tener relación con ellos.
+
+    El techo es el mayor entre el proceso y el punto donde la isentálpica de
+    referencia corta la saturación (la saturación adiabática: adónde iría el
+    aire si la cámara fuera ideal), con margen. El piso baja a cero solo si el
+    proceso está cerca del origen.
+    """
+    w_min, w_max = min(omegas_proceso), max(omegas_proceso)
+    iso = np.asarray(omega_isentalpica, dtype=float)
+    techo = w_max
+    if np.any(np.isfinite(iso)):
+        techo = max(techo, float(np.nanmax(iso)))
+    techo = techo + 0.15 * max(techo - w_min, 1.0)
+    piso = 0.0 if w_min < 0.4 * techo else max(0.0, w_min - 0.5 * (techo - w_min))
+    return piso, techo
+
+
 def fig_carta_psicrometrica(
     res: Any,
     proyecto: Any,
@@ -100,6 +123,14 @@ def fig_carta_psicrometrica(
     fondo = curvas_fondo(T_min, T_max, P_Pa)
     T_C = fondo["T_C"]
 
+    # El rango del eje de humedad se fija ANTES de dibujar el fondo: las
+    # etiquetas de las curvas de HR tienen que caer dentro del cuadro.
+    estado_in = estados[datos.get("idx_inlet", len(estados) - 2)]
+    T_iso, w_iso = isentalpica(estado_in.h_J_kg, T_min, T_max, P_Pa)
+    xs = [e.T_C for e in estados]
+    ys = [e.omega_kg_kg * 1000.0 for e in estados]
+    y_rango = _rango_omega_g_kg(ys, w_iso * 1000.0)
+
     fig = go.Figure()
 
     # --- Curva de saturación (HR = 100 %) ---
@@ -128,8 +159,10 @@ def fig_carta_psicrometrica(
                 hoverinfo="skip",
             )
         )
-        # Etiqueta de la curva en su extremo superior (último punto válido).
-        idx_validos = np.where(np.isfinite(y))[0]
+        # Etiqueta de la curva en su último punto visible (dentro del rango del
+        # eje): con el eje ajustado al proceso, el extremo de casi todas las
+        # curvas queda fuera del cuadro.
+        idx_validos = np.where(np.isfinite(y) & (y >= y_rango[0]) & (y <= y_rango[1]))[0]
         if idx_validos.size:
             j = idx_validos[-1]
             fig.add_annotation(
@@ -138,13 +171,11 @@ def fig_carta_psicrometrica(
                 text=f"{int(hr * 100)}%",
                 showarrow=False,
                 font=dict(size=9, color="#888"),
-                xanchor="left",
-                yanchor="middle",
+                xanchor="left" if j == len(T_C) - 1 else "right",
+                yanchor="middle" if j == len(T_C) - 1 else "top",
             )
 
     # --- Isentálpica de referencia desde la entrada de la cámara/túnel ---
-    estado_in = estados[datos.get("idx_inlet", len(estados) - 2)]
-    T_iso, w_iso = isentalpica(estado_in.h_J_kg, T_min, T_max, P_Pa)
     fig.add_trace(
         go.Scatter(
             x=T_iso,
@@ -157,8 +188,6 @@ def fig_carta_psicrometrica(
     )
 
     # --- Poligonal del proceso ---
-    xs = [e.T_C for e in estados]
-    ys = [e.omega_kg_kg * 1000.0 for e in estados]
     textos = [
         f"{e.nombre}<br>T = {e.T_C:.1f} °C<br>ω = {e.omega_kg_kg * 1000:.1f} g/kg<br>HR = {e.HR * 100:.0f} %"
         for e in estados
@@ -184,20 +213,27 @@ def fig_carta_psicrometrica(
         t("graficas.carta.nota_directa") if camara_directa else t("graficas.carta.nota_indirecta")
     )
     nota = t("graficas.carta.nota", p=P_Pa / 1000, camara=nota_camara)
+    # Cuánto se apartó el aire de la isentálpica al atravesar la cámara: el
+    # número que el dibujo solo deja estimar a ojo.
+    dh_kJ_kg = (estados[-1].h_J_kg - estado_in.h_J_kg) / 1000.0
+    nota = f"{nota}<br>{t('graficas.carta.delta_h', dh=dh_kJ_kg)}"
     rotulo_instante = _rotulo_instante(res, proyecto, datos.get("t_repr_s"))
     if rotulo_instante:
         nota = f"{nota}<br>{rotulo_instante}"
     fig.add_annotation(
         xref="paper",
         yref="paper",
-        x=0.01,
-        y=0.99,
+        # Abajo a la derecha: es la zona seca de la carta, la única que queda
+        # libre de curvas y de etiquetas de HR.
+        x=0.99,
+        y=0.01,
         text=nota,
         showarrow=False,
-        align="left",
+        align="right",
         font=dict(size=10, color="#555"),
-        xanchor="left",
-        yanchor="top",
+        xanchor="right",
+        yanchor="bottom",
+        bgcolor="rgba(255,255,255,0.85)",
     )
 
     fig.update_layout(
@@ -207,5 +243,5 @@ def fig_carta_psicrometrica(
         height=520,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
-    fig.update_yaxes(rangemode="tozero")
+    fig.update_yaxes(range=list(y_rango))
     return fig

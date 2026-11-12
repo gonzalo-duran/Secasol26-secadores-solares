@@ -26,6 +26,18 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Changed
 
+- **La HR del modo Constantes es la del aire AMBIENTE** (S67). El slider de P7 era la HR
+  evaluada a la temperatura de **entrada a la cámara**, así que la humedad absoluta implícita
+  crecía con la temperatura del colector: con el default (20 %) y 57 °C de entrada daba
+  25.8 g/kg, que a 25 °C ambiente es **HR 110 %** —un aire que no existe— y era el que usaba
+  el motor de cámara, no solo el dibujo. Ahora el slider es la HR ambiente (default 50 %, rango
+  5–100 %), fija ω a `T_amb` y la HR de entrada a la cámara resulta del calentamiento sensible.
+  `calcular_todo(..., HR_referida_a_ambiente=True)`; sin el flag conserva la semántica vieja.
+  **Cambian los resultados del modo Constantes**: en el armario de referencia (25 °C,
+  800 W/m²) la evaporación de régimen pasa de 239 a 310 g/h y el lote, que no secaba en 72 h,
+  seca en 26 h. Los modos Transitorio, Ventana y Anual **no cambian** (toman ω del clima). El
+  barrido de "Humedad relativa ambiente" y los exports TXT/PDF quedan rotulados igual.
+
 - **Cross-flow como única topología de la cámara** (S64). Se retira el through-flow
   (`DireccionFlujo.VERTICAL_ASCENDENTE`) que había introducido S63. Tres razones encadenadas:
 
@@ -69,6 +81,24 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   criterio que S62 con los topes de los widgets.
 
 ### Fixed
+
+- **Carta psicrométrica en modo Constantes** (S67) — los tres defectos por los que se apagó en
+  producción (hotfix 1.4.1). El diagnóstico se hizo a condiciones constantes sobre el armario
+  indirecto de referencia y confirmó que **el balance de cámara cierra** (`ṁ·Δh = −q_pared +
+  ṁ_w·h_líquido(T_prod)`, residuo 0.0 W; con la pared llevada a adiabática el aire sigue la
+  línea de saturación adiabática): el problema era de la carta.
+  1. *Escala.* El eje de humedad se autoescalaba a la curva de saturación hasta la temperatura
+     máxima del gráfico (250 g/kg a 65 °C) con un proceso de 2 g/kg: colector y cámara se veían
+     como una sola línea horizontal. Ahora el eje se ajusta al proceso y a la saturación
+     adiabática de referencia.
+  2. *Ambiente sobresaturado.* Ver el cambio del slider de HR más arriba.
+  3. *Instante representativo.* "Máxima evaporación" caía en `t = 0` cuando el producto arranca
+     por encima del bulbo húmedo: la carta mostraba al aire **ganando** entalpía en una cámara
+     opaca (+2.2 kJ/kg, 63 % de la caída sensible). En Constantes ahora se descarta el arranque
+     del producto (`_instante_regimen`).
+  La nota de la figura deja de afirmar "≈ adiabática" e informa el **Δh medido** del aire en la
+  cámara; la ω del proceso viaja en `ResultadosCompletos.omega_entrada_kg_kg` y la leen P7 y
+  el PDF, que antes la recalculaban cada uno por su lado.
 
 - **El encadenado inmediato de lotes ya no se documenta como cota superior de producción**
   (S64). Lo era mientras el lote entraba holgado en un día; con lotes largos la alineación con

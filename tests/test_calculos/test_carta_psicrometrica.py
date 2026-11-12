@@ -293,3 +293,62 @@ def test_caja_sin_colector_colapsa_estados():
     # Ambiente/colector/entrada coinciden → se colapsan a ≤ 2 estados (entrada + salida).
     assert len(d["estados"]) == 2
     assert d["camara_directa"] is True
+
+
+# ---------------------------------------------------------------------------
+# Constantes — ω del resultado e instante en régimen (S67)
+# ---------------------------------------------------------------------------
+
+
+def _res_constantes(T_prod_K, m_dot_w, *, omega_res=None):
+    n = len(T_prod_K)
+    cam = NS(
+        t_array_s=np.linspace(0.0, 10 * 3600.0, n),
+        T_prod_K=np.asarray(T_prod_K, float),
+        T_flujo_K=np.linspace(310.0, 312.0, n),
+        omega_flujo_kg_kg=np.full(n, 0.014),
+        m_dot_w_kg_s=np.asarray(m_dot_w, float),
+        Q_rad_W=np.zeros(n),
+    )
+    col = NS(T_entrada_K=293.15, T_salida_K=318.15)
+    return NS(
+        camara=cam,
+        colector=col,
+        T_entrada_camara_K=318.15,
+        forzantes_aplicadas=None,
+        omega_entrada_kg_kg=omega_res,
+    )
+
+
+def test_constantes_usa_la_omega_del_resultado():
+    """La ω que registró el cálculo manda sobre la que pase el llamador."""
+    n = 50
+    res = _res_constantes(np.full(n, 300.0), np.full(n, 1e-4), omega_res=0.011)
+    d = estados_proceso(res, P_Pa=_P_SALTA, omega_amb=0.030)
+    assert d["estados"][0].omega_kg_kg == pytest.approx(0.011)
+    # Y alcanza sola: sin omega_amb del llamador también hay carta.
+    assert estados_proceso(res, P_Pa=_P_SALTA) is not None
+
+
+def test_constantes_descarta_el_arranque_del_producto():
+    """Producto que arranca MÁS CALIENTE que el bulbo húmedo: la evaporación máxima
+    está en t=0, cuando cede calor sensible. La carta no debe pararse ahí."""
+    n = 200
+    t = np.linspace(0.0, 10 * 3600.0, n)
+    tau = 1200.0
+    T_prod = 293.15 + 5.0 * np.exp(-t / tau)  # relaja 25 → 20 °C
+    m_dot_w = 1e-4 * (1.0 + 0.5 * np.exp(-t / tau))  # máximo en t = 0
+    res = _res_constantes(T_prod, m_dot_w, omega_res=0.008)
+    d = estados_proceso(res, P_Pa=_P_SALTA)
+    assert int(np.argmax(m_dot_w)) == 0
+    # ≈ 3 constantes de tiempo: el transitorio ya cayó al 5 %.
+    assert d["t_repr_s"] >= 2.5 * tau
+    assert d["t_repr_s"] <= 5.0 * tau
+
+
+def test_constantes_producto_ya_en_regimen_no_descarta_nada():
+    n = 60
+    m_dot_w = np.linspace(2e-4, 1e-4, n)  # máximo en t = 0, sin transitorio térmico
+    res = _res_constantes(np.full(n, 300.0), m_dot_w, omega_res=0.008)
+    d = estados_proceso(res, P_Pa=_P_SALTA)
+    assert d["t_repr_s"] == pytest.approx(0.0)

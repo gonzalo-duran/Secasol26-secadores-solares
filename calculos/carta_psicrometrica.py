@@ -45,6 +45,11 @@ _TOL_T_C: float = 0.3
 _TOL_OMEGA: float = 1e-4
 # Holgura al comparar tiempos de dos bases temporales distintas [s].
 _TOL_T_S: float = 1.0
+# Arranque del producto en modo Constantes: se considera terminado cuando
+# |dT_prod/dt| cae a esta fracción de su valor inicial (≈ 3 constantes de tiempo).
+_FRAC_ARRANQUE: float = 0.05
+# Pendiente inicial por debajo de la cual el producto ya arranca en régimen [K/s].
+_PENDIENTE_MINIMA_K_S: float = 1.0e-5
 
 
 def _serie(obj: Any, campo: str) -> np.ndarray:
@@ -239,6 +244,56 @@ def _instante_representativo(camara, forzantes) -> float:
     return float(t_arr[t_arr.size // 2])
 
 
+def _idx_fin_arranque(camara) -> int:
+    """Primer índice de la trayectoria en que el producto dejó atrás el arranque.
+
+    A condiciones constantes el producto parte de su temperatura inicial y
+    relaja hacia la de bulbo húmedo; mientras dura ese transitorio almacena (o
+    cede) calor sensible y el aire **no** sigue la línea de saturación
+    adiabática aunque la cámara sea opaca y esté aislada. Si el producto arranca
+    más caliente que el bulbo húmedo —aire seco, colector tibio—, la evaporación
+    máxima cae justo en ``t = 0`` y el criterio de "máxima evaporación" elegía
+    ese instante: la carta mostraba al aire **ganando** entalpía en una cámara
+    indirecta (medido: +2.2 kJ/kg, 63 % de la caída sensible).
+
+    El arranque se da por terminado cuando ``|dT_prod/dt|`` cae a
+    ``_FRAC_ARRANQUE`` de su valor inicial. Si la pendiente inicial es
+    despreciable (el producto ya arranca en régimen) o la serie no alcanza, no
+    se descarta nada.
+
+    Returns:
+        Índice ≥ 0 sobre ``t_array_s``. 0 si no hay arranque que descartar.
+    """
+    t_arr = _serie(camara, "t_array_s")
+    T_prod = _serie(camara, "T_prod_K")
+    if t_arr.size < 3 or T_prod.size != t_arr.size or np.any(np.diff(t_arr) <= 0.0):
+        return 0
+    pendiente = np.abs(np.gradient(T_prod, t_arr))
+    if not np.isfinite(pendiente[0]) or pendiente[0] < _PENDIENTE_MINIMA_K_S:
+        return 0
+    asentado = np.where(pendiente <= _FRAC_ARRANQUE * pendiente[0])[0]
+    return int(asentado[0]) if asentado.size else 0
+
+
+def _instante_regimen(camara) -> float:
+    """Instante representativo del modo Constantes [s]: máxima evaporación **en régimen**.
+
+    Igual que ``_instante_representativo`` pero descartando el arranque del
+    producto (``_idx_fin_arranque``). Con forzantes constantes lo que queda es
+    el período de tasa constante, que es el proceso que una carta psicrométrica
+    sabe representar.
+    """
+    t_arr = _serie(camara, "t_array_s")
+    m_dot_w = _serie(camara, "m_dot_w_kg_s")
+    if t_arr.size == 0 or m_dot_w.size != t_arr.size:
+        return _instante_representativo(camara, None)
+    i0 = _idx_fin_arranque(camara)
+    tramo = m_dot_w[i0:]
+    if tramo.size == 0 or not np.any(np.isfinite(tramo)) or np.nanmax(tramo) <= 0.0:
+        return _instante_representativo(camara, None)
+    return float(t_arr[i0 + int(np.nanargmax(tramo))])
+
+
 def _idx_camara_en_tiempo(camara, t_repr_s: float) -> int:
     """Índice de la trayectoria de cámara más cercano a ``t_repr_s``.
 
@@ -356,7 +411,10 @@ def estados_proceso(
     """Extrae los estados del proceso desde un resultado del balance global.
 
     Soporta los tres modos:
-        - **Constantes** (``ResultadosCompletos``): T's escalares + ω del llamador.
+        - **Constantes** (``ResultadosCompletos``): T's escalares + ω del proceso
+          (``res.omega_entrada_kg_kg``, o la del llamador si el resultado no la
+          trae), en el instante de máxima evaporación **en régimen**
+          (``_instante_regimen``).
         - **Transitorio** (``ResultadosCompletosTransitorio``): instante de
           **máxima evaporación** sobre la base temporal de la cámara, con las
           forzantes interpoladas ahí (ver ``_instante_representativo``).
@@ -366,8 +424,9 @@ def estados_proceso(
     Args:
         res: Resultado del balance global.
         P_Pa: Presión representativa [Pa].
-        omega_amb: Humedad absoluta ambiente/entrada [kg/kg]. Requerida solo en
-            modo Constantes (donde no hay forzantes con ω).
+        omega_amb: Humedad absoluta ambiente/entrada [kg/kg]. Solo para modo
+            Constantes, y solo si el resultado no trae ``omega_entrada_kg_kg``
+            (que tiene prioridad: es la que usó el cálculo).
 
     Returns:
         dict con ``estados`` (list[EstadoPsicro]), ``camara_directa`` (bool),
@@ -419,7 +478,11 @@ def estados_proceso(
             "t_repr_s": t_repr_s,
         }
 
-    # --- Constantes: T's escalares desde el resultado; ω de entrada del llamador ---
+    # --- Constantes: T's escalares desde el resultado; ω del proceso desde el
+    #     propio resultado (la que usó el cálculo), o del llamador como respaldo ---
+    omega_res = getattr(res, "omega_entrada_kg_kg", None)
+    if omega_res is not None:
+        omega_amb = float(omega_res)
     if omega_amb is None:
         return None
 
@@ -439,9 +502,9 @@ def estados_proceso(
         T_amb_K = T_cam_in_K
         T_col_K = T_cam_in_K
 
-    # Salida de cámara: representativa = instante de máxima evaporación (la
-    # misma regla que el transitorio; acá no hay forzantes que alinear).
-    t_repr_s = _instante_representativo(camara, None)
+    # Salida de cámara: representativa = instante de máxima evaporación una vez
+    # pasado el arranque del producto (período de tasa constante).
+    t_repr_s = _instante_regimen(camara)
     t_arr = _serie(camara, "t_array_s")
     if t_arr.size > 0:
         idx_c = _idx_camara_en_tiempo(camara, t_repr_s)

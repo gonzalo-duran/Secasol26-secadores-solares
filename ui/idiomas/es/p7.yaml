@@ -279,11 +279,13 @@ condiciones:
     help: Irradiancia global sobre el plano del colector (POA).
   viento: Velocidad del viento [m/s]
   hr:
-    label: HR del aire de entrada [%]
+    label: HR del aire ambiente [%]
     help: >-
-      HR del aire que entra a la cámara, en el modo **Constantes
-      representativas**. Fija la ω de entrada. En el modo Transitorio la
-      HR de entrada sale de las forzantes y este valor no se usa.
+      HR del aire **ambiente** (a la temperatura ambiente), en el modo
+      **Constantes representativas**. Fija la humedad absoluta ω del proceso,
+      que se conserva al calentar el aire en el colector y el auxiliar: la HR
+      con que llega a la cámara resulta mucho menor. En el modo Transitorio
+      la humedad sale de las forzantes y este valor no se usa.
   boton: ▶ Calcular prediseño completo
   spinner: Calculando...
   prompt: ℹ️ Configurá las condiciones y presioná **Calcular** para ver los resultados.

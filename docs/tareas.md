@@ -4,6 +4,11 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S67, 2026-11-12): **carta psicrométrica diagnosticada y corregida en
+> `testing`** — tres defectos de la carta, no del balance de cámara. De paso el slider de HR
+> del modo Constantes pasó a ser la HR **ambiente**: cambian los resultados de ese modo. Sin
+> commitear; falta la validación en Streamlit.
+
 > Estado general (S66, 2026-11-09): **hotfix 1.4.1 en producción — carta psicrométrica
 > desactivada** en el Space antes de presentar Secasol en ASADES 2026 (11/11). Los resultados
 > de la carta eran muy raros, en algunos casos erróneos. `main` local y `testing` la
@@ -43,16 +48,28 @@ decisiones de diseño en [[docs/decisiones]].
 
 ## En progreso
 
-### Carta psicrométrica — DESACTIVADA en producción (S66, hotfix 1.4.1)
+### Carta psicrométrica — corregida en `testing` (S67), DESACTIVADA en producción (1.4.1)
 
-El usuario vio resultados muy raros, en algunos casos erróneos, en la carta del proceso
-(P7 y PDF). Se apagó en producción con `CARTA_HABILITADA = False` (ADR-009); en `testing`
-sigue visible para poder diagnosticarla. Falta: reproducir el caso del usuario, encontrar el
-error (`calculos/carta_psicrometrica.py::estados_proceso` y la extracción de estados de
-cada modo) y decidir si vuelve en el próximo release. Antecedente: la etapa 0 de S63 ya había
-corregido que la carta comparaba dos instantes distintos — **ese arreglo no está en 1.4.0**.
-**Si al liberar `testing` no está corregida, apagarla también ahí.**
+Diagnosticada en S67 a condiciones constantes ([[docs/bitacora/bitacora_sesion67]]): el balance
+de cámara cierra y los defectos eran tres, todos de la carta — escala del eje de humedad,
+punto "Ambiente" sobresaturado (el slider de HR se evaluaba a la temperatura de entrada a la
+cámara) e instante representativo en el arranque del producto. Corregidos los tres; el slider
+de HR del modo Constantes pasó a ser la HR **ambiente**, lo que **cambia los resultados de ese
+modo**. Falta:
 
+- **Validación del usuario en Streamlit** (P7 Constantes + PDF) antes de reactivarla en
+  producción. `CARTA_HABILITADA` sigue en `True` en `testing`.
+- **Transitorio y Ventana no se revisaron en S67.** Usan el instante de máxima evaporación sin
+  descartar el arranque, y la escala nueva les aplica igual; falta mirarlos con casos reales.
+- **Cámaras con techo translúcido** tampoco se corrieron.
+
+### Percolación parcial — plan escrito, EN ESPERA de mediciones (S67)
+
+[[docs/notas/plan_percolacion_parcial]]: reparto del caudal entre atravesar el lecho y rodear
+la bandeja, para salir de las dos cotas (S64 "todo rodea" / S63 "todo atraviesa"). **No se
+implementa todavía por decisión del usuario:** antes va a aportar ensayos propios de secadores
+solares para calibrar contra mediciones. Cuatro decisiones abiertas en el §3 del plan (paso
+libre, alcance por tipología, monocapa, forma de partícula en el catálogo).
 
 ### Transferencia en la cámara (S63) — plan COMPLETO (etapas 0 a 4)
 

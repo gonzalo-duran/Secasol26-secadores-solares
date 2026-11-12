@@ -49,7 +49,9 @@ from ui.componentes.vigencia import (
 _T_AMB_DEFAULT_C = 25.0
 _I_G_DEFAULT_W_M2 = 800.0
 _V_VIENTO_DEFAULT_MS = 2.0
-_HR_CAMARA_DEFAULT_PCT = 20.0
+# HR del aire AMBIENTE en modo Constantes [%]. El nombre es histórico: hasta S67
+# el slider era la HR ya evaluada a la temperatura de entrada a la cámara.
+_HR_CAMARA_DEFAULT_PCT = 50.0
 _LV_KJ_KG = 2450.0  # calor latente de vaporización [kJ/kg]
 
 
@@ -808,7 +810,7 @@ def _texto_resultados_completo(
         if v_viento is not None:
             lines.append(f"  Velocidad viento    : {v_viento:.1f} m/s")
         if HR_cam_pct is not None:
-            lines.append(f"  HR aire entrada     : {HR_cam_pct:.0f} %")
+            lines.append(f"  HR aire ambiente    : {HR_cam_pct:.0f} %")
 
     # --- Colector ---
     if proyecto.colector is not None:
@@ -2016,26 +2018,16 @@ def _render_ventana(proyecto) -> None:
 
 
 def _omega_amb_constantes(res, proyecto) -> Optional[float]:
-    """ω de entrada [kg/kg] en modo Constantes, desde HR_cam (P7) + T_ent + P.
+    """ω del proceso [kg/kg] en modo Constantes: la que dejó registrada el cálculo.
 
-    En Constantes no hay forzantes con ω; la HR del aire de entrada la fija el
-    slider de P7 a la temperatura de entrada a la cámara.
+    Hasta S67 se recalculaba acá desde el slider de HR, evaluado a la
+    temperatura de entrada a la cámara; con eso el punto "Ambiente" de la carta
+    podía quedar por encima de la saturación. Ahora hay una sola fuente
+    (``ResultadosCompletos.omega_entrada_kg_kg``) y la carta la lee sola: esta
+    función queda como paso explícito para el llamador.
     """
-    from calculos.balance_global import presion_representativa_proyecto
-    from calculos.psicrometria import humedad_absoluta
-
-    T_in = getattr(res, "T_entrada_camara_K", None)
-    if T_in is None:
-        return None
-    try:
-        P_Pa, _ = presion_representativa_proyecto(proyecto)
-    except Exception:
-        P_Pa = 101325.0
-    HR = st.session_state.get("p7_HR_cam", _HR_CAMARA_DEFAULT_PCT) / 100.0
-    try:
-        return humedad_absoluta(HR, float(T_in), P_Pa)
-    except ValueError:
-        return None
+    omega_res = getattr(res, "omega_entrada_kg_kg", None)
+    return float(omega_res) if omega_res is not None else None
 
 
 def _render_carta_psicrometrica(res, proyecto, *, omega_amb: Optional[float] = None) -> None:
@@ -2278,7 +2270,7 @@ def render() -> None:
         HR_cam_pct = st.slider(
             t("p7.condiciones.hr.label"),
             min_value=5.0,
-            max_value=80.0,
+            max_value=100.0,
             value=st.session_state.get("p7_HR_cam", _HR_CAMARA_DEFAULT_PCT),
             step=5.0,
             help=t("p7.condiciones.hr.help"),
@@ -2315,6 +2307,7 @@ def render() -> None:
                 v_viento_ms=v_viento,
                 T_entrada_K=T_amb_K,
                 HR_camara=HR_cam,
+                HR_referida_a_ambiente=True,
             )
         registrar(st.session_state, "constantes", res, proyecto, extras=extras_cte)
         st.session_state["p7_t_calc_base_s_constantes"] = _time.perf_counter() - _t0
@@ -2591,6 +2584,7 @@ def render() -> None:
                 v_viento_ms=v_viento,
                 T_entrada_K=T_amb_K,
                 HR_camara=HR_cam,
+                HR_referida_a_ambiente=True,
             ),
         )
 
