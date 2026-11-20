@@ -7,10 +7,56 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
-> **Producción corre 1.4.1** (hotfix sobre 1.4.0, 2026-11-09, rama `hotfix-1.4.1`): la carta
-> psicrométrica del proceso está **desactivada** en P7 y en el PDF por dar resultados
-> erróneos. Este `testing` todavía no la contiene (ADR-009). Al liberar: absorber el hotfix,
-> copiar acá su entrada `[1.4.1]` y numerar la versión nueva por encima.
+## [1.5.0] — 2026-11-19
+
+Primer release después de la 1.4.0: reúne S62–S70. **Cambian los resultados de casi todos los
+proyectos** (modelo de evaporación, topología de la cámara, HR del modo Constantes). Vuelve la
+carta psicrométrica, corregida, que el hotfix 1.4.1 había retirado.
+
+### Added
+
+- **Resistencia interna a la difusión del producto** (S70, Fase 2 del plan del modelo de
+  evaporación). La evaporación era solo película externa × `a_w(X)`: faltaba el período de
+  velocidad decreciente. El motor resuelve ahora una humedad de **superficie** `X_s` que iguala
+  el flujo interno `λ(T)·m_s·(X − X_s)` (primer modo de Fick, `λ = μ₁²·D_eff/L²`, `L` = mitad
+  del espesor de la pieza) con el de la película en `a_w(X_s)`. Opcional por producto:
+  difusividad efectiva **aparente** con fuente en manzana, pimiento, ají, ciruela, durazno, papa
+  y charqui; el resto corre como antes y P4 lo avisa (`PROD_SIN_DIFUSION_INTERNA`). Anclado en
+  Saravia et al. 2007 (banana, 5 mm): RMSE en X de 0.08 contra 1.27 sin difusión.
+- **X objetivo por producto desde una a_w objetivo** (S70). Un 0.15 único dejaba la manzana en
+  a_w 0.16 (sobresecada, y por debajo del equilibrio con aire al 20 % HR) y las hojas en 0.72.
+  P4 propone el X que da a_w ≈ 0.60 según la isoterma del producto y muestra la a_w del valor
+  cargado (`core.catalogo.objetivo_secado`).
+- **Aviso de X objetivo por debajo del equilibrio** (S70): si el aire más seco que puede tener
+  la cámara no permite llegar al X objetivo, P4 y P7 lo dicen con el valor de equilibrio en
+  lugar de sugerir ampliar el horizonte (`CAM_TD_X_OBJ_BAJO_EQUILIBRIO`).
+- **Isotermas nuevas** (S70): tomate, cebolla y zanahoria (Kiranoudis 1993), yerba mate
+  (Schmalko 2005), algarroba (Prokopiuk 2010), y analogías declaradas en el catálogo para los
+  productos sin isoterma propia (`PROD_ISOTERMA_ANALOGIA`). El selector de P4 muestra los 19
+  productos (filtraba por los bloques `capa_fina`, ya inertes, y dejaba fuera 12).
+- **Aporte del ambiente en el balance** (S70): el calor que el ambiente cede cuando la cámara
+  queda por debajo de la temperatura exterior entra en la energía total; el COP vuelve a quedar
+  ≤ 1. Métrica en P7, barra del balance, tabla, TXT, JSON y PDF.
+
+### Changed
+
+- **Sin la rampa `a_w = X/X₀`** (S70): los productos sin isoterma son agua libre hasta su
+  humedad de equilibrio del catálogo. La rampa los dejaba pesimistas por un artefacto (14 de 19
+  no llegaban a X = 0.15 en 72 h).
+- **El inversor GAB acepta `K ≥ 1`** (S70), habitual en desorción de productos azucarados: el
+  pimiento (K = 1.02, Vega 2007) corría con un escalón.
+
+### Fixed
+
+- **Gran escala: los carros se atraviesan en serie** (S70). La transferencia tomaba las
+  `n_carros × bandejas_por_carro` bandejas como una sola pila en paralelo, y en ADITAL la
+  velocidad sobre el producto salía ~26 veces baja (0.06 m/s contra 0.2–1.25 m/s medidos). La
+  pérdida de carga ya lo hacía bien. Cambian todos los resultados de gran escala con carros.
+- **Inversión GAB con X → 0** (S70): la cuadrática cancelaba y el motor lo tomaba como agua
+  libre.
+- **Logos del header** (S70): no se veían, ni en local ni en producción, por una
+  incompatibilidad de Streamlit 1.57 con Starlette 1.10 al servir imágenes. Van embebidos. Se
+  vuelven a ocultar el botón Deploy y el menú de Streamlit.
 
 ### Added
 
@@ -322,6 +368,25 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   `ANUAL_SEMICONTINUO_NO_SOPORTADO` porque su operación es flujo continuo y no lotes.
 - Pérdidas IR nocturnas del vidriado y discretización vertical del producto por bandeja (fuera
   de alcance de la cámara radiativa orientada — ver `docs/notas/plan_camara_radiativa_orientada.md`).
+
+## [1.4.1] — 2026-11-09
+
+Hotfix de producción, armado sobre `v1.4.0` (rama `hotfix-1.4.1`), **sin** el trabajo de
+`testing` (S63/S64). Motivo: la presentación pública de Secasol en ASADES 2026 (Salto,
+11/11/2026), donde la app del Space se usa en vivo.
+
+### Removed
+
+- **Carta psicrométrica del proceso desactivada temporalmente.** El usuario detectó que la
+  carta daba resultados muy raros, en algunos casos erróneos. Se retira de la vista hasta
+  revisarla: el interruptor `CARTA_HABILITADA = False` en
+  `ui/componentes/carta_psicrometrica.py` hace que `fig_carta_psicrometrica` devuelva `None`,
+  y sus consumidores (P7 en los modos Constantes, Transitorio y Ventana, y las figuras del
+  reporte PDF) ya tratan `None` como "no aplica" y omiten la sección. El cálculo
+  (`calculos/carta_psicrometrica.py`) y sus tests quedan intactos. Los capítulos 16, 21 y 36
+  del manual (ES/EN/PT) avisan que está desactivada.
+
+**Ningún otro resultado cambia**: el resto del balance es idéntico al de 1.4.0.
 
 ## [1.4.0] — 2026-07-29
 

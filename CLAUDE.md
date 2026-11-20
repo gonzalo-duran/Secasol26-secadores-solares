@@ -56,13 +56,10 @@ Reglas duras:
   `git commit -F`.
 - Los releases están **tageados localmente** (`v1.0.0`…`v1.4.0`): son los puntos de retorno.
   `git diff v1.4.0..testing` dice qué entró desde la última versión liberada.
-- **Hotfix 1.4.1 en producción (S66, ADR-009):** el Space corre la 1.4.0 **sin carta
-  psicrométrica** (`CARTA_HABILITADA = False`, rama `hotfix-1.4.1`, worktree
-  `../secador_solar_hotfix`). `main` local y `testing` conservan la carta (corregida en
-  S67) y **no contienen el commit del hotfix**, así que un push desde `main` es rechazado por
-  no ser fast-forward — **no forzarlo**. Al próximo release:
-  `git merge -s ours hotfix-1.4.1` en `testing`, versión > 1.4.1 y entrada `[1.4.1]` en el
-  CHANGELOG. Procedimiento de hotfix en `docs/flujo_de_trabajo.md` §6.1.
+- **Hotfix 1.4.1 absorbido en la 1.5.0 (S70, ADR-009):** la 1.4.1 fue la 1.4.0 sin carta
+  psicrométrica (rama `hotfix-1.4.1`, worktree `../secador_solar_hotfix`). `testing` la absorbió
+  con `git merge -s ours hotfix-1.4.1` y la 1.5.0 vuelve a mostrar la carta (corregida en S67).
+  Procedimiento de hotfix en `docs/flujo_de_trabajo.md` §6.1.
 
 El detalle operativo completo —ciclo de trabajo, ciclo de liberación, qué no puede tocar
 producción, vuelta atrás— está en `docs/flujo_de_trabajo.md` (ADR-008 y ADR-010).

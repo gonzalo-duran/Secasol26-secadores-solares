@@ -209,6 +209,10 @@ barato de deshacer; no lo hace menos probable.
 
 ## 9. Estado al momento de escribir esto
 
+**Actualización S70 (2026-11-19) — release 1.5.0:** `testing` absorbe el hotfix con
+`git merge -s ours hotfix-1.4.1` (la carta vuelve), bump a 1.5.0 y entradas `[1.5.0]` y `[1.4.1]`
+en el `CHANGELOG`. Después: `main` local por `--ff-only`, tag `v1.5.0`, push de `main` y tags.
+
 **Actualización S67 (2026-11-12) — tres niveles (ADR-010):**
 
 ```
