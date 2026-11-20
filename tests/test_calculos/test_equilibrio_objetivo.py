@@ -16,7 +16,7 @@ from calculos.camara_calc import (
     calcular_camara,
     humedad_equilibrio_alcanzable,
 )
-from calculos.psicrometria import actividad_agua_desde_X_GAB
+from calculos.psicrometria import actividad_agua_desde_X_GAB, actividad_agua_isoterma
 from core import catalogo
 from core.camara import Camara
 
@@ -69,12 +69,12 @@ class TestInversionGABEstable:
 class TestObjetivoSecadoPorProducto:
     """X objetivo por defecto desde a_w = 0.60 sobre la isoterma (S70)."""
 
-    @pytest.mark.parametrize("producto", [p for p in catalogo.PRODUCTOS if p != "charqui_vacuno"])
+    @pytest.mark.parametrize("producto", sorted(catalogo.PRODUCTOS))
     def test_cae_en_la_aw_objetivo(self, producto):
         o = catalogo.objetivo_secado(producto)
         iso = catalogo.isoterma_gab(producto)
         assert o.origen == "aw_default"
-        assert actividad_agua_desde_X_GAB(o.X, iso.X_m, iso.C, iso.K) == pytest.approx(
+        assert actividad_agua_isoterma(o.X, iso) == pytest.approx(
             catalogo.AW_OBJETIVO_DEFAULT, abs=1e-6
         )
 
@@ -82,7 +82,9 @@ class TestObjetivoSecadoPorProducto:
         """Manzana (isoterma alta) pide más X que la yerba a igual a_w."""
         assert catalogo.objetivo_secado("manzana").X > 3 * catalogo.objetivo_secado("te_yerba").X
 
-    def test_sin_isoterma_usa_la_reserva(self):
+    def test_sin_isoterma_usa_la_reserva(self, monkeypatch):
+        datos = {k: v for k, v in catalogo.PRODUCTOS["charqui_vacuno"].items() if k != "isoterma"}
+        monkeypatch.setitem(catalogo.PRODUCTOS, "charqui_vacuno", datos)  # sin isoterma (S71)
         o = catalogo.objetivo_secado("charqui_vacuno")
         assert o.origen == "reserva"
         assert o.X == catalogo.X_OBJETIVO_RESERVA

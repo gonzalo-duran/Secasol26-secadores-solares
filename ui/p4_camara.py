@@ -36,7 +36,7 @@ from calculos.conversiones_angulo import (
 )
 from calculos.lecho_producto import D_P_DEFAULT_M as _D_P_DEFAULT_M
 from calculos.motor_calc import _C_obstruccion_bloqueo
-from calculos.psicrometria import actividad_agua_desde_X_GAB, humedad_absoluta
+from calculos.psicrometria import actividad_agua_isoterma, humedad_absoluta
 from calculos.simulacion_anual import ResultadosAnual, simular_anual
 from core import catalogo
 from core.camara import (
@@ -2091,7 +2091,7 @@ def _caption_aw_objetivo(prod_id: str, X_obj: float, objetivo) -> None:
         st.caption(t("p4.producto.x_obj.sin_isoterma", x=objetivo.X))
         return
     try:
-        a_w = actividad_agua_desde_X_GAB(X_obj, iso.X_m, iso.C, iso.K)
+        a_w = actividad_agua_isoterma(X_obj, iso)
     except ValueError:
         a_w = 1.0
     st.caption(

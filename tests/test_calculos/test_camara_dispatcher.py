@@ -18,6 +18,7 @@ from calculos.camara_calc import (
     calcular_camara,
 )
 from calculos.camara_termodinamica import ResultadoMotorTermodinamico
+from core import catalogo
 from core.camara import (
     Camara,
     CargaProducto,
@@ -211,8 +212,14 @@ class TestWireUpTermodinamico:
         assert any(a.startswith("CAM_TD_GAB_ANALOGIA") and "damasco" in a for a in res.advertencias)
         assert not any("GAB_FALTA" in a for a in res.advertencias)
 
-    def test_CAM_TD_GAB_FALTA(self):
-        """Charqui (sin isoterma, S70): agua libre hasta X_eq del catálogo, con aviso."""
+    def test_CAM_TD_GAB_FALTA(self, monkeypatch):
+        """Producto sin isoterma: agua libre hasta X_eq del catálogo, con aviso.
+
+        Desde S71 ningún producto del catálogo corre sin isoterma: se le quita la
+        suya al charqui (era el caso real hasta entonces).
+        """
+        datos = {k: v for k, v in catalogo.PRODUCTOS["charqui_vacuno"].items() if k != "isoterma"}
+        monkeypatch.setitem(catalogo.PRODUCTOS, "charqui_vacuno", datos)  # sin isoterma (S71)
         res = self._correr("charqui_vacuno", 1.5, 0.30)
         aviso = [a for a in res.advertencias if a.startswith("CAM_TD_GAB_FALTA")]
         assert len(aviso) == 1

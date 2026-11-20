@@ -88,7 +88,7 @@ from calculos.lecho_producto import area_abierta_malla_efectiva
 from calculos.propiedades_aire import propiedades_aire
 from calculos.psicrometria import (
     HR_desde_omega,
-    actividad_agua_desde_X_GAB,
+    actividad_agua_isoterma,
     calor_latente_vaporizacion,
     densidad_aire_humedo,
     humedad_absoluta,
@@ -606,7 +606,7 @@ def _construir_params_termodinamico(
     # --- aw_func: GAB propia o por analogía (S70); reserva sin isoterma ---
     iso_gab = catalogo.isoterma_gab(p.producto_id)
     if iso_gab is not None:
-        X_m_GAB, C_GAB, K_GAB = iso_gab.X_m, iso_gab.C, iso_gab.K
+        K_GAB = iso_gab.K_max
         if iso_gab.origen == "analogia":
             advertencias.append(
                 f"CAM_TD_GAB_ANALOGIA: '{p.producto_id}' no tiene isoterma propia; "
@@ -622,7 +622,7 @@ def _construir_params_termodinamico(
 
         def _aw_func(X: float) -> float:
             try:
-                return actividad_agua_desde_X_GAB(X, X_m_GAB, C_GAB, K_GAB)
+                return actividad_agua_isoterma(X, iso_gab)
             except ValueError:
                 # S70: con parámetros validados (X_m, C, K > 0), la única falla
                 # posible es K < 1 y X por encima del máximo de la isoterma

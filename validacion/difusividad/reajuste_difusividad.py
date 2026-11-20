@@ -34,7 +34,7 @@ from scipy.optimize import brentq
 
 from calculos.camara_calc import _LE_AGUA_AIRE, coef_conveccion_producto_local
 from calculos.camara_termodinamica import simular_secado
-from calculos.psicrometria import actividad_agua_desde_X_GAB, cp_aire_humedo, humedad_absoluta
+from calculos.psicrometria import actividad_agua_isoterma, cp_aire_humedo, humedad_absoluta
 from core import catalogo
 from core.camara import ForzantesAire
 
@@ -162,7 +162,7 @@ def _aw_func(producto: str):
         if X <= 0.0:
             return 0.0
         try:
-            return actividad_agua_desde_X_GAB(X, iso.X_m, iso.C, iso.K)
+            return actividad_agua_isoterma(X, iso)
         except ValueError:
             return 1.0
 

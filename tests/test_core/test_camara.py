@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from core import catalogo
 from core.advertencias import Severidad
 from core.camara import (
     Camara,
@@ -329,13 +330,15 @@ class TestAdvertenciasCamara:
         assert "GEO_RELACION_ASPECTO_EXTREMA" not in codigos
         assert "FLUJO_VELOCIDAD_SUPERFICIAL_BAJA" not in codigos
 
-    def test_PROD_ISOTERMA_FALLBACK(self):
+    def test_PROD_ISOTERMA_FALLBACK(self, monkeypatch):
         """Producto sin isoterma propia ni analogía → PROD_ISOTERMA_FALLBACK CRITICAL.
 
-        Desde S70 el único caso del catálogo es el charqui (la sal cambia la
-        isoterma: no se presta la de un vegetal). Tiene fallback escalar de X_eq,
-        así que instancia y advierte.
+        Desde S71 ningún producto del catálogo corre sin isoterma: se le quita la
+        suya al charqui, que fue el caso real hasta entonces. Tiene fallback
+        escalar de X_eq, así que instancia y advierte.
         """
+        datos = {k: v for k, v in catalogo.PRODUCTOS["charqui_vacuno"].items() if k != "isoterma"}
+        monkeypatch.setitem(catalogo.PRODUCTOS, "charqui_vacuno", datos)  # sin isoterma (S71)
         camara = Camara(
             carga_producto=CargaProducto(
                 producto_id="charqui_vacuno",
@@ -463,9 +466,12 @@ class TestAdvertenciasCamara:
         codigos = [a.codigo for a in adv]
         assert "FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA" not in codigos
 
-    def test_advertencia_inio_carne_sin_isoterma(self):
-        # charqui_vacuno (CARNE) no tiene GAB pero sí fallback escalar de X_eq →
-        # instancia y advertencias_camara emite INIO_PRODUCTO_CARNE_SIN_ISOTERMA.
+    def test_advertencia_inio_carne_sin_isoterma(self, monkeypatch):
+        # Una CARNE sin GAB pero con fallback escalar de X_eq instancia y
+        # advertencias_camara emite INIO_PRODUCTO_CARNE_SIN_ISOTERMA. Desde S71
+        # el charqui tiene isoterma: se le quita para simular el caso.
+        datos = {k: v for k, v in catalogo.PRODUCTOS["charqui_vacuno"].items() if k != "isoterma"}
+        monkeypatch.setitem(catalogo.PRODUCTOS, "charqui_vacuno", datos)  # sin isoterma (S71)
         camara = Camara(
             carga_producto=CargaProducto(
                 producto_id="charqui_vacuno",

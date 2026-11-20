@@ -138,6 +138,13 @@ class IsotermaGAB:
             la toma prestada de otro material.
         material_fuente: Id del producto o material de referencia del que
             salen los parámetros (el propio producto si `origen == "propia"`).
+        meseta_a_w: a_w de la meseta de una isoterma con escalón, o None (GAB
+            simple). Productos con sal (charqui): por debajo de la a_w de la
+            salmuera saturada (0.753 para NaCl) la sal cristaliza y casi no
+            retiene agua; por encima la disuelve. Entre las dos ramas, la
+            superficie queda en ``meseta_a_w`` mientras cristaliza la sal.
+            Con meseta, ``(X_m, C, K)`` son la rama **baja**.
+        rama_alta: ``(X_m, C, K)`` de la rama alta (a_w > meseta_a_w), o None.
     """
 
     X_m: float
@@ -145,6 +152,56 @@ class IsotermaGAB:
     K: float
     origen: str
     material_fuente: str
+    meseta_a_w: float | None = None
+    rama_alta: tuple[float, float, float] | None = None
+
+    @property
+    def X_inicio_meseta(self) -> float | None:
+        """X del extremo inferior de la meseta (rama baja en ``meseta_a_w``)."""
+        if self.meseta_a_w is None:
+            return None
+        return _gab_directa(self.meseta_a_w, self.X_m, self.C, self.K)
+
+    @property
+    def X_fin_meseta(self) -> float | None:
+        """X del extremo superior de la meseta (rama alta en ``meseta_a_w``)."""
+        if self.meseta_a_w is None or self.rama_alta is None:
+            return None
+        return _gab_directa(self.meseta_a_w, *self.rama_alta)
+
+    @property
+    def K_max(self) -> float:
+        """Mayor K de las ramas: acota la a_w a la que la isoterma diverge."""
+        return max(self.K, self.rama_alta[2]) if self.rama_alta else self.K
+
+    def X_de_aw(self, a_w: float) -> float:
+        """Isoterma directa X(a_w), con el escalón si hay meseta.
+
+        En ``a_w == meseta_a_w`` devuelve el extremo inferior de la meseta (la
+        isoterma directa es multivaluada ahí; la inversa, en
+        ``calculos.psicrometria.actividad_agua_isoterma``, no).
+
+        Raises:
+            ValueError: ``CAT_AW_FUERA_DE_ISOTERMA`` si la rama que corresponde
+                diverge en ``a_w`` (``K·a_w ≥ 1``).
+        """
+        if self.meseta_a_w is not None and self.rama_alta is not None and a_w > self.meseta_a_w:
+            return _gab_directa(a_w, *self.rama_alta)
+        return _gab_directa(a_w, self.X_m, self.C, self.K)
+
+
+def _gab_directa(a_w: float, X_m: float, C: float, K: float) -> float:
+    """GAB directa ``X = X_m·C·K·a / ((1 − K·a)·(1 − K·a + C·K·a))``.
+
+    Raises:
+        ValueError: ``CAT_AW_FUERA_DE_ISOTERMA`` si ``K·a_w ≥ 1`` (la GAB diverge).
+    """
+    u = K * a_w
+    if not 0.0 <= a_w < 1.0 or u >= 1.0:
+        raise ValueError(
+            f"CAT_AW_FUERA_DE_ISOTERMA: a_w={a_w:.3f} con K={K:.4f} (K·a_w = {u:.3f} ≥ 1)."
+        )
+    return X_m * C * u / ((1.0 - u) * (1.0 - u + C * u))
 
 
 def _params_gab_validos(datos: dict[str, Any] | None) -> tuple[float, float, float] | None:
@@ -158,6 +215,39 @@ def _params_gab_validos(datos: dict[str, Any] | None) -> tuple[float, float, flo
     if any(v <= 0.0 for v in valores):
         return None
     return valores  # type: ignore[return-value]
+
+
+def _meseta_valida(
+    datos: dict[str, Any] | None,
+) -> tuple[float | None, tuple[float, float, float] | None]:
+    """Lee `isoterma.gab.meseta` → ``(a_w, (X_m, C, K) de la rama alta)``.
+
+    Devuelve ``(None, None)`` si no hay bloque. Un bloque presente pero
+    incompleto o no físico es un error de catálogo, no una ausencia: lanza.
+
+    Raises:
+        ValueError: ``CAT_MESETA_INVALIDA`` si falta la rama alta, la a_w está
+            fuera de (0, 1), o la rama alta no queda por encima de la baja en la
+            meseta (el escalón tiene que subir).
+    """
+    gab = ((datos or {}).get("isoterma") or {}).get("gab") or {}
+    meseta = gab.get("meseta")
+    if not meseta:
+        return None, None
+    alta = _params_gab_validos({"isoterma": {"gab": {"params": meseta.get("rama_alta")}}})
+    baja = _params_gab_validos(datos)
+    try:
+        a_s = float(meseta["a_w"])
+    except (KeyError, TypeError, ValueError):
+        a_s = float("nan")
+    if alta is None or baja is None or not 0.0 < a_s < 1.0:
+        raise ValueError(f"CAT_MESETA_INVALIDA: bloque meseta incompleto ({meseta!r}).")
+    if _gab_directa(a_s, *alta) <= _gab_directa(a_s, *baja):
+        raise ValueError(
+            "CAT_MESETA_INVALIDA: la rama alta no queda por encima de la baja en "
+            f"a_w = {a_s:.3f}."
+        )
+    return a_s, alta
 
 
 def isoterma_gab(producto_id: str) -> IsotermaGAB | None:
@@ -179,7 +269,14 @@ def isoterma_gab(producto_id: str) -> IsotermaGAB | None:
     datos = PRODUCTOS.get(producto_id) or {}
     propios = _params_gab_validos(datos)
     if propios is not None:
-        return IsotermaGAB(*propios, origen="propia", material_fuente=producto_id)
+        a_s, alta = _meseta_valida(datos)
+        return IsotermaGAB(
+            *propios,
+            origen="propia",
+            material_fuente=producto_id,
+            meseta_a_w=a_s,
+            rama_alta=alta,
+        )
 
     analogia = (((datos.get("isoterma") or {}).get("gab")) or {}).get("analogia")
     if not analogia:
@@ -188,7 +285,14 @@ def isoterma_gab(producto_id: str) -> IsotermaGAB | None:
     prestados = _params_gab_validos(fuente)
     if prestados is None:
         return None
-    return IsotermaGAB(*prestados, origen="analogia", material_fuente=str(analogia))
+    a_s, alta = _meseta_valida(fuente)
+    return IsotermaGAB(
+        *prestados,
+        origen="analogia",
+        material_fuente=str(analogia),
+        meseta_a_w=a_s,
+        rama_alta=alta,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -310,17 +414,12 @@ class ObjetivoSecado:
 
 
 def humedad_desde_aw_gab(iso: IsotermaGAB, a_w: float) -> float:
-    """Isoterma GAB directa: ``X = X_m·C·K·a / ((1 − K·a)·(1 − K·a + C·K·a))``.
+    """Isoterma directa X(a_w) del producto (GAB, con escalón si tiene meseta).
 
     Raises:
         ValueError: ``CAT_AW_FUERA_DE_ISOTERMA`` si ``K·a_w ≥ 1`` (la GAB diverge).
     """
-    u = iso.K * a_w
-    if not 0.0 <= a_w < 1.0 or u >= 1.0:
-        raise ValueError(
-            f"CAT_AW_FUERA_DE_ISOTERMA: a_w={a_w:.3f} con K={iso.K:.4f} (K·a_w = {u:.3f} ≥ 1)."
-        )
-    return iso.X_m * iso.C * u / ((1.0 - u) * (1.0 - u + iso.C * u))
+    return iso.X_de_aw(a_w)
 
 
 def objetivo_secado(producto_id: str) -> ObjetivoSecado:
@@ -339,8 +438,10 @@ def objetivo_secado(producto_id: str) -> ObjetivoSecado:
     def _aw_de(X: float) -> float | None:
         if iso is None:
             return None
-        lo, hi = 0.0, 1.0 / iso.K if iso.K > 1.0 else 1.0
-        for _ in range(60):  # bisección sobre la GAB directa (monótona)
+        lo, hi = 0.0, 1.0 / iso.K_max if iso.K_max > 1.0 else 1.0
+        # Bisección sobre la isoterma directa (no decreciente; con meseta, una X
+        # dentro del escalón converge a la a_w de la meseta).
+        for _ in range(60):
             mid = 0.5 * (lo + hi)
             try:
                 X_mid = humedad_desde_aw_gab(iso, mid)

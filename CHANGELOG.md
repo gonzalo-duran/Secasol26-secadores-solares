@@ -7,6 +7,39 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-11-20
+
+Isoterma propia del charqui con el escalón de la salmuera saturada, difusividad del charqui
+reajustada y difusividad de la zanahoria rallada. **Cambian los resultados** del charqui y de
+la zanahoria rallada; el resto de los productos no cambia.
+
+### Added
+
+- **Isoterma del charqui** (Comaposada, Gou & Arnau 2000, Meat Science 55:291; cerdo con 20 %
+  de NaCl en base seca, 26 °C, figuras digitalizadas). La carne salada tiene un **escalón en
+  a_w = 0.753** (la a_w de la salmuera saturada): por debajo la sal cristaliza y casi no
+  retiene agua, por encima la disuelve. Se representa con dos ramas GAB y una meseta entre
+  ellas (X = 0.17 a 0.66), con un bloque nuevo `isoterma.gab.meseta` en el catálogo. Una GAB
+  única erraba hasta 4 veces en X entre a_w 0.4 y 0.7. Hasta 1.5.1 el charqui corría sin
+  isoterma (a_w = 1) y secaba de noche.
+- **Difusividad de la zanahoria rallada** (Doymaz 2017, Heat Mass Transfer 53:25; rodajas de
+  4 mm sin pretratamiento, 50–70 °C), reajustada dentro de Secasol: D(50 °C) = 2.9e-10 m²/s,
+  E_a = 29 kJ/mol, pieza de 1 mm. Calidad baja: en ese ensayo el D que reproduce cada espesor
+  crece con él y ninguna película lo explica (ver notas del catálogo).
+
+### Changed
+
+- **Difusividad del charqui**: 9.5e-11 m²/s (antes 1.1e-10), reajustada dentro de Secasol
+  sobre el ensayo de Durán et al. 2008 ya con la isoterma nueva. La réplica pasa de RMSE 0.136
+  (sin isoterma) a 0.048 en X.
+
+### Fixed
+
+- **Inversión de la GAB con C = 1**: resolvía una ecuación que no es GAB, así que con C = 1
+  no devolvía la a_w de partida. Ningún producto tenía C = 1 hasta la rama alta del charqui.
+  Con C < 1 elegía a veces la raíz equivocada. Los dos casos quedan cubiertos por un test de
+  ida y vuelta contra la GAB directa.
+
 ## [1.5.1] — 2026-11-20
 
 Corrige la película sobre el producto y el caudal de los colectores de dos canales, y suma el

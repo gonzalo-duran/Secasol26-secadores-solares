@@ -29,8 +29,12 @@ Referencias:
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from scipy.optimize import brentq
+
+if TYPE_CHECKING:
+    from core.catalogo import IsotermaGAB
 
 # ---------------------------------------------------------------------------
 # Constantes — propiedades termofísicas del aire húmedo
@@ -262,6 +266,7 @@ def entalpia_aire_humedo(T_K: float, omega: float) -> float:
 #   4. densidad_aire_humedo
 #   5. temperatura_bulbo_humedo    — saturación adiabática iterativa
 #   6. actividad_agua_desde_X_GAB  — inversión analítica de GAB
+#      actividad_agua_isoterma     — idem por producto, con meseta (S71)
 #   7. coef_transferencia_masa_chilton_colburn
 # ===========================================================================
 
@@ -550,20 +555,13 @@ def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> floa
     if X <= 0.0:
         return 0.0
 
-    # Caso degenerado C → 1: GAB colapsa a Henderson lineal en a_w
+    # Caso degenerado C = 1: (1 − u + C·u) = 1 y GAB queda X = X_m·u/(1 − u);
+    # la cuadrática pierde el término en u² y la raíz es u = X/(X_m + X).
+    # (Hasta S71 acá se resolvía X·(1−u)² = X_m·u, que no es GAB: con C = 1 la
+    # inversa no devolvía la a_w de partida. Ningún producto del catálogo tenía
+    # C = 1 hasta la rama alta del charqui.)
     if abs(C - 1.0) < 1e-9:
-        # X·(1−u)² = X_m·u → ecuación cuadrática diferente
-        # X − 2X·u + X·u² = X_m·u → X·u² − (2X + X_m)·u + X = 0
-        a_q = X
-        b_q = -(2.0 * X + X_m)
-        c_q = X
-        disc = b_q * b_q - 4.0 * a_q * c_q
-        if disc < 0:
-            raise ValueError(
-                f"PSICRO_GAB_INVERSION_FALLO: discriminante negativo "
-                f"(C=1, X={X:.4f}, X_m={X_m:.4f})."
-            )
-        u = (-b_q - math.sqrt(disc)) / (2.0 * a_q)  # raíz menor (en (0,1))
+        u = X / (X_m + X)
     else:
         # Caso general: a·u² + b·u + c = 0
         a_q = X * (C - 1.0)
@@ -590,7 +588,10 @@ def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> floa
                 f"PSICRO_GAB_INVERSION_FALLO: sin raíz positiva "
                 f"(X={X:.4f}, X_m={X_m:.4f}, C={C:.3f}, K={K:.4f})."
             )
-        u = raices[0]
+        # Con C > 1 hay una sola raíz positiva. Con C < 1 (no físico, pero un
+        # ajuste empírico puede darlo) hay dos: la menor es la rama creciente que
+        # parte de u = 0 (S71; antes se tomaba la primera de la lista).
+        u = min(raices)
 
     a_w = u / K
 
@@ -601,6 +602,39 @@ def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> floa
             "Indica que X está fuera del rango de validez del modelo GAB."
         )
     return min(a_w, 1.0)
+
+
+def actividad_agua_isoterma(X: float, iso: IsotermaGAB) -> float:
+    """a_w(X) de la isoterma de un producto, con meseta si la tiene.
+
+    Sin meseta es ``actividad_agua_desde_X_GAB`` con los parámetros de ``iso``.
+    Con meseta (productos salados, ver ``core.catalogo.IsotermaGAB``):
+
+    - ``X ≤ X_inicio_meseta`` → inversión de la rama baja;
+    - ``X_inicio_meseta < X < X_fin_meseta`` → ``meseta_a_w`` (la superficie
+      está en la a_w de la salmuera saturada mientras cristaliza la sal);
+    - ``X ≥ X_fin_meseta`` → inversión de la rama alta.
+
+    La función queda continua y no decreciente en X, que es lo que pide el
+    nodo de superficie del motor (``humedad_superficie_producto``).
+
+    Args:
+        X: Humedad del producto [kg_agua/kg_seco].
+        iso: Isoterma resuelta por ``core.catalogo.isoterma_gab``.
+
+    Returns:
+        a_w [fracción 0–1].
+
+    Raises:
+        ValueError: Los de ``actividad_agua_desde_X_GAB`` para la rama que toca.
+    """
+    if iso.meseta_a_w is None or iso.rama_alta is None:
+        return actividad_agua_desde_X_GAB(X, iso.X_m, iso.C, iso.K)
+    if X <= iso.X_inicio_meseta:
+        return actividad_agua_desde_X_GAB(X, iso.X_m, iso.C, iso.K)
+    if X < iso.X_fin_meseta:
+        return iso.meseta_a_w
+    return actividad_agua_desde_X_GAB(X, *iso.rama_alta)
 
 
 # ---------------------------------------------------------------------------

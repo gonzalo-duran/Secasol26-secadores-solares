@@ -4,6 +4,13 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S71, 2026-11-20): **1.5.2 preparada** — isoterma del charqui con la meseta
+> de la salmuera (Comaposada 2000), D del charqui reajustado (9.5e-11, réplica de Durán 2008
+> RMSE 0.048), D de la zanahoria rallada (Doymaz 2017, BAJA), fix de la inversión GAB con
+> C ≤ 1. Tomate y cebolla siguen sin D (ningún ensayo publicado utilizable, bitácora S71 §7–8).
+> **Pendiente:** intercambio IR producto–paredes en la cámara; encogimiento (cuatro ensayos
+> de tres laboratorios con dependencia del espesor sub-lineal); ventilador de ADITAL.
+
 > Estado general (S70, 2026-11-20): **1.5.1 preparada** — película sobre el producto con el
 > largo de la bandeja (Fase 1 anclada en agua libre, Durán 2008 y Carrier/ASHRAE), caudal de
 > colectores Tipo 2/3 corregido, preset de ADITAL (Tipo 2, 3.3 kg/s medido, pimiento para

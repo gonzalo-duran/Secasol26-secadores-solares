@@ -127,6 +127,7 @@ class TestCatalogoDifusion:
             "papa",
             "charqui_vacuno",
             "te_yerba",
+            "zanahoria_rallada",
         ],
     )
     def test_productos_con_difusividad(self, producto):

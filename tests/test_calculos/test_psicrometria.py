@@ -625,15 +625,22 @@ class TestActividadAguaDesdeXGAB:
             actividad_agua_desde_X_GAB(0.40, X_m=0.05, C=12.0, K=0.85)
 
     def test_caso_degenerado_C1(self):
-        """C=1 (caso límite): GAB se reduce a forma simplificada."""
-        # Para C=1, GAB: X = X_m · K · a_w / (1 − K·a_w)²
-        # Caso de prueba: X_m=0.05, K=0.85, aw=0.5
+        """C=1 (caso límite): (1 − u + C·u) = 1 y GAB queda X = X_m·u/(1 − u)."""
         X_m, K = 0.05, 0.85
         aw_orig = 0.5
         u = K * aw_orig
-        X = X_m * u / (1.0 - u) ** 2
+        X = X_m * u / (1.0 - u)
         aw_rec = actividad_agua_desde_X_GAB(X, X_m, C=1.0, K=K)
         assert aw_rec == pytest.approx(aw_orig, abs=1e-6)
+
+    @pytest.mark.parametrize("C", [1.0, 0.5, 6.0, 25.0])
+    def test_ida_y_vuelta_contra_gab_directa(self, C):
+        """La inversa devuelve la a_w de partida con la GAB general, incluido C = 1 (S71)."""
+        X_m, K = 0.3414, 0.8764
+        for aw in (0.1, 0.5, 0.753, 0.9):
+            u = K * aw
+            X = X_m * C * u / ((1.0 - u) * (1.0 - u + C * u))
+            assert actividad_agua_desde_X_GAB(X, X_m, C, K) == pytest.approx(aw, abs=1e-9)
 
     def test_X_m_no_positiva_lanza(self):
         with pytest.raises(ValueError, match="PSICRO_GAB_XM_NO_POSITIVA"):
