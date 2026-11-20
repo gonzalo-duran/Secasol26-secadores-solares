@@ -18,6 +18,7 @@ Capa core/: sin Streamlit.
 
 from __future__ import annotations
 
+from core import catalogo
 from core.camara import (
     Camara,
     CapaPared,
@@ -33,8 +34,12 @@ from core.camara import (
 from core.colector import BancoColectores, CanoMaestro, Colector, ColectorUnidad
 from core.motor import Motor
 
-# Caudal másico de aire del sistema ADITAL [kg/s] (ventilador centrífugo).
-_CAUDAL_ADITAL_KG_S: float = 3.8
+# Caudal másico de aire del sistema ADITAL [kg/s] (ventilador centrífugo). Medido en
+# 2010 tras el cambio de ventilador: 1.4 m/s medios en el difusor de entrada a la cámara
+# (1.2 × 1.8 m), ρ ≈ 1.1 kg/m³ → 3.3 kg/s (tesis de G. Durán, cap. 3). El de diseño era
+# 600 m³/h por colector (≈ 3.8 kg/s). Hasta S70 el preset usaba 3.8 en la cámara pero el
+# banco de colectores, armado con un solo canal, entregaba la mitad.
+_CAUDAL_ADITAL_KG_S: float = 3.3
 # Densidad de referencia para convertir a caudal volumétrico (~50 °C, 1800 m).
 _RHO_REF_KG_M3: float = 0.87
 
@@ -66,9 +71,14 @@ def colector_gran_escala() -> Colector:
         unidad=ColectorUnidad(
             largo_m=7.5,
             ancho_m=0.94,
+            # Chapa ondulada a media altura: el aire pasa por arriba y por debajo
+            # (tesis, cap. 2) → Tipo 2, dos canales de ~5 cm (estimado por el
+            # usuario, S70). Hasta S70 era Tipo 1 con un solo canal de 5 cm.
             espaciado_m=0.05,
-            velocidad_diseno_ms=1.8,  # ≈ 600 m³/h por colector con esta sección
-            tipo_colector=1,
+            espaciado_inferior_m=0.05,
+            # 26 × 0.94 × (0.05 + 0.05) × 1.5 m/s ≈ 3.7 m³/s ≈ 3.3 kg/s (medido en 2010).
+            velocidad_diseno_ms=1.5,
+            tipo_colector=2,
             n_cubiertas=1,
         ),
         banco=BancoColectores(
@@ -105,10 +115,12 @@ def camara_gran_escala() -> Camara:
         ),
         flujo=ConfiguracionFlujo(caudal_masico_kg_s=_CAUDAL_ADITAL_KG_S, HR_entrada_fraccion=0.15),
         carga_producto=CargaProducto(
-            producto_id="pimiento_rojo",
+            # Pimiento para pimentón en vaina entera (S70): el producto real de ADITAL,
+            # X0 ≈ 3 (Condorí 2009). Hasta S70: pimiento morrón cortado, X0 = 10.7.
+            producto_id="pimiento_pimenton",
             masa_total_kg=5000.0,
-            humedad_inicial_X=10.7,  # ~91.5 % bh (catálogo)
-            humedad_objetivo_X=1.0,  # 50 % bh — target de la tesis
+            humedad_inicial_X=3.0,
+            humedad_objetivo_X=catalogo.objetivo_secado("pimiento_pimenton").X,
             modelo_capa_fina="page",
             modelo_isoterma="gab",
         ),

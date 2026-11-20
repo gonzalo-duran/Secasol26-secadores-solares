@@ -117,12 +117,22 @@ class TestCatalogoDifusion:
 
     @pytest.mark.parametrize(
         "producto",
-        ["manzana", "pimiento_rojo", "aji_rojo", "ciruela", "durazno", "papa", "charqui_vacuno"],
+        [
+            "manzana",
+            "pimiento_rojo",
+            "pimiento_pimenton",
+            "aji_rojo",
+            "ciruela",
+            "durazno",
+            "papa",
+            "charqui_vacuno",
+            "te_yerba",
+        ],
     )
     def test_productos_con_difusividad(self, producto):
         d = catalogo.difusion_interna(producto)
         assert d is not None
-        assert 1e-11 < d.D_ref_m2_s < 1e-8  # rango de alimentos (Maskan 2002)
+        assert 1e-12 < d.D_ref_m2_s < 1e-8  # alimentos; hojas en el extremo bajo
 
     def test_producto_sin_bloque(self):
         assert catalogo.difusion_interna("tomate") is None
@@ -246,3 +256,28 @@ class TestWireUpCamara:
         assert pr.tasa_difusion_func(323.15) == pytest.approx(
             math.pi**2 * 3.5e-10 / (4 * 0.003**2), rel=1e-9
         )
+
+
+class TestDimensionPieza:
+    """La difusión puede declarar su propia dimensión de pieza (yerba mate, S70)."""
+
+    def _tasa(self, d_p_usuario=None):
+        from calculos.camara_calc import _construir_params_termodinamico
+        from tests.test_calculos.test_conveccion_natural_cajon import _camara
+
+        cam = _camara()
+        cam.carga_producto.producto_id = "te_yerba"
+        cam.carga_producto.humedad_inicial_X = 2.3
+        cam.carga_producto.humedad_objetivo_X = 0.10
+        if d_p_usuario is not None:
+            cam.bandejas.diametro_eq_particula_m = d_p_usuario
+        pr = _construir_params_termodinamico(cam, 323.15, 0.2, 298.15, 101325.0)
+        return pr.tasa_difusion_func(323.15)
+
+    def test_usa_el_espesor_de_la_hoja(self):
+        d = catalogo.difusion_interna("te_yerba")
+        assert self._tasa() == pytest.approx(d.tasa_primer_modo_s(323.15, 0.00036), rel=1e-9)
+
+    def test_el_d_p_explicito_del_usuario_manda(self):
+        d = catalogo.difusion_interna("te_yerba")
+        assert self._tasa(0.001) == pytest.approx(d.tasa_primer_modo_s(323.15, 0.001), rel=1e-9)

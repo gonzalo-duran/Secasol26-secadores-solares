@@ -39,12 +39,13 @@ Uso:
 from __future__ import annotations
 
 import math
+from types import SimpleNamespace
 
 import numpy as np
 
+from calculos.balance_global import _correr_colector
 from calculos.camara_calc import calcular_camara_cascada
 from calculos.cano_maestro_calc import delta_T_cano_maestro, estimar_delta_P_cano_maestro
-from calculos.colector_calc import calcular_colector_tipo1
 from calculos.motor_calc import (
     densidad_aire,
     estimar_delta_P_camara,
@@ -116,6 +117,22 @@ def dia_sintetico_marzo(n_horas: int = 24) -> dict[str, np.ndarray]:
 # --------------------------------------------------------------------------
 # Checks
 # --------------------------------------------------------------------------
+def calcular_colector_tipo1(colector, *, T_amb_K, I_g_W_m2, v_viento_ms, P_amb_Pa, T_entrada_K):
+    """Salida del colector con el solver de SU tipo (S70: ADITAL es Tipo 2).
+
+    Conserva el nombre histórico del script; despacha vía ``balance_global._correr_colector``.
+    """
+    _, T_sal = _correr_colector(
+        SimpleNamespace(colector=colector, emplazamiento=None),
+        T_amb_K=T_amb_K,
+        I_g_W_m2=I_g_W_m2,
+        v_viento_ms=v_viento_ms,
+        T_entrada_K=T_entrada_K,
+        P_amb_Pa=P_amb_Pa,
+    )
+    return SimpleNamespace(T_salida_K=T_sal)
+
+
 def check_colector(colector: Colector) -> list[tuple]:
     """Check 1 — Salida de colector en dos puntos de operación de la tesis."""
     resultados = []
@@ -130,10 +147,12 @@ def check_colector(colector: Colector) -> list[tuple]:
         T_entrada_K=20.0 + 273.15,
     )
     T_op_C = res_op.T_salida_K - 273.15
-    resultados.append(("Colector — operación (v=1.8 m/s, I=900, Ta=20)", T_op_C, "°C", 45.0, 70.0))
+    resultados.append(("Colector — operación (I=900, Ta=20)", T_op_C, "°C", 45.0, 70.0))
 
-    # (b) Pico de mediodía a caudal de diseño: I=1000 W/m², T_amb=38 °C
-    #     → tesis ~80 °C a la salida del colector.
+    # (b) Pico de mediodía a caudal de diseño: I=1000 W/m², T_amb=38 °C.
+    #     Los ~80 °C de la tesis se midieron con el ventilador APAGADO (tiro natural,
+    #     caudal bajo); con el ventilador encendido la salida bajó a ~60 °C (Condorí et
+    #     al. 2009, Fig. 9 y texto). A caudal de diseño se compara contra 55–75 °C (S70).
     res_pico = calcular_colector_tipo1(
         colector,
         T_amb_K=38.0 + 273.15,
@@ -144,7 +163,7 @@ def check_colector(colector: Colector) -> list[tuple]:
     )
     T_pico_C = res_pico.T_salida_K - 273.15
     resultados.append(
-        ("Colector — pico mediodía (v=1.8 m/s, I=1000, Ta=38)", T_pico_C, "°C", 70.0, 90.0)
+        ("Colector — pico mediodía con ventilador (I=1000, Ta=38)", T_pico_C, "°C", 55.0, 75.0)
     )
     return resultados
 

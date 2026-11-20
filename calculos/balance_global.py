@@ -720,7 +720,7 @@ def _velocidad_modulo_desde_caudal(
     u = colector.unidad
     b = colector.banco
     rho = densidad_aire(T_op_K, P_amb_Pa)
-    A_canal = float(u.ancho_m) * float(u.espaciado_m)
+    A_canal = float(u.seccion_canal_m2())  # canales activos según el tipo (S70)
     n_par = max(1, int(b.n_paralelo))
     if A_canal <= 0 or rho <= 0:
         return float(u.velocidad_diseno_ms)
@@ -760,7 +760,7 @@ def caudal_masico_banco_kg_s(
     u = colector.unidad
     b = colector.banco
     rho = densidad_aire(float(T_aire_K), float(P_amb_Pa))
-    A_canal = float(u.ancho_m) * float(u.espaciado_m)
+    A_canal = float(u.seccion_canal_m2())  # canales activos según el tipo (S70)
     n_par = max(1, int(b.n_paralelo))
     if A_canal <= 0 or rho <= 0:
         return 0.0
@@ -796,7 +796,7 @@ def area_salida_colector_m2(proyecto) -> Optional[float]:
     if col is None:
         return None
     u, b = col.unidad, col.banco
-    area = float(u.espaciado_m * u.ancho_m * max(1, int(b.n_paralelo)))
+    area = float(u.seccion_canal_m2() * max(1, int(b.n_paralelo)))
     return area if area > 0.0 else None
 
 

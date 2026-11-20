@@ -883,3 +883,49 @@ aji_rojo:
 
     T MÁXIMA RECOMENDADA: 55 °C (>60°C degrada capsaicina y color rojo).
     fotosensible: true — cámara preferentemente protegida de luz directa.
+
+pimiento_pimenton:
+  descripcion: "Pimiento para pimentón (Capsicum annuum) en vaina entera, cosechado maduro, como se seca en los Valles Calchaquíes (ADITAL, San Carlos). La piel frena la salida del agua: seca mucho más lento que el pimiento cortado."
+  descripcion_en: "Paprika pepper (Capsicum annuum) as whole pods, harvested ripe, as dried in the Calchaquí Valleys (ADITAL, San Carlos). The skin slows water loss: it dries much more slowly than cut pepper."
+  descripcion_pt: "Pimentão para páprica (Capsicum annuum) em vagem inteira, colhido maduro, como é seco nos Vales Calchaquíes (ADITAL, San Carlos). A casca freia a saída da água: seca muito mais devagar que o pimentão cortado."
+  categoria: HORTALIZA
+  tipo_secado: CAPA_FINA
+  fotosensible: true
+
+  propiedades_basicas:
+    densidad_aparente: 890.0        # kg/m³. Tomada del pimiento rojo (ASHRAE Ch.19).
+    calor_especifico_seco: 1450.0   # J/(kg·K). Tomado del pimiento rojo.
+    humedad_inicial_tipica: 3.0     # kg/kg ms — ~75 % bh. Muestra de ADITAL (Condorí 2009, Fig. 14).
+    humedad_equilibrio_aire_seco: 0.08
+    calidad_propiedades_basicas: BAJA
+    fuente_propiedades_basicas: |
+      X0 de la curva de la muestra de Condorí et al. 2009 (140 g → 40 g secos; con ~12 %
+      b.h. final, m_s ≈ 35 g). El resto, del pimiento rojo.
+
+  forma_geometrica:
+    diametro_eq_m: 0.008        # lámina equivalente de la pared de la vaina (ver difusion_interna)
+    porosidad_lecho: 0.55
+    esfericidad: 0.5
+    forma: "vaina entera"
+
+  isoterma:
+    gab:
+      analogia: pimiento_rojo
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      notas: |
+        Mismo fruto que el pimiento rojo (Vega 2007, desorción). La piel cambia la
+        cinética, no el equilibrio.
+
+  difusion_interna:
+    D_ref_m2_s: 2.1e-10
+    T_ref_K: 323.15
+    E_a_J_mol: 39700.0
+    geometria: lamina
+    calidad_datos: BAJA
+    fuente: "Ajuste S70 en Secasol sobre la muestra del carro frente a la entrada de aire de ADITAL, tanda del 21/03/2009 (Condorí, Durán, Vargas & Echazú 2009, AVERMA 13:02.35, Fig. 14). Ver validacion/adital/."
+    notas: |
+      D aparente de la vaina entera como lámina equivalente de 8 mm, con la E_a de Vega 2007
+      (cubos). 17× menor que la de los cubos cortados: la piel domina. Ajustado a los días 2–4
+      (el día 1 tiene una caída anómala, posible agua del lavado). Una sola muestra pesada a
+      mano: calidad BAJA. Coherente con Condorí, Echazú & Saravia 2001 (vaina entera 6 días
+      contra mitades 3 días).

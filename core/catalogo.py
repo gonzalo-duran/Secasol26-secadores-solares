@@ -216,12 +216,17 @@ class DifusionInterna:
         E_a_J_mol: Energía de activación de Arrhenius [J/mol]. 0 = sin
             dependencia con la temperatura.
         geometria: ``"lamina"``, ``"cilindro"`` o ``"esfera"``.
+        dimension_pieza_m: Espesor (lámina) o diámetro (cilindro, esfera) de la pieza
+            para la difusión [m]. None → el ``d_p`` del lecho. Existe porque ``d_p``
+            también es la rugosidad del lecho en la pérdida de carga, y en hojas apiladas
+            eso no es el espesor de una hoja (yerba mate: 0.36 mm, S70).
     """
 
     D_ref_m2_s: float
     T_ref_K: float
     E_a_J_mol: float
     geometria: str
+    dimension_pieza_m: float | None = None
 
     def D_eff_m2_s(self, T_K: float) -> float:
         """Difusividad a ``T_K`` por Arrhenius."""
@@ -260,9 +265,15 @@ def difusion_interna(producto_id: str) -> DifusionInterna | None:
     except (KeyError, TypeError, ValueError):
         return None
     geometria = str(bloque.get("geometria", "lamina"))
+    dim = bloque.get("dimension_pieza_m")
+    dim = float(dim) if dim is not None else None
     if D <= 0.0 or T_ref <= 0.0 or E_a < 0.0 or geometria not in AUTOVALOR_DIFUSION:
         return None
-    return DifusionInterna(D_ref_m2_s=D, T_ref_K=T_ref, E_a_J_mol=E_a, geometria=geometria)
+    if dim is not None and dim <= 0.0:
+        return None
+    return DifusionInterna(
+        D_ref_m2_s=D, T_ref_K=T_ref, E_a_J_mol=E_a, geometria=geometria, dimension_pieza_m=dim
+    )
 
 
 # ---------------------------------------------------------------------------

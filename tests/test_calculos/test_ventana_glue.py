@@ -398,10 +398,13 @@ class TestPoliticaRecargaEnVentana:
             self._con_politica(PoliticaRecarga(activa=False)), df, P_Pa=88000.0
         )
         assert con_espera.status != "error" and sin_espera.status != "error"
-        # El agua evaporada es prácticamente la misma: el secado ocurre igual.
-        assert sin_espera.masa_evaporada_kg == pytest.approx(con_espera.masa_evaporada_kg, rel=0.05)
-        # Lo que cambia es cuántos lotes cierran dentro de la ventana.
-        assert sin_espera.masa_seca_producida_kg < con_espera.masa_seca_producida_kg
+        # Encadenar de inmediato NO produce más que esperar a la hora de carga.
+        # S70: con la película sobre la bandeja (no sobre la cámara) los lotes son
+        # más cortos y en esta ventana ambas políticas cierran 3 lotes (36 kg); el
+        # encadenado inmediato arranca un 4.º que no termina y evapora más agua sin
+        # entregar producto. En S64 cerraba un lote menos (12 contra 24 kg).
+        assert sin_espera.masa_seca_producida_kg <= con_espera.masa_seca_producida_kg
+        assert sin_espera.masa_evaporada_kg >= con_espera.masa_evaporada_kg
 
     def test_la_hora_de_carga_llega_al_motor(self):
         """Cambiar solo la hora de carga tiene que cambiar el resultado."""

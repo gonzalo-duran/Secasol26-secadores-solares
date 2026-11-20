@@ -307,3 +307,69 @@ productos en a_w 0.80–0.83.
   (criterio del lado seguro). Productos con humedad comercial propia (p. ej. pimentón 10–12 %
   b.h.) se declaran con `objetivo_secado.X` en su ficha; no se cargó ninguno todavía.
 - Tests: `TestObjetivoSecadoPorProducto` en `tests/test_calculos/test_equilibrio_objetivo.py`.
+
+## 14. Política de difusividades, Fase 1 y largo de placa (2026-11-20)
+
+**Difusividades de la literatura (decisión del usuario: adoptar el método).** Los D de capa
+fina absorben la película del equipo de ensayo. Política: el D del catálogo es el que hace que
+**Secasol** reproduzca el ensayo publicado, con el h del equipo estimado como placa plana sobre
+la pieza (el h casi nunca se informa; queda anotado por caso). Herramienta:
+`validacion/difusividad/reajuste_difusividad.py` (reconstruye la curva del paper con su propio D
+y su convención de L; busca el D de Secasol que llega a MR = 0.2 al mismo tiempo).
+Primer resultado: ciruela +17 %, durazno +19 %, manzana +37 % (40 °C); en pimiento, ají y papa
+la película estimada sola ya es más lenta que el ensayo → el h de esos equipos (canasta, malla,
+cubos) era mayor: D publicado = cota inferior. Cuando el "D" de un paper crece con el espesor
+(tomate, cebolla), no es una propiedad del producto: limitaba el aire.
+**No se sacó la 1.5.1 por eso**: la corrección era menor que la incertidumbre del h.
+
+**Fase 1 — película contra agua libre.** Condorí 1998 no alcanza (sin área de bandejas, sin
+caudal, sin clima). Durán 2008, bandejas de 20 × 10 cm (dato del usuario), secador con panel FV,
+13:00–17:30: 55 g en 4.5 h = 0.61 kg/m²h. Balance de la bandeja (sol bajo policarbonato,
+evaporación, convección y radiación) con la película de Secasol: **11.7–12.0 g/h contra 12.2
+medidos** si la bandeja recibe el sol de lleno (6–7 g/h a media sombra). Contra Carrier/ASHRAE
+(superficies de agua): Secasol con el largo de la **bandeja** queda 10–35 % abajo en 0.05–3 m/s;
+con el largo de la **cámara**, 2–3× abajo a 1–3 m/s.
+
+**Cambio de modelo: la placa es la bandeja** (decisión del usuario).
+`camara_calc.longitud_flujo_producto_m` = `área_bandeja / ancho`, acotado por el largo de la
+cámara y del carro. Armario por defecto: L 1.2 → 0.625 m, h casi igual (a 0.06 m/s manda la
+convección natural). ADITAL: L 0.75 → 0.32 m, h 5.2 → 7.8, NTU 0.53 → 0.80. **Cambian los
+resultados** (más donde la velocidad es mayor). Tests en `test_carros_transferencia.py`.
+
+Consecuencias en las réplicas:
+- Charqui (Durán 2008): el D que mejor ajusta el día 1 con la película nueva es 1.09e-10, igual
+  al del catálogo (1.1e-10): domina la resistencia interna y el valor estaba bien determinado.
+- ADITAL, primer carro: con la película nueva el pimiento de Vega (cubos cortados, 3.5e-9) seca
+  demasiado rápido. Ajustando a la muestra (días 2–4; el día 1 tiene la caída anómala): **D ≈
+  2.1e-10 m²/s a 50 °C** (lámina equivalente 8 mm, E_a de Vega) → 1.19/0.55/0.41/0.16/0.12
+  contra 1.17/0.69/0.51/0.14/0.14. Coherente con la vaina entera con piel (Condorí 2001: vaina
+  entera 6 d contra mitades 3 d). Calidad BAJA: una muestra.
+
+## 15. Release 1.5.1 (preparado, 2026-11-20)
+
+- **Caudal del preset de ADITAL**: 3.8 kg/s era el de diseño de la tesis (600 m³/h × 26); 1.9
+  salía del preset del colector, armado como Tipo 1 con **un** canal de 5 cm. El usuario aclaró
+  que la chapa ondulada forma **dos** canales de ~5 cm (aire por arriba y por debajo, tesis
+  cap. 2) → Tipo 2. Medido en 2010 (cap. 3): 1.4 m/s medios en el difusor de 1.2 × 1.8 m,
+  ρ 1.1 → **3.3 kg/s**. Preset: Tipo 2, 2 × 5 cm, 1.5 m/s, cámara 3.3 kg/s.
+- **Bug general de Tipo 2/3**: `ColectorUnidad.seccion_canal_m2` contaba siempre el canal
+  superior. Ahora depende del tipo (2: suma; 3: inferior). Afecta `caudal_total_m3_s`,
+  `caudal_masico_banco_kg_s`, la velocidad del lazo natural, el área de la boca y el preview de
+  P3. Tests en `test_core/test_colector.py`.
+- **Producto nuevo** `pimiento_pimenton` (vaina entera) y **yerba mate** con difusividad de
+  Schmalko y `dimension_pieza_m` = 0.36 mm.
+- `validacion_adital` despacha por tipo de colector. Con el preset nuevo: 5/7. Quedan afuera
+  (a decidir con el usuario): (1) pico de colector 67.9 °C contra el rango 70–90, pero los 80 °C
+  medidos eran **con el ventilador apagado** (con ventilador ~60 °C, Condorí 2009); (2) potencia
+  del ventilador 14.7 HP contra 4 HP de placa: con 3.7 m³/s, 1350 Pa de singulares, casi todo el
+  acople de ø 0.45 m a 23 m/s.
+- `test_ventana_glue::test_el_encadenado_inmediato_ya_no_es_cota_superior`: con lotes más
+  cortos ambas políticas cierran 3 lotes; el test conserva lo que importa (el encadenado
+  inmediato no produce más) y deja de exigir la misma agua evaporada.
+- **Chequeo del pico de colector corregido** (decisión del usuario): los 80 °C eran con el
+  ventilador apagado; a caudal de diseño se compara contra 55–75 °C (medido con ventilador ~60).
+- **Ventilador: pendiente.** El usuario confirma que es de 4 HP y que el caudal en el ventilador
+  no tendría por qué ser menor que en el difusor, salvo que en el primer año (2 t de carga,
+  energía de sobra) se haya abierto la esclusa lateral entre ventilador y difusor para mezclar
+  aire ambiente. Con 3.7 m³/s el modelo da 14.7 HP (1350 Pa de singulares, casi todo el acople
+  de ø 0.45 m a 23 m/s): revisar el modelo de pérdidas singulares del acople.

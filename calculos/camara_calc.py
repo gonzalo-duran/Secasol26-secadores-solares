@@ -309,18 +309,32 @@ def area_canal_entre_bandejas_m2(camara: "Camara") -> float:
 def longitud_flujo_producto_m(camara: "Camara") -> float:
     """Largo de placa que recorre el aire sobre el producto antes de reiniciar la capa límite.
 
-    Sin carros es el largo de la cámara. Con carros (túnel, S70) la capa límite
-    se corta entre un carro y el siguiente: es el largo del carro declarado, o el
-    largo del túnel repartido entre los carros en fila. Con 18 m de placa
-    laminar el ``h`` de ADITAL caía a ~2 W/(m²·K), nivel de convección natural.
+    Es el largo de la **bandeja** en la dirección del aire: la capa límite se corta en
+    su borde (S70, Fase 1 del plan de evaporación). Las bandejas ocupan el ancho de la
+    cámara, así que su largo es ``área_bandeja / ancho``, sin pasar del largo de la
+    cámara ni, con carros, del largo del carro (o del túnel repartido entre los carros
+    en fila).
+
+    Hasta S70 se usaba el largo de la cámara (o del túnel). Contra la evaporación de agua
+    libre de Durán et al. 2008 (bandejas de 20 × 10 cm en la caja forzada, 0.61 kg/m²h
+    medidos) la película con el largo de la caja daba 0.43 kg/m²h y con el de la
+    bandeja 0.57; contra la correlación de Carrier/ASHRAE para superficies de agua, el
+    largo de la cámara subestimaba 2–3× a 1–3 m/s. En ADITAL, con 18 m de placa
+    laminar, el ``h`` caía a ~2 W/(m²·K).
     """
-    g = camara.geometria
+    g, b = camara.geometria, camara.bandejas
+    L = g.largo_m
+    if g.ancho_m > 0.0 and b.area_bandeja_m2 > 0.0:
+        L = min(L, b.area_bandeja_m2 / g.ancho_m)
     carros = camara.carros
-    if carros is None:
-        return g.largo_m
-    if carros.largo_carro_m is not None:
-        return min(carros.largo_carro_m, g.largo_m)
-    return g.largo_m / carros.n_carros
+    if carros is not None:
+        L_carro = (
+            carros.largo_carro_m
+            if carros.largo_carro_m is not None
+            else g.largo_m / carros.n_carros
+        )
+        L = min(L, L_carro)
+    return L
 
 
 def area_transferencia_producto_m2(camara: "Camara") -> float:
@@ -645,7 +659,14 @@ def _construir_params_termodinamico(
     _difusion = catalogo.difusion_interna(p.producto_id)
     _tasa_difusion: Optional[Callable[[float], float]] = None
     if _difusion is not None:
+        # Prioridad: d_p explícito del usuario → dimensión de pieza del bloque de
+        # difusión → d_p del catálogo/lecho.
         _d_pieza_m, _, _ = geometria_lecho(camara.bandejas, p.producto_id)
+        if (
+            camara.bandejas.diametro_eq_particula_m is None
+            and _difusion.dimension_pieza_m is not None
+        ):
+            _d_pieza_m = _difusion.dimension_pieza_m
 
         def _tasa_difusion(T_prod_K: float) -> float:
             return _difusion.tasa_primer_modo_s(T_prod_K, _d_pieza_m)

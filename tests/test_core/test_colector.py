@@ -347,3 +347,27 @@ def test_catalogo_policarbonato_k_por_espesor():
     assert mapa is not None
     assert set(mapa.keys()) == {4, 6, 8, 10, 16}
     assert all(v > 0 for v in mapa.values())
+
+
+class TestSeccionCanalesActivos:
+    """El área de paso es la de los canales activos según el tipo (S70)."""
+
+    def _u(self, tipo):
+        from core.colector import ColectorUnidad
+
+        return ColectorUnidad(
+            ancho_m=1.0, espaciado_m=0.05, espaciado_inferior_m=0.03, tipo_colector=tipo
+        )
+
+    def test_tipo1_canal_superior(self):
+        assert self._u(1).seccion_canal_m2() == pytest.approx(0.05)
+
+    def test_tipo2_los_dos_canales(self):
+        """El aire pasa por arriba y por debajo del absorbedor (chapa ondulada de ADITAL)."""
+        assert self._u(2).seccion_canal_m2() == pytest.approx(0.08)
+
+    def test_tipo3_canal_inferior(self):
+        assert self._u(3).seccion_canal_m2() == pytest.approx(0.03)
+
+    def test_tipo4_canal_superior(self):
+        assert self._u(4).seccion_canal_m2() == pytest.approx(0.05)

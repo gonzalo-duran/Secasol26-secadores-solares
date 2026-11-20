@@ -199,11 +199,22 @@ class ColectorUnidad:
             )
 
     def seccion_canal_m2(self) -> float:
-        """Área de la sección transversal del canal de flujo [m²].
+        """Área de paso del aire de un módulo [m²]: la de los canales **activos**.
+
+        Tipo 1 y Tipo 4: el canal superior (``espaciado_m``). Tipo 2: los dos canales,
+        porque el aire pasa por arriba y por debajo del absorbedor
+        (``espaciado_m + espaciado_inferior_m``). Tipo 3: solo el inferior
+        (``espaciado_inferior_m``). Hasta S70 se usaba siempre el superior: en un Tipo 2
+        el solver del colector hacía pasar aire por los dos canales, pero el caudal del
+        banco —el que llega a la cámara y el que mueve el motor— contaba uno solo.
 
         Returns:
-            ancho_m × espaciado_m.
+            ancho_m × altura de los canales activos.
         """
+        if self.tipo_colector == 2:
+            return self.ancho_m * (self.espaciado_m + self.espaciado_inferior_m)
+        if self.tipo_colector == 3:
+            return self.ancho_m * self.espaciado_inferior_m
         return self.ancho_m * self.espaciado_m
 
     def caudal_volumetrico_m3_s(self) -> float:

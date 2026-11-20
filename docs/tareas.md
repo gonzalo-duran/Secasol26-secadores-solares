@@ -4,6 +4,14 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S70, 2026-11-20): **1.5.1 preparada** — película sobre el producto con el
+> largo de la bandeja (Fase 1 anclada en agua libre, Durán 2008 y Carrier/ASHRAE), caudal de
+> colectores Tipo 2/3 corregido, preset de ADITAL (Tipo 2, 3.3 kg/s medido, pimiento para
+> pimentón X0 = 3), producto `pimiento_pimenton` y difusividad de yerba mate. Política de
+> difusividades: reajustadas dentro de Secasol (`validacion/difusividad/`). **Pendiente:**
+> potencia del ventilador de ADITAL (14.7 HP contra 4: revisar singulares del acople);
+> difusividades de tomate, cebolla, zanahoria y el resto; ensayo de agua libre propio.
+
 > Estado general (S70, 2026-11-19): **modelo de evaporación, Fases 0 y 2 IMPLEMENTADAS en
 > `testing`** — `a_w` saneado (K ≥ 1, isotermas nuevas, analogías, sin rampa `X/X₀`);
 > **resistencia interna** por difusión (nodo de superficie, primer modo de Fick, 7 productos con

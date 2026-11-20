@@ -62,6 +62,22 @@ te_yerba:
       fuente: "PENDIENTE — misma referencia que page"
       notas: null
 
+  difusion_interna:
+    D_ref_m2_s: 2.4e-12
+    T_ref_K: 323.15
+    E_a_J_mol: 37900.0
+    geometria: lamina
+    dimension_pieza_m: 0.00036
+    calidad_datos: MEDIA
+    fuente: "Schmalko, Morawicki & Ramallo (1996), en Schmalko 2005, tesis doctoral UBA, §8.5, ec. (8.7): D = 2.96e-6·exp(0.0797·X)·exp(−4558.6/T), 60–100 °C."
+    notas: |
+      Hoja de yerba mate, espesor medio ponderado 0.36 mm (tesis, 0.27–0.45 mm). D_ref con
+      X ≈ 1 (el factor exp(0.0797·X) varía menos de 13 % en el rango de secado); E_a =
+      4558.6·R. Extrapolado a 50 °C (el ajuste es de 60–100 °C). La tesis no aclara si L es
+      el espesor o el semiespesor: si fuera el semiespesor, D sería 4× mayor. No reajustado
+      dentro de Secasol (política S70): en una hoja de 0.36 mm la resistencia interna domina
+      y la película pesa poco.
+
   isoterma:
     gab:
       params:

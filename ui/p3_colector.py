@@ -2492,7 +2492,15 @@ def render() -> None:
 
         # Preview rápido
         seccion_m2 = ancho_m * (espaciado_mm / 1000)
-        caudal_unit_m3s = velocidad_ms * seccion_m2
+        # Caudal por los canales ACTIVOS (S70): Tipo 2 los dos, Tipo 3 el inferior,
+        # igual que ColectorUnidad.seccion_canal_m2.
+        if tipo_colector == 2:
+            seccion_activa_m2 = ancho_m * ((espaciado_mm + espaciado_inferior_mm) / 1000)
+        elif tipo_colector == 3:
+            seccion_activa_m2 = ancho_m * (espaciado_inferior_mm / 1000)
+        else:
+            seccion_activa_m2 = seccion_m2
+        caudal_unit_m3s = velocidad_ms * seccion_activa_m2
         _caption = t(
             "p3.geometria.preview",
             seccion=seccion_m2 * 10000,

@@ -7,6 +7,38 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-11-20
+
+Corrige la película sobre el producto y el caudal de los colectores de dos canales, y suma el
+pimiento para pimentón en vaina entera. **Cambian los resultados**: más en cámaras con aire
+rápido y en gran escala; poco en un armario a baja velocidad, donde manda la convección natural.
+
+### Fixed
+
+- **La película sobre el producto se calcula con el largo de la bandeja, no con el de la
+  cámara** (Fase 1 del plan de evaporación). La capa límite se corta en el borde de cada
+  bandeja. Contrastada contra la evaporación de agua libre de Durán et al. 2008 (bandejas de
+  20 × 10 cm en una caja forzada: 12.0 g/h simulados contra 12.2 g/h medidos) y contra la
+  correlación de Carrier/ASHRAE para superficies de agua (10–35 % abajo en 0.05–3 m/s; con el
+  largo de la cámara quedaba 2–3 veces abajo a 1–3 m/s).
+- **Caudal de los colectores Tipo 2 y Tipo 3.** La sección de paso contaba siempre el canal
+  superior: en un Tipo 2 (aire por arriba y por debajo del absorbedor) el solver calentaba el
+  aire de los dos canales, pero a la cámara y al motor llegaba la mitad. En el Tipo 3 usaba la
+  altura del canal equivocado. Corregido también en la vista previa de P3.
+- **Preset de gran escala (ADITAL)**: colector Tipo 2 con dos canales de 5 cm (chapa ondulada a
+  media altura, tesis de G. Durán, cap. 2), caudal de 3.3 kg/s medido en 2010 (cap. 3), y
+  pimiento para pimentón con X₀ = 3 en lugar del morrón fresco con X₀ = 10.7.
+
+### Added
+
+- **Pimiento para pimentón en vaina entera** (`pimiento_pimenton`): isoterma del pimiento rojo
+  por analogía y difusividad aparente ajustada en Secasol sobre la muestra del primer carro de
+  ADITAL (Condorí et al. 2009): 2.1·10⁻¹⁰ m²/s a 50 °C, 17 veces menor que la de los cubos
+  cortados. Calidad baja: una sola muestra.
+- **Difusividad de la yerba mate** (Schmalko et al. 1996, en la tesis de Schmalko 2005), con el
+  espesor real de la hoja (0.36 mm). El bloque `difusion_interna` admite su propia
+  `dimension_pieza_m`, porque el `d_p` del lecho es también la rugosidad de la pérdida de carga.
+
 ## [1.5.0] — 2026-11-19
 
 Primer release después de la 1.4.0: reúne S62–S70. **Cambian los resultados de casi todos los
