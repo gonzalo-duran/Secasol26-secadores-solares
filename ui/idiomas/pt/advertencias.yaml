@@ -167,9 +167,25 @@ FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA:
   sugerencia: Especifique a UR de entrada para maior precisão no cálculo de X_eq.
 PROD_ISOTERMA_FALLBACK:
   mensaje: >-
-    Sem isoterma GAB calibrada para o produto. Será usado X_eq = {X_eq_fallback:.3f} kg/kg bs
-    (fallback escalar). A umidade de equilíbrio real depende da UR do ar.
-  sugerencia: Carregue parâmetros GAB no catálogo para maior precisão.
+    Sem isoterma de sorção para o produto. É tratado como água livre até
+    X_eq = {X_eq_fallback:.3f} kg/kg bs: a velocidade de secagem fica superestimada.
+  sugerencia: >-
+    Considere os tempos de secagem como limite inferior. Carregue uma isoterma GAB medida no
+    catálogo.
+PROD_SIN_DIFUSION_INTERNA:
+  mensaje: >-
+    O produto não tem difusividade efetiva no catálogo: evapora sem resistência interna,
+    apenas pela película do ar.
+  sugerencia: >-
+    Falta o período de taxa decrescente: os tempos de secagem ficam subestimados, tanto mais
+    quanto mais grossa a peça.
+PROD_ISOTERMA_ANALOGIA:
+  mensaje: >-
+    O produto não tem isoterma de sorção própria: usa a de '{material_fuente}' por
+    analogia.
+  sugerencia: >-
+    A umidade de equilíbrio e o fim da secagem são aproximados. Veja a fonte da analogia no
+    catálogo do produto.
 PROD_HUMEDAD_OBJETIVO_INALCANZABLE:
   mensaje: >-
     Umidade alvo {X_objetivo:.3f} kg/kg bs abaixo do X_eq estimado ({X_eq_estimado:.3f} kg/kg bs).

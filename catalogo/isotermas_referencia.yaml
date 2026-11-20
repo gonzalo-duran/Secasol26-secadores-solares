@@ -1,0 +1,46 @@
+# =============================================================================
+# Isotermas de referencia — S70 (2026-11-19)
+# =============================================================================
+# Isotermas GAB medidas sobre materiales que NO son productos del catálogo,
+# pero que sirven como analogía para productos sin isoterma propia.
+# Un producto las usa declarando `isoterma.gab.analogia: <id>` (ver
+# core/catalogo.py::isoterma_gab). La búsqueda del id es: primero
+# catalogo/productos/ (isoterma propia de otro producto), después este archivo.
+#
+# Mismo esquema que el bloque `isoterma.gab` de los productos. Unidades:
+# X_m en kg agua / kg sólido seco; C y K adimensionales; T en K.
+# =============================================================================
+
+damasco:
+  descripcion: "Damasco (Prunus armeniaca) fresco — fruta de alto azúcar"
+  descripcion_en: "Fresh apricot (Prunus armeniaca) — high-sugar fruit"
+  descripcion_pt: "Damasco (Prunus armeniaca) fresco — fruta com alto teor de açúcar"
+  isoterma:
+    gab:
+      params:
+        # Default a T=45°C (mediana del rango 30-60°C), igual que manzana y papa.
+        X_m: 0.105
+        C: 5.843       # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 1.0032      # = K0 · exp(ΔH_k / RT) a T=318.15 K  (≥ 1, ver notas)
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.105, C: 20.037, K: 1.0010}
+          - {T_K: 318.15, X_m: 0.105, C: 5.843,  K: 1.0032}
+          - {T_K: 333.15, X_m: 0.105, C: 1.904,  K: 1.0052}
+        entalpicos:
+          M_0: 0.105
+          C_0: 8.91e-11
+          K_0: 1.049
+          dH_c_kJ_mol: 65.880
+          dH_k_kJ_mol: -0.118
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: MEDIA
+      fuente: "Kaymak-Ertekin F, Gedik A (2004). Sorption isotherms and isosteric heat of sorption for grapes, apricots, apples and potatoes. LWT - Food Sci Technol 37(4):429-438. DOI:10.1016/j.lwt.2003.10.012. Tabla 6, DESORCIÓN, apricots."
+      notas: |
+        Damasco fresco, 85 % de humedad (b.h.), 78-82 g azúcar / 100 g ms (Tabla 1).
+        El PDF pierde el signo de ΔH_k; se toma negativo, el mismo criterio que
+        reproduce exactamente la manzana y la papa ya cargadas del mismo paper.
+        K ≈ 1.00 en todo el rango: típico de desorción de frutas azucaradas
+        (la uva del mismo paper da K = 0.96-1.04). El motor acepta K ≥ 1 desde
+        S70 (a_w acotada por 1/K).
+        Ajuste GAB: P = 15.05 % — el peor de la Tabla 6. Calidad MEDIA.
+        Usada como analogía para durazno, ciruela y granada (S70).

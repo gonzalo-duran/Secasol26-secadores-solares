@@ -166,9 +166,24 @@ FLUJO_HUMEDAD_ENTRADA_NO_ESPECIFICADA:
   sugerencia: Specify the inlet RH for greater accuracy in the X_eq calculation.
 PROD_ISOTERMA_FALLBACK:
   mensaje: >-
-    No calibrated GAB isotherm for the product. X_eq = {X_eq_fallback:.3f} kg/kg db will be
-    used (scalar fallback). The real equilibrium moisture depends on the air RH.
-  sugerencia: Load GAB parameters in the catalog for greater accuracy.
+    No sorption isotherm for the product. It is treated as free water down to
+    X_eq = {X_eq_fallback:.3f} kg/kg db: the drying rate is overestimated.
+  sugerencia: >-
+    Take the drying times as a lower bound. Load a measured GAB isotherm in the catalog.
+PROD_SIN_DIFUSION_INTERNA:
+  mensaje: >-
+    The product has no effective diffusivity in the catalog: it evaporates without internal
+    resistance, only through the air film.
+  sugerencia: >-
+    The falling-rate period is missing: drying times are underestimated, the more so the
+    thicker the piece.
+PROD_ISOTERMA_ANALOGIA:
+  mensaje: >-
+    The product has no sorption isotherm of its own: it uses that of '{material_fuente}' by
+    analogy.
+  sugerencia: >-
+    Equilibrium moisture and the end of drying are approximate. See the source of the
+    analogy in the product catalog.
 PROD_HUMEDAD_OBJETIVO_INALCANZABLE:
   mensaje: >-
     Target moisture {X_objetivo:.3f} kg/kg db below the estimated X_eq

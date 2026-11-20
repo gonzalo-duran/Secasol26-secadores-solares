@@ -72,6 +72,24 @@ charqui_vacuno:
         el nivel de sal del paper sea comparable al del charqui NOA.
         Charqui tradicional: ~10-15% de sal en peso fresco.
 
+  difusion_interna:
+    D_ref_m2_s: 1.1e-10
+    T_ref_K: 303.15
+    E_a_J_mol: 0.0
+    geometria: lamina
+    calidad_datos: BAJA
+    fuente: "Ajuste S70 sobre Durán, Molina, Condorí & Buchller (2008), AVERMA 12:03.87, Fig. 22 (secador con panel FV). Ver validacion/duran2008/."
+    notas: |
+      Primer término de Fick ajustado a X(t) de la muestra del secador forzado
+      (λ = 0.107 1/h, X_eq = 0.15, noche descontada), con fetas de 6 mm
+      supuestas: el paper no informa espesor. T de producto ~25-35 °C. Sin E_a
+      (no hay ensayos a otra T): a 50-60 °C subestima la velocidad. La muestra
+      del secador CPC da λ = 0.060 1/h: dispersión de un factor 2 entre muestras.
+
+  forma_geometrica:
+    diametro_eq_m: 0.006
+    forma: "fetas de ~6 mm (supuesto S70: el ensayo de Durán 2008 no informa espesor)"
+
   isoterma:
     gab:
       params:
@@ -80,8 +98,15 @@ charqui_vacuno:
         K: null
       rango_T_K: null
       calidad_datos: null
-      fuente: "PENDIENTE — Comaposada J, Gou P, Arnau J (2000). J Food Eng 43(2):119-123. DOI:10.1016/S0260-8774(99)00142-5 [MINCyT Elsevier] — efecto NaCl en a_w de carne"
+      fuente: "PENDIENTE — Comaposada J, Gou P, Arnau J (2000). The effect of sodium chloride content and temperature on pork meat isotherms. Meat Science 55(3). PII S0309174099001540 [acceso restringido; conseguir vía MINCyT] — efecto NaCl en a_w de carne"
       notas: |
+        SIN ISOTERMA (decisión S70): no se presta la de un vegetal porque la sal
+        cambia la isoterma por completo. El motor corre con a_w = 1 hasta
+        humedad_equilibrio_aire_seco (película pura, optimista) y avisa con
+        CAM_TD_GAB_FALTA / PROD_ISOTERMA_FALLBACK.
+        La cita de esta entrada hasta S69 (J Food Eng 43(2):119-123,
+        DOI 10.1016/S0260-8774(99)00142-5) no existe: el trabajo es de Meat
+        Science (2000) y mide cerdo, no vacuno.
         CRÍTICO: la isoterma de carne salada difiere sustancialmente
         de la carne sin sal. Usar SOLO parámetros de isoterma calibrados
         con carne con nivel de sal comparable al del producto.

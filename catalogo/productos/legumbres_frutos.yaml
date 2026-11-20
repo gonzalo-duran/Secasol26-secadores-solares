@@ -66,17 +66,25 @@ algarroba:
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Prokopiuk D et al. (2010). Int J Food Properties 13(4):692-701. DOI:10.1080/10942910902742055 [MINCyT Tandfonline]. Tiene GAB para algarroba cruda y tostada."
+        # Default a T=45°C, harina cruda (la T más alta medida).
+        X_m: 0.0413
+        C: 4.7021
+        K: 1.0480
+        sets_por_temperatura:
+          - {T_K: 278.15, X_m: 0.0644, C: 4.8867, K: 0.9778}
+          - {T_K: 298.15, X_m: 0.0515, C: 4.7079, K: 1.0139}
+          - {T_K: 318.15, X_m: 0.0413, C: 4.7021, K: 1.0480}
+      rango_T_K: [278.15, 318.15]   # 5-45 °C
+      calidad_datos: MEDIA
+      fuente: "Prokopiuk D, Martínez-Navarrete N, Andrés A, Chiralt A, Cruz G (2010). Influence of Roasting on the Water Sorption Isotherms of Argentinean Algarroba (Prosopis alba Griseb) Pods. Int J Food Prop 13(4):692-701. DOI:10.1080/10942910902742055 (open access). Tabla 2, harina cruda. Transcripción en docs/notas/papers/Prokopiuk2010_algarroba_GAB_tabla2.md."
       notas: |
-        Para secado usar rama de DESORCIÓN. El paper tiene GAB tanto para
-        adsorción como para desorción a distintas temperaturas.
-        Prokopiuk trabaja con Prosopis alba de Argentina — fuente de alta
-        relevancia local. Calidad esperada: ALTA.
+        ADSORCIÓN (no desorción) sobre HARINA de vaina de Prosopis alba argentina,
+        método gravimétrico estático, 5/25/45 °C. Hasta S69 esta nota decía que el
+        paper traía desorción: no es así.
+        Para un mismo X la adsorción da a_w algo mayor que la desorción (histéresis),
+        así que para secado es levemente optimista. Es la única GAB de algarroba.
+        R² = 0.92-0.97. K ≥ 1 a 25 y 45 °C (a_w acotada por 1/K).
+        La harina tostada da X_m ~20 % menor y C, K casi iguales.
 
   notas: |
     Papers prioritarios — FUENTES ARGENTINAS:

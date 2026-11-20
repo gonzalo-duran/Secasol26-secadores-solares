@@ -208,10 +208,15 @@ def _render_resultados_transitorios(res_tr, proyecto) -> None:
     cop_txt = f"{res_tr.COP_secado:.2f}" if res_tr.COP_secado is not None else "—"
     c4.metric(t("p7.transitorio.cop"), cop_txt)
 
-    c5, c6, c7, c8 = st.columns(4)
+    c5, c6, c7, c_amb, c8 = st.columns(5)
     c5.metric(t("p7.transitorio.e_solar"), f"{res_tr.energia_solar_util_MJ:.2f} MJ")
     c6.metric(t("p7.transitorio.e_aux"), f"{res_tr.energia_auxiliar_MJ:.2f} MJ")
     c7.metric(t("p7.transitorio.e_motor"), f"{res_tr.energia_motor_MJ:.2f} MJ")
+    c_amb.metric(
+        t("p7.transitorio.e_ambiente.label"),
+        f"{res_tr.energia_ambiente_MJ:.2f} MJ",
+        help=t("p7.transitorio.e_ambiente.help"),
+    )
     fs_txt = f"{res_tr.fraccion_solar:.2f}" if res_tr.fraccion_solar is not None else "—"
     c8.metric(t("p7.transitorio.fraccion_solar"), fs_txt)
 
@@ -550,6 +555,10 @@ def _fig_sankey_simplificado(res: ResultadosCompletos) -> go.Figure | None:
         etiquetas.append(t("p7.balance_fig.motor"))
         valores.append(res.energia_motor_MJ)
         colores.append("#9c27b0")
+    if res.energia_ambiente_MJ is not None and res.energia_ambiente_MJ > 0:
+        etiquetas.append(t("p7.balance_fig.ambiente"))
+        valores.append(res.energia_ambiente_MJ)
+        colores.append("#2196f3")
     if res.energia_secado_MJ is not None and res.energia_secado_MJ > 0:
         etiquetas.append(t("p7.balance_fig.evaporacion"))
         valores.append(res.energia_secado_MJ)
@@ -1029,6 +1038,7 @@ def _texto_resultados_completo(
             f"  E solar útil : {getattr(res, 'energia_solar_util_MJ', 0) or 0:.4f} MJ",
             f"  E auxiliar   : {getattr(res, 'energia_auxiliar_MJ', 0) or 0:.4f} MJ",
             f"  E motor      : {getattr(res, 'energia_motor_MJ', 0) or 0:.4f} MJ",
+            f"  E ambiente   : {getattr(res, 'energia_ambiente_MJ', 0) or 0:.4f} MJ",
             f"  E secado     : {getattr(res, 'energia_secado_MJ', 0) or 0:.4f} MJ",
         ]
         cop = getattr(res, "COP_secado", None)
@@ -1112,6 +1122,7 @@ def _json_resultados_completo(
         "energia_solar_util_MJ": getattr(res, "energia_solar_util_MJ", None),
         "energia_auxiliar_MJ": getattr(res, "energia_auxiliar_MJ", None),
         "energia_motor_MJ": getattr(res, "energia_motor_MJ", None),
+        "energia_ambiente_MJ": getattr(res, "energia_ambiente_MJ", None),
         "energia_secado_MJ": getattr(res, "energia_secado_MJ", None),
         "COP_secado": getattr(res, "COP_secado", None),
         "fraccion_solar": getattr(res, "fraccion_solar", None),
@@ -2400,12 +2411,15 @@ def render() -> None:
             X_final = float(cam.X_prod_kg_kg[-1]) if len(cam.X_prod_kg_kg) else 0.0
             c4.metric(t("p7.camara.x_final"), f"{X_final:.4f} kg/kg ms")
 
-            if cam.status == "t_max_alcanzado":
+            X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
+            X_eq = getattr(cam, "X_equilibrio_kg_kg", None)
+            if X_eq is not None and X_obj < X_eq:
+                st.error(t("comun.x_obj_bajo_equilibrio", x_obj=X_obj, x_eq=X_eq))
+            elif cam.status == "t_max_alcanzado":
                 st.warning(t("p7.camara.t_max_warning"))
             elif cam.status == "error":
                 st.error(t("p7.camara.error", status=cam.status))
 
-            X_obj = proyecto.camara.carga_producto.humedad_objetivo_X
             prod_id = proyecto.camara.carga_producto.producto_id
             fig_td = grafica_termodinamica_camara(cam, X_obj, prod_id)
             mostrar_plotly(fig_td, nombre="camara_trayectorias")
@@ -2547,6 +2561,7 @@ def render() -> None:
                 (t("p7.tabla.bal_solar"), f"{res.energia_solar_util_MJ:.4f}"),
                 (t("p7.tabla.bal_aux"), f"{res.energia_auxiliar_MJ:.4f}"),
                 (t("p7.tabla.bal_motor"), f"{res.energia_motor_MJ:.4f}"),
+                (t("p7.tabla.bal_ambiente"), f"{res.energia_ambiente_MJ or 0.0:.4f}"),
                 (t("p7.tabla.bal_secado"), f"{res.energia_secado_MJ:.4f}"),
                 (t("p7.tabla.bal_cop"), f"{res.COP_secado:.4f}" if res.COP_secado else "—"),
                 (

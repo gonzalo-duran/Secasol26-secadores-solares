@@ -83,9 +83,13 @@ class ResultadosCompletos:
             término es cero y todo el aporte viene del segundo.
         energia_auxiliar_MJ: Energía del auxiliar × t_secado [MJ].
         energia_motor_MJ: Energía eléctrica del motor × t_secado [MJ].
+        energia_ambiente_MJ: Calor que cede el ambiente cuando la cámara o su
+            aire de salida quedan por debajo de T_amb [MJ] (S70, ver
+            `energia_ambiente_camara_MJ`).
         energia_secado_MJ: masa_agua × Lv [MJ].
-        energia_total_MJ: solar + auxiliar + motor.
-        COP_secado: masa_agua × Lv / energia_total [adim].
+        energia_total_MJ: solar + auxiliar + motor + ambiente.
+        COP_secado: masa_agua × Lv / energia_total [adim]. Con el ambiente en
+            el denominador queda ≤ 1 salvo el calor sensible del producto.
         fraccion_solar: energia_solar / (solar + auxiliar).
         masa_producto_seco_kg: masa_total / (1 + X_0).
         rendimiento_masa: masa_seco / masa_fresco.
@@ -104,6 +108,7 @@ class ResultadosCompletos:
     energia_solar_util_MJ: Optional[float] = None
     energia_auxiliar_MJ: Optional[float] = None
     energia_motor_MJ: Optional[float] = None
+    energia_ambiente_MJ: Optional[float] = None
     energia_secado_MJ: Optional[float] = None
     energia_total_MJ: Optional[float] = None
     COP_secado: Optional[float] = None
@@ -415,6 +420,35 @@ def energia_solar_camara_MJ(res_camara) -> float:
     rad_producto_J = float(getattr(res_camara, "energia_rad_total_J", 0.0) or 0.0)
     rad_aire_J = float(getattr(res_camara, "energia_rad_aire_total_J", 0.0) or 0.0)
     return (rad_producto_J + rad_aire_J) / 1e6
+
+
+def energia_ambiente_camara_MJ(res_camara) -> float:
+    """Calor que el ambiente le cede al proceso durante el ciclo [MJ] (S70).
+
+    Todas las energías del balance (colector, vidriado, auxiliar, motor) se miden
+    respecto del ambiente: el aire a T_amb vale cero. Pero el ambiente también
+    aporta cuando el proceso queda **por debajo** de T_amb:
+
+    - el aire que entra no saturado se enfría sobre el producto húmedo hacia su
+      bulbo húmedo y sale más frío que afuera: cedió calor sensible que se fue
+      como latente (secado adiabático);
+    - la envolvente gana calor cuando la cámara queda más fría que el exterior.
+
+    Sin este término el ``COP_secado`` pasaba de 1 en cuanto había secado
+    nocturno o a baja temperatura (el tomate en un cajón: 1.05). El motor lo
+    integra paso a paso (``energia_ambiente_total_J``); acá solo se pasa a MJ.
+    Es el aporte **real**, no el potencial disponible del aire (ese es el
+    ``aprovechamiento_aire`` del modo anual, otro indicador).
+
+    Args:
+        res_camara: Resultado del motor termodinámico, o None.
+
+    Returns:
+        Energía en MJ; 0 si no hay cámara o el resultado no trae el término.
+    """
+    if res_camara is None:
+        return 0.0
+    return float(getattr(res_camara, "energia_ambiente_total_J", 0.0) or 0.0) / 1e6
 
 
 def _irradiancia_para_mascara(forzantes) -> Optional[np.ndarray]:
@@ -1844,12 +1878,14 @@ def calcular_todo(
                 if proyecto.motor is not None and proyecto.motor.potencia_electrica_W
                 else 0.0
             )
-            E_total = E_sol + E_aux + E_mot
+            E_amb = energia_ambiente_camara_MJ(res.camara)
+            E_total = E_sol + E_aux + E_mot + E_amb
             E_sec = masa_agua * LV_AGUA_MJ_KG
 
             res.energia_solar_util_MJ = E_sol
             res.energia_auxiliar_MJ = E_aux if proyecto.auxiliar else 0.0
             res.energia_motor_MJ = E_mot
+            res.energia_ambiente_MJ = E_amb
             res.energia_secado_MJ = E_sec
             res.energia_total_MJ = E_total
 
@@ -1899,8 +1935,10 @@ class ResultadosCompletosTransitorio:
             CAJA el primer término es cero por construcción.
         energia_auxiliar_MJ: E_aux del solver transitorio del auxiliar.
         energia_motor_MJ: P_elec · horizonte_s / 1e6 (escalar × tiempo).
+        energia_ambiente_MJ: Calor cedido por el ambiente [MJ] (S70, ver
+            `energia_ambiente_camara_MJ`).
         energia_secado_MJ: masa_agua_evaporada × LV_AGUA [MJ].
-        energia_total_MJ: solar + auxiliar + motor.
+        energia_total_MJ: solar + auxiliar + motor + ambiente.
         COP_secado: E_secado / E_total.
         fraccion_solar: E_solar / (E_solar + E_aux).
 
@@ -1929,6 +1967,7 @@ class ResultadosCompletosTransitorio:
     energia_solar_util_MJ: float = 0.0
     energia_auxiliar_MJ: float = 0.0
     energia_motor_MJ: float = 0.0
+    energia_ambiente_MJ: float = 0.0
     energia_secado_MJ: float = 0.0
     energia_total_MJ: float = 0.0
     COP_secado: Optional[float] = None
@@ -2327,9 +2366,15 @@ def calcular_todo_transitorio(
     # --- Energía de secado ---
     res.energia_secado_MJ = res.masa_agua_evaporada_kg * LV_AGUA_MJ_KG
 
+    # --- Aporte del ambiente (S70) ---
+    res.energia_ambiente_MJ = energia_ambiente_camara_MJ(res.camara)
+
     # --- Acumulados ---
     res.energia_total_MJ = (
-        res.energia_solar_util_MJ + res.energia_auxiliar_MJ + res.energia_motor_MJ
+        res.energia_solar_util_MJ
+        + res.energia_auxiliar_MJ
+        + res.energia_motor_MJ
+        + res.energia_ambiente_MJ
     )
     if res.energia_total_MJ > 0:
         res.COP_secado = res.energia_secado_MJ / res.energia_total_MJ

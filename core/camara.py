@@ -1000,15 +1000,11 @@ class Camara:
 
         datos = catalogo.PRODUCTOS[p.producto_id]
 
-        # Isoterma: error duro solo si no hay parámetros Y no hay fallback escalar
-        iso = datos.get("isoterma") or {}
-        iso_entry = iso.get(p.modelo_isoterma) or {}
-        params_iso = iso_entry.get("params") or {} if iso_entry else {}
-        params_iso_vacios = not params_iso or all(
-            v is None for v in params_iso.values() if not isinstance(v, (list, dict))
-        )
+        # Isoterma: error duro solo si no hay isoterma (propia o por analogía,
+        # S70) Y no hay fallback escalar
+        sin_isoterma = catalogo.isoterma_gab(p.producto_id) is None
         X_eq_fallback = (datos.get("propiedades_basicas") or {}).get("humedad_equilibrio_aire_seco")
-        if params_iso_vacios and X_eq_fallback is None:
+        if sin_isoterma and X_eq_fallback is None:
             raise ValueError(
                 f"MOD_ISOTERMA_NO_DISPONIBLE: isoterma '{p.modelo_isoterma}' sin parámetros "
                 f"para '{p.producto_id}' y sin fallback escalar en catálogo. "
@@ -1413,28 +1409,58 @@ def advertencias_camara(camara: Camara, latitud_deg: Optional[float] = None) -> 
             )
         )
 
-    # --- PROD: isoterma fallback ---
-    iso = datos.get("isoterma") or {}
-    iso_entry = iso.get(p.modelo_isoterma) or {}
-    params_iso = iso_entry.get("params") or {} if iso_entry else {}
-    params_iso_validos = (
-        params_iso.get("X_m") is not None
-        and params_iso.get("C") is not None
-        and params_iso.get("K") is not None
-    )
+    # --- PROD: isoterma por analogía o ausente (S70) ---
+    iso_gab = catalogo.isoterma_gab(p.producto_id)
     X_eq_fallback = props.get("humedad_equilibrio_aire_seco")
-    if not params_iso_validos and X_eq_fallback is not None:
+    if iso_gab is not None and iso_gab.origen == "analogia":
+        adv.append(
+            Advertencia(
+                codigo="PROD_ISOTERMA_ANALOGIA",
+                severidad=Severidad.INFO,
+                mensaje=(
+                    f"'{p.producto_id}' no tiene isoterma de sorción propia: usa la de "
+                    f"'{iso_gab.material_fuente}' por analogía."
+                ),
+                campo="carga_producto.producto_id",
+                sugerencia=(
+                    "La humedad de equilibrio y el final del secado son aproximados. "
+                    "Ver la fuente de la analogía en el catálogo del producto."
+                ),
+                contexto={"material_fuente": iso_gab.material_fuente},
+            )
+        )
+    if catalogo.difusion_interna(p.producto_id) is None:
+        adv.append(
+            Advertencia(
+                codigo="PROD_SIN_DIFUSION_INTERNA",
+                severidad=Severidad.WARNING,
+                mensaje=(
+                    f"'{p.producto_id}' no tiene difusividad efectiva en el catálogo: se "
+                    "evapora sin resistencia interna, solo con la película del aire."
+                ),
+                campo="carga_producto.producto_id",
+                sugerencia=(
+                    "Falta el período de velocidad decreciente: los tiempos de secado "
+                    "quedan subestimados, tanto más cuanto más gruesa la pieza."
+                ),
+                contexto={"producto_id": p.producto_id},
+            )
+        )
+    if iso_gab is None and X_eq_fallback is not None:
         adv.append(
             Advertencia(
                 codigo="PROD_ISOTERMA_FALLBACK",
                 severidad=Severidad.CRITICAL,
                 mensaje=(
-                    f"Sin isoterma GAB calibrada para '{p.producto_id}'. "
-                    f"Se usará X_eq = {X_eq_fallback:.3f} kg/kg ms (fallback escalar). "
-                    "La humedad de equilibrio real depende de la HR del aire."
+                    f"Sin isoterma de sorción para '{p.producto_id}'. El producto se trata "
+                    f"como agua libre hasta X_eq = {X_eq_fallback:.3f} kg/kg ms: la "
+                    "velocidad de secado queda sobreestimada."
                 ),
-                campo="carga_producto.modelo_isoterma",
-                sugerencia="Cargar parámetros GAB en el catálogo para mayor precisión.",
+                campo="carga_producto.producto_id",
+                sugerencia=(
+                    "Tomar los tiempos de secado como cota inferior. Cargar una isoterma "
+                    "GAB medida en el catálogo."
+                ),
                 contexto={"X_eq_fallback": X_eq_fallback},
             )
         )
@@ -1458,7 +1484,7 @@ def advertencias_camara(camara: Camara, latitud_deg: Optional[float] = None) -> 
 
     # --- INIO: carne sin isoterma ---
     categoria = datos.get("categoria", "").upper()
-    if categoria == "CARNE" and not params_iso_validos:
+    if categoria == "CARNE" and iso_gab is None:
         adv.append(
             Advertencia(
                 codigo="INIO_PRODUCTO_CARNE_SIN_ISOTERMA",

@@ -4,6 +4,25 @@ Backlog y estado de avance de **Secasol 26**. El historial de cambios liberados
 está en [[CHANGELOG]]. Las instrucciones de trabajo en [[CLAUDE]]. Las
 decisiones de diseño en [[docs/decisiones]].
 
+> Estado general (S70, 2026-11-19): **modelo de evaporación, Fases 0 y 2 IMPLEMENTADAS en
+> `testing`** — `a_w` saneado (K ≥ 1, isotermas nuevas, analogías, sin rampa `X/X₀`);
+> **resistencia interna** por difusión (nodo de superficie, primer modo de Fick, 7 productos con
+> `D_eff`, anclada en Saravia 2007); COP con el aporte del ambiente; aviso de X_obj bajo el
+> equilibrio; **X objetivo por producto** desde a_w = 0.60; **carros en serie** en gran escala
+> (la transferencia estaba ~26× baja). Réplicas en `validacion/duran2008/` y
+> `validacion/adital/`. Cambian los resultados de casi todos los proyectos: falta bump de
+> versión. Entrada: [[docs/bitacora/bitacora_sesion70]].
+
+> Estado general (S69, 2026-11-19): **plan del modelo de evaporación escrito, EN DISCUSIÓN** —
+> [[docs/notas/plan_modelo_evaporacion]] + [[docs/notas/analisis_corpus_evaporacion]]. Corpus de
+> papers INENCO leído y cruzado. Diagnóstico: Secasol no tiene resistencia interna y el `a_w` del
+> catálogo da tres modelos distintos según el producto. Nada implementado.
+
+> Estado general (S68, 2026-11-17): **plan de presets de tecnología escrito y EN ESPERA** —
+> [[docs/notas/plan_presets_tecnologia]]. Se implementó y probó la Fase A (galería de secadores
+> típicos en P1) y se volvió atrás por decisión del usuario; el código quedó en un stash local
+> de `testing`. Working tree igual a `ca68ceb`.
+
 > Estado general (S67, 2026-11-12): **carta psicrométrica diagnosticada y corregida en
 > `testing`** — tres defectos de la carta, no del balance de cámara. De paso el slider de HR
 > del modo Constantes pasó a ser la HR **ambiente**: cambian los resultados de ese modo. Sin
@@ -70,6 +89,36 @@ la bandeja, para salir de las dos cotas (S64 "todo rodea" / S63 "todo atraviesa"
 implementa todavía por decisión del usuario:** antes va a aportar ensayos propios de secadores
 solares para calibrar contra mediciones. Cuatro decisiones abiertas en el §3 del plan (paso
 libre, alcance por tipología, monocapa, forma de partícula en el catálogo).
+
+### Modelo de evaporación del producto — Fases 0 y 2 HECHAS (S70), camino (b)
+
+**S70:** decisiones del §9 tomadas; Fase 0 (`a_w`) y Fase 2 (resistencia interna) hechas; Fase 1
+salteada; Fase 3 iniciada con ADITAL 2009 (los datos de cámara no cierran masa; destapó el bug
+de carros en serie). **Pendiente:** `D_eff` de 12 productos (tomate, cebolla, zanahoria, yerba,
+algarroba, perejil, apio, mandioca, orégano, coca, granada, yacón) — sin ellos esos productos
+siguen optimistas y **no se libera**; Comaposada 2000 (charqui, IER/MINCyT); preset de ADITAL
+(X0 ≈ 3 en vez de 10.7; caudal 3.8 vs 1.9 kg/s); `objetivo_secado.X` comercial por producto
+(p. ej. pimentón); `diagnostico_transferencia` sin separar resistencia interna/externa;
+Fase 3 con la planta de San Carlos 2012.
+
+[[docs/notas/plan_modelo_evaporacion]], sobre el corpus de
+`docs/Papers de secadores p_ calibrar secasol/` (análisis en
+[[docs/notas/analisis_corpus_evaporacion]]). La evaporación solo tiene película externa
+(Chilton-Colburn) × `a_w(X)`: falta la **resistencia interna** que el grupo medía como
+`Hpd(X)`/`Ahd(X)`. Además, `a_w` es GAB en 3 productos, escalón en el pimiento (`K = 1.02`
+rechazado por el inversor) y rampa `X/X₀` en los otros 16. Fases: 0 sanear `a_w` · 1 validar
+película con agua libre · 2 resistencia interna (recomendado: resistencias en serie con
+`D_eff` y Arrhenius) · 3 verificación de sistema. Cinco decisiones abiertas en el §9.
+
+### Presets de tecnología — plan escrito, EN ESPERA (S68)
+
+[[docs/notas/plan_presets_tecnologia]]: entrada simple para novatos (productor, alumno) a partir
+de **secadores típicos**. Un preset es una **tecnología** que se combina con dos ejes
+independientes, **sitio** (de referencia con clima empaquetado, o coordenadas) y **producto**
+(tipo y masa). Fase A = galería en P1 + guía de próximos pasos + "Guardar como preset" en P7;
+Fase B = "Inicio rápido" de un clic. **No se implementa todavía por decisión del usuario.** La
+Fase A completa (suite 2061 + 2 verde) quedó en un stash local (§7 del plan). Cuatro decisiones
+abiertas en el §5 (sitios, pendiente mínima, caudal de ADITAL, los cuatro presets a diseñar).
 
 ### Transferencia en la cámara (S63) — plan COMPLETO (etapas 0 a 4)
 

@@ -30,11 +30,17 @@ producto:
   x_obj:
     label: Target moisture X_obj [kg water / kg ds]
     help: >-
-      Desired final moisture on a dry basis.
-      Typical storage values: 0.10–0.20 kg/kg ds.
+      Desired final moisture on a dry basis. The default is the one giving
+      a_w ≈ 0.60 on the product isotherm (microbial stability): the same X
+      means very different things for an apple and for a leaf.
+    aw: "At this X the product ends at a_w ≈ {aw:.2f}. Suggested for this product: X = {x_def:.3f} (a_w {aw_def:.2f})."
+    sin_isoterma: "⚠️ Product without isotherm: the default target X ({x:.3f}) has no a_w criterion behind it."
   masa: Total mass to dry [kg]
   gab_ok: ✅ Calibrated GAB isotherm available.
+  gab_analogia: "ℹ️ No isotherm of its own: it uses that of «{material}» by analogy (see catalog)."
   gab_fallback: "⚠️ No GAB isotherm. X_eq = {x:.3f} kg/kg ds will be used (fallback)."
+  difusion_ok: "✅ Effective diffusivity available: the falling-rate period is represented."
+  difusion_falta: "⚠️ No effective diffusivity: drying uses only the air film, with no internal resistance. Drying times are underestimated."
 geometria:
   titulo: Chamber geometry
   esquema_titulo: 📐 Chamber diagram

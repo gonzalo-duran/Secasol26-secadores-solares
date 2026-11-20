@@ -329,10 +329,49 @@ class TestAdvertenciasCamara:
         assert "GEO_RELACION_ASPECTO_EXTREMA" not in codigos
         assert "FLUJO_VELOCIDAD_SUPERFICIAL_BAJA" not in codigos
 
-    def test_advertencia_isoterma_fallback_sin_gab(self):
-        """Producto sin GAB calibrado debe emitir PROD_ISOTERMA_FALLBACK CRITICAL.
-        Tomate no tiene GAB pero sí fallback escalar de X_eq → instancia y
-        advertencias_camara emite PROD_ISOTERMA_FALLBACK (CRITICAL)."""
+    def test_PROD_ISOTERMA_FALLBACK(self):
+        """Producto sin isoterma propia ni analogía → PROD_ISOTERMA_FALLBACK CRITICAL.
+
+        Desde S70 el único caso del catálogo es el charqui (la sal cambia la
+        isoterma: no se presta la de un vegetal). Tiene fallback escalar de X_eq,
+        así que instancia y advierte.
+        """
+        camara = Camara(
+            carga_producto=CargaProducto(
+                producto_id="charqui_vacuno",
+                masa_total_kg=3.0,
+                humedad_inicial_X=1.5,
+                humedad_objetivo_X=0.30,
+                modelo_capa_fina="page",
+            ),
+        )
+        adv = advertencias_camara(camara)
+        codigos = [a.codigo for a in adv]
+        assert "PROD_ISOTERMA_FALLBACK" in codigos
+        fallback_adv = next(a for a in adv if a.codigo == "PROD_ISOTERMA_FALLBACK")
+        assert fallback_adv.severidad == Severidad.CRITICAL
+        assert "PROD_ISOTERMA_ANALOGIA" not in codigos
+
+    def test_PROD_ISOTERMA_ANALOGIA(self):
+        """Durazno toma la isoterma del damasco (S70): aviso INFO, no fallback."""
+        camara = Camara(
+            carga_producto=CargaProducto(
+                producto_id="durazno",
+                masa_total_kg=3.0,
+                humedad_inicial_X=6.0,
+                humedad_objetivo_X=0.20,
+                modelo_capa_fina="page",
+            ),
+        )
+        adv = advertencias_camara(camara)
+        analogia = [a for a in adv if a.codigo == "PROD_ISOTERMA_ANALOGIA"]
+        assert len(analogia) == 1
+        assert analogia[0].severidad == Severidad.INFO
+        assert analogia[0].contexto == {"material_fuente": "damasco"}
+        assert "PROD_ISOTERMA_FALLBACK" not in [a.codigo for a in adv]
+
+    def test_tomate_isoterma_propia_sin_avisos(self):
+        """Tomate tiene GAB de Kiranoudis 1993 (S70): ni fallback ni analogía."""
         camara = Camara(
             carga_producto=CargaProducto(
                 producto_id="tomate",
@@ -341,11 +380,9 @@ class TestAdvertenciasCamara:
                 humedad_objetivo_X=0.10,
             ),
         )
-        adv = advertencias_camara(camara)
-        codigos = [a.codigo for a in adv]
-        assert "PROD_ISOTERMA_FALLBACK" in codigos
-        fallback_adv = next(a for a in adv if a.codigo == "PROD_ISOTERMA_FALLBACK")
-        assert fallback_adv.severidad == Severidad.CRITICAL
+        codigos = [a.codigo for a in advertencias_camara(camara)]
+        assert "PROD_ISOTERMA_FALLBACK" not in codigos
+        assert "PROD_ISOTERMA_ANALOGIA" not in codigos
 
     def test_advertencia_relacion_aspecto_extrema(self):
         camara = Camara(

@@ -253,6 +253,7 @@ global:
   solar_util: Useful solar
   auxiliar: Auxiliary
   motor: Motor
+  ambiente: Ambient
   secado: Drying (useful)
   cop: Drying COP
   frac_solar: Solar fraction

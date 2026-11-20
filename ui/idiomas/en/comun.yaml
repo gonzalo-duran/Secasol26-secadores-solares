@@ -10,3 +10,8 @@ rugosidad:
   personalizado: Custom…
 esquema_no_encontrado: "[diagram '{nombre}' not found]"
 error_inesperado: "Unexpected error while processing the file ({tipo}): {err}. Check the column mapping; if the problem persists, report it along with the sample file."
+x_obj_bajo_equilibrio: >-
+  ⛔ X_obj = {x_obj:.3f} kg/kg db cannot be reached with this air: the product reaches
+  equilibrium with the driest air the chamber can provide at **X_eq ≈ {x_eq:.3f} kg/kg db** and cannot
+  go below it, however long the horizon. Raise X_obj above that value, or heat or dry the
+  air further (collector, auxiliary heater).

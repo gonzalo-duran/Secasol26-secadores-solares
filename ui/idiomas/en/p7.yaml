@@ -43,6 +43,10 @@ transitorio:
   e_solar: Useful E_solar
   e_aux: E_auxiliary
   e_motor: E_fan
+  e_ambiente:
+    label: E_ambient
+    help: >-
+      Heat given up by the surroundings when the chamber or its outlet air end up colder than outside (adiabatic drying). It enters the COP denominator.
   fraccion_solar: Solar fraction
   sin_trayectorias: No trajectories to plot.
   trayectorias: Horizon trajectories
@@ -120,6 +124,7 @@ balance_fig:
   solar: Solar<br>(collector)
   auxiliar: Auxiliary
   motor: Fan
+  ambiente: Ambient<br>(air and wall)
   evaporacion: Evaporation<br>(useful)
   eje: Energy [MJ]
   titulo: Energy balance of the drying cycle
@@ -382,6 +387,7 @@ tabla:
   bal_solar: Balance — Useful E solar [MJ]
   bal_aux: Balance — E auxiliary [MJ]
   bal_motor: Balance — E fan [MJ]
+  bal_ambiente: Balance — E ambient [MJ]
   bal_secado: Balance — E drying [MJ]
   bal_cop: Balance — COP
   bal_fs: Balance — Solar fraction

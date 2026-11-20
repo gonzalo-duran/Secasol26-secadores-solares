@@ -14,7 +14,7 @@ física completa.
 
 Lee del catálogo del producto:
     - propiedades_basicas.calor_especifico_seco → c_ps (sólido seco).
-    - isoterma.gab.params → para construir aw_func (actividad de agua).
+    - isoterma GAB (propia o por analogía, core.catalogo.isoterma_gab) → aw_func.
 
 Coeficientes convectivos interiores (S61)
 -----------------------------------------
@@ -87,6 +87,7 @@ from calculos.correlaciones_nusselt import (
 from calculos.lecho_producto import area_abierta_malla_efectiva
 from calculos.propiedades_aire import propiedades_aire
 from calculos.psicrometria import (
+    HR_desde_omega,
     actividad_agua_desde_X_GAB,
     calor_latente_vaporizacion,
     densidad_aire_humedo,
@@ -94,6 +95,7 @@ from calculos.psicrometria import (
 )
 from core import catalogo
 from core.camara import ForzantesAire
+from core.lecho import geometria_lecho
 
 if TYPE_CHECKING:
     from core.camara import Camara
@@ -288,11 +290,37 @@ def area_canal_entre_bandejas_m2(camara: "Camara") -> float:
     """
     g, b = camara.geometria, camara.bandejas
     espacio_libre = max(0.0, b.separacion_entre_bandejas_m - b.espesor_capa_m)
-    n_canales = max(0, b.n_bandejas - 1)
+    # Con carros (túnel, S70) el aire los atraviesa EN SERIE: en cada sección
+    # transversal solo están los canales de UN carro. Hasta S70 se tomaban las
+    # n_carros × bandejas_por_carro bandejas como una única pila en paralelo, y
+    # en ADITAL (24 × 14) la velocidad sobre el producto salía ~26× baja
+    # (0.06 m/s contra 0.2–1.25 m/s medidos, Condorí 2009). `motor_calc` ya lo
+    # hacía así para la pérdida de carga.
+    if camara.carros is not None:
+        n_canales = max(0, camara.carros.bandejas_por_carro - 1)
+    else:
+        n_canales = max(0, b.n_bandejas - 1)
     area = g.ancho_m * espacio_libre * n_canales
     if area <= 0.0:
         return area_transversal_flujo_m2(camara)
     return float(area)
+
+
+def longitud_flujo_producto_m(camara: "Camara") -> float:
+    """Largo de placa que recorre el aire sobre el producto antes de reiniciar la capa límite.
+
+    Sin carros es el largo de la cámara. Con carros (túnel, S70) la capa límite
+    se corta entre un carro y el siguiente: es el largo del carro declarado, o el
+    largo del túnel repartido entre los carros en fila. Con 18 m de placa
+    laminar el ``h`` de ADITAL caía a ~2 W/(m²·K), nivel de convección natural.
+    """
+    g = camara.geometria
+    carros = camara.carros
+    if carros is None:
+        return g.largo_m
+    if carros.largo_carro_m is not None:
+        return min(carros.largo_carro_m, g.largo_m)
+    return g.largo_m / carros.n_carros
 
 
 def area_transferencia_producto_m2(camara: "Camara") -> float:
@@ -465,6 +493,8 @@ class _ParamsCamaraTD:
     R_cond_techo_m2K_W: float
     A_techo_total_m2: float
     advertencias: list[str]
+    # Resistencia interna (S70): T_prod → λ [1/s]; None sin difusividad en catálogo.
+    tasa_difusion_func: Optional[Callable[[float], float]] = None
 
 
 def _construir_params_termodinamico(
@@ -559,34 +589,74 @@ def _construir_params_termodinamico(
     # Masa seca total: m_total = m_seco·(1 + X_inicial)
     m_seco_prod = p.masa_total_kg / (1.0 + p.humedad_inicial_X)
 
-    # --- aw_func: GAB del catálogo, fallback rampa lineal ---
-    iso = (datos.get("isoterma") or {}).get("gab") or {}
-    iso_params = iso.get("params") or {}
-    tiene_gab = (
-        iso_params.get("X_m") is not None
-        and iso_params.get("C") is not None
-        and iso_params.get("K") is not None
-    )
-    if tiene_gab:
-        X_m_GAB = float(iso_params["X_m"])
-        C_GAB = float(iso_params["C"])
-        K_GAB = float(iso_params["K"])
+    # --- aw_func: GAB propia o por analogía (S70); reserva sin isoterma ---
+    iso_gab = catalogo.isoterma_gab(p.producto_id)
+    if iso_gab is not None:
+        X_m_GAB, C_GAB, K_GAB = iso_gab.X_m, iso_gab.C, iso_gab.K
+        if iso_gab.origen == "analogia":
+            advertencias.append(
+                f"CAM_TD_GAB_ANALOGIA: '{p.producto_id}' no tiene isoterma propia; "
+                f"usa la de '{iso_gab.material_fuente}' por analogía (ver catálogo)."
+            )
+        if K_GAB >= 1.0:
+            advertencias.append(
+                f"CAM_TD_GAB_K_MAYOR_1: la isoterma GAB de '{p.producto_id}' tiene "
+                f"K={K_GAB:.3f} ≥ 1, fuera del rango teórico del modelo (ajuste "
+                "empírico de desorción). a_w queda acotada por "
+                f"1/K={1.0 / K_GAB:.3f}: el producto fresco no alcanza a_w = 1."
+            )
 
         def _aw_func(X: float) -> float:
             try:
                 return actividad_agua_desde_X_GAB(X, X_m_GAB, C_GAB, K_GAB)
             except ValueError:
-                return 1.0 if X > X_m_GAB else 0.0
+                # S70: con parámetros validados (X_m, C, K > 0), la única falla
+                # posible es K < 1 y X por encima del máximo de la isoterma
+                # (a_w > 1): agua libre, a_w = 1. Hasta S69 había acá un
+                # escalón 1/0 en X_m que atrapaba también el rechazo de K ≥ 1
+                # (el pimiento entero corría con ese escalón).
+                return 1.0
+
+    else:
+        # Reserva sin isoterma (S70; hasta S69 era la rampa a_w = X/X_inicial,
+        # que multiplicaba a ω_sat una actividad de agua físicamente falsa — 0.5
+        # con el producto a medio secar — y simulaba mal un período decreciente).
+        # Ahora: agua libre (a_w = 1, película pura) hasta la humedad de
+        # equilibrio escalar del catálogo, y caída lineal debajo para que el
+        # secado se detenga cerca de ella. Explícitamente optimista.
+        X_eq_cat = (datos.get("propiedades_basicas") or {}).get("humedad_equilibrio_aire_seco")
+        X_eq_res = float(X_eq_cat) if X_eq_cat else 0.0
+        advertencias.append(
+            f"CAM_TD_GAB_FALTA: '{p.producto_id}' sin isoterma propia ni analogía. "
+            f"Se usa a_w = 1 hasta X_eq = {X_eq_res:.3f} kg/kg (agua libre): la "
+            "velocidad de secado queda sobreestimada en todo el lote."
+        )
+
+        def _aw_func(X: float) -> float:
+            if X_eq_res <= 0.0:
+                return 1.0
+            return max(0.0, min(1.0, X / X_eq_res))
+
+    # --- Resistencia interna a la difusión (S70, Fase 2) ---
+    # λ(T) = μ₁²·D_eff(T)/L², con L la mitad de la dimensión de la PIEZA (el
+    # mismo d_p del lecho: espesor de rodaja, diámetro de arilo), no el espesor
+    # de capa. Sin difusividad en el catálogo la superficie es la humedad media
+    # (película pura) y se avisa: el secado queda sobreestimado.
+    _difusion = catalogo.difusion_interna(p.producto_id)
+    _tasa_difusion: Optional[Callable[[float], float]] = None
+    if _difusion is not None:
+        _d_pieza_m, _, _ = geometria_lecho(camara.bandejas, p.producto_id)
+
+        def _tasa_difusion(T_prod_K: float) -> float:
+            return _difusion.tasa_primer_modo_s(T_prod_K, _d_pieza_m)
 
     else:
         advertencias.append(
-            f"CAM_TD_GAB_FALTA: producto '{p.producto_id}' sin parámetros "
-            "GAB calibrados. Usando aw = clip(X/X_inicial, 0, 1) como fallback."
+            f"CAM_TD_DIFUSION_FALTA: '{p.producto_id}' sin difusividad efectiva en el "
+            "catálogo. Se evapora sin resistencia interna (solo la película del aire): "
+            "el período decreciente no está representado y el tiempo de secado queda "
+            "subestimado."
         )
-        X0 = p.humedad_inicial_X
-
-        def _aw_func(X: float) -> float:
-            return max(0.0, min(1.0, X / X0)) if X0 > 0 else 0.0
 
     # --- Geometría total ---
     # TOPOLOGÍA DE TRANSFERENCIA (S64): cross-flow único. El aire pasa entre
@@ -625,6 +695,7 @@ def _construir_params_termodinamico(
     # que motor_calc calcula la pérdida de carga del tramo.
     area_paso_producto_m2 = area_canal_entre_bandejas_m2(camara)
     L_bandeja = _L_caracteristica_bandeja(b.area_bandeja_m2, g.largo_m, g.ancho_m)
+    L_flujo_producto = longitud_flujo_producto_m(camara)
 
     def _h_producto(
         T_aire_camara_K: float, T_prod_local: float, omega_local: float, m_dot_local: float
@@ -651,7 +722,7 @@ def _construir_params_termodinamico(
                 T_prod_local,
                 omega_local,
                 P_Pa,
-                g.largo_m,
+                L_flujo_producto,
                 L_bandeja,
             )
             * factor_h_conv
@@ -721,6 +792,7 @@ def _construir_params_termodinamico(
         R_cond_techo_m2K_W=R_cond_techo,
         A_techo_total_m2=A_techo,
         advertencias=advertencias,
+        tasa_difusion_func=_tasa_difusion,
     )
 
 
@@ -741,8 +813,9 @@ def _calcular_termodinamico(
 
     Lee del catálogo del producto:
         - propiedades_basicas.calor_especifico_seco → c_ps (sólido seco).
-        - isoterma.gab.params → para construir aw_func. Si faltan, usa rampa
-          lineal aw = clip(X/X_inicial, 0, 1) como fallback con advertencia.
+        - isoterma GAB vía `core.catalogo.isoterma_gab` (propia o por analogía,
+          S70) → aw_func. Sin ninguna, a_w = 1 hasta humedad_equilibrio_aire_seco
+          (agua libre, optimista) con advertencia CAM_TD_GAB_FALTA.
 
     Calcula:
         - A_prod y h_conv según la **topología de flujo** (S63): atravesado
@@ -811,6 +884,7 @@ def _calcular_termodinamico(
         aw_func=pr.aw_func,
         coef_transporte_func=pr.coef_transporte_func,
         coef_pared_func=pr.coef_pared_func,
+        tasa_difusion_func=pr.tasa_difusion_func,
         tau_cubierta_solar=pr.tau_cubierta_solar,
         alfa_producto_solar=pr.alfa_producto_solar,
         A_rad_m2=pr.A_rad_total_m2,
@@ -829,7 +903,75 @@ def _calcular_termodinamico(
     # `energia_rad_aire_total_J` (S44) se perdían acá, así que la radiación al aire
     # entraba al balance pero no llegaba a los diagnósticos. Mismo patrón que el
     # albedo de S36 en la UI.
-    return replace(res, advertencias=advertencias + list(res.advertencias))
+    HR_seco = _HR_aire_sin_evaporacion(res, forzantes_uso, P_Pa)
+    X_eq = humedad_equilibrio_alcanzable(pr.aw_func, HR_seco)
+    if X_eq is not None and res.status == "t_max_alcanzado" and pr.X_objetivo < X_eq:
+        advertencias.append(
+            f"CAM_TD_X_OBJ_BAJO_EQUILIBRIO: X_obj = {pr.X_objetivo:.3f} kg/kg ms está por "
+            f"debajo de la humedad de equilibrio con el aire más seco que pudo tener la "
+            f"cámara (HR {float(np.nanmin(HR_seco)) * 100:.0f} %): X_eq = {X_eq:.3f} "
+            "kg/kg ms. El objetivo es inalcanzable con este aire, sin importar el horizonte: "
+            "subir el X_obj, o calentar/secar más el aire (colector, auxiliar)."
+        )
+    return replace(
+        res,
+        advertencias=advertencias + list(res.advertencias),
+        X_equilibrio_kg_kg=X_eq,
+    )
+
+
+def _HR_aire_sin_evaporacion(res, forzantes: "ForzantesAire", P_Pa: float) -> np.ndarray:
+    """HR del aire de la cámara si el producto ya no aportara humedad (S70).
+
+    Es el aire **más seco** que el producto puede llegar a ver: la ω de entrada a
+    la temperatura de la cámara (``max(T_flujo, T_ent)``, que ya incluye colector,
+    auxiliar y radiación). No se usa ``HR_flujo`` porque, si la corrida termina
+    con el producto húmedo, ese aire nunca se secó y el equilibrio quedaría
+    sobrestimado: diría "inalcanzable" cuando solo faltaba tiempo.
+    """
+    t = np.asarray(res.t_array_s, dtype=float)
+    if t.size == 0 or len(res.T_flujo_K) != t.size:
+        return np.array([])
+    t_fz = np.asarray(forzantes.t_s, dtype=float)
+    omega = np.interp(t, t_fz, np.asarray(forzantes.omega_ent, dtype=float))
+    T_ent = np.interp(t, t_fz, np.asarray(forzantes.T_ent_K, dtype=float))
+    T = np.maximum(np.asarray(res.T_flujo_K, dtype=float), T_ent)
+    return np.array([HR_desde_omega(w, Ti, P_Pa) for w, Ti in zip(omega, T)])
+
+
+def humedad_equilibrio_alcanzable(
+    aw_func: Callable[[float], float], HR_flujo: np.ndarray
+) -> Optional[float]:
+    """Humedad de equilibrio del producto con el aire más seco de la corrida (S70).
+
+    El producto no puede bajar de la humedad cuya ``a_w`` iguala la HR del aire que
+    lo rodea: ``a_w(X_eq) = HR``. Se toma la **mínima** HR de la serie (el
+    llamador pasa la del aire sin la humedad del propio producto, ver
+    ``_HR_aire_sin_evaporacion``), así que ``X_eq`` es la humedad más baja que
+    la corrida pudo alcanzar, y un ``X_obj`` por debajo es inalcanzable. Se invierte el **mismo** ``aw_func`` que
+    usa el motor (GAB propia, por analogía, o la reserva lineal sin isoterma), así
+    que el valor es coherente con lo que simula.
+
+    Args:
+        aw_func: Isoterma X → a_w del motor (monótona creciente).
+        HR_flujo: Serie de HR del aire que ve el producto [fracción 0-1].
+
+    Returns:
+        ``X_eq`` [kg/kg ms], o None si no hay serie de HR válida.
+    """
+    hr = np.asarray(HR_flujo, dtype=float)
+    hr = hr[np.isfinite(hr)]
+    if hr.size == 0:
+        return None
+    HR_min = float(np.clip(hr.min(), 1e-6, 0.999))
+
+    def _f(X: float) -> float:
+        return max(0.0, min(1.0, aw_func(X))) - HR_min
+
+    X_max = 50.0
+    if _f(X_max) <= 0.0:
+        return None
+    return float(brentq(_f, 1e-9, X_max, xtol=1e-6))
 
 
 @dataclass(frozen=True)
@@ -1161,6 +1303,7 @@ def calcular_camara_cascada(
         aw_func=pr.aw_func,
         coef_transporte_func=pr.coef_transporte_func,
         coef_pared_func=pr.coef_pared_func,
+        tasa_difusion_func=pr.tasa_difusion_func,
         tau_cubierta_solar=pr.tau_cubierta_solar,
         alfa_producto_solar=pr.alfa_producto_solar,
         A_rad_por_zona_m2=pr.A_rad_total_m2 / N,

@@ -163,6 +163,21 @@ manzana:
         ese modelo extendido (futuro upgrade).
 
   # ---------------------------------------------------------------------------
+  difusion_interna:
+    D_ref_m2_s: 3.5e-10
+    T_ref_K: 323.15
+    E_a_J_mol: 34000.0
+    geometria: lamina
+    calidad_datos: MEDIA
+    fuente: "Sacilik K, Elicin AK (2006). The thin layer drying characteristics of organic apple slices. J Food Eng 73:281-289. Ec. (7)-(8), texto §3."
+    notas: |
+      D_eff de 2.27e-10 a 4.97e-10 m²/s entre 40 y 60 °C y rodajas de 5 y 9 mm
+      (slope = π²D/(4H²), H = semiespesor: misma convención que Secasol). El paper
+      no tabula D por condición: D_ref es el centro del rango a 50 °C y E_a sale
+      de los extremos del rango (40 °C → 60 °C), que mezclan además espesores.
+      Difusividad APARENTE (espesor inicial), coherente con Secasol, que no
+      modela encogimiento.
+
   isoterma:
     gab:
       params:
@@ -295,13 +310,35 @@ durazno:
     #     (apricot, fruta hueso similar).
 
   # ---------------------------------------------------------------------------
+  difusion_interna:
+    D_ref_m2_s: 3.04e-10
+    T_ref_K: 328.15
+    E_a_J_mol: 16100.0
+    geometria: lamina
+    calidad_datos: BAJA
+    fuente: "Kingsly ARP, Goyal RK, Manikantan MR, Ilyas SM (2007). Effects of pretreatments and drying air temperature on drying behaviour of peach slice. Int J Food Sci Technol 42:65-69. Tabla 4 (control)."
+    notas: |
+      Control: 3.04 (55 °C) y 3.62 (65 °C) en 'μm²/s' según la tabla, unidad
+      que no cierra con el rango que cita el mismo texto: se lee ×10⁻¹⁰ m²/s
+      (igual que la ciruela del mismo grupo, con el mismo 3.04 a 55 °C). Rodajas
+      de 3.5 mm. Calidad BAJA por la unidad y por la coincidencia con la ciruela.
+
+  forma_geometrica:
+    diametro_eq_m: 0.0035
+    forma: "rodajas de ~3.5 mm (Kingsly 2007)"
+
   isoterma:
-    # No se cargó isoterma específica de durazno en esta sesión.
-    # Status: PENDIENTE para Sesión siguiente.
-    # Recomendado: Kaymak-Ertekin F, Gedik A (2004). Sorption isotherms
-    # and isosteric heat of sorption for grapes, apricots, apples and
-    # potatoes. LWT 37(4):429-438. (Apricot como análogo cercano a peach,
-    # ambas Prunus.)
+    gab:
+      params:
+        X_m: null
+        C: null
+        K: null
+      analogia: damasco
+      rango_T_K: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con damasco (Kaymak-Ertekin & Gedik 2004, desorción), catalogo/isotermas_referencia.yaml: Prunus, fruta de alto azúcar."
+      notas: |
+        Mismo género que el damasco y composición parecida.
 
   # ---------------------------------------------------------------------------
   notas: |
@@ -656,10 +693,13 @@ granada:
         X_m: null
         C: null
         K: null
+      analogia: damasco
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — no hay paper de isoterma de granada/arils en la carpeta."
-      notas: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con damasco (Kaymak-Ertekin & Gedik 2004, desorción), catalogo/isotermas_referencia.yaml: fruta de alto azúcar."
+      notas: |
+        Analogía de familia (fruta azucarada), no de especie. Reemplazar si
+        aparece una isoterma de arilos.
 
   notas: |
     PRODUCTO NUEVO en el catálogo (cargado en esta sesión).
@@ -707,16 +747,37 @@ ciruela:
       fuente: "PENDIENTE — Goyal et al. (2007) DOI:10.1016/j.jfoodeng.2006.01.041 selecciona Logarítmico como mejor (r²≈0.999) pero NO publica los coeficientes a,k,c — solo reporta r²/χ²/RMSE/MBE en Tabla 3. Mismo problema estructural que Kingsly 2007 de durazno (mismo grupo de autores indios)."
       notas: null
 
+  difusion_interna:
+    D_ref_m2_s: 3.04e-10
+    T_ref_K: 328.15
+    E_a_J_mol: 17900.0
+    geometria: lamina
+    calidad_datos: MEDIA
+    fuente: "Goyal RK, Kingsly ARP, Manikantan MR, Ilyas SM (2007). Mathematical modelling of thin layer drying kinetics of plum in a tunnel dryer. J Food Eng 79:176-180. Tabla 4 (control)."
+    notas: |
+      Control: 3.04e-10 (55 °C), 3.44e-10 (60), 3.69e-10 (65 °C); E_a ajustada
+      sobre esos tres puntos (S70). Rodajas de 3.5 mm, lámina. El durazno del
+      mismo grupo (Kingsly 2006) reporta el mismo 3.04 a 55 °C: revisar si son
+      datos independientes.
+
+  forma_geometrica:
+    diametro_eq_m: 0.0035
+    forma: "rodajas de ~3.5 mm (Goyal 2007)"
+
   isoterma:
     gab:
       params:
         X_m: null
         C: null
         K: null
+      analogia: damasco
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — no hay paper de isoterma de ciruela en la carpeta."
-      notas: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con damasco (Kaymak-Ertekin & Gedik 2004, desorción), catalogo/isotermas_referencia.yaml: Prunus, fruta de alto azúcar."
+      notas: |
+        Mismo género que el damasco. Tsami et al. (1990) tiene GAB de ciruela
+        seca (prunes) en docs/notas/papers/, pero la fila de desorción no se lee
+        en el PDF y es producto ya seco (23 % de humedad).
 
   notas: |
     PRODUCTO NUEVO en el catálogo. NO se pudo calibrar capa fina porque el

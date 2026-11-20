@@ -36,7 +36,7 @@ from calculos.conversiones_angulo import (
 )
 from calculos.lecho_producto import D_P_DEFAULT_M as _D_P_DEFAULT_M
 from calculos.motor_calc import _C_obstruccion_bloqueo
-from calculos.psicrometria import humedad_absoluta
+from calculos.psicrometria import actividad_agua_desde_X_GAB, humedad_absoluta
 from calculos.simulacion_anual import ResultadosAnual, simular_anual
 from core import catalogo
 from core.camara import (
@@ -53,7 +53,6 @@ from core.camara import (
     ForzantesAire,
     GeometriaCamara,
     ParedCamara,
-    _modelos_disponibles,
     advertencias_camara,
 )
 from core.lecho import espesor_capa_derivado_m, geometria_lecho
@@ -100,10 +99,21 @@ _CAUDAL_FLUJO_DEFAULT_KG_S: float = ConfiguracionFlujo().caudal_masico_kg_s
 
 
 def _productos_disponibles() -> dict[str, str]:
-    """Retorna {prod_id: label} solo para productos con al menos un modelo calibrado."""
+    """Retorna {prod_id: label} de los productos con los que el motor puede calcular.
+
+    El motor termodinámico necesita una isoterma (propia o por analogía,
+    `catalogo.isoterma_gab`) o, en su defecto, la humedad de equilibrio escalar
+    del catálogo. Hasta S69 el filtro era "tiene parámetros de capa fina", un
+    resto de antes de S38 (la capa fina ya no calcula nada) que dejaba fuera del
+    selector a 12 de 19 productos — tomate, cebolla, yerba mate, algarroba… (S70).
+    """
     result: dict[str, str] = {}
     for prod_id, datos in catalogo.PRODUCTOS.items():
-        if _modelos_disponibles(datos):
+        props = datos.get("propiedades_basicas") or {}
+        if (
+            catalogo.isoterma_gab(prod_id) is not None
+            or props.get("humedad_equilibrio_aire_seco") is not None
+        ):
             desc = t_catalogo(datos, default=prod_id)
             label = f"{prod_id} — {desc[:60]}..." if len(desc) > 60 else f"{prod_id} — {desc}"
             result[prod_id] = label
@@ -2074,6 +2084,26 @@ def _render_operacion_anual(proyecto, camara_builder) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _caption_aw_objetivo(prod_id: str, X_obj: float, objetivo) -> None:
+    """Debajo del X objetivo: a qué a_w corresponde y de dónde sale el default (S70)."""
+    iso = catalogo.isoterma_gab(prod_id)
+    if iso is None:
+        st.caption(t("p4.producto.x_obj.sin_isoterma", x=objetivo.X))
+        return
+    try:
+        a_w = actividad_agua_desde_X_GAB(X_obj, iso.X_m, iso.C, iso.K)
+    except ValueError:
+        a_w = 1.0
+    st.caption(
+        t(
+            "p4.producto.x_obj.aw",
+            aw=a_w,
+            x_def=objetivo.X,
+            aw_def=objetivo.a_w if objetivo.a_w is not None else catalogo.AW_OBJETIVO_DEFAULT,
+        )
+    )
+
+
 def render() -> None:
     """Renderiza la Pestaña 4 — Cámara de Secado."""
     st.header(t("p4.header"))
@@ -2198,22 +2228,24 @@ def render() -> None:
             help=t("p4.producto.x_ini.help"),
         )
 
+        # X objetivo por defecto desde una a_w objetivo sobre la isoterma del
+        # producto (S70): un X único para todo el catálogo dejaba la manzana
+        # sobresecada (a_w 0.16) y las hojas húmedas (a_w 0.72). Al cambiar de
+        # producto se propone el suyo; si no, se conserva el que cargó el usuario.
+        objetivo = catalogo.objetivo_secado(prod_id)
+        X_obj_default = objetivo.X
+        if proyecto.camara is not None and proyecto.camara.carga_producto.producto_id == prod_id:
+            X_obj_default = proyecto.camara.carga_producto.humedad_objetivo_X
         X_obj = st.number_input(
             t("p4.producto.x_obj.label"),
             min_value=0.01,
             max_value=X_ini - 0.01,
-            value=(
-                min(
-                    0.15,
-                    X_ini - 0.01,
-                )
-                if proyecto.camara is None
-                else min(proyecto.camara.carga_producto.humedad_objetivo_X, X_ini - 0.01)
-            ),
+            value=min(X_obj_default, X_ini - 0.01),
             step=0.01,
             format="%.3f",
             help=t("p4.producto.x_obj.help"),
         )
+        _caption_aw_objetivo(prod_id, X_obj, objetivo)
 
         masa_kg = st.number_input(
             t("p4.producto.masa"),
@@ -2245,20 +2277,21 @@ def render() -> None:
             else "logaritmico"
         )
 
-        # Isoterma disponible?
-        iso = datos_prod.get("isoterma") or {}
-        iso_entry = iso.get("gab") or {}
-        params_iso = iso_entry.get("params") or {} if iso_entry else {}
-        tiene_gab = (
-            params_iso.get("X_m") is not None
-            and params_iso.get("C") is not None
-            and params_iso.get("K") is not None
-        )
+        # Isoterma disponible? Propia, por analogía (S70) o ninguna.
+        iso_gab = catalogo.isoterma_gab(prod_id)
         X_eq_fallback = props.get("humedad_equilibrio_aire_seco")
-        if tiene_gab:
+        if iso_gab is not None and iso_gab.origen == "propia":
             st.success(t("p4.producto.gab_ok"))
+        elif iso_gab is not None:
+            st.info(t("p4.producto.gab_analogia", material=iso_gab.material_fuente))
         elif X_eq_fallback is not None:
             st.warning(t("p4.producto.gab_fallback", x=X_eq_fallback))
+
+        # Resistencia interna a la difusión (S70, Fase 2).
+        if catalogo.difusion_interna(prod_id) is not None:
+            st.success(t("p4.producto.difusion_ok"))
+        else:
+            st.warning(t("p4.producto.difusion_falta"))
 
     # -----------------------------------------------------------------------
     # Sección B: Geometría y construcción
@@ -3614,7 +3647,12 @@ def render() -> None:
                 help=t("p4.resultados_td.energia_rad.help"),
             )
 
-            if res.status == "t_max_alcanzado":
+            X_eq = getattr(res, "X_equilibrio_kg_kg", None)
+            if X_eq is not None and X_obj < X_eq:
+                # El objetivo está debajo del equilibrio con el aire (S70): ampliar el
+                # horizonte no sirve, y el aviso genérico de abajo lo sugeriría.
+                st.error(t("comun.x_obj_bajo_equilibrio", x_obj=X_obj, x_eq=X_eq))
+            elif res.status == "t_max_alcanzado":
                 horas_total = float(res.t_array_s[-1]) / 3600.0
                 st.warning(
                     t(

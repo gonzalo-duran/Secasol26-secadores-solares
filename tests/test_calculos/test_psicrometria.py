@@ -643,11 +643,61 @@ class TestActividadAguaDesdeXGAB:
         with pytest.raises(ValueError, match="PSICRO_GAB_C_NO_POSITIVA"):
             actividad_agua_desde_X_GAB(0.10, X_m=0.05, C=-1.0, K=0.85)
 
-    def test_K_fuera_rango_lanza(self):
-        with pytest.raises(ValueError, match="PSICRO_GAB_K_FUERA_RANGO"):
-            actividad_agua_desde_X_GAB(0.10, X_m=0.05, C=12.0, K=1.0)
+    def test_PSICRO_GAB_K_FUERA_RANGO(self):
         with pytest.raises(ValueError, match="PSICRO_GAB_K_FUERA_RANGO"):
             actividad_agua_desde_X_GAB(0.10, X_m=0.05, C=12.0, K=0.0)
+        with pytest.raises(ValueError, match="PSICRO_GAB_K_FUERA_RANGO"):
+            actividad_agua_desde_X_GAB(0.10, X_m=0.05, C=12.0, K=-0.5)
+
+
+class TestInversionGABKMayorQueUno:
+    """K ≥ 1 (S70): ajuste empírico de desorción, caso pimiento rojo Vega 2007.
+
+    Parámetros de la Tabla 2 de Vega et al. (2007), J Food Eng 79:1460:
+    X_m = 0.08, C = 12.53, K = 1.02 (isoterma de desorción a 30 °C).
+    """
+
+    PIMIENTO = {"X_m": 0.08, "C": 12.53, "K": 1.02}
+
+    def test_ida_y_vuelta(self):
+        """a_w → X (GAB directo) → a_w (inversión) recupera el valor."""
+        X_m, C, K = 0.08, 12.53, 1.02
+        for aw in [0.1, 0.3, 0.5, 0.75, 0.9, 0.95, 0.97]:
+            u = K * aw
+            X = X_m * C * u / ((1.0 - u) * (1.0 - u + C * u))
+            assert actividad_agua_desde_X_GAB(X, X_m, C, K) == pytest.approx(aw, abs=1e-9)
+
+    def test_acotada_por_inversa_de_K(self):
+        """Producto muy húmedo: a_w < 1/K, nunca lanza ni llega a 1."""
+        for X in [1.0, 5.0, 10.11, 50.0, 1e4]:
+            aw = actividad_agua_desde_X_GAB(X, **self.PIMIENTO)
+            assert aw < 1.0 / 1.02
+
+    def test_monotona_creciente(self):
+        Xs = [0.02, 0.05, 0.1, 0.3, 0.5, 1.0, 2.0, 5.0, 10.0]
+        aws = [actividad_agua_desde_X_GAB(X, **self.PIMIENTO) for X in Xs]
+        assert all(b > a for a, b in zip(aws, aws[1:]))
+
+    def test_reproduce_tabla3_vega2007(self):
+        """X de equilibrio a la HR del aire de secado (Vega 2007, Tabla 3).
+
+        El paper calcula esas X con esta misma isoterma; el desvío máximo
+        (12 % a 50 °C) está dentro del %E = 11.22 que declara la Tabla 2.
+        Se compara en X (lo que reporta el paper): en a_w el mismo desvío se
+        amplifica por la pendiente baja de la isoterma en esa zona.
+        Además se verifica que la inversión devuelva la HR de partida.
+        """
+        X_m, C, K = 0.08, 12.53, 1.02
+        for hr, X_tabla in [(0.114, 0.064), (0.069, 0.040), (0.050, 0.032), (0.029, 0.021)]:
+            u = K * hr
+            X_gab = X_m * C * u / ((1.0 - u) * (1.0 - u + C * u))
+            assert X_gab == pytest.approx(X_tabla, rel=0.13)
+            assert actividad_agua_desde_X_GAB(X_gab, X_m, C, K) == pytest.approx(hr, rel=1e-9)
+
+    def test_K_igual_a_uno(self):
+        """K = 1 exacto: a_w → 1 asintóticamente sin superarla."""
+        aw = actividad_agua_desde_X_GAB(100.0, X_m=0.05, C=12.0, K=1.0)
+        assert 0.99 < aw < 1.0
 
 
 # ---------------------------------------------------------------------------

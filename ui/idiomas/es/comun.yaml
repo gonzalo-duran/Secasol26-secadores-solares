@@ -10,3 +10,8 @@ rugosidad:
   personalizado: Personalizado…
 esquema_no_encontrado: "[esquema '{nombre}' no encontrado]"
 error_inesperado: "Error inesperado al procesar el archivo ({tipo}): {err}. Revisá el mapeo de columnas; si el problema persiste, reportalo con el archivo de ejemplo."
+x_obj_bajo_equilibrio: >-
+  ⛔ X_obj = {x_obj:.3f} kg/kg ms es inalcanzable con este aire: el producto se equilibra con
+  el aire más seco que puede tener la cámara en **X_eq ≈ {x_eq:.3f} kg/kg ms** y no puede bajar de
+  ahí, por largo que sea el horizonte. Subí el X_obj por encima de ese valor, o calentá o secá
+  más el aire (colector, auxiliar).

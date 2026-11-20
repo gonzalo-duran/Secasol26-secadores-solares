@@ -59,13 +59,30 @@ tomate:
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Akanbi et al. (2006). J Food Eng 73(2):157-163. DOI:10.1016/j.jfoodeng.2005.01.011"
-      notas: null
+        # Default a T=45°C (mediana del rango 30-60°C), igual que manzana y papa.
+        X_m: 0.182
+        C: 9.191       # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 0.695      # = k0 · exp(ΔH_k / RT) a T=318.15 K
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.182, C: 17.524, K: 0.7878}
+          - {T_K: 318.15, X_m: 0.182, C: 9.191, K: 0.695}
+          - {T_K: 333.15, X_m: 0.182, C: 5.109, K: 0.6201}
+        entalpicos:
+          M_0: 0.182
+          C_0: 1.99e-05
+          K_0: 0.0552
+          dH_c_kJ_mol: 34.5
+          dH_k_kJ_mol: 6.7
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: ALTA
+      fuente: "Kiranoudis CT, Maroulis ZB, Tsami E, Marinos-Kouris D (1993). Equilibrium moisture content and heat of desorption of some vegetables. J Food Eng 20(1):55-74. DOI:10.1016/0260-8774(93)90019-G. Tabla 3, DESORCIÓN, tomato."
+      notas: |
+        Curva de DESORCIÓN, 30/45/60 °C, método estático COST 90, rodajas de 1-2 mm
+        escaldadas. Ajuste directo no lineal de X_m, C0, ΔH_c, k0, ΔH_k sobre las tres
+        temperaturas a la vez. La Tabla 3 imprime C0 ×10⁵ y k0 ×10² (S70: escalas
+        leídas de la página renderizada; con ellas la GAB reproduce la Tabla 2 del
+        paper dentro del S_R = 3.47 % b.s. declarado).
+        El motor usa C y K fijos a 45 °C; recomputar desde `entalpicos` para otra T.
 
   notas: |
     Papers prioritarios de la shopping list:
@@ -152,6 +169,20 @@ papa:
         el esquema actual del catálogo.
         Caveat: b₁ (T=45°C) aparece como "0.00019-" en el PDF; interpretado
         como -0.00019 por consistencia con los demás sets (todos b<0).
+
+  difusion_interna:
+    D_ref_m2_s: 4.01e-9
+    T_ref_K: 313.15
+    E_a_J_mol: 8800.0
+    geometria: lamina
+    calidad_datos: MEDIA
+    fuente: "Hassini L, Azzouz S, Peczalski R, Belghith A (2007). Estimation of potato moisture diffusivity from convective drying kinetics with correction for shrinkage. J Food Eng 79:47-56. Tabla 1, columna L0."
+    notas: |
+      Se usa la difusividad APARENTE (espesor inicial L0): 4.01e-9 (40 °C),
+      4.39e-9 (55), 5.36e-9 (70), 6.13e-9 (85 °C), a 0.5 m/s; E_a ajustada a
+      los extremos (S70). La corregida por encogimiento es ~10× menor, pero
+      Secasol no modela encogimiento: con el espesor fijo la que reproduce la
+      cinética es la aparente. Secado por una cara en el paper.
 
   isoterma:
     gab:
@@ -261,13 +292,30 @@ cebolla:
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — buscar isoterma específica de cebolla. Alternativa: Kaymak-Ertekin & Sultanoğlu (2001) J Food Eng 47:225-231."
-      notas: null
+        # Default a T=45°C (mediana del rango 30-60°C), igual que manzana y papa.
+        X_m: 0.202
+        C: 4.987       # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 0.6583      # = k0 · exp(ΔH_k / RT) a T=318.15 K
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.202, C: 9.16, K: 0.7424}
+          - {T_K: 318.15, X_m: 0.202, C: 4.987, K: 0.6583}
+          - {T_K: 333.15, X_m: 0.202, C: 2.868, K: 0.59}
+        entalpicos:
+          M_0: 0.202
+          C_0: 2.3e-05
+          K_0: 0.0579
+          dH_c_kJ_mol: 32.5
+          dH_k_kJ_mol: 6.43
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: ALTA
+      fuente: "Kiranoudis CT, Maroulis ZB, Tsami E, Marinos-Kouris D (1993). Equilibrium moisture content and heat of desorption of some vegetables. J Food Eng 20(1):55-74. DOI:10.1016/0260-8774(93)90019-G. Tabla 3, DESORCIÓN, onion."
+      notas: |
+        Curva de DESORCIÓN, 30/45/60 °C, método estático COST 90, rodajas de 1-2 mm
+        escaldadas. Ajuste directo no lineal de X_m, C0, ΔH_c, k0, ΔH_k sobre las tres
+        temperaturas a la vez. La Tabla 3 imprime C0 ×10⁵ y k0 ×10² (S70: escalas
+        leídas de la página renderizada; con ellas la GAB reproduce la Tabla 2 del
+        paper dentro del S_R = 2.45 % b.s. declarado).
+        El motor usa C y K fijos a 45 °C; recomputar desde `entalpicos` para otra T.
 
   notas: |
     Papers prioritarios:
@@ -347,6 +395,21 @@ pimiento_rojo:
       fuente: "PENDIENTE — Vega (2007) no calibra Midilli (usa Page Modificado y H-Pabis). Buscar paper específico con Midilli para pimiento."
       notas: null
 
+  difusion_interna:
+    D_ref_m2_s: 3.51e-9
+    T_ref_K: 323.15
+    E_a_J_mol: 39700.0
+    geometria: lamina
+    calidad_datos: ALTA
+    fuente: "Vega A, Fito P, Andrés A, Lemus R (2007). Mathematical modeling of hot-air drying kinetics of red bell pepper (var. Lamuyo). J Food Eng 79:1460-1466. Tabla 4 y ec. (6)."
+    notas: |
+      Tabla 4: 3.2e-9 (50 °C), 6.9e-9 (60), 10.2e-9 (70), 11.2e-9 (80 °C);
+      E_a = 39.7 kJ/mol (D0 = 9.19e-3 m²/s, r² = 0.90). D_ref es la regresión
+      del paper evaluada a 50 °C (D0·exp(−E_a/RT)), no el punto de la tabla:
+      reproduce los cuatro puntos dentro de ±21 %. Primer término de Fick en lámina con
+      L = semiespesor. Cubos de 1 cm en canasta (7 kg/m²): difusividad aparente,
+      alta frente a frutas porque incluye la geometría del cubo.
+
   isoterma:
     gab:
       params:
@@ -366,6 +429,11 @@ pimiento_rojo:
         J Food Eng 47:225-231, que reporta isotermas de pimiento a varias T.
         Como check: X_we experimental a 50/60/70/80 °C = 0.064/0.040/0.032/0.021
         kg/kg ms (Vega 2007 Tabla 3).
+        K = 1.02 verificado contra la Tabla 2 (S70): es el valor publicado, no
+        un error de carga. Queda fuera del rango teórico de GAB (K < 1), típico
+        de desorción de productos azucarados cerca de la saturación. El motor
+        lo acepta desde S70 (a_w acotada por 1/K = 0.98) y avisa con
+        CAM_TD_GAB_K_MAYOR_1; hasta S69 lo rechazaba y corría con un escalón.
 
   notas: |
     Papers cargados:
@@ -440,13 +508,30 @@ zanahoria_rallada:
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — buscar isoterma específica de zanahoria."
-      notas: null
+        # Default a T=45°C (mediana del rango 30-60°C), igual que manzana y papa.
+        X_m: 0.212
+        C: 3.302       # = C0 · exp(ΔH_c / RT) a T=318.15 K
+        K: 0.6399      # = k0 · exp(ΔH_k / RT) a T=318.15 K
+        sets_por_temperatura:
+          - {T_K: 303.15, X_m: 0.212, C: 5.67, K: 0.7091}
+          - {T_K: 318.15, X_m: 0.212, C: 3.302, K: 0.6399}
+          - {T_K: 333.15, X_m: 0.212, C: 2.019, K: 0.5828}
+        entalpicos:
+          M_0: 0.212
+          C_0: 5.94e-05
+          K_0: 0.0803
+          dH_c_kJ_mol: 28.9
+          dH_k_kJ_mol: 5.49
+      rango_T_K: [303.15, 333.15]   # 30-60 °C
+      calidad_datos: ALTA
+      fuente: "Kiranoudis CT, Maroulis ZB, Tsami E, Marinos-Kouris D (1993). Equilibrium moisture content and heat of desorption of some vegetables. J Food Eng 20(1):55-74. DOI:10.1016/0260-8774(93)90019-G. Tabla 3, DESORCIÓN, carrot."
+      notas: |
+        Curva de DESORCIÓN, 30/45/60 °C, método estático COST 90, rodajas de 1-2 mm
+        escaldadas. Ajuste directo no lineal de X_m, C0, ΔH_c, k0, ΔH_k sobre las tres
+        temperaturas a la vez. La Tabla 3 imprime C0 ×10⁵ y k0 ×10² (S70: escalas
+        leídas de la página renderizada; con ellas la GAB reproduce la Tabla 2 del
+        paper dentro del S_R = 2.56 % b.s. declarado).
+        El motor usa C y K fijos a 45 °C; recomputar desde `entalpicos` para otra T.
 
   notas: |
     ADVERTENCIA CENTRAL: la literatura de cinética de zanahoria trabaja con
@@ -518,10 +603,13 @@ perejil:
         X_m: null
         C: null
         K: null
+      analogia: te_yerba
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE"
-      notas: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con hojas de yerba mate (Schmalko 2005). Sin isoterma propia de perejil a mano."
+      notas: |
+        Se seca la hoja: la isoterma de hoja es la más cercana por tejido
+        (decisión del usuario, S70). Reemplazar si aparece una medida.
 
   notas: |
     La literatura de perejil es predominantemente de microondas o IR.
@@ -593,10 +681,13 @@ apio:
         X_m: null
         C: null
         K: null
+      analogia: te_yerba
       rango_T_K: null
       calidad_datos: ESTIMADA_POR_ANALOGIA
-      fuente: "PENDIENTE — analogía con perejil"
-      notas: null
+      fuente: "Analogía (S70) con hojas de yerba mate (Schmalko 2005). Sin isoterma propia de apio a mano."
+      notas: |
+        Se seca la hoja: la isoterma de hoja es la más cercana por tejido
+        (decisión del usuario, S70). Reemplazar si aparece una medida.
 
   notas: |
     PRODUCTO CON DATOS DE ANALOGÍA. Ver decisión Sesión 6.
@@ -661,12 +752,14 @@ mandioca:
         X_m: null
         C: null
         K: null
+      analogia: papa
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Sanni LO et al. (1997). J Food Eng 34(2):203-212. DOI:10.1016/S0260-8774(97)00072-6 [MINCyT Elsevier] (fufu/tapioca)"
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con papa (Kaymak-Ertekin & Gedik 2004): raíz/tubérculo almidonoso. Fuente propia pendiente: Sanni LO et al. (1997) J Food Eng 34(2):203-212, acceso restringido."
       notas: |
-        Sanni et al. (1997) trabaja con mandioca procesada (fufu, tapioca).
-        Para raíz fresca en rodajas la isoterma puede diferir. Verificar.
+        Sanni et al. (1997) trabaja con mandioca procesada (fufu, tapioca);
+        para raíz fresca en rodajas puede diferir. La mandioca tiene menos agua
+        inicial que la papa: la analogía vale para la forma de la isoterma.
 
   notas: |
     Papers prioritarios:
@@ -749,16 +842,30 @@ aji_rojo:
           - Modelo Kaleemullah (T-dependent): MR = exp(-(at+b)·θ^(ct+d))
             con a=0.00848, b=-0.34775, c=0.00005, d=1.1912 (rank #2 del paper).
 
+  difusion_interna:
+    D_ref_m2_s: 3.78e-9
+    T_ref_K: 323.15
+    E_a_J_mol: 37760.0
+    geometria: cilindro
+    calidad_datos: ALTA
+    fuente: "Kaleemullah S, Kailappan R (2006). Modelling of thin-layer drying kinetics of red chillies. J Food Eng 76:531-537. Resumen y §3.5."
+    notas: |
+      D_eff de 3.78e-9 (50 °C) a 7.10e-9 m²/s (65 °C), E_a = 37.76 kJ/mol.
+      Ají entero como cilindro (raíz de Bessel β1, radio rc): misma geometría
+      que el catálogo ('chiles enteros'), con d_p como diámetro.
+
   isoterma:
     gab:
       params:
         X_m: null
         C: null
         K: null
+      analogia: pimiento_rojo
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Kaleemullah & Kailappan (2004). Moisture sorption isotherms of red chillies. Biosyst Eng 88(1):95-104. Los mismos autores publicaron isotermas de chillies; no descargado todavía."
-      notas: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con pimiento rojo (Vega 2007): mismo género Capsicum. Fuente propia pendiente: Kaleemullah S, Kailappan R (2004) Biosyst Eng 88(1):95-104, acceso restringido."
+      notas: |
+        Hereda K = 1.02 del pimiento (a_w acotada por 1/K, ver pimiento_rojo).
 
   notas: |
     PRODUCTO NUEVO en el catálogo (cargado en esta sesión).

@@ -91,19 +91,34 @@ class TestCajaTranslucidaEnElBalance:
         assert res.fraccion_solar > 0.5, res.fraccion_solar
 
     def test_el_COP_no_supera_1_con_la_energia_bien_contada(self):
-        """Un COP > 1 con la sola entrada eléctrica era la señal del problema.
+        """Un COP > 1 con la sola entrada eléctrica era la señal del problema (S62).
 
-        Contando el sol, el denominador incluye toda la energía que entra y el
-        cociente vuelve a ser interpretable.
+        Contando el sol el cociente se volvió interpretable, pero faltaba una
+        entrada: el **ambiente**. De noche el tomate se enfría hacia el bulbo
+        húmedo del aire (20 °C, 50 % HR) y evapora con el calor que cede el aire
+        que sale más frío que afuera y la pared que gana calor. Sin ese término
+        el COP daba 1.05 (S70, al pasar el tomate de la rampa X/X₀ a su
+        isoterma); con él, vuelve a quedar por debajo de 1.
         """
         res = self._res()
         assert res.COP_secado is not None
         assert res.COP_secado < 1.0, res.COP_secado
 
+    def test_el_ambiente_aporta_cuando_el_proceso_queda_bajo_T_amb(self):
+        """El tomate húmedo enfría la cámara por debajo de 20 °C de noche (S70)."""
+        res = self._res()
+        assert res.energia_ambiente_MJ > 0.0
+        assert res.energia_ambiente_MJ == pytest.approx(
+            res.camara.energia_ambiente_total_J / 1e6, rel=1e-12
+        )
+
     def test_el_total_es_la_suma_de_sus_partes(self):
         res = self._res()
         assert res.energia_total_MJ == pytest.approx(
-            res.energia_solar_util_MJ + res.energia_auxiliar_MJ + res.energia_motor_MJ
+            res.energia_solar_util_MJ
+            + res.energia_auxiliar_MJ
+            + res.energia_motor_MJ
+            + res.energia_ambiente_MJ
         )
 
 

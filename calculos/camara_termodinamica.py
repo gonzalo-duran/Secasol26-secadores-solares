@@ -33,11 +33,12 @@ Referencias:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Callable
 
 import numpy as np
 from scipy.integrate import solve_ivp
+from scipy.optimize import brentq
 
 from calculos.psicrometria import (
     _CP_VAPOR,
@@ -154,6 +155,15 @@ class EstadoCamara:
             es la modulada, que puede ser 0 (el sol ya superó el objetivo) o el
             techo disponible (subdimensionado). Es la que hay que integrar para
             contabilizar consumo: la disponible es solo un techo.
+        q_envolvente_W: Calor sensible aire → ambiente por TODA la envolvente
+            (pared opaca + techo vidriado) [W], el que entra al balance vía
+            ``UA_loss``. Positivo = pérdida. A diferencia de ``q_pared_W`` (solo
+            la pared opaca, para reconstruir sus nodos), este es el que cuenta en
+            el balance de energía: negativo es calor que el ambiente le **da** a
+            la cámara cuando queda más fría que afuera (S70).
+        X_sup_kg_kg: Humedad de la **superficie** del producto con la que se
+            evaluó ``a_w`` [kg/kg seco] (S70, resistencia interna). ``None`` si
+            no hay modelo de difusión: la superficie es la humedad media.
     """
 
     T_flujo_K: float
@@ -165,6 +175,76 @@ class EstadoCamara:
     T_cam_ext_K: float
     U_pared_W_m2K: float
     Q_aux_W: float = 0.0
+    q_envolvente_W: float = 0.0
+    X_sup_kg_kg: float | None = None
+
+
+def humedad_superficie_producto(
+    *,
+    X_prod_kg_kg: float,
+    m_seco_kg: float,
+    tasa_difusion_s: float,
+    m_dot_w_kg_s: float,
+    omega_sup_kg_kg: float,
+    omega_ent_kg_kg: float,
+    omega_sat_prod_kg_kg: float,
+    aw_func: Callable[[float], float],
+) -> float:
+    """Humedad de la superficie del producto con resistencia interna en serie (S70).
+
+    El agua recorre dos tramos en serie: del interior a la superficie, por
+    difusión, y de la superficie al aire, por la película. Con un nodo de
+    superficie de humedad ``X_s``:
+
+        interno:  ṁ = λ(T)·m_s·(X − X_s)                    (primer modo de Fick)
+        externo:  ṁ = G·(ω_sat(T_prod)·a_w(X_s) − ω_ent)
+
+    ``λ = μ₁²·D_eff/L²`` es la tasa del primer modo de difusión de la pieza
+    (lámina: ``μ₁ = π/2`` con L = semiespesor). Escrita por kg de sólido, la
+    resistencia interna no necesita el área de la pieza.
+
+    ``G`` es la conductancia de la cadena de aire hacia la superficie. La cadena
+    (``resolver_cadena_camara``) es **afín en ω_sup** con los films fijos —cada
+    sub-etapa mezcla ω_in con ω_sup—, así que ``G`` sale exacto de un solve sin
+    resistencia interna: ``G = ṁ_w / (ω_sup(X) − ω_ent)``. La igualdad de los
+    dos flujos es una raíz escalar monótona en ``X_s ∈ [0, X]``.
+
+    Límites: ``λ → ∞`` da ``X_s → X`` (película pura, el modelo previo); con
+    ``a_w`` plana en X alto la superficie baja sin frenar la evaporación (período
+    de velocidad constante) hasta que ``a_w(X_s)`` cae (período decreciente).
+
+    Args:
+        X_prod_kg_kg: Humedad media del producto [kg/kg seco].
+        m_seco_kg: Masa de sólido seco [kg].
+        tasa_difusion_s: λ(T_prod) [1/s]. Debe ser > 0.
+        m_dot_w_kg_s: Evaporación del solve **sin** resistencia interna [kg/s].
+        omega_sup_kg_kg: ω de superficie de ese solve, ``ω_sat·a_w(X)``.
+        omega_ent_kg_kg: ω del aire de entrada a la cámara.
+        omega_sat_prod_kg_kg: ω de saturación a T_prod (acotada).
+        aw_func: Isoterma X → a_w (monótona creciente).
+
+    Returns:
+        ``X_s`` [kg/kg seco]. Igual a ``X`` si no hay evaporación.
+
+    Raises:
+        ValueError: ``CAM_TD_DIFUSION_TASA_NO_POSITIVA`` si λ ≤ 0.
+    """
+    if tasa_difusion_s <= 0.0:
+        raise ValueError(f"CAM_TD_DIFUSION_TASA_NO_POSITIVA: λ={tasa_difusion_s:.3e} 1/s ≤ 0.")
+    fuerza = omega_sup_kg_kg - omega_ent_kg_kg
+    if m_dot_w_kg_s <= 0.0 or fuerza <= 0.0 or X_prod_kg_kg <= 0.0:
+        return X_prod_kg_kg
+    G = m_dot_w_kg_s / fuerza
+    capacidad = tasa_difusion_s * m_seco_kg
+
+    def _f(X_s: float) -> float:
+        a_w = max(0.0, min(1.0, aw_func(X_s)))
+        return capacidad * (X_prod_kg_kg - X_s) - G * (omega_sat_prod_kg_kg * a_w - omega_ent_kg_kg)
+
+    # _f(X) = −ṁ_w < 0; _f(0) = λ·m_s·X + G·ω_ent − G·ω_sat·a_w(0) > 0 con a_w(0) = 0.
+    if _f(0.0) <= 0.0:
+        return 0.0
+    return float(brentq(_f, 0.0, X_prod_kg_kg, xtol=1e-12, rtol=1e-10))
 
 
 def resolver_estado_camara(
@@ -429,6 +509,7 @@ def resolver_estado_camara(
         T_cam_ext_K=T_cam_ext,
         U_pared_W_m2K=U_total,
         Q_aux_W=Q_aux,
+        q_envolvente_W=UA_loss * (T_flujo - T_amb_K),
     )
 
 
@@ -500,7 +581,7 @@ def resolver_cadena_camara(
                 **kwargs,
             )
         T_i, omega_i = T_ent_K, omega_ent_kg_kg
-        m_dot_w = q_prod = q_pared = 0.0
+        m_dot_w = q_prod = q_pared = q_env = 0.0
         T_cam_int = T_cam_ext = 0.0
         est = None
         for _ in range(n):
@@ -518,6 +599,7 @@ def resolver_cadena_camara(
             m_dot_w += est.m_dot_w_kg_s
             q_prod += est.q_prod_W
             q_pared += est.q_pared_W
+            q_env += est.q_envolvente_W
             T_cam_int += est.T_cam_int_K
             T_cam_ext += est.T_cam_ext_K
         assert est is not None  # n ≥ 1 garantiza al menos una vuelta
@@ -533,6 +615,7 @@ def resolver_cadena_camara(
             T_cam_ext_K=T_cam_ext / n,
             U_pared_W_m2K=est.U_pared_W_m2K,
             Q_aux_W=Q_aux_total_W,
+            q_envolvente_W=q_env,
         )
 
     # Sin consigna (o sin auxiliar) no hay nada que modular: la potencia
@@ -622,6 +705,16 @@ class ResultadoMotorTermodinamico:
             colector, donde el aporte va como ΔT sobre la entrada).
         energia_aux_total_J: ∫ Q_aux dt sobre toda la simulación [J]. Es la
             energía que hay que facturar: la disponible es solo un techo.
+        Q_ambiente_W: Serie del calor que el AMBIENTE le cede al proceso [W]
+            (S70): la envolvente cuando la cámara queda más fría que afuera,
+            ``max(0, −q_envolvente)``, más el aire que sale por debajo de la
+            temperatura ambiente, ``max(0, ṁ·cp_hum·(T_amb − T_salida))`` — el
+            secado adiabático: aire no saturado que se enfría hacia su bulbo
+            húmedo cediendo calor sensible como latente. Son caminos
+            independientes (pared vs. corriente de aire), sin doble conteo. Todas
+            las demás energías del balance se miden respecto del ambiente; esta
+            es la que faltaba para que cierre.
+        energia_ambiente_total_J: ∫ Q_ambiente dt sobre la simulación [J].
         horas_clipeo_nocturno_s: Tiempo acumulado [s] en que la política B
             anti-rehumectación clipeó dX/dt a 0 porque la fuerza motriz se
             invirtió (ω_sup < ω_ent → tendencia a condensación).
@@ -629,6 +722,11 @@ class ResultadoMotorTermodinamico:
             (riesgo de saturación del aire en cámara).
         T_max_alcanzada_K: Máxima T_prod registrada en toda la trayectoria [K].
         advertencias: Lista de códigos/mensajes (ver core/advertencias.py).
+        X_sup_kg_kg: Humedad de la superficie del producto [kg/kg seco] en cada
+            t guardado (S70). Igual a ``X_prod_kg_kg`` sin resistencia interna.
+        X_equilibrio_kg_kg: Humedad de equilibrio con el aire más seco que tuvo
+            la cámara [kg/kg seco] (S70). La completa ``camara_calc``; None si no
+            se calculó.
     """
 
     t_secado_s: float | None
@@ -652,10 +750,14 @@ class ResultadoMotorTermodinamico:
     energia_rad_aire_total_J: float = 0.0
     Q_aux_W: np.ndarray = field(default_factory=lambda: np.array([]))
     energia_aux_total_J: float = 0.0
+    Q_ambiente_W: np.ndarray = field(default_factory=lambda: np.array([]))
+    energia_ambiente_total_J: float = 0.0
     horas_clipeo_nocturno_s: float = 0.0
     horas_HR_alta_s: float = 0.0
     T_max_alcanzada_K: float = 0.0
     advertencias: list[str] = field(default_factory=list)
+    X_sup_kg_kg: np.ndarray = field(default_factory=lambda: np.array([]))
+    X_equilibrio_kg_kg: float | None = None
 
 
 def simular_secado(
@@ -693,6 +795,10 @@ def simular_secado(
     # Firma: (T_aire_camara_K, T_amb_K, m_dot_as, h_w) -> h_conv_pared.
     # Si None, el film de pared queda atado al del producto (histórico).
     coef_pared_func: Callable[[float, float, float, float], float] | None = None,
+    # Resistencia interna a la difusión (S70, plan modelo de evaporación Fase 2).
+    # Firma: T_prod_K -> λ [1/s], tasa del primer modo de Fick de la pieza. Si
+    # None, la superficie del producto es su humedad media (película pura).
+    tasa_difusion_func: Callable[[float], float] | None = None,
     # Radiación solar directa al producto (techo translúcido).
     # Q_rad(t) = I_g(t)·τ·α·A_rad. Defaults 0 → cámara opaca, sin término radiativo.
     tau_cubierta_solar: float = 0.0,
@@ -877,7 +983,7 @@ def simular_secado(
                 h_local, K_m_base = coef_transporte_func(T_aire_K, T_prod, omega_ent, m_dot)
             return h_local, (K_m_override if K_m_override is not None else K_m_base)
 
-        def _solve(T_aire_films_K: float):
+        def _solve(T_aire_films_K: float, X_sup: float):
             h_conv_local, K_m_usado = _coef_producto(T_aire_films_K)
             h_pared_local = (
                 None
@@ -887,7 +993,7 @@ def simular_secado(
             return resolver_cadena_camara(
                 n_etapas=n_etapas_aire,
                 T_prod_K=T_prod,
-                X_prod_kg_kg=X_safe,
+                X_prod_kg_kg=X_sup,
                 T_ent_K=T_ent,
                 omega_ent_kg_kg=omega_ent,
                 A_prod_m2=A_prod_m2,
@@ -928,11 +1034,31 @@ def simular_secado(
         # films ya corregidos. El solve es analítico (O(1)) y los coeficientes
         # entran suave (Nu ~ Ra^{1/4} en la pared, Re^{1/2} en el producto), así
         # que una sola refinación alcanza — no hace falta iterar a convergencia.
-        est = _solve(T_ent)
-        if coef_transporte_func is None and coef_pared_func is None:
-            # Coeficientes congelados: la segunda pasada daría lo mismo.
+        est = _solve(T_ent, X_safe)
+        films_congelados = coef_transporte_func is None and coef_pared_func is None
+        T_films = T_ent if films_congelados else est.T_flujo_K
+        if not films_congelados:
+            est = _solve(T_films, X_safe)
+        if tasa_difusion_func is None or K_m_override is not None or est.m_dot_w_kg_s <= 0.0:
             return est
-        return _solve(est.T_flujo_K)
+        # Resistencia interna (S70): con los MISMOS films, la cadena es afín en
+        # ω_sup, así que la superficie que sale de `humedad_superficie_producto`
+        # iguala exactamente el flujo interno con el de la película (ω no depende
+        # de T dentro de la cadena). T_flujo cambia con X_sup solo por la entalpía
+        # del vapor —el latente lo pone el producto, no el aire—, así que no hace
+        # falta volver a refinar los films.
+        omega_sat_prod = _omega_saturacion_acotada(T_prod, P_Pa)
+        X_sup = humedad_superficie_producto(
+            X_prod_kg_kg=X_safe,
+            m_seco_kg=m_seco_prod_kg,
+            tasa_difusion_s=tasa_difusion_func(T_prod),
+            m_dot_w_kg_s=est.m_dot_w_kg_s,
+            omega_sup_kg_kg=omega_sat_prod * max(0.0, min(1.0, aw_func(X_safe))),
+            omega_ent_kg_kg=omega_ent,
+            omega_sat_prod_kg_kg=omega_sat_prod,
+            aw_func=aw_func,
+        )
+        return replace(_solve(T_films, X_sup), X_sup_kg_kg=X_sup)
 
     # --- Estado mutable para diagnóstico de política B y HR alta ---
     diag = {
@@ -1100,10 +1226,21 @@ def simular_secado(
     Q_rad_aire_arr = np.zeros(n)
     Q_aux_arr = np.zeros(n)
     Q_aux_max_arr = np.zeros(n)
+    Q_amb_arr = np.zeros(n)
+    X_sup_arr = np.array(sol.y[1], dtype=float)
     for i in range(n):
         t_i = float(sol.t[i])
         est, _ = _resolver_con_politica_B(sol.y[0, i], sol.y[1, i], t_i)
+        # Aporte del ambiente (S70): envolvente que gana calor + aire que sale
+        # más frío que afuera. Ver `ResultadoMotorTermodinamico.Q_ambiente_W`.
+        _, _, m_dot_i, T_amb_i, _ = _boundary_t(t_i)
+        Q_amb_arr[i] = max(0.0, -est.q_envolvente_W) + max(
+            0.0,
+            m_dot_i * cp_aire_humedo(est.omega_flujo_kg_kg) * (T_amb_i - est.T_flujo_K),
+        )
         T_flujo_arr[i] = est.T_flujo_K
+        if est.X_sup_kg_kg is not None:
+            X_sup_arr[i] = est.X_sup_kg_kg
         omega_flujo_arr[i] = est.omega_flujo_kg_kg
         m_dot_w_arr[i] = est.m_dot_w_kg_s
         q_prod_arr[i] = est.q_prod_W
@@ -1132,11 +1269,13 @@ def simular_secado(
         energia_rad = float(np.trapezoid(Q_rad_arr, sol.t))
         energia_rad_aire = float(np.trapezoid(Q_rad_aire_arr, sol.t))
         energia_aux = float(np.trapezoid(Q_aux_arr, sol.t))
+        energia_amb = float(np.trapezoid(Q_amb_arr, sol.t))
     else:
         masa_evap = 0.0
         energia_rad = 0.0
         energia_rad_aire = 0.0
         energia_aux = 0.0
+        energia_amb = 0.0
 
     # --- Set-point del respaldo inalcanzable ---
     # El equipo satura —entrega todo su techo— y aun así el aire no llega a la
@@ -1199,6 +1338,7 @@ def simular_secado(
         t_array_s=sol.t,
         T_prod_K=sol.y[0],
         X_prod_kg_kg=sol.y[1],
+        X_sup_kg_kg=X_sup_arr,
         T_flujo_K=T_flujo_arr,
         omega_flujo_kg_kg=omega_flujo_arr,
         m_dot_w_kg_s=m_dot_w_arr,
@@ -1215,6 +1355,8 @@ def simular_secado(
         energia_rad_aire_total_J=energia_rad_aire,
         Q_aux_W=Q_aux_arr,
         energia_aux_total_J=energia_aux,
+        Q_ambiente_W=Q_amb_arr,
+        energia_ambiente_total_J=energia_amb,
         horas_clipeo_nocturno_s=horas_clipeo,
         horas_HR_alta_s=horas_hr_alta,
         T_max_alcanzada_K=float(np.max(sol.y[0])) if n > 0 else float(T_prod_inicial_K),
@@ -1329,6 +1471,7 @@ def simular_cascada(
     # Firma: (T_ent_K, T_amb_K, m_dot_as, h_w) -> h_conv_pared.
     # Si None, el film de pared queda atado al del producto (histórico).
     coef_pared_func: Callable[[float, float, float, float], float] | None = None,
+    tasa_difusion_func: Callable[[float], float] | None = None,
     # Radiación solar directa (túnel translúcido — normalmente opaco → 0)
     tau_cubierta_solar: float = 0.0,
     alfa_producto_solar: float = 0.6,
@@ -1369,6 +1512,8 @@ def simular_cascada(
             se recalculan por paso si se pasa coef_transporte_func).
         k_aisl_W_mK, esp_cam_m, P_Pa, aw_func: Idénticos a simular_secado.
         coef_transporte_func: Coeficientes variables en t (opcional).
+        tasa_difusion_func: Resistencia interna, T_prod → λ [1/s] (opcional,
+            S70). Igual que en simular_secado, con la masa seca de cada zona.
         T_max_admisible_K: Si se da, se avisa (no se detiene) si alguna zona
             supera ese umbral.
 
@@ -1463,7 +1608,7 @@ def simular_cascada(
                 h_local, K_m_base = coef_transporte_func(T_aire_K, T_prod, omega_ent_zona, m_dot)
             return h_local, (K_m_override if K_m_override is not None else K_m_base)
 
-        def _solve(T_aire_films_K: float):
+        def _solve(T_aire_films_K: float, X_sup: float):
             h_conv_local, K_m_usado = _coef_producto(T_aire_films_K)
             h_pared_local = (
                 None
@@ -1472,7 +1617,7 @@ def simular_cascada(
             )
             return resolver_estado_camara(
                 T_prod_K=T_prod,
-                X_prod_kg_kg=X_safe,
+                X_prod_kg_kg=X_sup,
                 T_ent_K=T_ent_zona,
                 omega_ent_kg_kg=omega_ent_zona,
                 A_prod_m2=A_prod_por_zona_m2,
@@ -1495,10 +1640,26 @@ def simular_cascada(
         # Igual que en `simular_secado`: los films interiores —pared y producto—
         # los gobierna el aire DE LA ZONA, no el que entra a ella. Ver el
         # comentario largo allá.
-        est = _solve(T_ent_zona)
-        if coef_transporte_func is None and coef_pared_func is None:
+        est = _solve(T_ent_zona, X_safe)
+        films_congelados = coef_transporte_func is None and coef_pared_func is None
+        T_films = T_ent_zona if films_congelados else est.T_flujo_K
+        if not films_congelados:
+            est = _solve(T_films, X_safe)
+        if tasa_difusion_func is None or K_m_override is not None or est.m_dot_w_kg_s <= 0.0:
             return est
-        return _solve(est.T_flujo_K)
+        # Resistencia interna (S70): misma construcción que en `simular_secado`.
+        omega_sat_prod = _omega_saturacion_acotada(T_prod, P_Pa)
+        X_sup = humedad_superficie_producto(
+            X_prod_kg_kg=X_safe,
+            m_seco_kg=m_seco_por_zona_kg,
+            tasa_difusion_s=tasa_difusion_func(T_prod),
+            m_dot_w_kg_s=est.m_dot_w_kg_s,
+            omega_sup_kg_kg=omega_sat_prod * max(0.0, min(1.0, aw_func(X_safe))),
+            omega_ent_kg_kg=omega_ent_zona,
+            omega_sat_prod_kg_kg=omega_sat_prod,
+            aw_func=aw_func,
+        )
+        return replace(_solve(T_films, X_sup), X_sup_kg_kg=X_sup)
 
     def _march_aire(y: np.ndarray, t: float, aplicar_politica_B: bool) -> list[EstadoCamara]:
         """Marcha el aire de la zona N−1 → 0 y devuelve el EstadoCamara de cada

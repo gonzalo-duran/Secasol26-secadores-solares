@@ -30,11 +30,17 @@ producto:
   x_obj:
     label: Humedad objetivo X_obj [kg agua / kg ms]
     help: >-
-      Humedad final deseada en base seca.
-      Valores típicos de almacenamiento: 0.10–0.20 kg/kg ms.
+      Humedad final deseada en base seca. Por defecto se propone la que da
+      a_w ≈ 0.60 según la isoterma del producto (estabilidad microbiológica):
+      un mismo X significa cosas muy distintas en una manzana y en una hoja.
+    aw: "Con este X el producto queda en a_w ≈ {aw:.2f}. Propuesto para este producto: X = {x_def:.3f} (a_w {aw_def:.2f})."
+    sin_isoterma: "⚠️ Producto sin isoterma: el X objetivo por defecto ({x:.3f}) no tiene un criterio de a_w detrás."
   masa: Masa total a secar [kg]
   gab_ok: ✅ Isoterma GAB calibrada disponible.
+  gab_analogia: "ℹ️ Sin isoterma propia: usa la de «{material}» por analogía (ver catálogo)."
   gab_fallback: "⚠️ Sin isoterma GAB. Se usará X_eq = {x:.3f} kg/kg ms (fallback)."
+  difusion_ok: "✅ Difusividad efectiva disponible: el período de velocidad decreciente está representado."
+  difusion_falta: "⚠️ Sin difusividad efectiva: se seca solo con la película del aire, sin resistencia interna. Los tiempos de secado quedan subestimados."
 geometria:
   titulo: Geometría de la cámara
   esquema_titulo: 📐 Esquema de la cámara

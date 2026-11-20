@@ -1234,6 +1234,7 @@ def _seccion_resultados_globales(
         [tr("global.solar_util"), f"{_fmt(snap_global.get('energia_solar_util_MJ'))} MJ"],
         [tr("global.auxiliar"), f"{_fmt(snap_global.get('energia_auxiliar_MJ'))} MJ"],
         [tr("global.motor"), f"{_fmt(snap_global.get('energia_motor_MJ'))} MJ"],
+        [tr("global.ambiente"), f"{_fmt(snap_global.get('energia_ambiente_MJ'))} MJ"],
         [tr("global.secado"), f"{_fmt(snap_global.get('energia_secado_MJ'))} MJ"],
         [tr("global.cop"), _fmt(snap_global.get("COP_secado"))],
         [tr("global.frac_solar"), _fmt(snap_global.get("fraccion_solar"))],

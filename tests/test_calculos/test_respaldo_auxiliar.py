@@ -315,10 +315,17 @@ class TestSetPointEnElPipelineTransitorio:
         assert float(np.max(modulado.camara.T_flujo_K)) < T_pico_pleno
 
     def test_la_resistencia_se_apaga_cuando_el_sol_ya_supera_la_consigna(self):
-        """La marca de que la consigna llegó: horas con el techo disponible y 0 W."""
+        """La marca de que la consigna llegó: horas con el techo disponible y 0 W.
+
+        La consigna tiene que quedar por debajo de lo que el sol solo alcanza. Con
+        el tomate evaporando como agua libre (S70: isoterma de Kiranoudis en vez
+        de la rampa X/X₀), el aire de la cámara llega a ~21.3 °C al mediodía: los
+        ~190 W latentes del producto húmedo se comen el sol. Hasta S69 la consigna
+        era 22 °C y pasaba porque la rampa frenaba la evaporación.
+        """
         import numpy as np
 
-        res = self._correr_transitorio(_respaldo(potencia_nominal_W=1500.0, set_point_T_K=295.15))
+        res = self._correr_transitorio(_respaldo(potencia_nominal_W=1500.0, set_point_T_K=293.65))
         Q = res.camara.Q_aux_W
         disponible = res.forzantes_aplicadas.Q_aux_max_W
         # En algún instante el auxiliar tuvo permiso de operar y aun así no entregó.

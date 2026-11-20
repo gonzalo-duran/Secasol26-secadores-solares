@@ -254,6 +254,7 @@ global:
   solar_util: Solar útil
   auxiliar: Auxiliar
   motor: Motor
+  ambiente: Ambiente
   secado: Secado (útil)
   cop: COP secado
   frac_solar: Fracción solar

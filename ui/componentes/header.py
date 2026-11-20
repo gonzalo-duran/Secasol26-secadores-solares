@@ -29,9 +29,13 @@ Nota sobre selectores CSS:
 
 from __future__ import annotations
 
+import base64
+import io
+from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -59,6 +63,9 @@ _ANCHO_LOGO_PX = 90  # ancho de cada logo en píxeles
 _CSS_OCULTAR_TOOLBAR = """
 <style>
     [data-testid="stToolbarActions"] { display: none !important; }
+    /* 1.57: Deploy y menú ⋮ ya no cuelgan de stToolbarActions (S70). */
+    [data-testid="stAppDeployButton"] { display: none !important; }
+    [data-testid="stMainMenu"]        { display: none !important; }
     [data-testid="stDecoration"]     { display: none !important; }
 </style>
 """
@@ -129,13 +136,40 @@ def render_header() -> None:
 def _mostrar_logo(ruta: Path, alt: str) -> None:
     """Muestra un logo si el archivo existe; no hace nada si falta.
 
+    El logo va embebido como ``data:`` URI en un ``<img>``, **no** con
+    ``st.image``. En Streamlit 1.57 sobre Starlette ≥ 1.x, el middleware GZip de
+    Streamlit (``_MediaAwareGZipResponder``) nunca envía el
+    ``http.response.start`` de las respuestas ``image/*`` del endpoint
+    ``/media``: el servidor tira ``RuntimeError: Expected ASGI message
+    'http.response.start'`` y el navegador recibe la imagen rota (S70; afectaba
+    local y producción). Embebido no pasa por ese endpoint.
+
     Args:
         ruta: Ruta absoluta al archivo PNG del logo.
         alt:  Texto alternativo (para accesibilidad / depuración).
     """
-    if ruta.is_file():
-        st.image(str(ruta), width=_ANCHO_LOGO_PX)
-    # Si el archivo no existe, la columna queda vacía sin error visible.
-    # Para depurar, descomentar:
-    # else:
-    #     st.caption(f"[logo no encontrado: {ruta.name}]")  # i18n: exento (código comentado de debug)
+    if not ruta.is_file():
+        # La columna queda vacía sin error visible.
+        return
+    b64 = _logo_base64(str(ruta), _ANCHO_LOGO_PX * 2)
+    st.markdown(
+        f'<img src="data:image/png;base64,{b64}" alt="{alt}" '
+        f'style="width:{_ANCHO_LOGO_PX}px;height:auto;">',
+        unsafe_allow_html=True,
+    )
+
+
+@lru_cache(maxsize=8)
+def _logo_base64(ruta: str, ancho_px: int) -> str:
+    """PNG reescalado a ``ancho_px`` (2× el ancho mostrado, para pantallas HiDPI), en base64.
+
+    Los originales pesan ~100 kB; reescalados quedan en pocos kB, que es lo que
+    viaja en cada rerun.
+    """
+    with Image.open(ruta) as img:
+        if img.width > ancho_px:
+            alto = round(img.height * ancho_px / img.width)
+            img = img.resize((ancho_px, alto), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii")

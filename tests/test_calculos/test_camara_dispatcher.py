@@ -191,6 +191,60 @@ class TestWireUpTermodinamico:
         )
         assert not any("GAB_FALTA" in a for a in res.advertencias)
 
+    @staticmethod
+    def _correr(producto_id, X0, X_obj):
+        cam = Camara(
+            carga_producto=CargaProducto(
+                producto_id=producto_id,
+                masa_total_kg=3.0,
+                humedad_inicial_X=X0,
+                humedad_objetivo_X=X_obj,
+                modelo_capa_fina="page",
+            ),
+            modo_calculo="termodinamico",
+        )
+        return calcular_camara(cam, T_operacion_K=333.15, HR_operacion=0.15, T_amb_K=298.15)
+
+    def test_CAM_TD_GAB_ANALOGIA(self):
+        """Durazno corre con la isoterma del damasco (S70) y lo avisa."""
+        res = self._correr("durazno", 6.0, 0.20)
+        assert any(a.startswith("CAM_TD_GAB_ANALOGIA") and "damasco" in a for a in res.advertencias)
+        assert not any("GAB_FALTA" in a for a in res.advertencias)
+
+    def test_CAM_TD_GAB_FALTA(self):
+        """Charqui (sin isoterma, S70): agua libre hasta X_eq del catálogo, con aviso."""
+        res = self._correr("charqui_vacuno", 1.5, 0.30)
+        aviso = [a for a in res.advertencias if a.startswith("CAM_TD_GAB_FALTA")]
+        assert len(aviso) == 1
+        assert "X_eq = 0.150" in aviso[0]
+        assert "X/X_inicial" not in aviso[0]  # la rampa de S69 ya no existe
+
+    def test_CAM_TD_GAB_K_MAYOR_1(self):
+        """Pimiento rojo (GAB de Vega 2007, K = 1.02): usa la isoterma con aviso.
+
+        Hasta S69 el rechazo de K ≥ 1 caía en un escalón a_w ∈ {0, 1}. Ahora
+        corre la isoterma real y avisa que a_w queda acotada por 1/K.
+        """
+        cam = Camara(
+            carga_producto=CargaProducto(
+                producto_id="pimiento_rojo",
+                masa_total_kg=5.0,
+                humedad_inicial_X=9.0,
+                humedad_objetivo_X=0.15,
+                modelo_capa_fina="page",
+            ),
+            modo_calculo="termodinamico",
+        )
+        res = calcular_camara(
+            cam,
+            T_operacion_K=333.15,
+            HR_operacion=0.15,
+            T_amb_K=298.15,
+        )
+        assert any(a.startswith("CAM_TD_GAB_K_MAYOR_1") for a in res.advertencias)
+        assert not any("GAB_FALTA" in a for a in res.advertencias)
+        assert res.masa_evaporada_total_kg > 0.0
+
     def test_series_temporales_consistentes(self, camara_manzana_termodinamico):
         """Todas las series tienen el mismo tamaño y son numpy arrays."""
         res = calcular_camara(

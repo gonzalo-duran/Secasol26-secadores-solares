@@ -65,13 +65,36 @@ te_yerba:
   isoterma:
     gab:
       params:
-        X_m: null
-        C: null
-        K: null
-      rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — Schmalko ME, Alzamora SM (2001). Drying Technol 19(3-4):599-610. DOI:10.1081/DRT-100103937 [MINCyT Tandfonline]"
-      notas: null
+        # Default a T=50°C: el más cercano a la operación de secado solar con
+        # buen ajuste (MPE 4.62 %). Las constantes no muestran tendencia con T
+        # (Schmalko 2005, p. 137): el autor interpola X_eq entre temperaturas.
+        X_m: 0.0418
+        C: 46.36
+        K: 1.005
+        sets_por_temperatura:
+          - {T_K: 293.15, X_m: 0.0484, C: 11.19, K: 0.915}
+          - {T_K: 303.15, X_m: 0.0511, C: 14.96, K: 0.911}
+          - {T_K: 313.15, X_m: 0.0494, C: 45.13, K: 0.935}
+          - {T_K: 323.15, X_m: 0.0418, C: 46.36, K: 1.005}
+          - {T_K: 333.15, X_m: 0.0388, C: 4.34,  K: 0.963}
+          - {T_K: 343.15, X_m: 0.0250, C: 12.80, K: 1.031}
+          - {T_K: 353.15, X_m: 0.0316, C: 7.88,  K: 0.884}
+          - {T_K: 363.15, X_m: 0.0169, C: 39.79, K: 1.066}
+      rango_T_K: [293.15, 363.15]   # 20-90 °C
+      calidad_datos: MEDIA
+      fuente: "Schmalko ME (2005). Estudio y modelado matemático del procesamiento primario de la yerba mate. Tesis doctoral, FCEyN-UBA (dir. SM Alzamora). Tabla 8.4 (GAB por temperatura), datos de Känzig et al. (1987a) 20-50 °C y Schmalko et al. (1989) 60-90 °C, Tabla 8.1. Hojas verdes sin procesar."
+      notas: |
+        DESORCIÓN de hojas. 20-50 °C: método instrumental (Rotronic), hojas secadas
+        a distintos tiempos y equilibradas una semana. 60-90 °C: método estático con
+        7 sales saturadas. MPE de la GAB por T entre 3.1 y 16.9 % (Tabla 8.4).
+        Las constantes oscilan con T sin tendencia (C entre 4.3 y 46): con pocos
+        puntos por isoterma el ajuste no las identifica bien; la curva X(a_w) es
+        más estable que cada constante por separado.
+        Hasta S69 la fuente citada era Schmalko & Alzamora (2001) Drying Technol
+        19(3-4):599-610, que NO es un trabajo de isotermas (color, clorofila,
+        cafeína y agua durante el procesamiento).
+        Contraste: Barbosa, Johann, Pereira (2020, CONBREPRO) — desorción de erva-mate
+        a 40-60 °C, sin parámetros GAB publicados (R² medio 0.88).
 
   notas: |
     Decisión Sesión 6: entrada única `te_yerba` con default = yerba mate.
@@ -143,10 +166,13 @@ oregano:
         X_m: null
         C: null
         K: null
+      analogia: te_yerba
       rango_T_K: null
-      calidad_datos: null
-      fuente: "PENDIENTE — buscar isoterma de orégano. Alternativa: Lemus-Mondaca et al. o Akpinar (2006)."
-      notas: null
+      calidad_datos: ESTIMADA_POR_ANALOGIA
+      fuente: "Analogía (S70) con hojas de yerba mate (Schmalko 2005). No se encontró isoterma de hoja de orégano en acceso abierto."
+      notas: |
+        La única GAB de orégano hallada (PMC10341308) es de extracto en polvo,
+        no de hoja: no corresponde al producto.
 
   notas: |
     Papers prioritarios:
@@ -223,10 +249,12 @@ coca:
         X_m: null
         C: null
         K: null
+      analogia: te_yerba
       rango_T_K: null
       calidad_datos: ESTIMADA_POR_ANALOGIA
-      fuente: "PENDIENTE — analogía con yerba mate"
-      notas: null
+      fuente: "Analogía (S70) con hojas de yerba mate (Schmalko 2005)."
+      notas: |
+        Hoja coriácea secada entera, como la yerba mate.
 
   notas: |
     PRODUCTO CON DATOS DE ANALOGÍA. Incertidumbre alta.

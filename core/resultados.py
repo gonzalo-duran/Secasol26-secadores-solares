@@ -170,7 +170,8 @@ class ResultadosGlobal(BloqueResultados):
     energia_solar_util_MJ: Optional[float] = None  # Q_util_col × t_secado
     energia_auxiliar_MJ: Optional[float] = None  # Q_aux × t_secado (0 si None)
     energia_motor_MJ: Optional[float] = None  # P_elec_motor × t_secado
-    energia_total_MJ: Optional[float] = None  # solar + auxiliar + motor
+    energia_ambiente_MJ: Optional[float] = None  # calor cedido por el ambiente (S70)
+    energia_total_MJ: Optional[float] = None  # solar + auxiliar + motor + ambiente
     energia_secado_MJ: Optional[float] = None  # masa_agua × Lv (calor latente)
     fraccion_solar: Optional[float] = None  # solar / (solar + auxiliar)
 

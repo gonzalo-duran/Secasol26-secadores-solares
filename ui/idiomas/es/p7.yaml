@@ -44,6 +44,10 @@ transitorio:
   e_solar: E_solar útil
   e_aux: E_auxiliar
   e_motor: E_motor
+  e_ambiente:
+    label: E_ambiente
+    help: >-
+      Calor que cede el ambiente cuando la cámara o el aire que sale quedan más fríos que afuera (secado adiabático). Entra al denominador del COP.
   fraccion_solar: Fracción solar
   sin_trayectorias: Sin trayectorias para graficar.
   trayectorias: Trayectorias del horizonte
@@ -121,6 +125,7 @@ balance_fig:
   solar: Solar<br>(colector)
   auxiliar: Auxiliar
   motor: Motor
+  ambiente: Ambiente<br>(aire y pared)
   evaporacion: Evaporación<br>(útil)
   eje: Energía [MJ]
   titulo: Balance energético del ciclo de secado
@@ -384,6 +389,7 @@ tabla:
   bal_solar: Balance — E solar útil [MJ]
   bal_aux: Balance — E auxiliar [MJ]
   bal_motor: Balance — E motor [MJ]
+  bal_ambiente: Balance — E ambiente [MJ]
   bal_secado: Balance — E secado [MJ]
   bal_cop: Balance — COP
   bal_fs: Balance — Fracción solar

@@ -525,23 +525,28 @@ def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> floa
         C: Constante de Guggenheim (energía de adsorción de monocapa) [adim].
             Típicamente 5–30 para alimentos.
         K: Constante GAB (corrección multicapa) [adim]. Típicamente 0.7–0.95.
+            Se acepta K ≥ 1 (S70): la teoría GAB pide K < 1, pero ajustes de
+            desorción de productos azucarados cerca de la saturación dan K
+            levemente mayor que 1 (pimiento rojo, Vega 2007: K = 1.02). La
+            isoterma directa diverge en a_w = 1/K, así que la raíz positiva
+            de la inversión cumple siempre K·a_w < 1 y a_w queda acotada por
+            1/K: el producto fresco nunca llega a a_w = 1. Advertir al
+            usuario es responsabilidad del consumidor (camara_calc).
 
     Returns:
         a_w [adim, fracción 0–1]. Devuelve 0 si X ≤ 0.
 
     Raises:
         ValueError: Si los parámetros GAB son no físicos, o si la raíz
-            calculada cae fuera de [0, 1] (indica X fuera del rango GAB).
+            calculada cae fuera de [0, 1] (con K < 1, X por encima del
+            máximo de la isoterma: a_w > 1).
     """
     if X_m <= 0.0:
         raise ValueError(f"PSICRO_GAB_XM_NO_POSITIVA: X_m={X_m:.4f} ≤ 0.")
     if C <= 0.0:
         raise ValueError(f"PSICRO_GAB_C_NO_POSITIVA: C={C:.3f} ≤ 0.")
-    if not (0.0 < K < 1.0):
-        raise ValueError(
-            f"PSICRO_GAB_K_FUERA_RANGO: K={K:.4f} ∉ (0, 1). "
-            "K debe estar en el intervalo abierto (0, 1)."
-        )
+    if K <= 0.0:
+        raise ValueError(f"PSICRO_GAB_K_FUERA_RANGO: K={K:.4f} ≤ 0. K debe ser positiva.")
     if X <= 0.0:
         return 0.0
 
@@ -572,11 +577,20 @@ def actividad_agua_desde_X_GAB(X: float, X_m: float, C: float, K: float) -> floa
                 f"(X={X:.4f}, X_m={X_m:.4f}, C={C:.3f}, K={K:.4f})."
             )
 
-        # De las dos raíces, la positiva es la física (producto de raíces = c/a < 0)
+        # De las dos raíces, la positiva es la física (producto de raíces = c/a < 0).
+        # Forma estable (Numerical Recipes §5.6): q = −(b + sgn(b)·√disc)/2, raíces
+        # q/a y c/q. La fórmula directa (−b + √disc)/(2a) cancela en X → 0 (a ∝ X):
+        # a X = 1e-9 devolvía a_w fuera de rango y el motor la convertía en agua
+        # libre (S70).
         sqrt_disc = math.sqrt(disc)
-        u_pos = (-b_q + sqrt_disc) / (2.0 * a_q)
-        u_neg = (-b_q - sqrt_disc) / (2.0 * a_q)
-        u = u_pos if u_pos > 0 else u_neg
+        q = -0.5 * (b_q + math.copysign(sqrt_disc, b_q))
+        raices = [r for r in (q / a_q, c_q / q) if r > 0.0]
+        if not raices:
+            raise ValueError(
+                f"PSICRO_GAB_INVERSION_FALLO: sin raíz positiva "
+                f"(X={X:.4f}, X_m={X_m:.4f}, C={C:.3f}, K={K:.4f})."
+            )
+        u = raices[0]
 
     a_w = u / K
 
