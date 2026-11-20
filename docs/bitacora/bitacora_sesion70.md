@@ -1,7 +1,7 @@
 # Bitácora — Sesión 70
 
-**Fecha:** 2026-11-19 · **Tema:** modelo de evaporación, **Fase 0** (saneamiento de `a_w`).
-Decisiones del §9 del plan cerradas e implementación de la Fase 0. **Nada commiteado.**
+**Fecha:** 2026-11-19 / 20 · **Tema:** modelo de evaporación (Fases 0, 1, 2 y primer paso de
+la 3) y releases **1.5.0** y **1.5.1**. Para retomar: **§16**.
 
 ## 1. Decisiones del usuario (§9 de [[docs/notas/plan_modelo_evaporacion]])
 
@@ -121,7 +121,7 @@ Se instaló Chrome nativo (RPM de Google) en paralelo; funciona sin tocar nada m
 descarga no abra un diálogo hay que desactivar «Preguntar dónde guardar» en el Chrome nativo.
 ScienceDirect identificó la sesión como UNAM (México): los papers restringidos no se bajaron.
 
-## 7. Estado al cierre
+## 7. Estado a mitad de sesión (histórico; ver §16)
 
 - `testing` = `ca68ceb` + Fase 0 sin commitear. PDFs nuevos en `docs/notas/papers/`
   (gitignoreados); transcripción de Prokopiuk en `.md` (sí versionable).
@@ -373,3 +373,48 @@ Consecuencias en las réplicas:
   energía de sobra) se haya abierto la esclusa lateral entre ventilador y difusor para mezclar
   aire ambiente. Con 3.7 m³/s el modelo da 14.7 HP (1350 Pa de singulares, casi todo el acople
   de ø 0.45 m a 23 m/s): revisar el modelo de pérdidas singulares del acople.
+
+## 16. Estado al cierre y para retomar (desde el IER)
+
+**Producción:** v1.5.1 (`origin/main` = `main` = `testing` = `aa8f932`, tags `v1.5.0` y
+`v1.5.1`). Verificada en el Space (panel Entorno). La rama `hotfix-1.4.1` y el worktree
+`../secador_solar_hotfix` ya no hacen falta (borrarlos solo si el usuario lo pide). Fuera de git
+a propósito: `docs/Papers de secadores p_ calibrar secasol/` (PDFs con copyright),
+`docs/asades2026/`, `uv.lock`.
+
+**Qué hay en el modelo** (detalle en §8–15, en `CLAUDE.md` y en
+[[docs/notas/plan_modelo_evaporacion]]):
+- `a_w` por isoterma propia o por analogía; sin rampa; K ≥ 1 aceptado.
+- Resistencia interna en serie (nodo de superficie, Fick primer modo) en 9 productos.
+- Película con el largo de la **bandeja** (Fase 1 anclada en agua libre).
+- Carros en serie; colectores Tipo 2/3 con la sección de sus canales activos.
+- X objetivo por producto desde a_w = 0.60; aviso de X objetivo bajo el equilibrio.
+
+**Para conseguir en el IER** (acceso institucional; desde México no usar el de la UNAM):
+1. **Comaposada, Gou & Arnau 2000**, Meat Science 55(3), PII S0309174099001540 — isoterma de
+   carne salada para el charqui (hoy corre con `a_w = 1`: seca de noche en la réplica de Durán
+   2008).
+2. **Difusividades con varios espesores o curvas** para reajustar dentro de Secasol:
+   - tomate: Demiray & Tulek 2012, Heat Mass Transfer 48 (DOI 10.1007/s00231-011-0942-1);
+   - cebolla: Demiray et al. 2017, Heat Mass Transfer (DOI 10.1007/s00231-016-1943-x);
+   - zanahoria: Doymaz (zanahoria naranja, aire caliente, sin pretratamiento);
+   - mandioca: Sanni 1997; ají (isoterma): Kaleemullah 2004.
+   Los de acceso abierto ya leídos están citados en §14 y en la respuesta del 20/11.
+3. **Evaporación de agua libre** (validación independiente de la película a varias
+   velocidades): Pauken 1999 (Exp. Heat Transfer), Bower & Saylor 2009 (IJHMT), Shah 2014.
+
+**Siguientes pasos, en orden sugerido:**
+1. Ventilador de ADITAL: el modelo pide 14.7 HP contra 4 HP reales; revisar los singulares del
+   acople de ø 0.45 m (1350 Pa a 23 m/s). El usuario confirma 4 HP y que el caudal en el
+   ventilador es el del difusor (salvo la esclusa lateral abierta el primer año).
+2. Reajustar con `validacion/difusividad/reajuste_difusividad.py` las difusividades de tomate,
+   cebolla, zanahoria y el resto con los papers del punto 2; cargar las que queden bien
+   determinadas.
+3. Isoterma del charqui con Comaposada.
+4. Ensayo propio de agua libre (bandejas de área conocida, balanza, anemómetro, T/HR) cuando el
+   usuario vuelva a Argentina.
+5. Fase 3 con la planta de San Carlos 2012 (diagramas de caja de T y HR de campaña).
+
+**Herramientas nuevas:** `validacion/duran2008/` (caja con charqui), `validacion/adital/`
+(tanda de 2009, primer carro y carga media), `validacion/difusividad/` (reajuste de D),
+`validacion/validacion_adital.py` (6/7 con el preset nuevo).
